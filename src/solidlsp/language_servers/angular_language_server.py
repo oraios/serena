@@ -52,6 +52,7 @@ Hard project requirements (failure modes if violated):
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import pathlib
@@ -67,7 +68,7 @@ from solidlsp.language_servers.typescript_language_server import (
     prefer_non_node_modules_definition,
 )
 from solidlsp.language_servers.vscode_html_language_server import VsCodeHtmlLanguageServer
-from solidlsp.ls import LSPFileBuffer, SolidLanguageServer
+from solidlsp.ls import LanguageServerDependencyProvider, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, InitializeParams, SymbolInformation
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -102,12 +103,26 @@ class AngularTypeScriptServer(TypeScriptLanguageServer):
         return Language.ANGULAR.get_source_fn_matcher()
 
     class DependencyProvider(TypeScriptLanguageServer.DependencyProvider):
-        override_ts_ls_executable: str | None = None
+        """Dependency provider that returns a pre-resolved executable path.
 
+        The Angular LS install (run by ``AngularLanguageServer._setup_runtime_dependencies``)
+        already locates the ``typescript-language-server`` binary alongside ngserver,
+        so the companion does not need to perform another install lookup — it just
+        returns the path it was constructed with.
+        """
+
+        def __init__(
+            self,
+            custom_settings: SolidLSPSettings.CustomLSSettings,
+            ls_resources_dir: str,
+            explicit_executable_path: str,
+        ) -> None:
+            super().__init__(custom_settings, ls_resources_dir)
+            self._explicit_executable_path = explicit_executable_path
+
+        @override
         def _get_or_install_core_dependency(self) -> str:
-            if self.override_ts_ls_executable is not None:
-                return self.override_ts_ls_executable
-            return super()._get_or_install_core_dependency()
+            return self._explicit_executable_path
 
     @override
     def _get_language_id_for_file(self, relative_file_path: str) -> str:
@@ -131,11 +146,21 @@ class AngularTypeScriptServer(TypeScriptLanguageServer):
     ):
         self._angular_plugin_path = angular_plugin_path
         self._custom_tsdk_path = tsdk_path
-        AngularTypeScriptServer.DependencyProvider.override_ts_ls_executable = ts_ls_executable_path
-        try:
-            super().__init__(config, repository_root_path, solidlsp_settings)
-        finally:
-            AngularTypeScriptServer.DependencyProvider.override_ts_ls_executable = None
+        # Stored as instance state so the override survives across concurrent
+        # constructions of multiple AngularLanguageServer instances. The class
+        # attribute pattern this replaces was racy: two parallel constructors
+        # could see each other's value in the brief window between assignment
+        # and reset.
+        self._explicit_ts_ls_executable = ts_ls_executable_path
+        super().__init__(config, repository_root_path, solidlsp_settings)
+
+    @override
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        return self.DependencyProvider(
+            self._custom_settings,
+            self._ls_resources_dir,
+            self._explicit_ts_ls_executable,
+        )
 
     @override
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
@@ -409,16 +434,57 @@ class AngularLanguageServer(SolidLanguageServer):
                 self._html_server = None
                 self._html_server_started = False
 
+    def _find_angular_core_install(self) -> str | None:
+        """Walk up from ``repository_root_path`` looking for ``node_modules/@angular/core``.
+
+        Handles monorepo layouts (Nx, yarn/pnpm workspaces) where ``node_modules`` is
+        hoisted to a workspace root above the activated sub-package. Stops walking at:
+        the filesystem root, a mount-point change, or a ``package.json`` that declares
+        ``"workspaces"`` (the workspace root — no need to look further).
+
+        :return: absolute path to the discovered ``@angular/core/package.json``, or None.
+        """
+        cur = pathlib.Path(self.repository_root_path).resolve()
+        try:
+            start_dev = cur.stat().st_dev
+        except OSError:
+            start_dev = None
+        for parent in [cur, *cur.parents]:
+            # Stop *before* probing across a mount-point change: a different
+            # st_dev typically means we've crossed a container/volume boundary
+            # and node_modules over there is unrelated.
+            if start_dev is not None:
+                try:
+                    if parent.stat().st_dev != start_dev:
+                        break
+                except OSError:
+                    break
+            candidate = parent / "node_modules" / "@angular" / "core" / "package.json"
+            if candidate.exists():
+                return str(candidate)
+            workspace_pkg = parent / "package.json"
+            if workspace_pkg.exists():
+                try:
+                    with open(workspace_pkg, encoding="utf-8") as f:
+                        if "workspaces" in json.load(f):
+                            break
+                except (OSError, ValueError) as e:
+                    log.debug("Could not parse %s as JSON dict (%s); ignoring as workspace marker", workspace_pkg, e)
+        return None
+
     def _check_angular_core_in_project(self) -> None:
         """Warn loudly if the project does not appear to have @angular/core installed."""
-        candidate = os.path.join(self.repository_root_path, "node_modules", "@angular", "core", "package.json")
-        if not os.path.exists(candidate):
+        found = self._find_angular_core_install()
+        if found is None:
             log.warning(
-                "Angular language server activated but @angular/core was not found at %s. "
-                "ngserver will report files as 'not in an Angular project' and template-aware features "
-                "will be disabled. Run `npm install` in the project root to enable Angular features.",
-                candidate,
+                "Angular language server activated but @angular/core was not found in any "
+                "node_modules from %s upward. ngserver will report files as 'not in an "
+                "Angular project' and template-aware features will be disabled. Run "
+                "`npm install` in the workspace root to enable Angular features.",
+                self.repository_root_path,
             )
+        else:
+            log.debug("Found @angular/core at %s", found)
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
@@ -491,21 +557,34 @@ class AngularLanguageServer(SolidLanguageServer):
         self.server.on_notification("angular/projectLoadingFinish", angular_project_loading_finish)
         self.server.on_notification("angular/projectLanguageService", do_nothing)
 
-        log.info("Starting Angular language server (ngserver)")
-        self.server.start()
-        init_params = self._get_initialize_params(self.repository_root_path)
-        init_response = self.server.send.initialize(init_params)
-        log.debug("Angular LS initialize response: %s", init_response)
-        self.server.notify.initialized({})
-        # ngserver loads the Angular compiler asynchronously after `initialized`. Wait briefly
-        # for projectLoadingFinish, then proceed regardless — operations queue inside ngserver.
-        # ngserver eagerly resolves the project once projectLoadingFinish fires; we previously
-        # ran a proactive .ts didOpen/didClose pass but empirical testing on real Angular
-        # projects (181 .ts / 85 .html) showed it added ~4s to cold start without improving
-        # first-query correctness or latency, so it has been removed.
-        if not self.server_ready.wait(timeout=self.NG_SERVER_READY_TIMEOUT):
-            log.info("Timeout waiting for ngserver project load; proceeding anyway")
-            self.server_ready.set()
+        # Companions are already running. If anything below fails, our caller never
+        # received an initialised handle and therefore can't invoke stop() — so we
+        # tear down both companions and any partially-started ngserver process here
+        # to avoid leaking Node processes.
+        try:
+            log.info("Starting Angular language server (ngserver)")
+            self.server.start()
+            init_params = self._get_initialize_params(self.repository_root_path)
+            init_response = self.server.send.initialize(init_params)
+            log.debug("Angular LS initialize response: %s", init_response)
+            self.server.notify.initialized({})
+            # ngserver loads the Angular compiler asynchronously after `initialized`. Wait briefly
+            # for projectLoadingFinish, then proceed regardless — operations queue inside ngserver.
+            # ngserver eagerly resolves the project once projectLoadingFinish fires; we previously
+            # ran a proactive .ts didOpen/didClose pass but empirical testing on real Angular
+            # projects (181 .ts / 85 .html) showed it added ~4s to cold start without improving
+            # first-query correctness or latency, so it has been removed.
+            if not self.server_ready.wait(timeout=self.NG_SERVER_READY_TIMEOUT):
+                log.info("Timeout waiting for ngserver project load; proceeding anyway")
+                self.server_ready.set()
+        except Exception:
+            self._stop_typescript_server()
+            self._stop_html_server()
+            try:
+                self.server.stop()
+            except Exception as e:
+                log.warning("Error stopping ngserver during startup-failure cleanup: %s", e)
+            raise
 
     @override
     def stop(self, shutdown_timeout: float = 5.0) -> None:

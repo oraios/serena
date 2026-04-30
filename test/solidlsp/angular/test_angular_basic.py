@@ -45,24 +45,27 @@ class TestAngularLanguageServerBasics:
     def test_full_symbol_tree_includes_all_files(self, language_server: SolidLanguageServer) -> None:
         all_symbols = request_all_symbols(language_server)
         relative_paths = {s.get("location", {}).get("relativePath") for s in all_symbols}
-        # At minimum the two TS files should appear; HTML may or may not depending on
-        # how Angular LS reports template-only symbols.
-        for f in ("src/app/app.component.ts", "src/app/greeting.service.ts"):
+        # The HTML companion is unconditionally started, so .html documentSymbol
+        # contributes structural element entries to the workspace tree alongside
+        # the two TS files.
+        for f in (
+            "src/app/app.component.ts",
+            "src/app/greeting.service.ts",
+            "src/app/app.component.html",
+        ):
             assert f in relative_paths, f"Expected {f} to appear in symbol tree, got {relative_paths}"
 
     @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
     def test_template_definition_to_component_method(self, language_server: SolidLanguageServer) -> None:
         """Resolve `greeting()` interpolation in the template to its component method.
 
-        app.component.html (LSP coordinates are 0-based):
-            line 0: <section>
-            line 1:     <h1>{{ title() }}</h1>
-            line 2:     <p>{{ greeting() }}</p>
-        Cursor on `greeting` in `{{ greeting() }}` on line 2.
+        Cursor lands inside the ``greeting`` identifier on the ``{{ greeting() }}``
+        line of ``app.component.html``.
         """
         path = "src/app/app.component.html"
-        # Column of `g` in `greeting` on line 2 is at index 11 (after `    <p>{{ `).
-        definitions = language_server.request_definition(path, 2, 12)
+        line, col = _find_in_file(language_server, path, "greeting()")
+        # +1 puts the cursor inside the identifier rather than on its leading boundary.
+        definitions = language_server.request_definition(path, line, col + 1)
         assert definitions, f"Expected non-empty cross-file definition for template->component method, got {definitions}"
         target_uris = [d["uri"] for d in definitions]
         assert any(uri.endswith("app.component.ts") for uri in target_uris), (
@@ -148,7 +151,9 @@ class TestAngularHover:
         """
         path = "src/app/app.component.ts"
         line, col = _find_in_file(language_server, path, "setName(")
-        hover = language_server.request_hover(path, line, col + 1)  # cursor on 's' of setName
+        # Cursor inside the identifier (one past the leading 's') so the LSP
+        # treats the position as the symbol rather than a token boundary.
+        hover = language_server.request_hover(path, line, col + 1)
         assert hover is not None, f"Expected hover info for setName in {path}, got None"
         contents = hover.get("contents")
         assert contents, f"Expected non-empty hover contents, got: {hover}"
@@ -162,7 +167,8 @@ class TestAngularHover:
         """
         path = "src/app/app.component.html"
         line, col = _find_in_file(language_server, path, "greeting()")
-        hover = language_server.request_hover(path, line, col + 1)  # cursor on 'g' of greeting
+        # Cursor inside the identifier (one past the leading 'g').
+        hover = language_server.request_hover(path, line, col + 1)
         assert hover is not None, f"Expected hover info for greeting() in {path}, got None"
         contents = hover.get("contents")
         assert contents, f"Expected non-empty hover contents, got: {hover}"

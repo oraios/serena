@@ -61,6 +61,7 @@ class VsCodeHtmlLanguageServer(SolidLanguageServer):
         )
         self.server_ready = threading.Event()
 
+    @override
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
@@ -77,7 +78,10 @@ class VsCodeHtmlLanguageServer(SolidLanguageServer):
             package_version = self._custom_settings.get("vscode_langservers_version", DEFAULT_PACKAGE_VERSION)
             npm_registry = self._custom_settings.get("npm_registry")
 
-            install_dir = os.path.join(self._ls_resources_dir, "vscode-langservers")
+            # Isolated from the CSS LS's install dir even though both default to the same npm
+            # package: users may override `vscode_langservers_package` for one and not the other,
+            # and a shared dir would make those overrides ping-pong on the version_file check.
+            install_dir = os.path.join(self._ls_resources_dir, "vscode-langservers-html")
             executable_path = os.path.join(install_dir, "node_modules", ".bin", LS_BIN_NAME)
             if os.name == "nt":
                 executable_path += ".cmd"

@@ -55,8 +55,18 @@ class SomeSassLanguageServer(SolidLanguageServer):
         )
         self.server_ready = threading.Event()
 
+    @override
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
+
+    @override
+    def _get_language_id_for_file(self, relative_file_path: str) -> str:
+        # The indented Sass syntax (.sass) is a different parser from SCSS:
+        # whitespace-significant, no braces or semicolons. Some Sass disambiguates
+        # via the textDocument language id.
+        if os.path.splitext(relative_file_path)[1].lower() == ".sass":
+            return "sass"
+        return "scss"
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:

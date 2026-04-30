@@ -142,10 +142,14 @@ Only the language servers listed below download or install additional dependenci
 
 ### npm Package Installs
 
+- **Angular**: `@angular/language-server`, `@angular/language-service`, plus `typescript` and `typescript-language-server`
 - **Ansible**: `@ansible/ansible-language-server`
 - **Bash**: `bash-language-server`
+- **CSS**: `vscode-langservers-extracted` (provides `vscode-css-language-server`)
 - **Elm**: `@elm-tooling/elm-language-server`
+- **HTML**: `vscode-langservers-extracted` (provides `vscode-html-language-server`)
 - **PHP (`intelephense`)**: `intelephense`
+- **SCSS / Sass**: `some-sass-language-server`
 - **Solidity**: `@nomicfoundation/solidity-language-server`
 - **TypeScript**: `typescript` and `typescript-language-server`
 - **Vue**: `@vue/language-server`, plus `typescript` and `typescript-language-server`

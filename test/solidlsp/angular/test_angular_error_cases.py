@@ -16,12 +16,14 @@ positions instead of raising).
 
 import os
 import sys
+import time
 
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_exceptions import SolidLSPException
+from test.conftest import _create_ls
 
 pytestmark = pytest.mark.angular
 
@@ -242,3 +244,122 @@ class TestAngularReferenceEdgeCases:
         """
         result = language_server.request_defining_symbol(TS_FILE, -1, -1)
         assert result is None, f"Expected None, got: {result!r}"
+
+
+class TestAngularCoreProbe:
+    """Unit tests for the monorepo-aware ``_find_angular_core_install`` walk.
+
+    These don't spin up the Angular LS — they exercise the pure-Python
+    filesystem walker against synthetic node_modules layouts.
+    """
+
+    @staticmethod
+    def _walk(repo_path: str) -> str | None:
+        """Invoke the bound method against a minimal stub carrying only
+        ``repository_root_path``.
+        """
+        from solidlsp.language_servers.angular_language_server import AngularLanguageServer
+
+        stub = type("Stub", (), {"repository_root_path": repo_path})()
+        return AngularLanguageServer._find_angular_core_install(stub)  # type: ignore[arg-type]
+
+    def test_finds_core_at_project_root(self, tmp_path) -> None:
+        core_pkg = tmp_path / "node_modules" / "@angular" / "core" / "package.json"
+        core_pkg.parent.mkdir(parents=True)
+        core_pkg.write_text("{}")
+        assert self._walk(str(tmp_path)) == str(core_pkg)
+
+    def test_finds_hoisted_core_in_workspace_parent(self, tmp_path) -> None:
+        """Nx / yarn-workspaces layout: ``node_modules`` is hoisted to the
+        workspace root and the activated sub-package has none of its own.
+        """
+        sub_pkg = tmp_path / "packages" / "app"
+        sub_pkg.mkdir(parents=True)
+        core_pkg = tmp_path / "node_modules" / "@angular" / "core" / "package.json"
+        core_pkg.parent.mkdir(parents=True)
+        core_pkg.write_text("{}")
+        # Workspace root marker — the walker stops here.
+        (tmp_path / "package.json").write_text('{"workspaces": ["packages/*"]}')
+
+        assert self._walk(str(sub_pkg)) == str(core_pkg)
+
+    def test_returns_none_when_not_installed(self, tmp_path) -> None:
+        """No node_modules anywhere — walker exhausts and returns None."""
+        sub_pkg = tmp_path / "packages" / "app"
+        sub_pkg.mkdir(parents=True)
+        assert self._walk(str(sub_pkg)) is None
+
+    def test_workspace_root_stops_walk(self, tmp_path) -> None:
+        """If a ``package.json`` declares ``workspaces`` we should not walk past
+        it — the workspace root is the canonical install location even when no
+        ``@angular/core`` is present there.
+        """
+        # Plant a misleading sibling install ABOVE the workspace root that the
+        # walker must NOT find.
+        sibling_core = tmp_path / "node_modules" / "@angular" / "core" / "package.json"
+        sibling_core.parent.mkdir(parents=True)
+        sibling_core.write_text("{}")
+
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        (workspace / "package.json").write_text('{"workspaces": ["packages/*"]}')
+        sub_pkg = workspace / "packages" / "app"
+        sub_pkg.mkdir(parents=True)
+
+        assert self._walk(str(sub_pkg)) is None
+
+
+class TestAngularStartupCleanup:
+    """Regression: companion processes (TS + HTML) must not leak when ngserver
+    fails partway through ``_start_server``.
+
+    Until the cleanup wrapper landed, an exception during ngserver init left
+    the two companion Node processes orphaned because the parent constructor
+    never returned a handle on which the caller could invoke ``stop()``.
+    """
+
+    def test_companions_cleaned_up_on_initialize_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        if IS_WINDOWS:
+            pytest.skip("psutil child enumeration is flaky under Windows CI")
+
+        import psutil
+
+        ls = _create_ls(Language.ANGULAR)
+        my_proc = psutil.Process(os.getpid())
+        children_before = {p.pid for p in my_proc.children(recursive=True)}
+
+        def boom(*_args: object, **_kwargs: object) -> dict:
+            raise RuntimeError("simulated ngserver init failure")
+
+        # _get_initialize_params runs after both companions and ngserver have
+        # been spawned — exactly the failure window the cleanup wrapper
+        # protects against.
+        monkeypatch.setattr(ls, "_get_initialize_params", boom)
+
+        try:
+            with pytest.raises(RuntimeError, match="simulated ngserver init"):
+                ls.start()
+
+            assert ls._ts_server is None, "TS companion was not cleared after startup failure"
+            assert ls._html_server is None, "HTML companion was not cleared after startup failure"
+
+            # Allow a brief grace period for the OS to reap the spawned Node
+            # processes (and grandchildren — typescript-language-server forks
+            # tsserver).
+            deadline = time.monotonic() + 5.0
+            new_children: set[int] = set()
+            while time.monotonic() < deadline:
+                children_after = {p.pid for p in my_proc.children(recursive=True)}
+                new_children = children_after - children_before
+                if not new_children:
+                    break
+                time.sleep(0.2)
+            assert not new_children, f"Companion processes leaked after startup failure: {sorted(new_children)}"
+        finally:
+            # Best-effort: if anything is still around (e.g. ngserver itself,
+            # which lives outside the cleanup contract), shut it down so the
+            # test session doesn't leave orphans.
+            try:
+                ls.stop(shutdown_timeout=2.0)
+            except Exception:
+                pass

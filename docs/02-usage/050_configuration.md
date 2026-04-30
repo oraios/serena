@@ -227,8 +227,13 @@ ls_specific_settings:
 
 This is supported by all language servers deriving their dependency provider from `LanguageServerDependencyProviderSinglePath`,
 and by some additional wrappers that explicitly expose `ls_path`.
-Common examples include: `ansible`, `bash`, `clojure`, `cpp`, `cpp_ccls`, `hlsl`, `kotlin`, `lean4`, `luau`, `markdown`, `php`,
-`php_phpactor`, `python`, `rust`, `solidity`, `systemverilog`, `toml`, `typescript`, and `yaml`.
+Common examples include: `ansible`, `bash`, `clojure`, `cpp`, `cpp_ccls`, `css`, `hlsl`, `html`, `kotlin`, `lean4`, `luau`, `markdown`, `php`,
+`php_phpactor`, `python`, `rust`, `scss`, `solidity`, `systemverilog`, `toml`, `typescript`, and `yaml`.
+
+Note: `angular` does **not** support `ls_path` — the Angular language server is part of a multi-process orchestration
+(`ngserver` plus a companion TypeScript language server with the `@angular/language-service` plugin and an HTML
+companion) where the dependency layout matters; use the version overrides documented in the Angular section below
+to pin specific releases of the bundled stack.
 
 If a language server supports `ls_path`, setting it bypasses Serena's managed download or install for that server.
 In that case, any server-specific version or registry settings only apply when `ls_path` is not set.
@@ -242,6 +247,36 @@ Supported settings:
 | Setting | Default | Description |
 |---|---|---|
 | `al_extension_version` | `18.0.2242655` | Override the AL VS Code extension version Serena downloads from the VS Code Marketplace. |
+
+#### Angular
+
+Serena uses `@angular/language-server` (`ngserver`) for the `angular` language key, orchestrated together with a
+companion `typescript-language-server` (with `@angular/language-service` loaded as a tsserver plugin) and a
+companion `vscode-html-language-server` for `.html` `documentSymbol`. This is an **experimental** language and
+must be explicitly listed in `project.yml`; it is not auto-detected.
+
+**Project requirements:**
+
+- The project itself must have `@angular/core` installed (i.e. `npm install` must have been run in the project root,
+  or in a workspace root above it for monorepo layouts). Without it, `ngserver` reports every file as "not in an
+  Angular project" and template-aware features silently return empty.
+- A `tsconfig.json` must be reachable at or above any opened `.ts` file.
+- Do **not** also list `typescript` or `html` in `languages` when `angular` is active — Angular subsumes both
+  for `.ts` / `.html` files. SCSS is **not** subsumed; list `scss` separately if needed.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `angular_language_server_version` | `21.2.10` | Override the bundled `@angular/language-server` npm package version Serena installs. |
+| `angular_language_service_version` | `21.2.10` | Override the bundled `@angular/language-service` tsserver plugin version. |
+| `typescript_version` | `5.9.3` | Override the bundled `typescript` npm package version. Falls back to `ls_specific_settings.typescript.typescript_version` if unset. |
+| `typescript_language_server_version` | `5.1.3` | Override the bundled `typescript-language-server` version. Falls back to `ls_specific_settings.typescript.typescript_language_server_version` if unset. |
+| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. Falls back to `ls_specific_settings.typescript.npm_registry` if unset. |
+
+Notes:
+- The HTML companion (`vscode-html-language-server`) is configured via `ls_specific_settings.html` — see the HTML section below.
+- `ls_path` is not supported (see note above the AL section).
 
 #### Ansible
 
@@ -363,6 +398,24 @@ Supported settings:
 |---|---|---|
 | `omnisharp_version` | `1.39.10` | Override the OmniSharp version Serena downloads. |
 | `razor_omnisharp_version` | `7.0.0-preview.23363.1` | Override the Razor OmniSharp plugin version Serena downloads. |
+
+#### CSS
+
+Serena uses `vscode-css-language-server` from Microsoft's `vscode-langservers-extracted` npm package for the
+`css` language key. **Experimental** — must be explicitly listed in `project.yml`; not auto-detected. Cross-file
+`@import` navigation is limited; for SCSS / Sass, use the `scss` language instead.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed install | Override the `vscode-css-language-server` executable path. |
+| `vscode_langservers_package` | `vscode-langservers-extracted` | npm package providing the binary. Set to `@t1ckbase/vscode-langservers-extracted` (or any other source) to use the actively-maintained 2026 fork. |
+| `vscode_langservers_version` | `4.10.0` | Override the npm package version Serena installs when `ls_path` is not set. |
+| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
+
+Note: the CSS and HTML language servers default to the same npm package but are installed into separate
+directories so that overriding `vscode_langservers_package` for one does not invalidate the other.
 
 #### Dart
 
@@ -495,6 +548,25 @@ ls_specific_settings:
     haxePath: "/usr/local/bin/haxe"
     renameSourceFolders: ["src", "lib"]
 ```
+
+#### HTML
+
+Serena uses `vscode-html-language-server` from Microsoft's `vscode-langservers-extracted` npm package for the
+`html` language key. **Experimental** — must be explicitly listed in `project.yml`; not auto-detected. The HTML
+LSP returns in-file element / id symbols via `documentSymbol`; cross-file `definition` / `references` are not
+meaningful for HTML and are not exposed.
+
+This same language server is also used as a tertiary companion by the Angular language server (see the Angular
+section), since `ngserver` does not implement `textDocument/documentSymbol` for `.html` files.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed install | Override the `vscode-html-language-server` executable path. |
+| `vscode_langservers_package` | `vscode-langservers-extracted` | npm package providing the binary. Set to `@t1ckbase/vscode-langservers-extracted` (or any other source) to use the actively-maintained 2026 fork. |
+| `vscode_langservers_version` | `4.10.0` | Override the npm package version Serena installs when `ls_path` is not set. |
+| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
 
 #### Java (`eclipse.jdt.ls`)
 
@@ -789,6 +861,24 @@ Supported settings:
 | `client_name` | `Serena` | Client identifier sent to Metals. |
 | `on_stale_lock` | `auto-clean` | How Serena handles stale Metals H2 database locks. Supported values: `auto-clean`, `warn`, `fail`. |
 | `log_multi_instance_notice` | `true` | Log a notice when another Metals instance is detected. |
+
+#### SCSS / Sass
+
+Serena uses [`some-sass-language-server`](https://github.com/wkillerud/some-sass) for the `scss` language key.
+**Experimental** — must be explicitly listed in `project.yml`; not auto-detected. Some Sass was chosen over the
+generic `vscode-css-language-server` because it provides full workspace-wide `@use` / `@forward` go-to-definition
+and find-references for variables, mixins, functions, and placeholders.
+
+Supports both `.scss` and `.sass` files. The indented Sass syntax (`.sass`) is opened with the `sass` LSP language
+id; `.scss` files use `scss`.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed install | Override the `some-sass-language-server` executable path. |
+| `some_sass_version` | `2.3.8` | Override the npm package version Serena installs when `ls_path` is not set. |
+| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
 
 #### Solidity
 

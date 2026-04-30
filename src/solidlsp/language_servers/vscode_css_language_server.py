@@ -66,6 +66,7 @@ class VsCodeCssLanguageServer(SolidLanguageServer):
         )
         self.server_ready = threading.Event()
 
+    @override
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
@@ -82,7 +83,9 @@ class VsCodeCssLanguageServer(SolidLanguageServer):
             package_version = self._custom_settings.get("vscode_langservers_version", DEFAULT_PACKAGE_VERSION)
             npm_registry = self._custom_settings.get("npm_registry")
 
-            install_dir = os.path.join(self._ls_resources_dir, "vscode-langservers")
+            # Isolated from the HTML LS's install dir; see the matching comment in
+            # vscode_html_language_server.py for the rationale.
+            install_dir = os.path.join(self._ls_resources_dir, "vscode-langservers-css")
             executable_path = os.path.join(install_dir, "node_modules", ".bin", LS_BIN_NAME)
             if os.name == "nt":
                 executable_path += ".cmd"

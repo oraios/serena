@@ -1,8 +1,34 @@
+from pathlib import Path
+
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
 
 PYTHON_BACKEND_LANGUAGES = [Language.PYTHON, Language.PYTHON_TY]
+
+
+def find_in_file(language_server: SolidLanguageServer, relative_path: str, needle: str, occurrence: int = 0) -> tuple[int, int]:
+    """Locate the (line, column) of ``needle`` in ``relative_path`` (0-based, LSP coords).
+
+    The column points to the first character of the match. Pass ``occurrence`` to skip
+    earlier hits when the substring repeats.
+
+    Prefer this over hardcoded coordinates: tests stay readable and don't break when
+    the fixture shifts by a line.
+    """
+    abs_path = Path(language_server.language_server.repository_root_path) / relative_path
+    seen = -1
+    for i, line in enumerate(abs_path.read_text().splitlines()):
+        start = 0
+        while True:
+            idx = line.find(needle, start)
+            if idx < 0:
+                break
+            seen += 1
+            if seen == occurrence:
+                return i, idx
+            start = idx + 1
+    raise AssertionError(f"Could not find occurrence #{occurrence} of '{needle}' in {relative_path}")
 
 
 def is_diagnostics_test_file(relative_path: str) -> bool:
