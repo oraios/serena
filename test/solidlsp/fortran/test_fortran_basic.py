@@ -11,6 +11,7 @@ from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
+from test.conftest import find_identifier_position, get_repo_path, language_has_verified_implementation_support
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 # Mark all tests in this module as fortran tests
@@ -37,6 +38,33 @@ class TestFortranLanguageServer:
 
         # Verify subroutine symbol
         assert SymbolUtils.symbol_tree_contains_name(symbols, "print_result"), "print_result subroutine not found in symbol tree"
+
+    if language_has_verified_implementation_support(Language.FORTRAN):
+
+        @pytest.mark.parametrize("language_server", [Language.FORTRAN], indirect=True)
+        def test_find_implementations(self, language_server: SolidLanguageServer) -> None:
+            repo_path = get_repo_path(Language.FORTRAN)
+            pos = find_identifier_position(repo_path / "modules" / "geometry.f90", "distance")
+            assert pos is not None, "Could not find interface distance in geometry.f90"
+
+            implementations = language_server.request_implementation("modules/geometry.f90", *pos)
+            assert implementations, "Expected implementations for geometry_types.distance"
+            implementation_files = {implementation.get("relativePath", "") for implementation in implementations}
+            assert implementation_files == {"modules/geometry.f90"}, f"Unexpected implementation locations: {implementations}"
+            assert len(implementations) >= 2, f"Expected module procedure implementations, got: {implementations}"
+
+        @pytest.mark.parametrize("language_server", [Language.FORTRAN], indirect=True)
+        def test_request_implementing_symbols(self, language_server: SolidLanguageServer) -> None:
+            repo_path = get_repo_path(Language.FORTRAN)
+            pos = find_identifier_position(repo_path / "modules" / "geometry.f90", "distance")
+            assert pos is not None, "Could not find interface distance in geometry.f90"
+
+            implementing_symbols = language_server.request_implementing_symbols("modules/geometry.f90", *pos)
+            assert implementing_symbols, "Expected implementing symbols for geometry_types.distance"
+            implementing_symbol_names = {symbol.get("name") for symbol in implementing_symbols}
+            assert {"distance_2d", "distance_3d"}.issubset(implementing_symbol_names), (
+                f"Expected distance_2d and distance_3d, got: {implementing_symbols}"
+            )
 
     @pytest.mark.parametrize("language_server", [Language.FORTRAN], indirect=True)
     def test_request_document_symbols(self, language_server: SolidLanguageServer) -> None:

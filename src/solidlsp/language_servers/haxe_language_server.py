@@ -215,7 +215,14 @@ class HaxeLanguageServer(SolidLanguageServer):
             "locale": "en",
             "capabilities": {
                 "textDocument": {
-                    "synchronization": {"didSave": True},
+                    "publishDiagnostics": {
+                        "relatedInformation": True,
+                        "versionSupport": False,
+                        "tagSupport": {"valueSet": [1, 2]},
+                        "codeDescriptionSupport": True,
+                        "dataSupport": True,
+                    },
+                    "synchronization": {"dynamicRegistration": True, "didSave": True},
                     "completion": {"completionItem": {"snippetSupport": True}},
                     "definition": {},
                     "references": {},

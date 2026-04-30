@@ -7,8 +7,9 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
-from test.conftest import is_ci
+from test.conftest import find_identifier_position, get_repo_path, is_ci, language_has_verified_implementation_support
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
+from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
 
 # Currently, most F# tests fail, there seems to be a regression or instability.
@@ -38,6 +39,33 @@ class TestFSharpLanguageServer:
         # Look for expected functions and modules
         symbol_names = [s.get("name") for s in symbols]
         assert "main" in symbol_names, "main function not found in Program.fs symbols"
+
+    if language_has_verified_implementation_support(Language.FSHARP):
+
+        @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
+        def test_find_implementations(self, language_server: SolidLanguageServer) -> None:
+            repo_path = get_repo_path(Language.FSHARP)
+            pos = find_identifier_position(repo_path / "Formatter.fs", "FormatGreeting")
+            assert pos is not None, "Could not find IGreeter.FormatGreeting in fixture"
+
+            implementations = language_server.request_implementation("Formatter.fs", *pos)
+            assert implementations, "Expected at least one implementation of IGreeter.FormatGreeting"
+            assert any("Formatter.fs" in implementation.get("relativePath", "") for implementation in implementations), (
+                f"Expected ConsoleGreeter.FormatGreeting in implementations, got: {implementations}"
+            )
+
+        @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
+        def test_request_implementing_symbols(self, language_server: SolidLanguageServer) -> None:
+            repo_path = get_repo_path(Language.FSHARP)
+            pos = find_identifier_position(repo_path / "Formatter.fs", "FormatGreeting")
+            assert pos is not None, "Could not find IGreeter.FormatGreeting in fixture"
+
+            implementing_symbols = language_server.request_implementing_symbols("Formatter.fs", *pos)
+            assert implementing_symbols, "Expected implementing symbols for IGreeter.FormatGreeting"
+            assert any(
+                symbol.get("name") == "FormatGreeting" and "Formatter.fs" in symbol["location"].get("relativePath", "")
+                for symbol in implementing_symbols
+            ), f"Expected ConsoleGreeter.FormatGreeting symbol, got: {implementing_symbols}"
 
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
     def test_get_document_symbols_calculator(self, language_server: SolidLanguageServer) -> None:
@@ -169,21 +197,13 @@ class TestFSharpLanguageServer:
         assert isinstance(result["value"], list), "Completions should be a list"
 
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
-    def test_diagnostics(self, language_server: SolidLanguageServer) -> None:
-        """Test getting diagnostics (errors, warnings) from F# files."""
-        file_path = os.path.join("Program.fs")
-
-        # FsAutoComplete uses publishDiagnostics notifications instead of textDocument/diagnostic requests
-        # So we'll test that the language server can handle files without crashing
-        # In real usage, diagnostics would come through the publishDiagnostics notification handler
-
-        # Test that we can at least work with the file (open/close cycle)
-        with language_server.open_file(file_path) as _:
-            # If we can open and close the file without errors, basic diagnostics support is working
-            pass
-
-        # This is a successful test - FsAutoComplete is working with F# files
-        assert True, "F# language server can handle files successfully"
+    def test_file_diagnostics(self, language_server: SolidLanguageServer) -> None:
+        assert_file_diagnostics(
+            language_server,
+            "DiagnosticsSample.fs",
+            (),
+            min_count=1,
+        )
 
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:

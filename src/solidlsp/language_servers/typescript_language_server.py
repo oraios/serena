@@ -67,6 +67,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         - typescript_language_server_version: Version of typescript-language-server to install (default: "5.1.3")
     """
 
+    @classmethod
+    def supports_implementation_request(cls) -> bool:
+        return True
+
     # Safety timeout for $/progress-based indexing wait. Normally the event fires
     # well within this window; the timeout is only hit if the server never sends progress.
     INDEXING_PROGRESS_TIMEOUT = 15.0 if os.name == "nt" else 10.0
@@ -85,7 +89,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         self.server_ready = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
 
-        # Progress tracking for $/progress notifications (project indexing, etc.)
+        # tracking asynchronous diagnostics publication
+        self._published_diagnostics_timeout = 5.0
+
+        # tracking project indexing progress
         self._progress_lock = threading.Lock()
         self._active_progress_tokens: set[str] = set()
         self._indexing_complete = threading.Event()
@@ -248,9 +255,11 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                     "signatureHelp": {"dynamicRegistration": True},
                     "codeAction": {"dynamicRegistration": True},
                     "rename": {"dynamicRegistration": True, "prepareSupport": True},
+                    "publishDiagnostics": {"relatedInformation": True},
                 },
                 "workspace": {
                     "workspaceFolders": True,
+                    "configuration": True,
                     "didChangeConfiguration": {"dynamicRegistration": True},
                     "symbol": {"dynamicRegistration": True},
                 },
@@ -297,6 +306,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
 
         def execute_client_command_handler(params: dict) -> list:
             return []
+
+        def configuration_handler(params: dict) -> list:
+            items = params.get("items", [])
+            return [{} for _ in items]
 
         def do_nothing(params: dict) -> None:
             return
@@ -357,6 +370,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                         self._indexing_complete.set()
 
         self.server.on_request("client/registerCapability", register_capability_handler)
+        self.server.on_request("workspace/configuration", configuration_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
         self.server.on_request("window/workDoneProgress/create", work_done_progress_create)
@@ -401,6 +415,20 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                 "TypeScript project indexing did not complete within %.0fs; proceeding anyway",
                 self.INDEXING_PROGRESS_TIMEOUT,
             )
+
+    @override
+    def _get_published_diagnostics_uri(self, request_uri: str) -> str:
+        if os.name != "nt" or not request_uri.startswith("file:///"):
+            return request_uri
+
+        path_part = request_uri[len("file:///") :]
+        if len(path_part) >= 2 and path_part[0].isalpha() and path_part[1] == ":":
+            return f"file:///{path_part[0].lower()}%3A{path_part[2:]}"
+        return request_uri
+
+    @override
+    def _get_published_diagnostics_wait_timeout(self, pull_diagnostics_failed: bool) -> float:
+        return self._published_diagnostics_timeout
 
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:

@@ -9,6 +9,7 @@ from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import SymbolUtils
 from solidlsp.settings import SolidLSPSettings
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
+from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
 
 @pytest.mark.groovy
@@ -117,3 +118,12 @@ class TestGroovyLanguageServer:
                 f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
                 pytrace=False,
             )
+
+    def test_file_diagnostics(self) -> None:
+        assert self.language_server is not None
+        assert_file_diagnostics(
+            self.language_server,
+            "src/main/groovy/com/example/DiagnosticsSample.groovy",
+            (),
+            min_count=1,
+        )

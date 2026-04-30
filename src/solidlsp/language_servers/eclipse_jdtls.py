@@ -152,6 +152,10 @@ class EclipseJDTLS(SolidLanguageServer):
     ```
     """
 
+    @classmethod
+    def supports_implementation_request(cls) -> bool:
+        return True
+
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a new EclipseJDTLS instance initializing the language server settings appropriately.

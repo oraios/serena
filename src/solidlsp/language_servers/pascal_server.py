@@ -777,6 +777,14 @@ class PascalLanguageServer(SolidLanguageServer):
             if value:
                 initialization_options[var] = value
 
+        initialization_options.update(
+            {
+                "checkSyntax": True,
+                "publishDiagnostics": True,
+                "showSyntaxErrors": True,
+            }
+        )
+
         initialize_params = {
             "locale": "en",
             "capabilities": {
@@ -831,6 +839,7 @@ class PascalLanguageServer(SolidLanguageServer):
                     },
                     "formatting": {"dynamicRegistration": True},
                     "rangeFormatting": {"dynamicRegistration": True},
+                    "publishDiagnostics": {"relatedInformation": True},
                 },
                 "workspace": {
                     "workspaceFolders": True,

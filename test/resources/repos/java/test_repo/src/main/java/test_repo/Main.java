@@ -6,6 +6,8 @@ public class Main {
         Model model = new Model("Cascade");
         System.out.println(model.getName());
         acceptModel(model);
+        Greeter greeter = new ConsoleGreeter();
+        System.out.println(greeter.formatGreeting("Cascade"));
     }
     public static void acceptModel(Model m) {
         // Do nothing, just for LSP reference

@@ -595,3 +595,76 @@ class JetBrainsDebugTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
             else:
                 response = client.debug_close(repl_key=repl_key)
             return response.get("result", str(response))
+
+
+class JetBrainsRunInspectionsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+    """
+    Runs JetBrains IDE inspections on a file and returns the results.
+    """
+
+    def apply(
+        self,
+        relative_path: str,
+        min_severity: str | None = None,
+        inspection_names: list[str] | None = None,
+        start_line: int | None = None,
+        end_line: int | None = None,
+        max_answer_chars: int = -1,
+    ) -> str:
+        """
+        Runs IDE inspections (code analysis) on the given file and returns the problems found.
+        This leverages the full power of JetBrains' static analysis engine, including language-specific
+        inspections, type checking, potential bugs, code style issues, and more.
+
+        :param relative_path: the relative path to the file to inspect.
+        :param min_severity: minimum severity level to include in results (e.g. "ERROR", "WARNING", "WEAK_WARNING", "INFO").
+            If not specified, all severities are returned.
+        :param inspection_names: optional list of specific inspection names to run (e.g. ["UnusedImport", "TypeMismatch"]).
+            If not specified, all applicable inspections are run.
+        :param start_line: optional 1-based start line to restrict the inspection range.
+        :param end_line: optional 1-based end line to restrict the inspection range.
+        :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
+            -1 means the default value from the config will be used.
+        :return: JSON string with inspection results including severity, message, and location.
+        """
+        with JetBrainsPluginClient.from_project(self.project) as client:
+            response_dict = client.run_inspections(
+                relative_path=relative_path,
+                min_severity=min_severity,
+                inspection_names=inspection_names,
+                start_line=start_line,
+                end_line=end_line,
+            )
+        result = self._to_json(response_dict)
+        return self._limit_length(result, max_answer_chars)
+
+
+class JetBrainsListInspectionsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+    """
+    Lists available JetBrains IDE inspections, optionally filtered by language or group.
+    """
+
+    def apply(
+        self,
+        language: str | None = None,
+        group_path_contains: str | None = None,
+        max_answer_chars: int = -1,
+    ) -> str:
+        """
+        Lists the available IDE inspections. Use this to discover which inspections can be passed
+        to the run_inspections tool's `inspection_names` parameter.
+
+        :param language: optional language to filter by (e.g. "Java", "Python", "Kotlin").
+        :param group_path_contains: optional substring to match against the inspection group path
+            (e.g. "probable bugs", "code style").
+        :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
+            -1 means the default value from the config will be used.
+        :return: JSON string with the list of available inspections including name, group path, and language.
+        """
+        with JetBrainsPluginClient.from_project(self.project) as client:
+            response_dict = client.list_inspections(
+                language=language,
+                group_path_contains=group_path_contains,
+            )
+        result = self._to_json(response_dict)
+        return self._limit_length(result, max_answer_chars)
