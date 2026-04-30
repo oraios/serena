@@ -18,44 +18,8 @@ from serena.tools import (
     ToolMarkerSymbolicRead,
 )
 from serena.tools.tools_base import ToolMarkerOptional
-from solidlsp import ls_types
+from serena.util.ls_diagnostics import GroupedDiagnostics
 from solidlsp.ls_types import SymbolKind
-from solidlsp.lsp_protocol_handler.lsp_types import DiagnosticSeverity
-
-FILE_LEVEL_DIAGNOSTIC_BUCKET = "<file>"
-
-
-def _diagnostic_severity_name(severity: int | None) -> str:
-    if severity is None:
-        return "Unknown"
-    try:
-        return DiagnosticSeverity(severity).name
-    except ValueError:
-        return f"Severity_{severity}"
-
-
-def _diagnostic_output_dict(diagnostic: ls_types.Diagnostic) -> dict[str, Any]:
-    result: dict[str, Any] = {
-        "message": diagnostic["message"],
-        "range": diagnostic["range"],
-    }
-    if "code" in diagnostic:
-        result["code"] = diagnostic["code"]
-    if "source" in diagnostic:
-        result["source"] = diagnostic["source"]
-    return result
-
-
-def _add_grouped_diagnostic(
-    grouped_result: dict[str, dict[str, dict[str, list[dict[str, Any]]]]],
-    relative_path: str,
-    severity_name: str,
-    name_path: str,
-    diagnostic: ls_types.Diagnostic,
-) -> None:
-    grouped_result.setdefault(relative_path, {}).setdefault(severity_name, {}).setdefault(name_path, []).append(
-        _diagnostic_output_dict(diagnostic)
-    )
 
 
 def _offset_to_line_and_column(text: str, offset: int) -> tuple[int, int]:
@@ -663,7 +627,7 @@ class GetDiagnosticsForFileTool(Tool, ToolMarkerSymbolicRead):
     Gets diagnostics for a file, optionally restricted to a line range, grouped by file, severity, and containing symbol.
     """
 
-    _ENABLE_DIAGNOSTICS: bool = True
+    FILE_LEVEL_DIAGNOSTIC_BUCKET = "<file>"
 
     def apply(
         self,
@@ -693,10 +657,10 @@ class GetDiagnosticsForFileTool(Tool, ToolMarkerSymbolicRead):
             min_severity=min_severity,
         )
 
-        grouped_result: dict[str, dict[str, dict[str, list[dict[str, Any]]]]] = {}
+        grouped_diagnostics = GroupedDiagnostics()
         for diagnostic in diagnostics:
             diag_range = diagnostic["range"]["start"]
-            name_path = FILE_LEVEL_DIAGNOSTIC_BUCKET
+            name_path = self.FILE_LEVEL_DIAGNOSTIC_BUCKET
             owner_symbol = symbol_retriever.find_diagnostic_owner_symbol(
                 relative_file_path=relative_path,
                 line=diag_range["line"],
@@ -704,15 +668,9 @@ class GetDiagnosticsForFileTool(Tool, ToolMarkerSymbolicRead):
             )
             if owner_symbol is not None:
                 name_path = owner_symbol.get_name_path()
-            _add_grouped_diagnostic(
-                grouped_result,
-                relative_path=relative_path,
-                severity_name=_diagnostic_severity_name(diagnostic.get("severity")),
-                name_path=name_path,
-                diagnostic=diagnostic,
-            )
+            grouped_diagnostics.add(relative_path, name_path, diagnostic)
 
-        result = self._to_json(grouped_result)
+        result = self._to_json(grouped_diagnostics.get_dict())
         return self._limit_length(result, max_answer_chars)
 
 
@@ -720,8 +678,6 @@ class GetDiagnosticsForSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOption
     """
     Gets diagnostics for a symbol and, optionally, for symbols that reference it.
     """
-
-    _ENABLE_DIAGNOSTICS: bool = True
 
     def apply(
         self,
@@ -752,22 +708,16 @@ class GetDiagnosticsForSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOption
             min_severity=min_severity,
         )
 
-        grouped_result: dict[str, dict[str, dict[str, list[dict[str, Any]]]]] = {}
+        grouped_diagnostics = GroupedDiagnostics()
         for symbol, diagnostics in diagnostics_by_symbol.items():
             relative_path = symbol.relative_path
             if relative_path is None:
                 continue
             symbol_name_path = symbol.get_name_path()
             for diagnostic in diagnostics:
-                _add_grouped_diagnostic(
-                    grouped_result,
-                    relative_path=relative_path,
-                    severity_name=_diagnostic_severity_name(diagnostic.get("severity")),
-                    name_path=symbol_name_path,
-                    diagnostic=diagnostic,
-                )
+                grouped_diagnostics.add(relative_path, symbol_name_path, diagnostic)
 
-        result = self._to_json(grouped_result)
+        result = self._to_json(grouped_diagnostics.get_dict())
         return self._limit_length(result, max_answer_chars)
 
 

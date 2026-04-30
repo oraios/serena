@@ -448,7 +448,7 @@ class EditingToolWithDiagnostics(Tool, ToolMarkerCanEdit):
 
             assert self._symbol_retriever is not None
             diagnostics_diff = DiagnosticsDiff(self._before_edit_diagnostics_snapshot, self._edited_files, self._symbol_retriever)
-            grouped_diagnostics = diagnostics_diff.get_grouped_diagnostics()
+            grouped_diagnostics = diagnostics_diff.get_grouped_diagnostics().get_dict()
 
             if not grouped_diagnostics:
                 return base_result

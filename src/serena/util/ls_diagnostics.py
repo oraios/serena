@@ -88,6 +88,62 @@ class PublishedDiagnosticsSnapshot:
         self.warning_identities_by_before_path = warning_identities_by_before_path
 
 
+class GroupedDiagnostics:
+    def __init__(self) -> None:
+        self._grouped_diagnostics: dict[str, dict[str, dict[str, list[dict[str, Any]]]]] = {}
+
+    def add(self, relative_path: str, name_path: str, diagnostic: ls_types.Diagnostic) -> None:
+        severity_name = self._diagnostic_severity_name(diagnostic.get("severity"))
+        self._grouped_diagnostics.setdefault(relative_path, {}).setdefault(severity_name, {}).setdefault(name_path, []).append(
+            self._diagnostic_output_dict(diagnostic)
+        )
+
+    def get_dict(self) -> dict[str, dict[str, dict[str, list[dict[str, Any]]]]]:
+        """
+        Returns a nested dictionary of the form:
+        {
+            relative_file_path: {
+                severity_name: {
+                    name_path: [
+                        diagnostic_dict,
+                        ...
+                    ],
+                    ...
+                },
+                ...
+            },
+            ...
+        }
+        where:
+        - relative_file_path is the relative path of the file containing the diagnostic
+        - severity_name is the name of the diagnostic severity (e.g. "Warning", "Error")
+        - name_path is the name path of the symbol that owns the diagnostic (or "<file>" if no owner symbol was found)
+        - diagnostic_dict is a dictionary containing the diagnostic's message, range, and optionally code and source
+        """
+        return self._grouped_diagnostics
+
+    @staticmethod
+    def _diagnostic_severity_name(severity: int | None) -> str:
+        if severity is None:
+            return "Unknown"
+        try:
+            return DiagnosticSeverity(severity).name
+        except ValueError:
+            return f"Severity_{severity}"
+
+    @staticmethod
+    def _diagnostic_output_dict(diagnostic: ls_types.Diagnostic) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            "message": diagnostic["message"],
+            "range": diagnostic["range"],
+        }
+        if "code" in diagnostic:
+            result["code"] = diagnostic["code"]
+        if "source" in diagnostic:
+            result["source"] = diagnostic["source"]
+        return result
+
+
 class DiagnosticsDiff:
     def __init__(
         self,
@@ -95,7 +151,7 @@ class DiagnosticsDiff:
         edited_files: Iterable[EditedFilePath],
         symbol_retriever: "LanguageServerSymbolRetriever",
     ):
-        grouped_result: dict[str, dict[str, dict[str, list[dict[str, Any]]]]] = {}
+        grouped_diagnostics = GroupedDiagnostics()
 
         for edited_file_path in edited_files:
             try:
@@ -139,64 +195,9 @@ class DiagnosticsDiff:
                     column=diagnostic_start["character"],
                 )
                 name_path = owner_symbol.get_name_path() if owner_symbol is not None else "<file>"
-                self._add_grouped_diagnostic(grouped_result, edited_file_path.after_relative_path, name_path, diagnostic)
+                grouped_diagnostics.add(edited_file_path.after_relative_path, name_path, diagnostic)
 
-        self._grouped_result = grouped_result
+        self._grouped_diagnostics = grouped_diagnostics
 
-    def get_grouped_diagnostics(self) -> dict[str, dict[str, dict[str, list[dict[str, Any]]]]]:
-        """
-        Returns a nested dictionary of the form:
-        {
-            relative_file_path: {
-                severity_name: {
-                    name_path: [
-                        diagnostic_dict,
-                        ...
-                    ],
-                    ...
-                },
-                ...
-            },
-            ...
-        }
-        where:
-        - relative_file_path is the relative path of the file containing the diagnostic
-        - severity_name is the name of the diagnostic severity (e.g. "Warning", "Error")
-        - name_path is the name path of the symbol that owns the diagnostic (or "<file>" if no owner symbol was found)
-        - diagnostic_dict is a dictionary containing the diagnostic's message, range, and optionally code and source
-        """
-        return self._grouped_result
-
-    @classmethod
-    def _add_grouped_diagnostic(
-        cls,
-        grouped_result: dict[str, dict[str, dict[str, list[dict[str, Any]]]]],
-        relative_path: str,
-        name_path: str,
-        diagnostic: ls_types.Diagnostic,
-    ) -> None:
-        severity_name = cls._diagnostic_severity_name(diagnostic.get("severity"))
-        grouped_result.setdefault(relative_path, {}).setdefault(severity_name, {}).setdefault(name_path, []).append(
-            cls._diagnostic_output_dict(diagnostic)
-        )
-
-    @staticmethod
-    def _diagnostic_severity_name(severity: int | None) -> str:
-        if severity is None:
-            return "Unknown"
-        try:
-            return DiagnosticSeverity(severity).name
-        except ValueError:
-            return f"Severity_{severity}"
-
-    @staticmethod
-    def _diagnostic_output_dict(diagnostic: ls_types.Diagnostic) -> dict[str, Any]:
-        result: dict[str, Any] = {
-            "message": diagnostic["message"],
-            "range": diagnostic["range"],
-        }
-        if "code" in diagnostic:
-            result["code"] = diagnostic["code"]
-        if "source" in diagnostic:
-            result["source"] = diagnostic["source"]
-        return result
+    def get_grouped_diagnostics(self) -> GroupedDiagnostics:
+        return self._grouped_diagnostics
