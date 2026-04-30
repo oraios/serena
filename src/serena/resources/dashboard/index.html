@@ -8,6 +8,9 @@
     <link rel="icon" type="image/png" sizes="16x16" href="serena-icon-16.png">
     <link rel="icon" type="image/png" sizes="32x32" href="serena-icon-32.png">
     <link rel="icon" type="image/png" sizes="48x48" href="serena-icon-48.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="dashboard.css">
     <script src="jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -69,8 +72,8 @@
                 </section>
 
                 <section class="config-section">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <h2 style="margin: 0;">Current Configuration</h2>
+                    <div class="section-header-row">
+                        <h2>Current Configuration</h2>
                     </div>
                     <div id="config-display">
                         <div class="loading">Loading configuration...</div>
@@ -110,9 +113,9 @@
                 <section class="projects-section">
                     <h2 class="collapsible-header" id="projects-header">
                         <span>Registered Projects</span>
-                        <span class="toggle-icon">▼</span>
+                        <span class="toggle-icon expanded">▼</span>
                     </h2>
-                    <div id="projects-display" class="collapsible-content" style="display:none">
+                    <div id="projects-display" class="collapsible-content">
                         <div class="loading">Loading projects...</div>
                     </div>
                 </section>
@@ -201,9 +204,9 @@
             <button id="clear-stats" class="btn">Clear Stats</button>
         </div>
 
-        <div id="stats-summary" style="margin-bottom:20px; text-align:center;"></div>
-        <div id="estimator-name" style="text-align:center; margin-bottom:10px;"></div>
-        <div id="no-stats-message" style="text-align:center; color:var(--text-muted); font-style:italic; display:none;">
+        <div id="stats-summary" class="stats-summary-block"></div>
+        <div id="estimator-name" class="estimator-name"></div>
+        <div id="no-stats-message" class="no-stats-message" style="display:none;">
             No tool stats collected yet.
         </div>
 
@@ -232,25 +235,26 @@
         <div class="modal-content">
             <span class="modal-close">&times;</span>
             <h3>Add Language</h3>
-            <p id="modal-project-info" style="margin: 15px 0; color: var(--text-primary); line-height: 1.5;">
+            <p id="modal-project-info" class="modal-info">
                 Adding a language to serena config of project <strong id="modal-project-name"></strong>.
             </p>
-            <p style="margin: 15px 0; color: var(--text-muted); font-size: 13px; line-height: 1.5;">
+            <p class="modal-hint">
                 Note that this may download some dependencies needed for the language server and then start it,
                 it may take a few seconds before the LS is responsive.
             </p>
-            <div style="margin: 20px 0;">
-                <label for="modal-language-select" style="display: block; margin-bottom: 8px; font-weight: 500;">Select
-                    Language:</label>
-                <select id="modal-language-select" class="language-select"
-                        style="width: 100%; padding: 8px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); font-size: 14px;">
-                </select>
+            <div class="modal-field">
+                <label for="modal-language-select">Select Language:</label>
+                <div class="combobox" id="modal-language-combobox">
+                    <input type="text" id="modal-language-select" class="modal-input combobox-input"
+                           placeholder="Type to filter…" autocomplete="off" spellcheck="false">
+                    <span class="combobox-caret" aria-hidden="true">▾</span>
+                    <ul id="modal-language-options" class="combobox-options" role="listbox" style="display:none"></ul>
+                    <div id="modal-language-empty" class="combobox-empty" style="display:none">No languages available to add</div>
+                </div>
             </div>
-            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
-                <button id="modal-cancel-btn" class="btn"
-                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
-                </button>
-                <button id="modal-add-btn" class="btn" style="padding: 8px 16px;">Add Language</button>
+            <div class="modal-actions">
+                <button id="modal-cancel-btn" class="btn btn-secondary">Cancel</button>
+                <button id="modal-add-btn" class="btn">Add Language</button>
             </div>
         </div>
     </div>
@@ -259,14 +263,12 @@
     <div id="remove-language-modal" class="modal" style="display:none">
         <div class="modal-content">
             <span class="modal-close modal-close-remove">&times;</span>
-            <p style="margin: 20px 0; color: var(--text-primary); line-height: 1.5; font-size: 15px;">
+            <p class="modal-prompt">
                 Remove language <strong id="remove-language-name"></strong> from configuration?
             </p>
-            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
-                <button id="remove-modal-cancel-btn" class="btn"
-                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
-                </button>
-                <button id="remove-modal-ok-btn" class="btn" style="padding: 8px 16px;">OK</button>
+            <div class="modal-actions">
+                <button id="remove-modal-cancel-btn" class="btn btn-secondary">Cancel</button>
+                <button id="remove-modal-ok-btn" class="btn">OK</button>
             </div>
         </div>
     </div>
@@ -275,7 +277,7 @@
     <div id="edit-memory-modal" class="modal" style="display:none">
         <div class="modal-content modal-content-large">
             <span class="modal-close modal-close-edit-memory">&times;</span>
-            <h3 style="margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+            <h3 class="modal-title-with-meta">
                 Memory:
                 <span id="edit-memory-name" class="memory-name-display"></span>
                 <span id="edit-memory-rename-btn" class="memory-rename-btn" title="Rename memory">
@@ -286,13 +288,10 @@
                 </span>
                 <input type="text" id="edit-memory-rename-input" class="memory-rename-input" style="display: none;">
             </h3>
-            <textarea id="edit-memory-content" class="memory-editor" rows="20"
-                      style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-family: 'Courier New', monospace; font-size: 13px; resize: vertical;"></textarea>
-            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
-                <button id="edit-memory-cancel-btn" class="btn"
-                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
-                </button>
-                <button id="edit-memory-save-btn" class="btn" style="padding: 8px 16px;">Save</button>
+            <textarea id="edit-memory-content" class="memory-editor modal-textarea" rows="20"></textarea>
+            <div class="modal-actions">
+                <button id="edit-memory-cancel-btn" class="btn btn-secondary">Cancel</button>
+                <button id="edit-memory-save-btn" class="btn">Save</button>
             </div>
         </div>
     </div>
@@ -301,14 +300,12 @@
     <div id="delete-memory-modal" class="modal" style="display:none">
         <div class="modal-content">
             <span class="modal-close modal-close-delete-memory">&times;</span>
-            <p style="margin: 20px 0; color: var(--text-primary); line-height: 1.5; font-size: 15px;">
+            <p class="modal-prompt">
                 Delete memory <strong id="delete-memory-name"></strong>?
             </p>
-            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
-                <button id="delete-memory-cancel-btn" class="btn"
-                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
-                </button>
-                <button id="delete-memory-ok-btn" class="btn" style="padding: 8px 16px;">OK</button>
+            <div class="modal-actions">
+                <button id="delete-memory-cancel-btn" class="btn btn-secondary">Cancel</button>
+                <button id="delete-memory-ok-btn" class="btn">OK</button>
             </div>
         </div>
     </div>
@@ -317,26 +314,22 @@
     <div id="create-memory-modal" class="modal" style="display:none">
         <div class="modal-content">
             <span class="modal-close modal-close-create-memory">&times;</span>
-            <p id="create-memory-project-info" style="margin: 15px 0; color: var(--text-primary); line-height: 1.5;">
+            <p id="create-memory-project-info" class="modal-info">
                 Create a new memory for project <strong id="create-memory-project-name"></strong>.
             </p>
-            <p style="margin: 15px 0; color: var(--text-muted); font-size: 13px; line-height: 1.5;">
+            <p class="modal-hint">
                 Memory names should be descriptive and use underscores instead of spaces (e.g., "api_architecture",
                 "testing_guidelines"). Use "/" to organize memories into subdirectories (e.g., "architecture/api_design"),
                 use the "global/" prefix to write memories that are shared across projects (e.g., "global/java/style_guide").
             </p>
-            <div style="margin: 20px 0;">
-                <label for="create-memory-name-input" style="display: block; margin-bottom: 8px; font-weight: 500;">Memory
-                    Name:</label>
-                <input type="text" id="create-memory-name-input" class="memory-name-input"
-                       placeholder="e.g., project_overview or topic/memory_name"
-                       style="width: 100%; padding: 8px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); font-size: 14px;">
+            <div class="modal-field">
+                <label for="create-memory-name-input">Memory Name:</label>
+                <input type="text" id="create-memory-name-input" class="memory-name-input modal-input"
+                       placeholder="e.g., project_overview or topic/memory_name">
             </div>
-            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
-                <button id="create-memory-cancel-btn" class="btn"
-                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
-                </button>
-                <button id="create-memory-create-btn" class="btn" style="padding: 8px 16px;">Create</button>
+            <div class="modal-actions">
+                <button id="create-memory-cancel-btn" class="btn btn-secondary">Cancel</button>
+                <button id="create-memory-create-btn" class="btn">Create</button>
             </div>
         </div>
     </div>
@@ -345,15 +338,13 @@
     <div id="cancel-execution-modal" class="modal" style="display:none">
         <div class="modal-content">
             <span class="modal-close modal-close-cancel-execution">&times;</span>
-            <p style="margin: 20px 0; color: var(--text-primary); line-height: 1.5; font-size: 15px;">
+            <p class="modal-prompt">
                 Are you sure? The execution will continue running until timeout, it will simply no longer be in the queue.
                 Abandoning a running execution is only advised as a measure for unblocking Serena.
             </p>
-            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
-                <button id="cancel-execution-cancel-btn" class="btn"
-                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
-                </button>
-                <button id="cancel-execution-ok-btn" class="btn" style="padding: 8px 16px;">OK</button>
+            <div class="modal-actions">
+                <button id="cancel-execution-cancel-btn" class="btn btn-secondary">Cancel</button>
+                <button id="cancel-execution-ok-btn" class="btn">OK</button>
             </div>
         </div>
     </div>
@@ -362,17 +353,14 @@
     <div id="edit-serena-config-modal" class="modal" style="display:none">
         <div class="modal-content modal-content-large">
             <span class="modal-close modal-close-edit-serena-config">&times;</span>
-            <h3 style="margin-bottom: 10px;">Global Serena Configuration</h3>
-            <p style="margin: 10px 0 20px 0; color: var(--text-muted); font-size: 13px; line-height: 1.5;">
+            <h3>Global Serena Configuration</h3>
+            <p class="modal-hint">
                 Note: Changes to the configuration will only take effect after Serena is restarted.
             </p>
-            <textarea id="edit-serena-config-content" class="memory-editor" rows="20"
-                      style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); font-family: 'Courier New', monospace; font-size: 13px; resize: vertical;"></textarea>
-            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
-                <button id="edit-serena-config-cancel-btn" class="btn"
-                        style="background: var(--bg-secondary); color: var(--text-primary); padding: 8px 16px;">Cancel
-                </button>
-                <button id="edit-serena-config-save-btn" class="btn" style="padding: 8px 16px;">Save</button>
+            <textarea id="edit-serena-config-content" class="memory-editor modal-textarea" rows="20"></textarea>
+            <div class="modal-actions">
+                <button id="edit-serena-config-cancel-btn" class="btn btn-secondary">Cancel</button>
+                <button id="edit-serena-config-save-btn" class="btn">Save</button>
             </div>
         </div>
     </div>
