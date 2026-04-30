@@ -606,15 +606,15 @@ FIND_DEFINING_SYMBOL_REGEX_ERROR_CASES = [
         relative_path=os.path.join("test_repo", "services.py"),
         regex=r"(User)",
         containing_symbol_name_path="",
-        error_fragment="Expected exactly one regex match",
+        error_fragment="Match must be unique",
     ).to_pytest_param(),
     RegexDefiningSymbolErrorCase(
         language=Language.PYTHON,
         id="python_regex_missing_group",
         relative_path=os.path.join("test_repo", "services.py"),
-        regex=r"User",
-        containing_symbol_name_path="UserService/create_user",
-        error_fragment="must contain exactly one capturing group",
+        regex=r"self.users.get\(id\)",
+        containing_symbol_name_path="UserService/get_user",
+        error_fragment="Regex must contain exactly one group",
     ).to_pytest_param(),
 ]
 
@@ -984,13 +984,12 @@ class TestSerenaAgent:
         case: RegexDefiningSymbolErrorCase,
     ) -> None:
         tool = serena_agent.get_tool(FindDeclarationTool)
-        result = tool.apply(
-            regex=case.regex,
-            relative_path=case.relative_path,
-            containing_symbol_name_path=case.containing_symbol_name_path,
-        )
-        assert result.startswith("Error: "), result
-        assert case.error_fragment in result, result
+        with pytest.raises(ValueError, match=case.error_fragment):
+            tool.apply(
+                regex=case.regex,
+                relative_path=case.relative_path,
+                containing_symbol_name_path=case.containing_symbol_name_path,
+            )
 
     @pytest.mark.parametrize("serena_agent,diagnostic_case", DIAGNOSTIC_CASES, indirect=["serena_agent"])
     def test_get_diagnostics_for_file(self, serena_agent: SerenaAgent, diagnostic_case: DiagnosticCase) -> None:
