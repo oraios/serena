@@ -4,7 +4,7 @@
 </p>
 
 <h3 align="center">
-    Serena is the IDE for your coding agent.
+    The IDE for Your Coding Agent
 </h3>
 
 <div align="center">

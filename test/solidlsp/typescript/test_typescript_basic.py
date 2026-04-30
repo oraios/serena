@@ -62,6 +62,37 @@ class TestTypescriptLanguageServer:
             ), f"Expected ConsoleGreeter.formatGreeting symbol, got: {implementing_symbols}"
 
     @pytest.mark.parametrize("language_server", [Language.TYPESCRIPT], indirect=True)
+    def test_tsx_symbol_range_not_truncated_by_jsx(self, language_server: SolidLanguageServer) -> None:
+        # Regression: when the language id is sent as "typescript" instead of
+        # "typescriptreact" for .tsx files, tsserver parses JSX as syntax
+        # errors and recovers by truncating the enclosing symbol's range at
+        # the first multi-line JSX expression. find_symbol then returns a
+        # body that ends mid-component and hides everything below.
+        file_path = "jsx_component.tsx"
+        roots = language_server.request_document_symbols(file_path).root_symbols
+
+        jsx_component = next((s for s in roots if s.get("name") == "JsxComponent"), None)
+        assert jsx_component is not None, "JsxComponent not found at root level of jsx_component.tsx"
+
+        end_line = jsx_component["location"]["range"]["end"]["line"]
+        # JsxComponent's body extends to line 38 (0-based 37) in the fixture;
+        # the truncation bug cut it at the first multi-line JSX (~line 21).
+        # Use a generous lower bound so the test survives small fixture edits
+        # that don't affect the regression behaviour we care about.
+        assert end_line >= 30, (
+            f"JsxComponent symbol range truncated at line {end_line + 1} (1-based); "
+            f"expected end at or past line 31 (1-based). "
+            f"This indicates the .tsx file was opened with the wrong languageId."
+        )
+
+        # The trailing helper must be visible as a top-level symbol — it lives
+        # past the truncation point and disappears entirely when the bug is
+        # active because tsserver stops emitting symbols after the parse error.
+        assert any(s.get("name") == "trailingHelper" for s in roots), (
+            "trailingHelper missing from jsx_component.tsx root symbols; tsserver likely stopped parsing at the first JSX expression."
+        )
+
+    @pytest.mark.parametrize("language_server", [Language.TYPESCRIPT], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

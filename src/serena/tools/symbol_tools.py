@@ -23,7 +23,7 @@ from solidlsp.ls_types import SymbolKind
 
 
 class RestartLanguageServerTool(Tool, ToolMarkerOptional):
-    """Restarts the language server, may be necessary when edits not through Serena happen."""
+    """Restarts the language server(s)."""
 
     def apply(self) -> str:
         """Use this tool only on explicit user request or after confirmation.

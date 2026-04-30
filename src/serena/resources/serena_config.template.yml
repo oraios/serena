@@ -37,13 +37,15 @@ gui_log_window: False
 # Further information: https://oraios.github.io/serena/02-usage/060_dashboard.html
 web_dashboard: True
 
-# whether to open the Dashboard window/browser tab when Serena starts (provided that web_dashboard is enabled).
-# If set to false, you can still open the dashboard manually by clicking on the Serena icon in your system
-# tray on Windows and macOS. On Linux, there is no system tray support, so you can only open the dashboard by
-# a) telling the LLM to "open the dashboard" (provided that the open_dashboard tool is enabled) or by
-# b) manually navigating to http://localhost:24282/dashboard/ in your web browser (actual port
-#    may be higher if you have multiple instances running; try ports 24283, 24284, etc.)
-# See also: https://oraios.github.io/serena/02-usage/060_dashboard.html
+# whether to open the Dashboard window/browser tab when Serena starts (provided that `web_dashboard` is enabled).
+# If set to false, you can still open the dashboard manually:
+#  * When using an interface that supports a tray icon (see setting `web_dashboard_interface`),
+#    you can conveniently open the dashboard from the system tray.
+#  * When using the `browser` interface (no tray icon), so you can only open the dashboard by
+#    a) telling the LLM to "open the dashboard" (provided that the open_dashboard tool is enabled) or by
+#    b) manually navigating to http://localhost:24282/dashboard/ in your web browser (actual port
+#       may be higher if you have multiple instances running; try ports 24283, 24284, etc.)
+# Further information: https://oraios.github.io/serena/02-usage/060_dashboard.html
 web_dashboard_open_on_launch: True
 
 # defines the interface (application mode) used for the web dashboard (if enabled).
@@ -59,6 +61,7 @@ web_dashboard_open_on_launch: True
 #      opening the dashboard in browser tabs when selected from the tray menu.
 #      This is EXPERIMENTAL. It is tested on Windows only. We will establish macOS support, but it is yet untested.
 #      On Linux, this cannot be universally supported, but it may work in some desktop environments.
+# See https://oraios.github.io/serena/02-usage/060_dashboard.html
 web_dashboard_interface:
 
 # the address the web dashboard will listen on (bind address).
@@ -112,18 +115,22 @@ included_optional_tools: []
 # This cannot be combined with non-empty excluded_tools or included_optional_tools.
 fixed_tools: []
 
-# list of mode names to that are always to be included in the set of active modes
-# The full set of modes to be activated is base_modes + default_modes.
-# If this is undefined, no base modes are included.
-# The project configuration (project.yml) may override this setting.
+# list of mode names to that are always to be included in the set of active modes.
+# The full set of modes to be activated is base_modes + default_modes + added_modes,
+# where added_modes can be defined by projects/CLI parameters.
+# If this is undefined/empty, no base modes are included.
+# See https://oraios.github.io/serena/02-usage/050_configuration.html#modes
 base_modes:
-
-# list of mode names that are to be activated by default.
-# The full set of modes to be activated is base_modes + default_modes.
-# These modes can be overridden by the project configuration (project.yml) or through the CLI (--mode).
-default_modes:
   - interactive
   - editing
+
+# list of mode names that are to be activated by default (but can be overridden by projects/CLI params).
+# The full set of modes to be activated is base_modes + default_modes + added_modes,
+# where added_modes are defined by projects/CLI parameters.
+# If this is undefined/empty, no default modes are defined.
+# These modes can be overridden by the project configuration (project.yml) or through the CLI (--mode).
+# See https://oraios.github.io/serena/02-usage/050_configuration.html#modes
+default_modes:
 
 # Used as default for tools where the apply method has a default maximal answer length.
 # Even though the value of the max_answer_chars can be changed when calling the tool, it may make sense to adjust this default

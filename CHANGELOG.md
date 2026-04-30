@@ -2,6 +2,12 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Breaking change in mode definitions: Projects (project.yml) can no longer override `base_modes`.
+    Instead, they can define `added_modes` to add modes on top of base and default modes.  
+    See updated [documentation on modes](https://oraios.github.io/serena/02-usage/050_configuration.html#modes).
+  - Serena's default configuration now uses `interactive` and `editing` as `base_modes` instead of as `default_modes`. 
+
 * JetBrains:
   - Add new tools:
     - `jet_brains_list_inspections`: Lists available IDE inspections (akin to diagnostics), optionally filtered by language or group
