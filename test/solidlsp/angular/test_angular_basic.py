@@ -9,6 +9,7 @@ Workspace: a minimal standalone-component Angular app with a service that the
 component injects, plus a template (.html) that interpolates component methods.
 """
 
+import os
 from pathlib import Path
 
 import pytest
@@ -48,10 +49,11 @@ class TestAngularLanguageServerBasics:
         # The HTML companion is unconditionally started, so .html documentSymbol
         # contributes structural element entries to the workspace tree alongside
         # the two TS files.
+        # relativePath uses OS-native separators (Path.relative_to), so build expectations the same way.
         for f in (
-            "src/app/app.component.ts",
-            "src/app/greeting.service.ts",
-            "src/app/app.component.html",
+            os.path.join("src", "app", "app.component.ts"),
+            os.path.join("src", "app", "greeting.service.ts"),
+            os.path.join("src", "app", "app.component.html"),
         ):
             assert f in relative_paths, f"Expected {f} to appear in symbol tree, got {relative_paths}"
 

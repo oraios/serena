@@ -86,6 +86,10 @@ class TestAngularInvalidPositionsOnTs:
         assert result == [], f"Expected [], got: {result!r}"
 
 
+@pytest.mark.skipif(
+    IS_WINDOWS,
+    reason="Windows ngserver swallows malformed positions instead of raising — same divergence as the TS companion (see test_referencing_symbols_at_invalid_position_raises).",
+)
 class TestAngularInvalidPositionsOnTemplate:
     """Negative / out-of-bounds positions on .html files (ngserver route)."""
 
