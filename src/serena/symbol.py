@@ -310,6 +310,12 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         end_line = end_pos["line"] if end_pos else None
         return start_line, end_line
 
+    def get_body_line_numbers_or_raise(self) -> tuple[int, int]:
+        start_line, end_line = self.get_body_line_numbers()
+        if start_line is None or end_line is None:
+            raise ValueError(f"Body line numbers could not be determined for {self.get_name_path()}")
+        return start_line, end_line
+
     @property
     def line(self) -> int | None:
         """
@@ -936,7 +942,7 @@ class LanguageServerSymbolRetriever:
 
         return [LanguageServerSymbol(s) for s in implementing_symbols]
 
-    def find_defining_symbol(
+    def find_declaration(
         self,
         relative_file_path: str,
         line: int,
@@ -944,7 +950,7 @@ class LanguageServerSymbolRetriever:
         include_body: bool = False,
     ) -> LanguageServerSymbol | None:
         """
-        Find the symbol that defines the symbol at the given file position.
+        Find the declaration/definition of the symbol at the given file position.
 
         :param relative_file_path: the relative path to the file in which the symbol usage occurs.
         :param line: the 0-based line number of the symbol usage.

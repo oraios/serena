@@ -11,7 +11,7 @@ from serena.agent import SerenaAgent
 from serena.config.serena_config import LanguageBackend, ProjectConfig, RegisteredProject, SerenaConfig
 from serena.constants import REPO_ROOT
 from serena.project import Project
-from serena.tools import FindDefiningSymbolAtLocationTool, FindDefiningSymbolTool
+from serena.tools import FindDeclarationTool
 from solidlsp.ls_config import Language
 
 SEPARATOR = "=" * 80
@@ -73,24 +73,8 @@ if __name__ == "__main__":
         relative_path = SERVICES_FILE.as_posix()
         services_abs_path = PYTHON_TEST_REPO / SERVICES_FILE
 
-        # resolving via exact location
-        line, column = find_identifier_occurrence_position(services_abs_path, "User", occurrence_index=1)
-        find_by_location_tool = agent.get_tool(FindDefiningSymbolAtLocationTool)
-        location_result = agent.execute_task(
-            lambda: find_by_location_tool.apply(
-                relative_path=relative_path,
-                line=line,
-                column=column,
-                include_info=True,
-            )
-        )
-
-        print_section("FindDefiningSymbolAtLocationTool")
-        location_symbol = json.loads(location_result)
-        pprint(location_symbol, width=200)
-
         # resolving via regex over the full file
-        find_by_regex_tool = agent.get_tool(FindDefiningSymbolTool)
+        find_by_regex_tool = agent.get_tool(FindDeclarationTool)
         regex_result = agent.execute_task(
             lambda: find_by_regex_tool.apply(
                 regex=r"from \.models import Item, (User)",
@@ -118,7 +102,7 @@ if __name__ == "__main__":
         pprint(contained_regex_symbol, width=200)
 
         # validating the demonstrated result
-        for symbol in [location_symbol, regex_symbol, contained_regex_symbol]:
+        for symbol in [regex_symbol, contained_regex_symbol]:
             assert symbol is not None, "Expected a defining symbol result"
             assert symbol.get("relative_path") is not None
             assert "models.py" in symbol["relative_path"], symbol

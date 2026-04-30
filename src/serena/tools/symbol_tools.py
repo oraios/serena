@@ -4,7 +4,6 @@ Language server-related tools
 
 import copy
 import os
-import re
 from collections import Counter, defaultdict
 from collections.abc import Sequence
 from typing import Any
@@ -19,35 +18,8 @@ from serena.tools import (
 )
 from serena.tools.tools_base import ToolMarkerOptional
 from serena.util.ls_diagnostics import GroupedDiagnostics
+from serena.util.text_utils import find_text_coordinates
 from solidlsp.ls_types import SymbolKind
-
-
-def _offset_to_line_and_column(text: str, offset: int) -> tuple[int, int]:
-    if offset < 0 or offset > len(text):
-        raise ValueError(f"Offset out of range: {offset}")
-    prefix = text[:offset]
-    line = prefix.count("\n")
-    previous_newline_offset = prefix.rfind("\n")
-    column = offset if previous_newline_offset == -1 else offset - previous_newline_offset - 1
-    return line, column
-
-
-def _line_and_column_to_offset(text: str, line: int, column: int) -> int:
-    if line < 0 or column < 0:
-        raise ValueError(f"Line and column must be non-negative, got {line=}, {column=}")
-
-    line_start_offsets = [0]
-    for match in re.finditer("\n", text):
-        line_start_offsets.append(match.end())
-
-    if line >= len(line_start_offsets):
-        raise ValueError(f"Line out of range: {line}")
-
-    line_start_offset = line_start_offsets[line]
-    line_end_offset = line_start_offsets[line + 1] - 1 if line + 1 < len(line_start_offsets) else len(text)
-    if column > line_end_offset - line_start_offset:
-        raise ValueError(f"Column out of range for line {line}: {column}")
-    return line_start_offset + column
 
 
 class RestartLanguageServerTool(Tool, ToolMarkerOptional):
@@ -411,215 +383,85 @@ class FindImplementationsTool(Tool, ToolMarkerSymbolicRead):
         return self._limit_length(result, max_answer_chars)
 
 
-class FindDefiningSymbolAtLocationTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class FindDeclarationTool(Tool, ToolMarkerSymbolicRead):
     """
-    Finds the symbol that defines the symbol at the given file position using the language server backend.
+    Finds the declaration/definition of a symbol
     """
 
-    @staticmethod
-    def _defining_symbol_to_result_dict(
-        symbol_retriever: Any,
-        defining_symbol: LanguageServerSymbol | None,
-        include_body: bool,
-        include_info: bool,
-    ) -> dict[str, Any] | None:
-        if defining_symbol is None:
-            return None
-
-        symbol_dict = dict(defining_symbol.to_dict(kind=True, relative_path=True, depth=0, body=include_body, body_location=True))
-        if not include_body and include_info:
-            if symbol_info := symbol_retriever.request_info_for_symbol(defining_symbol):
-                symbol_dict["info"] = symbol_info
-                symbol_dict.pop("name", None)
-        return symbol_dict
-
-    # noinspection PyDefaultArgument
     def apply(
         self,
         relative_path: str,
-        line: int,
-        column: int,
+        regex: str,
+        containing_symbol_name_path: str | None = None,
         include_body: bool = False,
         include_info: bool = False,
-        max_answer_chars: int = -1,
-    ) -> str:
-        """
-        Finds the defining symbol for the symbol at the given position.
-
-        :param relative_path: the relative path to the file containing the symbol usage.
-        :param line: the 0-based line number of the symbol usage.
-        :param column: the 0-based column number of the symbol usage.
-        :param include_body: whether to include the source code of the defining symbol.
-        :param include_info: whether to include additional info (hover-like, typically including docstring and signature)
-            about the defining symbol. Ignored if no defining symbol is found.
-        :param max_answer_chars: same as in the `find_symbol` tool.
-        :return: a JSON object representing the defining symbol, or `null` if no definition was found.
-        """
-        symbol_retriever = self.create_language_server_symbol_retriever()
-        defining_symbol = symbol_retriever.find_defining_symbol(
-            relative_file_path=relative_path,
-            line=line,
-            column=column,
-            include_body=include_body,
-        )
-
-        if defining_symbol is None:
-            result = self._to_json(None)
-            return self._limit_length(result, max_answer_chars)
-
-        symbol_dict = self._defining_symbol_to_result_dict(symbol_retriever, defining_symbol, include_body, include_info)
-        assert symbol_dict is not None
-        result = self._to_json(symbol_dict)
-        return self._limit_length(result, max_answer_chars)
-
-
-class FindDefiningSymbolTool(Tool, ToolMarkerSymbolicRead):
-    """
-    Finds the symbol that defines a uniquely captured regex match in a file or containing symbol body.
-    """
-
-    @staticmethod
-    def _describe_search_scope(relative_path: str, containing_symbol_name_path: str | None) -> str:
-        if containing_symbol_name_path:
-            return f"symbol body '{containing_symbol_name_path}' in file '{relative_path}'"
-        return f"file '{relative_path}'"
-
-    @classmethod
-    def _format_match_preview(cls, match: re.Match[str]) -> str:
-        matched_text = match.group(0).replace("\n", "\\n")
-        return matched_text[:120]
-
-    @classmethod
-    def _get_unique_captured_span(cls, match: re.Match[str], regex: str, search_scope_description: str) -> tuple[int, int] | str:
-        if match.re.groups == 0:
-            return (
-                f"Error: Regex '{regex}' must contain exactly one capturing group that identifies the symbol usage in "
-                f"{search_scope_description}."
-            )
-
-        matched_capture_spans = [span for span in match.regs[1:] if span != (-1, -1)]
-        if len(matched_capture_spans) != 1:
-            return (
-                f"Error: Regex '{regex}' must produce exactly one matched capture in {search_scope_description}, "
-                f"but produced {len(matched_capture_spans)} for match '{cls._format_match_preview(match)}'."
-            )
-
-        capture_start_offset, capture_end_offset = matched_capture_spans[0]
-        if capture_start_offset == capture_end_offset:
-            return (
-                f"Error: Regex '{regex}' produced an empty capture in {search_scope_description}; "
-                "the capture must select the referenced symbol text."
-            )
-        return capture_start_offset, capture_end_offset
-
-    def _find_unique_captured_location(
-        self,
-        relative_path: str,
-        regex: str,
-        containing_symbol_name_path: str | None,
-    ) -> tuple[int, int] | str:
-        # retrieving the search region
-        file_content = self.project.read_file(relative_path)
-        symbol_retriever = self.create_language_server_symbol_retriever()
-        search_scope_description = self._describe_search_scope(relative_path, containing_symbol_name_path)
-        search_start_offset = 0
-        search_text = file_content
-
-        if containing_symbol_name_path:
-            try:
-                containing_symbol = symbol_retriever.find_unique(containing_symbol_name_path, within_relative_path=relative_path)
-            except Exception as e:
-                return f"Error: Could not resolve containing symbol '{containing_symbol_name_path}' in file '{relative_path}': {e}"
-
-            body_start_position = containing_symbol.get_body_start_position_or_raise()
-            body_end_position = containing_symbol.get_body_end_position_or_raise()
-            search_start_offset = _line_and_column_to_offset(file_content, body_start_position.line, body_start_position.col)
-            search_end_offset = _line_and_column_to_offset(file_content, body_end_position.line, body_end_position.col)
-            search_text = file_content[search_start_offset:search_end_offset]
-
-        # finding regex matches
-        try:
-            compiled_regex = re.compile(regex, re.MULTILINE)
-        except re.error as e:
-            return f"Error: Invalid regex '{regex}': {e}"
-
-        if compiled_regex.groups == 0:
-            return (
-                f"Error: Regex '{regex}' must contain exactly one capturing group that identifies the symbol usage in "
-                f"{search_scope_description}."
-            )
-
-        matches = list(compiled_regex.finditer(search_text))
-        if len(matches) != 1:
-            match_previews = [self._format_match_preview(match) for match in matches[:3]]
-            preview_suffix = f" Matches: {match_previews}" if match_previews else ""
-            return (
-                f"Error: Expected exactly one regex match for '{regex}' in {search_scope_description}, "
-                f"but found {len(matches)}.{preview_suffix}"
-            )
-
-        capture_span_or_error = self._get_unique_captured_span(matches[0], regex, search_scope_description)
-        if isinstance(capture_span_or_error, str):
-            return capture_span_or_error
-
-        capture_start_offset, _ = capture_span_or_error
-        absolute_capture_start_offset = search_start_offset + capture_start_offset
-        return _offset_to_line_and_column(file_content, absolute_capture_start_offset)
-
-    # noinspection PyDefaultArgument
-    def apply(
-        self,
-        regex: str,
-        relative_path: str,
-        containing_symbol_name_path: str = "",
-        include_body: bool = False,
-        include_info: bool = False,
-        max_answer_chars: int = -1,
     ) -> str:
         r"""
-        Finds the defining symbol for a uniquely captured regex match in a file.
+        Finds the declaration of a symbol.
 
-        The regex must contain exactly one capturing group, and exactly one overall match must be found.
-        The capture identifies the symbol usage whose definition should be resolved.
-
-        The regex is compiled with ``re.MULTILINE`` enabled and ``re.DOTALL`` disabled. This keeps common
-        single-symbol matches predictable. If cross-line matching is needed, opt in explicitly with ``(?s)``
-        or ``[\\s\\S]*?``.
-
-        :param regex: a Python regular expression containing exactly one capturing group.
-        :param relative_path: the relative path to the file containing the symbol usage.
+        :param relative_path: the relative path to the source file containing the symbol for which to find the declaration.
+        :param regex: a regular expression with one group, where the group matches the symbol for which to perform the lookup.
+            For example, to find the declaration of the `process` method in a call like `obj.process()`,
+            pass an expression like "obj\.(process)\(process_input_arg=37\)".
+            Prefer regexes with sufficiently large context around the group to render the match unambiguous.
+            Uses Python syntax with MULTILINE and DOTALL flags enabled.
         :param containing_symbol_name_path: optional name path of a containing symbol whose body shall be searched instead of the full file.
-        :param include_body: whether to include the source code of the defining symbol.
-        :param include_info: whether to include additional info (hover-like, typically including docstring and signature)
-            about the defining symbol. Ignored if no defining symbol is found.
-        :param max_answer_chars: same as in the `find_symbol` tool.
-        :return: a JSON object representing the defining symbol, or ``null`` if no definition was found.
-            If the regex does not identify a unique captured match, an informative error string is returned.
+        :param include_body: whether to include the symbol's body in the result. Default False.
+        :param include_info: whether to include additional info (hover-like). Default False.
         """
-        captured_location_or_error = self._find_unique_captured_location(
-            relative_path=relative_path,
-            regex=regex,
-            containing_symbol_name_path=containing_symbol_name_path or None,
-        )
-        if isinstance(captured_location_or_error, str):
-            return captured_location_or_error
-
-        line, column = captured_location_or_error
         symbol_retriever = self.create_language_server_symbol_retriever()
-        defining_symbol = symbol_retriever.find_defining_symbol(
+        relative_path = self._sanitize_input_param(relative_path)
+        regex = self._sanitize_input_param(regex)
+
+        # find relevant location for lookup
+        editor = self.create_code_editor()
+        if not containing_symbol_name_path:
+            content = editor.read_file(relative_path)
+            coords = find_text_coordinates(content, regex, require_unique=True)
+            assert coords is not None
+        else:
+            symbol = symbol_retriever.find_unique(name_path_pattern=containing_symbol_name_path, within_relative_path=relative_path)
+            body_line_numers = symbol.get_body_line_numbers_or_raise()
+            content = editor.read_file(relative_path, lines=body_line_numers)
+            coords = find_text_coordinates(content, regex, require_unique=True)
+            assert coords is not None
+            coords.line += body_line_numers[0]
+
+        # retrieve declaration
+        defining_symbol = symbol_retriever.find_declaration(
             relative_file_path=relative_path,
-            line=line,
-            column=column,
+            line=coords.line,
+            column=coords.col,
             include_body=include_body,
         )
-        symbol_dict = FindDefiningSymbolAtLocationTool._defining_symbol_to_result_dict(
+        if defining_symbol is None:
+            raise ValueError(
+                f"No symbol declaration found at the location of the regex match. Location: {relative_path}:{coords.line}:{coords.col}."
+            )
+
+        # create output
+        symbol_dict = self._defining_symbol_to_result_dict(
             symbol_retriever,
             defining_symbol,
             include_body,
             include_info,
         )
         result = self._to_json(symbol_dict)
-        return self._limit_length(result, max_answer_chars)
+        return result
+
+    @staticmethod
+    def _defining_symbol_to_result_dict(
+        symbol_retriever: Any,
+        defining_symbol: LanguageServerSymbol,
+        include_body: bool,
+        include_info: bool,
+    ) -> dict[str, Any]:
+        symbol_dict = dict(defining_symbol.to_dict(kind=True, relative_path=True, depth=0, body=include_body, body_location=True))
+        if not include_body and include_info:
+            if symbol_info := symbol_retriever.request_info_for_symbol(defining_symbol):
+                symbol_dict["info"] = symbol_info
+                symbol_dict.pop("name", None)
+        return symbol_dict
 
 
 class GetDiagnosticsForFileTool(Tool, ToolMarkerSymbolicRead):

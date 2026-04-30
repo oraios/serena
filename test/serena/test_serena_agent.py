@@ -19,8 +19,7 @@ from serena.tools import (
     SUCCESS_RESULT,
     ActivateProjectTool,
     EditingToolWithDiagnostics,
-    FindDefiningSymbolAtLocationTool,
-    FindDefiningSymbolTool,
+    FindDeclarationTool,
     FindImplementationsTool,
     FindReferencingSymbolsTool,
     FindSymbolTool,
@@ -958,38 +957,10 @@ class TestSerenaAgent:
             f"Expected to find reference to {case.symbol_name} in {case.reference_file}. refs={refs}"
         )
 
-    @pytest.mark.parametrize("serena_agent,case", FIND_DEFINING_SYMBOL_CASES, indirect=["serena_agent"])
-    def test_find_defining_symbol(self, serena_agent: SerenaAgent, case: FindDefiningSymbolCase) -> None:
-        project_root = get_repo_path(case.language)
-        position = find_identifier_pos(
-            project_root / case.relative_path,
-            case.identifier,
-            case.occurrence_index,
-            case.column_offset,
-        )
-        assert position is not None, f"Could not find occurrence {case.occurrence_index} of {case.identifier!r} in {case.relative_path}"
-        find_defining_symbol_tool = serena_agent.get_tool(FindDefiningSymbolAtLocationTool)
-        result = find_defining_symbol_tool.apply(
-            relative_path=case.relative_path,
-            line=position[0],
-            column=position[1],
-            include_info=True,
-        )
-        defining_symbol = json.loads(result)
-        assert defining_symbol is not None, f"Expected defining symbol for {case.identifier!r} in {case.relative_path}"
-        assert defining_symbol.get("relative_path") is not None
-        assert case.expected_definition_file in defining_symbol["relative_path"], (
-            f"Expected defining symbol in {case.expected_definition_file!r}, got: {defining_symbol}"
-        )
-        assert self._symbol_matches_expected_name(defining_symbol, case.expected_name), (
-            f"Expected defining symbol name {case.expected_name!r}, got: {defining_symbol}"
-        )
-        self._assert_symbol_info_present(serena_agent, defining_symbol)
-
     @pytest.mark.parametrize("serena_agent,case", FIND_DEFINING_SYMBOL_REGEX_CASES, indirect=["serena_agent"])
-    def test_find_defining_symbol_by_regex(self, serena_agent: SerenaAgent, case: RegexDefiningSymbolCase) -> None:
-        find_defining_symbol_tool = serena_agent.get_tool(FindDefiningSymbolTool)
-        result = find_defining_symbol_tool.apply(
+    def test_find_declaration(self, serena_agent: SerenaAgent, case: RegexDefiningSymbolCase) -> None:
+        tool = serena_agent.get_tool(FindDeclarationTool)
+        result = tool.apply(
             regex=case.regex,
             relative_path=case.relative_path,
             containing_symbol_name_path=case.containing_symbol_name_path,
@@ -1007,13 +978,13 @@ class TestSerenaAgent:
         self._assert_symbol_info_present(serena_agent, defining_symbol)
 
     @pytest.mark.parametrize("serena_agent,case", FIND_DEFINING_SYMBOL_REGEX_ERROR_CASES, indirect=["serena_agent"])
-    def test_find_defining_symbol_by_regex_error(
+    def test_find_declaration_error(
         self,
         serena_agent: SerenaAgent,
         case: RegexDefiningSymbolErrorCase,
     ) -> None:
-        find_defining_symbol_tool = serena_agent.get_tool(FindDefiningSymbolTool)
-        result = find_defining_symbol_tool.apply(
+        tool = serena_agent.get_tool(FindDeclarationTool)
+        result = tool.apply(
             regex=case.regex,
             relative_path=case.relative_path,
             containing_symbol_name_path=case.containing_symbol_name_path,
