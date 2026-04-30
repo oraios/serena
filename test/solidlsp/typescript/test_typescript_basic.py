@@ -5,7 +5,13 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
-from test.conftest import find_identifier_position, get_repo_path, is_ci, language_has_verified_implementation_support, language_tests_enabled
+from test.conftest import (
+    find_identifier_position,
+    get_repo_path,
+    is_ci,
+    language_has_verified_implementation_support,
+    language_tests_enabled,
+)
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 _typescript_servers: list[Language] = [Language.TYPESCRIPT]
@@ -97,8 +103,8 @@ class TestTypescriptLanguageServer:
         assert any(s.get("name") == "trailingHelper" for s in roots), (
             "trailingHelper missing from jsx_component.tsx root symbols; tsserver likely stopped parsing at the first JSX expression."
         )
+
     @pytest.mark.parametrize("language_server", _typescript_servers, indirect=True)
->>>>>>> a2eb8afb (refactor: address PR review — auto-install tsgo via npm, merge tests into existing suite)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

@@ -35,7 +35,7 @@ class TsgoLanguageServer(SolidLanguageServer):
     It does not require the traditional typescript-language-server wrapper.
 
     You can pass the following entries in ls_specific_settings["typescript_tsgo"]:
-        - tsgo_version: Version of @typescript/native-preview to install (default: "7.0.0-dev.20250601")
+        - tsgo_version: Version of @typescript/native-preview to install (default: "latest")
     """
 
     @override
@@ -53,7 +53,7 @@ class TsgoLanguageServer(SolidLanguageServer):
         def _get_or_install_core_dependency(self) -> str:
             """Install @typescript/native-preview via npm and return the path to the tsgo executable."""
             language_specific_config = self._custom_settings
-            tsgo_version = language_specific_config.get("tsgo_version", "7.0.0-dev.20250601")
+            tsgo_version = language_specific_config.get("tsgo_version", "latest")
             npm_registry = language_specific_config.get("npm_registry")
 
             deps = RuntimeDependencyCollection(

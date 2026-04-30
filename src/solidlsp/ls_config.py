@@ -270,7 +270,7 @@ class Language(str, Enum):
             case self.PYTHON | self.PYTHON_JEDI | self.PYTHON_TY:
                 return FilenameMatcher(".py", ".pyi")
             case self.JAVA:
-                return FilenameMatcher("*.java")
+                return FilenameMatcher(".java")
             case self.TYPESCRIPT | self.TYPESCRIPT_TSGO | self.TYPESCRIPT_VTS:
                 # see https://github.com/oraios/serena/issues/204
                 path_patterns = []

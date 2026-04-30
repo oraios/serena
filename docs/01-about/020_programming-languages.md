@@ -122,7 +122,7 @@ Some languages require additional installations or setup steps, as noted.
 * **Swift**
 * **TypeScript**
   (by default, uses [typescript-language-server](https://github.com/typescript-language-server/typescript-language-server) (language `typescript`);
-  alternatively supports [tsgo](https://github.com/nicolo-ribaudo/tc39-proposal-type-annotations) (language `typescript_tsgo`), the native Go-based TypeScript 7 compiler with built-in LSP — automatically installed via npm)
+  alternatively supports [tsgo](https://github.com/microsoft/typescript-go) (language `typescript_tsgo`), the native Go-based TypeScript 7 compiler with built-in LSP — automatically installed via npm)
 * **Vue**
   (3.x with TypeScript; requires Node.js v18+ and npm; supports .vue Single File Components with monorepo detection)
 * **YAML**
