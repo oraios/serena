@@ -19,6 +19,7 @@ classifiers = [
 dependencies = [
   "requests==2.33.0",
   "pyright==1.1.403",
+  "basedpyright==1.38.4",
   "fortls==3.2.2",
   "overrides==7.7.0",
   "python-dotenv==1.2.2",
@@ -301,6 +302,7 @@ markers = [
   "clojure: language server running for Clojure",
   "crystal: language server running for Crystal",
   "python: language server running for Python",
+  "python_basedpyright: language server running for Python (basedpyright)",
   "go: language server running for Go",
   "java: language server running for Java",
   "kotlin: language server running for kotlin",
