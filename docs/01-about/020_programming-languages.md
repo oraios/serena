@@ -60,6 +60,12 @@ Some languages require additional installations or setup steps, as noted.
 * **Crystal**  
   (requires [Crystalline](https://github.com/elbywan/crystalline) language server to be installed and available on PATH;
   note: Crystalline has limited go-to-definition support and does not support find-references)
+* **CSS**
+  (experimental; requires Node.js and npm; automatically installs `vscode-langservers-extracted`;
+  must be explicitly specified in the `languages` entry in the `project.yml`;
+  uses `vscode-css-language-server` from Microsoft;
+  reports rules/selectors as document symbols; cross-file `@import` navigation is limited;
+  for SCSS/Sass, use the `scss` language instead)
 * **Dart**
 * **Elixir**  
   (requires Elixir installation; Expert language server is downloaded automatically)
@@ -126,6 +132,11 @@ Some languages require additional installations or setup steps, as noted.
   (requires [rustup](https://rustup.rs/) - uses rust-analyzer from your toolchain)
 * **Scala**  
   (requires some [manual setup](../03-special-guides/scala_setup_guide_for_serena); uses Metals LSP)
+* **SCSS / Sass**
+  (experimental; requires Node.js and npm; automatically installs [some-sass-language-server](https://github.com/wkillerud/some-sass);
+  must be explicitly specified in the `languages` entry in the `project.yml`;
+  supports `.scss` and `.sass` files;
+  provides full `@use`/`@forward` workspace-wide go-to-definition and find-references for variables, mixins, and functions)
 * **Solidity**  
   (experimental; requires Node.js and npm; automatically installs `@nomicfoundation/solidity-language-server`;
   works best with a `foundry.toml` or `hardhat.config.js` in the project root)
