@@ -13,6 +13,7 @@ from typing import Literal, Self
 import click
 
 from serena.util.cli_util import AutoRegisteringGroup
+from solidlsp.ls_config import Language
 
 # copied from serena_config.py, we don't want to import anything here to keep the hook commands fast
 serena_home_dir = os.getenv("SERENA_HOME", "").strip() or str(Path.home() / ".serena")
@@ -190,8 +191,8 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
                 return
 
             now = hook.triggered_at_timestamp
-            is_grep = hook.is_grep_tool()
-            is_read = hook.is_read_file_tool()
+            is_grep = hook.is_grep_call()
+            is_code_file_read = hook.is_read_code_file_call()
 
             # update grep counter
             if is_grep:
@@ -203,7 +204,7 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
                 self.last_grep_use_timestamp = now
 
             # update read file counter
-            if is_read:
+            if is_code_file_read:
                 read_period = self._READ_FILE_RESET_PERIOD_SECONDS
                 if (
                     self.last_read_file_use_timestamp is not None
@@ -216,7 +217,7 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
 
             # update combined non-symbolic counter — catches mixed bursts (e.g.
             # alternating grep/read) that neither per-tool counter would trip
-            if is_grep or is_read:
+            if is_grep or is_code_file_read:
                 combined_period = self._NON_SYMBOLIC_RESET_PERIOD_SECONDS
                 if (
                     self.last_non_symbolic_use_timestamp is not None
@@ -255,40 +256,54 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
         super().__init__(client)
         self._tool_call_counter = self.ToolUseCounter.load(self)
 
-    def _get_exec_command_name(self) -> str:
-        """Extract the command name from an ``exec_command`` tool input.
+        # Extract the command name from an ``exec_command`` tool input.
+        #
+        # We use the basename of the first whitespace-separated token of the
+        # ``cmd`` field, lowercased, so that both bare names (``rg``) and
+        # path-prefixed invocations (``/usr/bin/grep``) are normalised the same
+        # way. Returns an empty string when the input is absent or empty.
+        self._command: str | None = None
+        self._command_name: str | None = None
+        self._command_args_str: str | None = None
+        if self._tool_input is not None:
+            self._command = self._tool_input.get("cmd", self._tool_input.get("command", "")).strip()
+            if self._command:
+                cmd_split = self._command.split(maxsplit=1)
+                if len(cmd_split) > 1:
+                    self._command_args_str = cmd_split[1]
+                self._command_name = os.path.basename(cmd_split[0]).lower()
 
-        Returns the basename of the first whitespace-separated token of the
-        ``cmd`` field, lowercased, so that both bare names (``rg``) and
-        path-prefixed invocations (``/usr/bin/grep``) are normalised the same
-        way.  Returns an empty string when the input is absent or empty.
-        """
-        if self._tool_input is None:
-            return ""
-        cmd = str(self._tool_input.get("cmd", "") or "").strip()
-        if not cmd:
-            return ""
-        first_token = cmd.split()[0]
-        return os.path.basename(first_token).lower()
+    def _cmd_args_contain_code_file(self) -> bool:
+        """Heuristic, looks whether the command string contains a substring that looks like a code extension."""
+        if not self._command_args_str:
+            return False
+        for lang in Language.iter_all(include_non_programming_languages=False):
+            file_matcher = lang.get_source_fn_matcher()
+            if file_matcher.string_contains_relevant_filename(self._command_args_str):
+                return True
+        return False
 
-    def is_grep_tool(self) -> bool:
+    def is_grep_call(self) -> bool:
         if self._client == HookClient.CLAUDE_CODE:
             return self._tool_name == "grep"
         if self._client == HookClient.CODEX and self._tool_name == "exec_command":
-            return self._get_exec_command_name() in self._GREP_SHELL_COMMANDS
+            return self._command_name in self._GREP_SHELL_COMMANDS
         # heuristic for other clients
         return "grep" in self._tool_name
 
-    def is_read_file_tool(self) -> bool:
+    def is_read_call(self) -> bool:
         if self._client == HookClient.CLAUDE_CODE:
             return self._tool_name == "read"
         if self._client == HookClient.CODEX and self._tool_name == "exec_command":
-            return self._get_exec_command_name() in self._READ_SHELL_COMMANDS
+            return self._command_name in self._READ_SHELL_COMMANDS
         # heuristic for other clients
         name = self._tool_name
         if "file" not in name:
             return False
         return any(verb in name for verb in self._READ_FILE_VERB_SUBSTRINGS)
+
+    def is_read_code_file_call(self) -> bool:
+        return self.is_read_call() and self._cmd_args_contain_code_file()
 
     def execute(self) -> None:
         # gate the entire hook on the rate-limit window: while we are within
@@ -310,14 +325,14 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
         too_many_non_symbolic = self._tool_call_counter.too_many_recent_non_symbolic()
 
         output_data: PreToolUseHook.OutputData | None = None
-        if self.is_grep_tool() and too_many_greps:
+        if self.is_grep_call() and too_many_greps:
             output_data = self._build_grep_deny()
-        elif self.is_read_file_tool() and too_many_reads:
-            output_data = self._build_read_deny()
+        elif self.is_read_code_file_call() and too_many_reads:
+            output_data = self._build_code_read_deny()
         elif too_many_greps:
             output_data = self._build_grep_deny()
         elif too_many_reads:
-            output_data = self._build_read_deny()
+            output_data = self._build_code_read_deny()
         elif too_many_non_symbolic:
             output_data = self._build_non_symbolic_deny()
 
@@ -341,13 +356,13 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
             ),
         )
 
-    def _build_read_deny(self) -> "PreToolUseHook.OutputData":
+    def _build_code_read_deny(self) -> "PreToolUseHook.OutputData":
         return self.OutputData(
             permission_decision="deny",
-            permission_decision_reason="Too many consecutive read calls without using symbolic tools. "
+            permission_decision_reason="Too many consecutive read calls of code files without using symbolic tools. "
             "You can continue using read now if needed, the counter was reset.",
             additional_context=(
-                "You were using many read file calls recently. Consider using Serena's symbolic "
+                "You were using many read calls on code files recently. Consider using Serena's symbolic "
                 "mcp tools instead for more targeted reads. You can continue using read now if needed, the counter was reset."
             ),
         )

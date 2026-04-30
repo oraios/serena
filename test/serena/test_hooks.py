@@ -68,21 +68,21 @@ class TestPreToolUseRemindAboutSerenaHook:
         for name, expected in [("grep", True), ("grep_search", False), ("mcp_grep", False), ("read", False)]:
             with patch("sys.stdin", _make_stdin(_base_input(tool_name=name))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
                 hook = PreToolUseRemindAboutSerenaHook(HookClient.CLAUDE_CODE)
-            assert hook.is_grep_tool() == expected, f"is_grep_tool() wrong for {name} (claude-code)"
+            assert hook.is_grep_call() == expected, f"is_grep_tool() wrong for {name} (claude-code)"
 
     def test_grep_tool_detection_non_claude_code(self, tmp_path: Path):
         """Non-Claude-Code clients fall back to substring matching to cover verbose tool names."""
         for name, expected in [("grep_search", True), ("mcp_grep", True), ("read_file", False), ("serena_find", False)]:
             with patch("sys.stdin", _make_stdin(_base_input(tool_name=name))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
                 hook = PreToolUseRemindAboutSerenaHook(HookClient.VSCODE)
-            assert hook.is_grep_tool() == expected, f"is_grep_tool() wrong for {name} (vscode)"
+            assert hook.is_grep_call() == expected, f"is_grep_tool() wrong for {name} (vscode)"
 
     def test_read_file_tool_detection_claude_code(self, tmp_path: Path):
         """Claude Code uses the exact tool name ``Read`` (lowercased to ``read``)."""
         for name, expected in [("read", True), ("read_file", False), ("readFile", False), ("grep", False)]:
             with patch("sys.stdin", _make_stdin(_base_input(tool_name=name))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
                 hook = PreToolUseRemindAboutSerenaHook(HookClient.CLAUDE_CODE)
-            assert hook.is_read_file_tool() == expected, f"is_read_file_tool() wrong for {name} (claude-code)"
+            assert hook.is_read_code_file_call() == expected, f"is_read_file_tool() wrong for {name} (claude-code)"
 
     def test_read_file_tool_detection_non_claude_code(self, tmp_path: Path):
         """Non-Claude-Code clients accept any read-style verb (``read``/``view``/``open``/``show``) combined with ``file``."""
@@ -103,7 +103,7 @@ class TestPreToolUseRemindAboutSerenaHook:
         for name, expected in cases:
             with patch("sys.stdin", _make_stdin(_base_input(tool_name=name))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
                 hook = PreToolUseRemindAboutSerenaHook(HookClient.VSCODE)
-            assert hook.is_read_file_tool() == expected, f"is_read_file_tool() wrong for {name} (vscode)"
+            assert hook.is_read_code_file_call() == expected, f"is_read_file_tool() wrong for {name} (vscode)"
 
     def test_serena_tool_detection(self, tmp_path: Path):
         for name, expected in [("mcp_serena_find_symbol", True), ("serena_overview", True), ("grep_search", False)]:
