@@ -145,9 +145,10 @@ without reading entire files.
 | find referencing symbols         | yes              | yes              |
 | search in project dependencies   | --               | yes              |
 | type hierarchy                   | --               | yes              |
-| find declaration                 | --               | yes              |
-| find implementations             | --               | yes              |
+| find declaration                 | yes              | yes              |
+| find implementations             | yes              | yes              |
 | query external projects          | yes              | yes              |
+| diagnostics/inspections          | yes              | yes              |
 
 ### Refactoring
 
