@@ -162,10 +162,11 @@ class Language(str, Enum):
     """
 
     @classmethod
-    def iter_all(cls, include_experimental: bool = False) -> Iterable[Self]:
+    def iter_all(cls, include_experimental: bool = False, include_non_programming_languages: bool = True) -> Iterable[Self]:
         for lang in cls:
             if include_experimental or not lang.is_experimental():
-                yield lang
+                if include_non_programming_languages or lang.is_programming_language():
+                    yield lang
 
     def is_experimental(self) -> bool:
         """
@@ -191,6 +192,12 @@ class Language(str, Enum):
             self.CPP_CCLS,
             self.SOLIDITY,
         }
+
+    def is_programming_language(self) -> bool:
+        """Whether the supported language should be considered a programming language.
+        Solidlsp supports languages like markdown or json, this method returns False for them.
+        """
+        return self not in frozenset((self.MARKDOWN, self.JSON, self.TOML, self.YAML, self.ANSIBLE))
 
     def __str__(self) -> str:
         return self.value
