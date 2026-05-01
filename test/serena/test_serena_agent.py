@@ -327,7 +327,7 @@ FIND_DEFINING_SYMBOL_CASES = [
         expected_definition_file="utils.ps1",
     ).to_pytest_param(),
     FindDefiningSymbolCase(
-        language=Language.CPP_CCLS,
+        language=Language.CPP,
         id="cpp_add_in_a",
         relative_path="a.cpp",
         identifier="add",
@@ -502,7 +502,7 @@ FIND_SYMBOL_REFERENCES_CASES = [
         expected_file="main.ps1",
     ).to_pytest_param(),
     FindSymbolCase(
-        language=Language.CPP_CCLS, id="cpp_add_function", symbol_name="add", expected_kind="Function", expected_file="b.cpp"
+        language=Language.CPP, id="cpp_add_function", symbol_name="add", expected_kind="Function", expected_file="b.cpp"
     ).to_pytest_param(),
     FindSymbolCase(
         language=Language.LEAN4, id="lean_add_method", symbol_name="add", expected_kind="Method", expected_file="Helper.lean"
@@ -580,7 +580,7 @@ FIND_REFERENCE_CASES = [
         reference_file="main.ps1",
     ).to_pytest_param(),
     FindReferenceCase(
-        language=Language.CPP_CCLS, id="cpp_add_refs", symbol_name="add", definition_file="b.cpp", reference_file="a.cpp"
+        language=Language.CPP, id="cpp_add_refs", symbol_name="add", definition_file="b.cpp", reference_file="a.cpp"
     ).to_pytest_param(),
     FindReferenceCase(
         language=Language.LEAN4, id="lean_add_refs", symbol_name="add", definition_file="Helper.lean", reference_file="Main.lean"
@@ -775,7 +775,7 @@ def serena_config():
         Language.CLOJURE,
         Language.FSHARP,
         Language.POWERSHELL,
-        Language.CPP_CCLS,
+        Language.CPP,
         Language.HAXE,
         Language.LEAN4,
         Language.MSL,
