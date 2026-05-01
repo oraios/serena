@@ -1,5 +1,3 @@
-"""Basic tests for BSL Language Server integration."""
-
 import os
 import shutil
 
@@ -10,8 +8,12 @@ from solidlsp.settings import SolidLSPSettings
 
 REPO_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "resources", "repos", "bsl", "test_repo"))
 
+_is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
 _java_available = shutil.which("java") is not None
-_skip_if_no_java = pytest.mark.skipif(not _java_available, reason="Java is not installed")
+_skip_integration = pytest.mark.skipif(
+    _is_ci or not _java_available,
+    reason="BSL LSP integration tests require Java 11+ and network access; skipped in CI",
+)
 
 
 @pytest.fixture(scope="module")
@@ -27,14 +29,14 @@ def bsl_ls():
 
 @pytest.mark.bsl
 @pytest.mark.slow
-@_skip_if_no_java
+@_skip_integration
 def test_bsl_server_starts(bsl_ls):
     assert bsl_ls.server_ready.is_set()
 
 
 @pytest.mark.bsl
 @pytest.mark.slow
-@_skip_if_no_java
+@_skip_integration
 def test_bsl_document_symbols(bsl_ls):
     symbols = bsl_ls.request_document_symbols("CommonModule.bsl")
     names = [s.get("name") for s in symbols.iter_symbols()]
@@ -45,9 +47,8 @@ def test_bsl_document_symbols(bsl_ls):
 
 @pytest.mark.bsl
 @pytest.mark.slow
-@_skip_if_no_java
+@_skip_integration
 def test_bsl_find_references(bsl_ls):
-    # find references to ПолучитьПриветствие defined in CommonModule.bsl
     refs = bsl_ls.request_references("CommonModule.bsl", line=6, column=10)
     assert len(refs) >= 1
 
