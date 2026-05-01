@@ -201,6 +201,146 @@ class TestProjectConfigLanguageBackend:
         assert config.language_backend is None
 
 
+class TestProjectConfigActiveWorkspace:
+    """Tests for the per-project active_workspace field."""
+
+    def setup_method(self):
+        """Set up test environment before each test method."""
+        self.test_dir = tempfile.mkdtemp()
+        self.serena_config = create_default_serena_config()
+        self.project_path = Path(self.test_dir)
+
+    def teardown_method(self):
+        """Clean up test environment after each test method."""
+        shutil.rmtree(self.test_dir)
+
+    def test_active_workspace_defaults_to_none(self):
+        config = ProjectConfig(
+            project_name="test",
+            languages=[Language.PYTHON],
+        )
+        assert config.active_workspace is None
+
+    def test_active_workspace_roundtrips_through_yaml(self):
+        config = ProjectConfig(
+            project_name="test",
+            languages=[Language.PYTHON],
+            active_workspace="src/Main/Main.sln",
+        )
+        d = config._to_yaml_dict()
+        assert d["active_workspace"] == "src/Main/Main.sln"
+
+    def test_active_workspace_parsed_from_dict(self):
+        """Test that _from_dict parses active_workspace correctly."""
+        data, _ = ProjectConfig._load_yaml_dict(PROJECT_TEMPLATE_FILE)
+        data["project_name"] = "test"
+        data["languages"] = ["python"]
+        data["active_workspace"] = "src/Main/Main.sln"
+        config = ProjectConfig._from_dict(data, local_override_keys=[])
+        assert config.active_workspace == "src/Main/Main.sln"
+
+    def test_active_workspace_none_when_missing_from_dict(self):
+        """Test that _from_dict handles missing active_workspace gracefully."""
+        data, _ = ProjectConfig._load_yaml_dict(PROJECT_TEMPLATE_FILE)
+        data["project_name"] = "test"
+        data["languages"] = ["python"]
+        data.pop("active_workspace", None)
+        config = ProjectConfig._from_dict(data, local_override_keys=[])
+        assert config.active_workspace is None
+
+    def test_active_workspace_persists_to_project_local_yml(self):
+        ProjectConfig.autogenerate(
+            self.project_path,
+            self.serena_config,
+            languages=[Language.PYTHON],
+            save_to_disk=True,
+        )
+        project_yml_path = self.serena_config.get_project_yml_location(self.project_path)
+        config = ProjectConfig.load(self.project_path, self.serena_config)
+        config.active_workspace = "src/Main/Main.sln"
+        config._local_override_keys = ["active_workspace"]
+
+        config.save(project_yml_path)
+
+        project_yml_data, _ = ProjectConfig._load_yaml_dict(project_yml_path)
+        project_local_yml_path = ProjectConfig._project_local_yml_path(project_yml_path)
+        project_local_yml_data, _ = ProjectConfig._load_yaml_dict(project_local_yml_path, apply_defaults=False)
+        reloaded_config = ProjectConfig.load(self.project_path, self.serena_config)
+
+        assert project_yml_data["active_workspace"] is None
+        assert project_local_yml_data["active_workspace"] == "src/Main/Main.sln"
+        assert reloaded_config.active_workspace == "src/Main/Main.sln"
+        assert "active_workspace" in reloaded_config._local_override_keys
+
+
+class TestProjectLanguageServerSettings:
+    """Tests for Project language server settings propagation."""
+
+    def test_active_workspace_is_injected_into_csharp_settings(self, monkeypatch, tmp_path):
+        serena_config = create_default_serena_config()
+        project = Project(
+            project_root=str(tmp_path),
+            project_config=ProjectConfig(
+                project_name="test",
+                languages=[Language.CSHARP],
+                active_workspace="src/Main/Main.sln",
+                ls_specific_settings={Language.CSHARP: {"existing_setting": "value"}},
+            ),
+            serena_config=serena_config,
+        )
+        captured: dict[str, object] = {}
+
+        class DummyManager:
+            def stop_all(self) -> None:
+                return None
+
+        def fake_from_languages(languages, factory):
+            captured["languages"] = languages
+            captured["ls_specific_settings"] = factory.ls_specific_settings
+            return DummyManager()
+
+        monkeypatch.setattr("serena.project.LanguageServerManager.from_languages", fake_from_languages)
+
+        manager = project.create_language_server_manager()
+
+        assert manager is project.language_server_manager
+        assert captured["languages"] == [Language.CSHARP]
+        csharp_settings = captured["ls_specific_settings"][Language.CSHARP]
+        assert csharp_settings["existing_setting"] == "value"
+        assert csharp_settings["active_workspace"] == "src/Main/Main.sln"
+
+    def test_active_workspace_is_not_injected_when_unset(self, monkeypatch, tmp_path):
+        serena_config = create_default_serena_config()
+        project = Project(
+            project_root=str(tmp_path),
+            project_config=ProjectConfig(
+                project_name="test",
+                languages=[Language.CSHARP],
+                ls_specific_settings={Language.CSHARP: {"existing_setting": "value"}},
+            ),
+            serena_config=serena_config,
+        )
+        captured: dict[str, object] = {}
+
+        class DummyManager:
+            def stop_all(self) -> None:
+                return None
+
+        def fake_from_languages(languages, factory):
+            captured["languages"] = languages
+            captured["ls_specific_settings"] = factory.ls_specific_settings
+            return DummyManager()
+
+        monkeypatch.setattr("serena.project.LanguageServerManager.from_languages", fake_from_languages)
+
+        project.create_language_server_manager()
+
+        assert captured["languages"] == [Language.CSHARP]
+        csharp_settings = captured["ls_specific_settings"][Language.CSHARP]
+        assert csharp_settings["existing_setting"] == "value"
+        assert "active_workspace" not in csharp_settings
+
+
 def _make_config_with_project(
     project_name: str,
     language_backend: LanguageBackend | None = None,

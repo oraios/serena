@@ -46,6 +46,11 @@ line_ending:
 # is activated post-init, an error will be returned.
 language_backend:
 
+# relative path from the project root to the currently selected workspace entry.
+# This may point to a .sln, .slnx, or .csproj file.
+# Prefer setting this in project.local.yml when the selection is user-local.
+active_workspace:
+
 # whether to use project's .gitignore files to ignore files
 ignore_all_files_in_gitignore: true
 

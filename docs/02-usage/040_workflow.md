@@ -65,6 +65,33 @@ You can specify local overrides for the settings in a `project.local.yml` file i
 (which, by default, is ignored by git). 
 Any keys defined therein will override the respective key in `project.yml`.
 
+### Selecting a C# Workspace in Large Repositories
+
+For large C# repositories that contain multiple `.sln`, `.slnx`, or standalone `.csproj` files,
+you can select the workspace Serena should target by setting `active_workspace` in `project.local.yml`.
+The path must be relative to the project root.
+
+```yaml
+active_workspace: "Hyland.Applications.Server.sln"
+```
+
+This setting is especially useful for monorepos where loading every solution is either too expensive
+or not representative of the task at hand. When `active_workspace` is set for a C# project, Serena
+passes the selected solution or project to the language server and narrows initialization and open-file
+behavior to that workspace.
+
+You can also manage the selection dynamically while Serena is running:
+
+* `list_workspace_entries` lists the available `.sln`, `.slnx`, and `.csproj` candidates in the project.
+* `set_active_workspace` switches the selected workspace and can persist the change to `project.local.yml`
+  or keep it only for the current session.
+* `get_current_config` shows the active project configuration, including the currently selected workspace.
+
+If no `active_workspace` is configured, Serena falls back to its default breadth-first workspace discovery.
+This workflow is intentionally scoped to one selected C# workspace at a time. If you need to work across
+multiple independent solutions simultaneously, use separate Serena projects or combine this with the
+`query_project` workflow described later in this guide.
+
 (indexing)=
 ### Indexing
 

@@ -8,7 +8,7 @@ import platform
 import shutil
 import threading
 from collections.abc import Hashable, Iterable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -179,6 +179,54 @@ def find_solution_or_project_file(root_dir: str) -> str | None:
     return csproj_file
 
 
+@dataclass(frozen=True)
+class SelectedWorkspaceEntry:
+    path: str
+    workspace_root: str
+    kind: str
+
+
+def resolve_selected_workspace_entry(repository_root_path: str, active_workspace: str | None) -> SelectedWorkspaceEntry | None:
+    """
+    Resolve the configured workspace entry against the repository root.
+    """
+    if not isinstance(active_workspace, str) or not active_workspace:
+        return None
+
+    repository_root = Path(repository_root_path).resolve()
+    selected_path = (repository_root / active_workspace).resolve()
+
+    try:
+        selected_path.relative_to(repository_root)
+    except ValueError:
+        log.warning(
+            "Ignoring active_workspace '%s' because it is outside the repository root %s",
+            active_workspace,
+            repository_root_path,
+        )
+        return None
+
+    if not selected_path.is_file():
+        log.warning(
+            "Ignoring active_workspace '%s' because it does not resolve to a file under %s",
+            active_workspace,
+            repository_root_path,
+        )
+        return None
+
+    suffix = selected_path.suffix.lower()
+    if suffix in (".sln", ".slnx"):
+        return SelectedWorkspaceEntry(path=str(selected_path), workspace_root=str(selected_path.parent), kind="solution")
+    if suffix == ".csproj":
+        return SelectedWorkspaceEntry(path=str(selected_path), workspace_root=str(selected_path.parent), kind="project")
+
+    log.warning(
+        "Ignoring active_workspace '%s' because only .sln, .slnx, and .csproj entries are supported",
+        active_workspace,
+    )
+    return None
+
+
 class CSharpLanguageServer(SolidLanguageServer):
     """
     Provides C# specific instantiation of the LanguageServer class using the official Roslyn-based
@@ -331,8 +379,11 @@ class CSharpLanguageServer(SolidLanguageServer):
             self._dotnet_path, self._language_server_path = self._ensure_server_installed()
 
         def create_launch_command(self) -> list[str]:
-            # Find solution or project file
-            solution_or_project = find_solution_or_project_file(self._repository_root_path)
+            selected_workspace = resolve_selected_workspace_entry(
+                self._repository_root_path,
+                cast(str | None, self._custom_settings.get("active_workspace")),
+            )
+            solution_or_project = selected_workspace.path if selected_workspace is not None else find_solution_or_project_file(self._repository_root_path)
 
             # Create log directory
             log_dir = Path(self._ls_resources_dir) / "logs"
@@ -342,7 +393,9 @@ class CSharpLanguageServer(SolidLanguageServer):
             cmd = [self._dotnet_path, self._language_server_path, "--logLevel=Information", f"--extensionLogDirectory={log_dir}", "--stdio"]
 
             # The language server will discover the solution/project from the workspace root
-            if solution_or_project:
+            if selected_workspace is not None:
+                log.info(f"Using configured workspace entry: {selected_workspace.path}")
+            elif solution_or_project:
                 log.info(f"Found solution/project file: {solution_or_project}")
             else:
                 log.warning("No .sln/.slnx or .csproj file found, language server will attempt auto-discovery")
@@ -480,18 +533,29 @@ class CSharpLanguageServer(SolidLanguageServer):
             except Exception as e:
                 raise SolidLSPException(f"Failed to download package {package_name} version {package_version} from NuGet.org: {e}") from e
 
+    def _get_selected_workspace_entry(self) -> SelectedWorkspaceEntry | None:
+        """
+        Resolve the configured active workspace for the current project.
+        """
+        return resolve_selected_workspace_entry(
+            self.repository_root_path,
+            cast(str | None, self._custom_settings.get("active_workspace")),
+        )
+
     def _get_initialize_params(self) -> InitializeParams:
         """
         Returns the initialize params for the Microsoft.CodeAnalysis.LanguageServer.
         """
-        root_uri = PathUtils.path_to_uri(self.repository_root_path)
-        root_name = os.path.basename(self.repository_root_path)
+        selected_workspace = self._get_selected_workspace_entry()
+        workspace_root = selected_workspace.workspace_root if selected_workspace is not None else self.repository_root_path
+        root_uri = PathUtils.path_to_uri(workspace_root)
+        root_name = os.path.basename(workspace_root)
         return cast(
             InitializeParams,
             {
                 "workspaceFolders": [{"uri": root_uri, "name": root_name}],
                 "processId": os.getpid(),
-                "rootPath": self.repository_root_path,
+                "rootPath": workspace_root,
                 "rootUri": root_uri,
                 "capabilities": {
                     "window": {
@@ -733,6 +797,18 @@ class CSharpLanguageServer(SolidLanguageServer):
         """
         Open solution and project files using notifications.
         """
+        selected_workspace = self._get_selected_workspace_entry()
+        if selected_workspace is not None:
+            selected_uri = PathUtils.path_to_uri(selected_workspace.path)
+            if selected_workspace.kind == "solution":
+                self.server.notify.send_notification("solution/open", {"solution": selected_uri})
+                log.debug(f"Opened configured solution file: {selected_workspace.path}")
+                return
+
+            self.server.notify.send_notification("project/open", {"projects": [selected_uri]})
+            log.debug(f"Opened configured project file: {selected_workspace.path}")
+            return
+
         # Find solution file (.sln or .slnx)
         solution_file = None
         for filename in breadth_first_file_scan(self.repository_root_path):

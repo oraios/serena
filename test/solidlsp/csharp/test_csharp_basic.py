@@ -13,6 +13,7 @@ from solidlsp.language_servers.csharp_language_server import (
     CSharpLanguageServer,
     breadth_first_file_scan,
     find_solution_or_project_file,
+    resolve_selected_workspace_entry,
 )
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_types import SymbolKind
@@ -20,6 +21,19 @@ from solidlsp.ls_utils import SymbolUtils
 from solidlsp.settings import SolidLSPSettings
 from test.conftest import find_identifier_position, get_repo_path, language_has_verified_implementation_support
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
+
+
+def _make_csharp_language_server_stub(repository_root: Path, active_workspace: str | None = None) -> CSharpLanguageServer:
+    server = object.__new__(CSharpLanguageServer)
+    server.repository_root_path = str(repository_root)
+    settings = {}
+    if active_workspace is not None:
+        settings["active_workspace"] = active_workspace
+    server._custom_settings = SolidLSPSettings.CustomLSSettings(settings)
+    server.server = Mock()
+    server.server.notify = Mock()
+    server.server.notify.send_notification = Mock()
+    return server
 
 
 @pytest.mark.csharp
@@ -313,6 +327,76 @@ class TestCSharpSolutionProjectOpening:
 
             # Should still prefer .sln file even though it's deeper
             assert result == str(solution_file)
+
+
+    def test_resolve_selected_workspace_entry_returns_solution_details(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            solution_dir = temp_path / "src" / "Main"
+            solution_dir.mkdir(parents=True)
+            solution_file = solution_dir / "Main.sln"
+            solution_file.touch()
+
+            workspace_entry = resolve_selected_workspace_entry(str(temp_path), "src/Main/Main.sln")
+
+            assert workspace_entry is not None
+            assert workspace_entry.kind == "solution"
+            assert workspace_entry.path == str(solution_file)
+            assert workspace_entry.workspace_root == str(solution_dir)
+
+    def test_get_initialize_params_uses_selected_workspace_root(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            solution_dir = temp_path / "src" / "Main"
+            solution_dir.mkdir(parents=True)
+            solution_file = solution_dir / "Main.sln"
+            solution_file.touch()
+            language_server = _make_csharp_language_server_stub(temp_path, "src/Main/Main.sln")
+
+            initialize_params = language_server._get_initialize_params()
+
+            expected_root = str(solution_dir)
+            expected_uri = Path(expected_root).as_uri()
+            assert initialize_params["rootPath"] == expected_root
+            assert initialize_params["rootUri"] == expected_uri
+            assert initialize_params["workspaceFolders"] == [{"uri": expected_uri, "name": "Main"}]
+
+    def test_open_solution_and_projects_uses_selected_solution_only(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            solution_dir = temp_path / "src" / "Main"
+            solution_dir.mkdir(parents=True)
+            solution_file = solution_dir / "Main.sln"
+            solution_file.touch()
+            stray_project_dir = temp_path / "src" / "Other"
+            stray_project_dir.mkdir(parents=True)
+            (stray_project_dir / "Other.csproj").touch()
+            language_server = _make_csharp_language_server_stub(temp_path, "src/Main/Main.sln")
+
+            language_server._open_solution_and_projects()
+
+            language_server.server.notify.send_notification.assert_called_once_with(
+                "solution/open",
+                {"solution": solution_file.as_uri()},
+            )
+
+    def test_open_solution_and_projects_uses_selected_project_only(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            project_dir = temp_path / "src" / "Main"
+            project_dir.mkdir(parents=True)
+            project_file = project_dir / "Main.csproj"
+            project_file.touch()
+            stray_solution = temp_path / "Main.sln"
+            stray_solution.touch()
+            language_server = _make_csharp_language_server_stub(temp_path, "src/Main/Main.csproj")
+
+            language_server._open_solution_and_projects()
+
+            language_server.server.notify.send_notification.assert_called_once_with(
+                "project/open",
+                {"projects": [project_file.as_uri()]},
+            )
 
     @patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer.DependencyProvider._ensure_server_installed")
     @patch("solidlsp.language_servers.csharp_language_server.CSharpLanguageServer._start_server")

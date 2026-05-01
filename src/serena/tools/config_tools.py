@@ -1,4 +1,8 @@
 from sensai.util.helper import mark_used
+from pathlib import Path
+
+from solidlsp.language_servers.csharp_language_server import breadth_first_file_scan
+from solidlsp.ls_config import Language
 
 from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional
 
@@ -64,3 +68,114 @@ class GetCurrentConfigTool(Tool):
         Print the current configuration of the agent, including the active and available projects, tools, contexts, and modes.
         """
         return self.agent.get_current_config_overview()
+
+
+
+def _project_supports_csharp_workspace_selection(project) -> bool:
+    return Language.CSHARP in project.project_config.languages or Language.CSHARP_OMNISHARP in project.project_config.languages
+
+
+
+def _iter_csharp_workspace_entries(project_root: str, include_projects: bool) -> list[dict[str, str]]:
+    entries = []
+    root = Path(project_root).resolve()
+    for filename in breadth_first_file_scan(project_root):
+        absolute_path = Path(filename).resolve()
+        suffix = absolute_path.suffix.lower()
+        if suffix in (".sln", ".slnx"):
+            kind = "solution"
+        elif include_projects and suffix == ".csproj":
+            kind = "project"
+        else:
+            continue
+
+        relative_path = absolute_path.relative_to(root).as_posix()
+        entries.append({"path": relative_path, "kind": kind})
+    return entries
+
+
+
+def _resolve_workspace_path(project_root: str, path: str) -> tuple[str, Path]:
+    if not path:
+        raise ValueError("Workspace path must not be empty.")
+
+    root = Path(project_root).resolve()
+    candidate = Path(path)
+    absolute_path = candidate.resolve() if candidate.is_absolute() else (root / candidate).resolve()
+
+    try:
+        relative_path = absolute_path.relative_to(root).as_posix()
+    except ValueError as e:
+        raise ValueError(f"Workspace path '{path}' must be inside the active project root {project_root}.") from e
+
+    if not absolute_path.is_file():
+        raise ValueError(f"Workspace path '{path}' does not resolve to a file.")
+
+    if absolute_path.suffix.lower() not in (".sln", ".slnx", ".csproj"):
+        raise ValueError("Workspace path must point to a .sln, .slnx, or .csproj file.")
+
+    return relative_path, absolute_path
+
+
+class ListWorkspaceEntriesTool(Tool):
+    """
+    Lists candidate C# workspace entries under the active project root.
+    """
+
+    def apply(self, kind: str = "csharp", include_projects: bool = True) -> str:
+        """
+        Lists candidate workspace entries for the active project.
+
+        :param kind: workspace kind to list. Currently only 'csharp' is supported.
+        :param include_projects: whether to include .csproj files in addition to solutions
+        """
+        if kind != "csharp":
+            raise ValueError("Only kind='csharp' is currently supported.")
+
+        project = self.project
+        if not _project_supports_csharp_workspace_selection(project):
+            raise ValueError("Workspace selection is currently only supported for C# projects.")
+
+        selected_path = Path(project.project_config.active_workspace).as_posix() if project.project_config.active_workspace else None
+        entries = _iter_csharp_workspace_entries(project.project_root, include_projects)
+        for entry in entries:
+            entry["selected"] = entry["path"] == selected_path  # type: ignore[index]
+        return self._to_json(entries)
+
+
+class SetActiveWorkspaceTool(Tool):
+    """
+    Sets the active workspace entry for the active project.
+    """
+
+    def apply(self, path: str, persist_mode: str = "project_local", restart: bool = True) -> str:
+        """
+        Sets the active workspace entry for the active project.
+
+        :param path: relative or absolute path to the selected workspace entry
+        :param persist_mode: whether to persist to project.local.yml or only change the current session
+        :param restart: whether to restart the language server manager after changing the active workspace
+        """
+        if persist_mode not in ("project_local", "session"):
+            raise ValueError("persist_mode must be either 'project_local' or 'session'.")
+
+        project = self.project
+        if not _project_supports_csharp_workspace_selection(project):
+            raise ValueError("Workspace selection is currently only supported for C# projects.")
+
+        relative_path, absolute_path = _resolve_workspace_path(project.project_root, path)
+        project.project_config.active_workspace = relative_path
+
+        if persist_mode == "project_local":
+            if "active_workspace" not in project.project_config._local_override_keys:
+                project.project_config._local_override_keys.append("active_workspace")
+            project.save_config()
+
+        if restart:
+            self.agent.reset_language_server_manager()
+
+        suffix = absolute_path.suffix.lower()
+        return (
+            f"Active workspace set to '{relative_path}' ({suffix}) "
+            f"with persist_mode='{persist_mode}' and restart={str(restart).lower()}."
+        )

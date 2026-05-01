@@ -275,6 +275,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
     ignore_all_files_in_gitignore: bool = True
     initial_prompt: str = ""
     encoding: str = DEFAULT_SOURCE_FILE_ENCODING
+    active_workspace: str | None = None
 
     # internal fields which are not mapped to/from the configuration file (must start with "_")
     _local_override_keys: list[str] = field(default_factory=list)
@@ -499,6 +500,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
             ignore_all_files_in_gitignore=data["ignore_all_files_in_gitignore"],
             initial_prompt=data["initial_prompt"],
             encoding=data["encoding"],
+            active_workspace=data.get("active_workspace"),
             line_ending=line_ending,
             language_backend=language_backend,
             added_modes=data["added_modes"],

@@ -870,6 +870,15 @@ class TestSerenaAgent:
         serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False)
         SerenaAgent(project=project, serena_config=serena_config)
 
+
+    @pytest.mark.parametrize("serena_agent", [Language.PYTHON], indirect=True)
+    def test_current_config_overview_includes_active_workspace(self, serena_agent: SerenaAgent) -> None:
+        serena_agent.get_active_project_or_raise().project_config.active_workspace = "demo/Main.sln"
+
+        result = serena_agent.get_current_config_overview()
+
+        assert "Active workspace: demo/Main.sln" in result
+
     def _symbol_matches_expected_name(self, symbol: dict, expected_name: str) -> bool:
         return (
             symbol.get("name") == expected_name

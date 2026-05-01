@@ -628,6 +628,25 @@ class Project(ToStringMixin):
             source_file_path=relative_file_path,
         )
 
+    def _get_ls_specific_settings(self) -> dict:
+        """
+        Build the merged language server specific settings for the project.
+        """
+        ls_specific_settings = {**self.serena_config.ls_specific_settings, **self.project_config.ls_specific_settings}
+
+        active_workspace = self.project_config.active_workspace
+        if active_workspace is None:
+            return ls_specific_settings
+
+        for language in (Language.CSHARP, Language.CSHARP_OMNISHARP):
+            if language not in self.project_config.languages:
+                continue
+            language_settings = dict(ls_specific_settings.get(language, {}))
+            language_settings["active_workspace"] = active_workspace
+            ls_specific_settings[language] = language_settings
+
+        return ls_specific_settings
+
     def create_language_server_manager(self) -> LanguageServerManager:
         """
         Creates the language server manager for the project, starting one language server per configured programming language.
@@ -652,7 +671,7 @@ class Project(ToStringMixin):
 
             log.info(f"Creating language server manager for {self.project_root}")
             self._language_server_manager_init_error = None
-            ls_specific_settings = {**self.serena_config.ls_specific_settings, **self.project_config.ls_specific_settings}
+            ls_specific_settings = self._get_ls_specific_settings()
             factory = LanguageServerFactory(
                 project_root=self.project_root,
                 project_data_path=self._serena_data_folder,

@@ -3,3 +3,6 @@
 # Use the same keys as in project.yml here. Any setting you specify will override the corresponding
 # setting in project.yml, allowing you to customise the configuration for your local development environment
 # without affecting the project configuration in project.yml (which is intended to be versioned).
+#
+# Example user-local workspace selection:
+# active_workspace: "src/Main/Main.sln"
