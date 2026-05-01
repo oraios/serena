@@ -1,0 +1,21 @@
+description: Context for 1C Enterprise BSL development
+prompt: |
+  You are working with a 1C:Enterprise codebase using BSL (Built-in Scripting Language).
+  Guidelines:
+  - Use Cyrillic-aware identifier regex: [A-Za-zА-Яа-я_][A-Za-zА-Яа-я0-9_]*
+  - Prefer semantic tools (find_symbol, find_referencing_symbols) for rename operations
+  - For cross-file operations, check forms (.xml) in addition to modules (.bsl)
+  - Manager modules, forms, info registers, and common modules have different
+    visibility semantics — consult SymbolKind before renaming
+  - Export methods (marked with keyword Export) are visible across modules;
+    module-local methods are not
+  - EDT project structure: src/Catalogs/*/Ext/{ManagerModule,ObjectModule,Forms/*/Ext/Form/Module}.bsl
+allowed_tools:
+  - find_symbol
+  - find_referencing_symbols
+  - replace_symbol_body
+  - insert_after_symbol
+  - insert_before_symbol
+  - search_for_pattern
+excluded_tools:
+  - execute_shell_command

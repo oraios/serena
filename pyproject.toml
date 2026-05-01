@@ -328,6 +328,7 @@ markers = [
   "ocaml: language server running for OCaml and Reason",
   "scala: language server running for Scala",
   "al: language server running for AL (Microsoft Dynamics 365 Business Central)",
+  "bsl: language server running for BSL (1C:Enterprise)",
   "fsharp: language server running for F#",
   "rego: language server running for Rego",
   "markdown: language server running for Markdown",

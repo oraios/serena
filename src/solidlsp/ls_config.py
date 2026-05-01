@@ -63,6 +63,7 @@ class Language(str, Enum):
     ERLANG = "erlang"
     OCAML = "ocaml"
     AL = "al"
+    BSL = "bsl"  # 1C:Enterprise and OneScript language
     FSHARP = "fsharp"
     REGO = "rego"
     SCALA = "scala"
@@ -283,6 +284,8 @@ class Language(str, Enum):
                 return FilenameMatcher("*.ml", "*.mli", "*.re", "*.rei")
             case self.AL:
                 return FilenameMatcher("*.al", "*.dal")
+            case self.BSL:
+                return FilenameMatcher("*.bsl", "*.os", "*.bsl")
             case self.FSHARP:
                 return FilenameMatcher("*.fs", "*.fsx", "*.fsi")
             case self.REGO:
@@ -511,6 +514,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.r_language_server import RLanguageServer
 
                 return RLanguageServer
+            case self.BSL:
+                from solidlsp.language_servers.bsl_language_server import BslLanguageServer
+
+                return BslLanguageServer
             case self.SCALA:
                 from solidlsp.language_servers.scala_language_server import ScalaLanguageServer
 
