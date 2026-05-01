@@ -1395,7 +1395,6 @@ class TestSerenaAgent:
         # Kept for backwards compat; full parametrized coverage is in FIND_REFERENCE_CASES
         pass
 
-    @pytest.mark.parametrize("serena_agent,case", SAFE_DELETE_BLOCKED_CASES, indirect=["serena_agent"])
     def test_safe_delete_symbol_blocked_by_references(self, serena_agent: SerenaAgent, name_path: str, relative_path: str):
         """Tests that SafeDeleteSymbol refuses to delete a symbol that is referenced elsewhere
         and returns a message listing the referencing files.
