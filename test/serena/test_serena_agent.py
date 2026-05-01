@@ -13,6 +13,7 @@ from typing import Literal, cast
 import pytest
 from _pytest.mark import Mark, MarkDecorator, ParameterSet
 
+import test.solidlsp.clojure as clj
 from serena.agent import SerenaAgent
 from serena.config.serena_config import ProjectConfig, RegisteredProject, SerenaConfig
 from serena.project import Project
@@ -40,7 +41,6 @@ from test.conftest import (
     is_ci,
     language_tests_enabled,
 )
-import test.solidlsp.clojure as clj  # noqa: E402 — needed for clj.CORE_PATH / clj.UTILS_PATH
 
 
 @dataclass
@@ -1232,7 +1232,8 @@ class TestSerenaAgent:
     @pytest.mark.parametrize("serena_agent,case", FIND_SYMBOL_OVERLOADED_FUNCTION_CASES, indirect=["serena_agent"])
     def test_find_symbol_overloaded_function(self, serena_agent: SerenaAgent, case: FindSymbolOverloadedCase) -> None:
         """Tests whether the FindSymbolTool can find all overloads of a function/method
-        provided that the overload id remains unspecified in the name path"""
+        provided that the overload id remains unspecified in the name path
+        """
         agent = serena_agent
         find_symbol_tool = agent.get_tool(FindSymbolTool)
         result = find_symbol_tool.apply_ex(
@@ -1375,7 +1376,8 @@ class TestSerenaAgent:
     )
     def test_replace_content_regex_with_wildcard_ambiguous(self, serena_agent: SerenaAgent):
         """Tests that an ambiguous replacement where there is a larger match that internally
-        contains a smaller match triggers an exception"""
+        contains a smaller match triggers an exception
+        """
         replace_content_tool = serena_agent.get_tool(ReplaceContentTool)
         with pytest.raises(ValueError, match="ambiguous"):
             replace_content_tool.apply(
