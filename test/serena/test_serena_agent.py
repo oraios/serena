@@ -179,9 +179,7 @@ class DiagnosticCase(BaseCase):
                 assert expected_name_path in name_path_group, name_path_group
 
         diagnostic_messages = [
-            diagnostic["message"]
-            for diagnostics_for_name_path in name_path_group.values()
-            for diagnostic in diagnostics_for_name_path
+            diagnostic["message"] for diagnostics_for_name_path in name_path_group.values() for diagnostic in diagnostics_for_name_path
         ]
         for expected_fragment in [self.message_fragment1, self.message_fragment2]:
             if expected_fragment is not None:
@@ -714,7 +712,9 @@ FIND_SYMBOL_NAME_PATH_NO_MATCH_CASES = [
 ]
 
 FIND_SYMBOL_OVERLOADED_FUNCTION_CASES = [
-    FindSymbolOverloadedCase(language=Language.JAVA, id="java_overloaded_get_name", name_path="Model/getName", num_expected=2).to_pytest_param(),
+    FindSymbolOverloadedCase(
+        language=Language.JAVA, id="java_overloaded_get_name", name_path="Model/getName", num_expected=2
+    ).to_pytest_param(),
 ]
 
 NON_UNIQUE_SYMBOL_REFERENCE_ERROR_CASES = [
@@ -954,14 +954,9 @@ class TestSerenaAgent:
         result = find_symbol_tool.apply(name_path_pattern=symbol_name, include_info=True)
         symbols = json.loads(result)
         assert any(
-            symbol_name in s["name_path"]
-            and expected_kind.lower() in s["kind"].lower()
-            and expected_file in s["relative_path"]
+            symbol_name in s["name_path"] and expected_kind.lower() in s["kind"].lower() and expected_file in s["relative_path"]
             for s in symbols
-        ), (
-            f"Expected to find {symbol_name} ({expected_kind}) in {expected_file}. "
-            f"Found name paths: {[s['name_path'] for s in symbols]}"
-        )
+        ), f"Expected to find {symbol_name} ({expected_kind}) in {expected_file}. Found name paths: {[s['name_path'] for s in symbols]}"
         for symbol in symbols:
             self._assert_symbol_info_present(serena_agent, symbol, symbol_name)
 
@@ -991,9 +986,7 @@ class TestSerenaAgent:
             return False
 
         refs = json.loads(result)
-        assert contains_ref_with_relative_path(refs, ref_file), (
-            f"Expected to find reference to {symbol_name} in {ref_file}. refs={refs}"
-        )
+        assert contains_ref_with_relative_path(refs, ref_file), f"Expected to find reference to {symbol_name} in {ref_file}. refs={refs}"
 
     @pytest.mark.parametrize("serena_agent,case", FIND_SYMBOL_REFERENCES_CASES, indirect=["serena_agent"])
     def test_find_symbol(self, serena_agent: SerenaAgent, case: FindSymbolCase) -> None:
@@ -1016,7 +1009,13 @@ class TestSerenaAgent:
     @pytest.mark.parametrize(
         "serena_agent,symbol_name,expected_kind,expected_file",
         [
-            pytest.param(Language.BSL, "ВывестиСообщение", "Method", "CommonModule.bsl", marks=[pytest.mark.bsl, pytest.mark.skipif(shutil.which("java") is None, reason="Java 11+ is required for BSL LSP")]),
+            pytest.param(
+                Language.BSL,
+                "ВывестиСообщение",
+                "Method",
+                "CommonModule.bsl",
+                marks=[pytest.mark.bsl, pytest.mark.skipif(shutil.which("java") is None, reason="Java 11+ is required for BSL LSP")],
+            ),
         ],
         indirect=["serena_agent"],
     )
@@ -1025,9 +1024,7 @@ class TestSerenaAgent:
         result = find_symbol_tool.apply(name_path_pattern=symbol_name, include_info=True)
         symbols = json.loads(result)
         assert any(
-            symbol_name in s["name_path"]
-            and expected_kind.lower() in s["kind"].lower()
-            and expected_file in s["relative_path"]
+            symbol_name in s["name_path"] and expected_kind.lower() in s["kind"].lower() and expected_file in s["relative_path"]
             for s in symbols
         ), f"Expected to find {symbol_name} ({expected_kind}) in {expected_file}. Symbols: {symbols}"
 
@@ -1134,6 +1131,7 @@ class TestSerenaAgent:
             f"Expected defining symbol name {case.expected_name!r}, got: {defining_symbol}"
         )
         self._assert_symbol_info_present(serena_agent, defining_symbol)
+
     @pytest.mark.parametrize("serena_agent,case", FIND_DEFINING_SYMBOL_REGEX_ERROR_CASES, indirect=["serena_agent"])
     def test_find_declaration_error(
         self,
@@ -1187,10 +1185,7 @@ class TestSerenaAgent:
             case.implementation_file in implementation["relative_path"]
             and self._symbol_matches_expected_name(implementation, case.expected_symbol_name)
             for implementation in implementations
-        ), (
-            f"Expected to find implementation of {case.symbol_name} in {case.implementation_file}. "
-            f"implementations={implementations}"
-        )
+        ), f"Expected to find implementation of {case.symbol_name} in {case.implementation_file}. implementations={implementations}"
         for implementation in implementations:
             self._assert_symbol_info_present(serena_agent, implementation)
 
@@ -1213,9 +1208,7 @@ class TestSerenaAgent:
             and case.expected_kind.lower() in s["kind"].lower()
             and case.expected_file in s["relative_path"]
             for s in symbols
-        ), (
-            f"Expected to find {case.name_path} ({case.expected_kind}) in {case.expected_file}. Symbols: {symbols}"
-        )
+        ), f"Expected to find {case.name_path} ({case.expected_kind}) in {case.expected_file}. Symbols: {symbols}"
 
     @pytest.mark.parametrize("serena_agent,case", FIND_SYMBOL_NAME_PATH_NO_MATCH_CASES, indirect=["serena_agent"])
     def test_find_symbol_name_path_no_match(self, serena_agent: SerenaAgent, case: FindSymbolNoMatchCase) -> None:
@@ -1403,11 +1396,11 @@ class TestSerenaAgent:
         pass
 
     @pytest.mark.parametrize("serena_agent,case", SAFE_DELETE_BLOCKED_CASES, indirect=["serena_agent"])
-    def test_safe_delete_symbol_blocked_by_references(self, serena_agent: SerenaAgent, case: SafeDeleteCase):
+    def test_safe_delete_symbol_blocked_by_references(self, serena_agent: SerenaAgent, name_path: str, relative_path: str):
         """Tests that SafeDeleteSymbol refuses to delete a symbol that is referenced elsewhere
         and returns a message listing the referencing files.
         """
-        with project_file_modification_context(serena_agent, case.relative_path):
+        with project_file_modification_context(serena_agent, relative_path):
             safe_delete_tool = serena_agent.get_tool(SafeDeleteSymbol)
             result = safe_delete_tool.apply(name_path_pattern=name_path, relative_path=relative_path)
             assert "Cannot delete" in result, f"Expected deletion to be blocked due to existing references, but got: {result}"
@@ -1416,18 +1409,18 @@ class TestSerenaAgent:
     @pytest.mark.parametrize(
         "serena_agent,name_path,relative_path",
         [
-            pytest.param(Language.PYTHON, "Timer", os.path.join("test_repo", "utils.py"), marks=pytest.mark.python),
-            pytest.param(Language.JAVA, "ModelUser", os.path.join("src", "main", "java", "test_repo", "ModelUser.java"), marks=pytest.mark.java),
+            pytest.param(Language.PYTHON, "User", os.path.join("test_repo", "models.py"), marks=pytest.mark.python),
+            pytest.param(Language.JAVA, "Model", os.path.join("src", "main", "java", "test_repo", "Model.java"), marks=pytest.mark.java),
             pytest.param(
                 Language.KOTLIN,
-                "ModelUser",
-                os.path.join("src", "main", "kotlin", "test_repo", "ModelUser.kt"),
+                "Model",
+                os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
                 marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
             ),
-            pytest.param(Language.TYPESCRIPT, "unusedStandaloneFunction", "index.ts", marks=pytest.mark.typescript),
+            pytest.param(Language.TYPESCRIPT, "helperFunction", "index.ts", marks=pytest.mark.typescript),
             pytest.param(
                 Language.BSL,
-                "ВызватьПриветствие",
+                "ВывестиСообщение",
                 "CommonModule.bsl",
                 marks=[pytest.mark.bsl, pytest.mark.skipif(shutil.which("java") is None, reason="Java 11+ is required for BSL LSP")],
             ),
@@ -1471,9 +1464,7 @@ class TestPromptProvision:
             assert match is None, f"Expected no project activation message in result:\n{result}"
 
     @pytest.mark.parametrize("serena_agent", [Language.PYTHON], indirect=True)
-    def test_initial_instructions_provide_project_activation_message_once_per_session(
-        self, serena_agent: SerenaAgent
-    ) -> None:
+    def test_initial_instructions_provide_project_activation_message_once_per_session(self, serena_agent: SerenaAgent) -> None:
         """Tests that the project activation message is provided on the first call to
         InitialInstructionsTool for a session, but not on subsequent calls within the same session.
         #1372
