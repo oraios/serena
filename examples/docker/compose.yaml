@@ -10,3 +10,14 @@ services:
     ports:
       - "${SERENA_PORT:-9121}:9121"  # MCP server port
       - "${SERENA_DASHBOARD_PORT:-24282}:24282"  # Dashboard port (default 0x5EDA = 24282)
+    # HTTP Server setup
+    command:
+      - start-mcp-server
+      - --transport
+      - streamable-http
+      - --host
+      - 0.0.0.0
+      - --port
+      - "9121"
+      - --context
+      - vscode
