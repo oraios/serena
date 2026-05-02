@@ -13,7 +13,6 @@ from typing import Literal, cast
 import pytest
 from _pytest.mark import Mark, MarkDecorator, ParameterSet
 
-import test.solidlsp.clojure as clj
 from serena.agent import SerenaAgent
 from serena.config.serena_config import ProjectConfig, RegisteredProject, SerenaConfig
 from serena.project import Project
@@ -164,8 +163,9 @@ class DiagnosticCase(BaseCase):
 
     def assert_matches(self, tool_output: dict) -> None:
         """
-        :param tool_output: Output of diagnostics tool, representing the mapping
-            `relative_path -> severity -> name_path -> diagnostics_results`.
+
+        :param tool_output: Output of diagnostics tool, representing the mapping `relative_path -> severity -> name_path -> diagnostics_results`.
+        :return:
         """
         assert self.relative_path in tool_output, (
             f"Missing diagnostics for relative path {self.relative_path} in tool output keys: {list(tool_output.keys())}"
@@ -367,6 +367,8 @@ FIND_DEFINING_SYMBOL_CASES = [
         expected_name="add",
         expected_definition_file="Calculator.fs",
     ).to_pytest_param(
+        pytest.mark.bsl,
+        pytest.mark.skipif(shutil.which("java") is None, reason="Java 11+ is required for BSL LSP"),
         pytest.mark.xfail(reason="F# language server cannot reliably resolve defining symbols"),
     ),
 ]
@@ -407,25 +409,6 @@ FIND_DEFINING_SYMBOL_REGEX_CASES = [
         containing_symbol_name_path="main",
         expected_name="Greeter",
         expected_definition_file="main.go",
-    ).to_pytest_param(),
-]
-
-FIND_DEFINING_SYMBOL_REGEX_ERROR_CASES = [
-    RegexDefiningSymbolErrorCase(
-        language=Language.PYTHON,
-        id="python_regex_multiple_matches",
-        relative_path=os.path.join("test_repo", "services.py"),
-        regex=r"(User)",
-        containing_symbol_name_path="",
-        error_fragment="Match must be unique",
-    ).to_pytest_param(),
-    RegexDefiningSymbolErrorCase(
-        language=Language.PYTHON,
-        id="python_regex_missing_group",
-        relative_path=os.path.join("test_repo", "services.py"),
-        regex=r"self\.users\.get\(id\)",
-        containing_symbol_name_path="UserService/get_user",
-        error_fragment="Regex must contain exactly one group",
     ).to_pytest_param(),
 ]
 
@@ -522,11 +505,7 @@ FIND_SYMBOL_REFERENCES_CASES = [
         expected_file="main.ps1",
     ).to_pytest_param(),
     FindSymbolCase(
-        language=Language.CPP_CCLS,
-        id="cpp_add_function",
-        symbol_name="add",
-        expected_kind="Function",
-        expected_file="b.cpp",
+        language=Language.CPP_CCLS, id="cpp_add_function", symbol_name="add", expected_kind="Function", expected_file="b.cpp"
     ).to_pytest_param(),
     FindSymbolCase(
         language=Language.LEAN4, id="lean_add_method", symbol_name="add", expected_kind="Method", expected_file="Helper.lean"
@@ -552,11 +531,7 @@ FIND_REFERENCE_CASES = [
         reference_file=os.path.join("test_repo", "services.py"),
     ).to_pytest_param(),
     FindReferenceCase(
-        language=Language.GO,
-        id="go_helper_refs",
-        symbol_name="Helper",
-        definition_file="main.go",
-        reference_file="main.go",
+        language=Language.GO, id="go_helper_refs", symbol_name="Helper", definition_file="main.go", reference_file="main.go"
     ).to_pytest_param(),
     FindReferenceCase(
         language=Language.JAVA,
@@ -608,43 +583,42 @@ FIND_REFERENCE_CASES = [
         reference_file="main.ps1",
     ).to_pytest_param(),
     FindReferenceCase(
-        language=Language.CPP_CCLS,
-        id="cpp_add_refs",
-        symbol_name="add",
-        definition_file="b.cpp",
-        reference_file="a.cpp",
+        language=Language.CPP_CCLS, id="cpp_add_refs", symbol_name="add", definition_file="b.cpp", reference_file="a.cpp"
     ).to_pytest_param(),
     FindReferenceCase(
-        language=Language.LEAN4,
-        id="lean_add_refs",
-        symbol_name="add",
-        definition_file="Helper.lean",
-        reference_file="Main.lean",
+        language=Language.LEAN4, id="lean_add_refs", symbol_name="add", definition_file="Helper.lean", reference_file="Main.lean"
     ).to_pytest_param(),
     FindReferenceCase(
         language=Language.TYPESCRIPT,
         id="typescript_helper_refs",
         symbol_name="helperFunction",
         definition_file="index.ts",
-        reference_file="usehelper.ts",
+        reference_file="use_helper.ts",
     ).to_pytest_param(pytest.mark.xfail(False, reason="TypeScript language server is unreliable")),
     FindReferenceCase(
-        language=Language.FSHARP,
-        id="fsharp_add_refs",
-        symbol_name="add",
-        definition_file="Calculator.fs",
-        reference_file="Program.fs",
-    ).to_pytest_param(pytest.mark.xfail(reason="F# language server is unreliable. See issue #1040")),
-    FindReferenceCase(
-        language=Language.BSL,
-        id="bsl_get_greeting_refs",
-        symbol_name="ПолучитьПриветствие",
-        definition_file="CommonModule.bsl",
-        reference_file="CommonModule.bsl",
+        language=Language.FSHARP, id="fsharp_add_refs", symbol_name="add", definition_file="Calculator.fs", reference_file="Program.fs"
     ).to_pytest_param(
-        pytest.mark.bsl,
-        pytest.mark.skipif(shutil.which("java") is None, reason="Java 11+ is required for BSL LSP"),
+        pytest.mark.xfail(reason="F# language server is unreliable"),  # See issue #1040
     ),
+]
+
+FIND_DEFINING_SYMBOL_REGEX_ERROR_CASES = [
+    RegexDefiningSymbolErrorCase(
+        language=Language.PYTHON,
+        id="python_regex_multiple_matches",
+        relative_path=os.path.join("test_repo", "services.py"),
+        regex=r"(User)",
+        containing_symbol_name_path="",
+        error_fragment="Match must be unique",
+    ).to_pytest_param(),
+    RegexDefiningSymbolErrorCase(
+        language=Language.PYTHON,
+        id="python_regex_missing_group",
+        relative_path=os.path.join("test_repo", "services.py"),
+        regex=r"self.users.get\(id\)",
+        containing_symbol_name_path="UserService/get_user",
+        error_fragment="Regex must contain exactly one group",
+    ).to_pytest_param(),
 ]
 
 FIND_SYMBOL_NAME_PATH_CASES = [
@@ -660,9 +634,9 @@ FIND_SYMBOL_NAME_PATH_CASES = [
     FindSymbolNamePathCase(
         language=Language.PYTHON,
         id="nested_method_exact",
-        name_path="OuterClass/NestedClass/findme",
+        name_path="OuterClass/NestedClass/find_me",
         substring_matching=False,
-        expected_symbol_name="findme",
+        expected_symbol_name="find_me",
         expected_kind="Method",
         expected_file=os.path.join("test_repo", "nested.py"),
     ).to_pytest_param(),
@@ -678,16 +652,16 @@ FIND_SYMBOL_NAME_PATH_CASES = [
     FindSymbolNamePathCase(
         language=Language.PYTHON,
         id="nested_method_substring",
-        name_path="OuterClass/NestedClass/findm",
+        name_path="OuterClass/NestedClass/find_m",
         substring_matching=True,
-        expected_symbol_name="findme",
+        expected_symbol_name="find_me",
         expected_kind="Method",
         expected_file=os.path.join("test_repo", "nested.py"),
     ).to_pytest_param(),
     FindSymbolNamePathCase(
         language=Language.PYTHON,
         id="outer_class_absolute",
-        name_path="OuterClass",
+        name_path="/OuterClass",
         substring_matching=False,
         expected_symbol_name="OuterClass",
         expected_kind="Class",
@@ -696,18 +670,18 @@ FIND_SYMBOL_NAME_PATH_CASES = [
     FindSymbolNamePathCase(
         language=Language.PYTHON,
         id="nested_method_absolute_substring",
-        name_path="OuterClass/NestedClass/findm",
+        name_path="/OuterClass/NestedClass/find_m",
         substring_matching=True,
-        expected_symbol_name="findme",
+        expected_symbol_name="find_me",
         expected_kind="Method",
         expected_file=os.path.join("test_repo", "nested.py"),
     ).to_pytest_param(),
 ]
 
 FIND_SYMBOL_NAME_PATH_NO_MATCH_CASES = [
-    FindSymbolNoMatchCase(language=Language.PYTHON, id="nested_class_not_top_level", name_path="NestedClass").to_pytest_param(),
+    FindSymbolNoMatchCase(language=Language.PYTHON, id="nested_class_not_top_level", name_path="/NestedClass").to_pytest_param(),
     FindSymbolNoMatchCase(
-        language=Language.PYTHON, id="nested_class_missing_parent", name_path="NoSuchParent/NestedClass"
+        language=Language.PYTHON, id="nested_class_missing_parent", name_path="/NoSuchParent/NestedClass"
     ).to_pytest_param(),
 ]
 
@@ -887,24 +861,32 @@ def serena_agent(request: pytest.FixtureRequest, serena_config) -> Iterator[Sere
     language = Language(request.param)
     if not language_tests_enabled(language):
         pytest.skip(f"Tests for language {language} are not enabled.")
+
     project_name = f"test_repo_{language}"
+
     agent = SerenaAgent(project=project_name, serena_config=serena_config)
+
+    # wait for agent to be ready
     agent.execute_task(lambda: None)
+
     yield agent
+
+    # explicitly shut down to free resources
     agent.on_shutdown(timeout=5)
 
 
 class TestSerenaAgent:
     @pytest.mark.parametrize(
         "project",
-        [None, str(get_repo_path(Language.PYTHON)), "nonexistentpath"],
+        [None, str(get_repo_path(Language.PYTHON)), "non_existent_path"],
         ids=["no_project", "python_project_path", "invalid_project_path"],
     )
     def test_agent_instantiation(self, project: str | None):
-        """Tests agent instantiation for cases where:
-        - no project is specified at startup
-        - a valid project path is specified at startup
-        - an invalid project path is specified at startup
+        """
+        Tests agent instantiation for cases where
+          * no project is specified at startup
+          * a valid project path is specified at startup
+          * an invalid project path is specified at startup
         All cases must not raise an exception.
         """
         serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False)
@@ -932,61 +914,17 @@ class TestSerenaAgent:
             return
 
         symbol_info = symbol.get("info")
-        assert symbol_info, f"Expected symbol info to be present for symbol {symbol}"
+        assert symbol_info, f"Expected symbol info to be present for symbol: {symbol}"
+
         if expected_name is not None:
             assert expected_name in symbol_info, (
-                f"{serena_agent.get_active_lsp_languages()[0]} Expected symbol info to contain symbol name "
-                f"{expected_name!r}. Info: {symbol_info}"
+                f"[{serena_agent.get_active_lsp_languages()[0]}] Expected symbol info to contain symbol name "
+                f"{expected_name}. Info: {symbol_info}"
             )
-        # special additional test for Java, since Eclipse returns hover in a complex format
+
+        # special additional test for Java, since Eclipse returns hover in a complex format and we want to make sure to get it right
         if symbol["kind"] == SymbolKind.Class.name and serena_agent.get_active_lsp_languages() == [Language.JAVA]:
             assert "A simple model class" in symbol_info, f"Java class docstring not found in symbol info: {symbol}"
-
-    def _assert_find_symbol(
-        self,
-        serena_agent: SerenaAgent,
-        symbol_name: str,
-        expected_kind: str,
-        expected_file: str,
-    ) -> None:
-        agent = serena_agent
-        find_symbol_tool = agent.get_tool(FindSymbolTool)
-        result = find_symbol_tool.apply(name_path_pattern=symbol_name, include_info=True)
-        symbols = json.loads(result)
-        assert any(
-            symbol_name in s["name_path"] and expected_kind.lower() in s["kind"].lower() and expected_file in s["relative_path"]
-            for s in symbols
-        ), f"Expected to find {symbol_name} ({expected_kind}) in {expected_file}. Found name paths: {[s['name_path'] for s in symbols]}"
-        for symbol in symbols:
-            self._assert_symbol_info_present(serena_agent, symbol, symbol_name)
-
-    def _assert_find_symbol_references(
-        self,
-        serena_agent: SerenaAgent,
-        symbol_name: str,
-        def_file: str,
-        ref_file: str,
-    ) -> None:
-        find_symbol_tool = serena_agent.get_tool(FindSymbolTool)
-        result = find_symbol_tool.apply(name_path_pattern=symbol_name, relative_path=def_file)
-        time.sleep(1)
-        symbols = json.loads(result)
-        def_symbol = symbols[0]
-
-        find_refs_tool = serena_agent.get_tool(FindReferencingSymbolsTool)
-        result = find_refs_tool.apply(name_path=def_symbol["name_path"], relative_path=def_symbol["relative_path"])
-
-        def contains_ref_with_relative_path(refs: object, relative_path: str) -> bool:
-            if isinstance(refs, list):
-                return any(contains_ref_with_relative_path(ref, relative_path) for ref in refs)
-            elif isinstance(refs, dict):
-                if relative_path in refs:
-                    return True
-                return any(contains_ref_with_relative_path(v, relative_path) for v in refs.values())
-            return False
-
-        refs = json.loads(result)
-        assert contains_ref_with_relative_path(refs, ref_file), f"Expected to find reference to {symbol_name} in {ref_file}. refs={refs}"
 
     @pytest.mark.parametrize("serena_agent,case", FIND_SYMBOL_REFERENCES_CASES, indirect=["serena_agent"])
     def test_find_symbol(self, serena_agent: SerenaAgent, case: FindSymbolCase) -> None:
@@ -1000,8 +938,7 @@ class TestSerenaAgent:
             and case.expected_file in s["relative_path"]
             for s in symbols
         ), (
-            f"Expected to find {case.symbol_name} ({case.expected_kind}) in {case.expected_file}. "
-            f"Found name paths: {[s['name_path'] for s in symbols]}"
+            f"Expected to find {case.symbol_name} ({case.expected_kind}) in {case.expected_file}. Found name paths: {[s['name_path'] for s in symbols]}"
         )
         for symbol in symbols:
             self._assert_symbol_info_present(serena_agent, symbol, case.symbol_name)
@@ -1030,87 +967,39 @@ class TestSerenaAgent:
 
     @pytest.mark.parametrize("serena_agent,case", FIND_REFERENCE_CASES, indirect=["serena_agent"])
     def test_find_symbol_references(self, serena_agent: SerenaAgent, case: FindReferenceCase) -> None:
+        # Find the symbol location first
         find_symbol_tool = serena_agent.get_tool(FindSymbolTool)
         result = find_symbol_tool.apply(name_path_pattern=case.symbol_name, relative_path=case.definition_file)
+
         time.sleep(1)
         symbols = json.loads(result)
+        # Find the definition
         def_symbol = symbols[0]
 
+        # Now find references
         find_refs_tool = serena_agent.get_tool(FindReferencingSymbolsTool)
         result = find_refs_tool.apply(name_path=def_symbol["name_path"], relative_path=def_symbol["relative_path"])
 
-        def contains_ref_with_relative_path(refs: object, relative_path: str) -> bool:
-            """Checks for reference to relative path, regardless of output format (grouped or ungrouped)"""
+        def contains_ref_with_relative_path(refs, relative_path):
+            """
+            Checks for reference to relative path, regardless of output format (grouped or ungrouped)
+            """
             if isinstance(refs, list):
-                return any(contains_ref_with_relative_path(ref, relative_path) for ref in refs)
+                for ref in refs:
+                    if contains_ref_with_relative_path(ref, relative_path):
+                        return True
             elif isinstance(refs, dict):
                 if relative_path in refs:
                     return True
-                return any(contains_ref_with_relative_path(v, relative_path) for v in refs.values())
+                for value in refs.values():
+                    if contains_ref_with_relative_path(value, relative_path):
+                        return True
             return False
 
         refs = json.loads(result)
         assert contains_ref_with_relative_path(refs, case.reference_file), (
             f"Expected to find reference to {case.symbol_name} in {case.reference_file}. refs={refs}"
         )
-
-    @pytest.mark.parametrize(
-        "serena_agent,symbol_name,expected_kind,expected_file",
-        [
-            pytest.param(Language.PYTHON, "User", "Class", "models.py", marks=pytest.mark.python),
-            pytest.param(Language.GO, "Helper", "Function", "main.go", marks=pytest.mark.go),
-            pytest.param(Language.JAVA, "Model", "Class", "Model.java", marks=pytest.mark.java),
-            pytest.param(
-                Language.KOTLIN,
-                "Model",
-                "Struct",
-                "Model.kt",
-                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
-            ),
-            pytest.param(Language.TYPESCRIPT, "DemoClass", "Class", "index.ts", marks=pytest.mark.typescript),
-            pytest.param(Language.PHP, "helperFunction", "Function", "helper.php", marks=pytest.mark.php),
-            pytest.param(Language.CLOJURE, "greet", "Function", clj.CORE_PATH, marks=pytest.mark.clojure),
-            pytest.param(Language.CSHARP, "Calculator", "Class", "Program.cs", marks=pytest.mark.csharp),
-            pytest.param(Language.POWERSHELL, "Greet-User", "Function", "main.ps1", marks=pytest.mark.powershell),
-            pytest.param(Language.CPP_CCLS, "add", "Function", "b.cpp", marks=pytest.mark.cpp),
-            pytest.param(Language.HAXE, "Main", "Class", "Main.hx", marks=pytest.mark.haxe),
-            pytest.param(Language.LEAN4, "add", "Method", "Helper.lean", marks=pytest.mark.lean4),
-            pytest.param(Language.MSL, "greet", "Function", "main.mrc", marks=pytest.mark.msl),
-            pytest.param(
-                Language.BSL,
-                "ВывестиСообщение",
-                "Method",
-                "CommonModule.bsl",
-                marks=[pytest.mark.bsl, pytest.mark.skipif(shutil.which("java") is None, reason="Java 11+ is required for BSL LSP")],
-            ),
-        ],
-        indirect=["serena_agent"],
-    )
-    def test_find_symbol_stable(self, serena_agent: SerenaAgent, symbol_name: str, expected_kind: str, expected_file: str) -> None:
-        self._assert_find_symbol(serena_agent, symbol_name, expected_kind, expected_file)
-
-    @pytest.mark.parametrize("serena_agent,case", FIND_DEFINING_SYMBOL_CASES, indirect=["serena_agent"])
-    def test_find_defining_symbol(self, serena_agent: SerenaAgent, case: FindDefiningSymbolCase) -> None:
-        tool = serena_agent.get_tool(FindDeclarationTool)
-        project_root = get_repo_path(case.language)
-        pos = find_identifier_pos(project_root, case.relative_path, case.identifier, occurrence_index=case.occurrence_index)
-        assert pos is not None, f"Could not find identifier {case.identifier!r} in {case.relative_path}"
-        result = tool.apply(
-            relative_path=case.relative_path,
-            line=pos[0],
-            column=pos[1] + case.column_offset,
-            include_info=True,
-        )
-        defining_symbol = json.loads(result)
-        assert defining_symbol is not None, f"Expected defining symbol for {case.identifier!r} in {case.relative_path}"
-        assert defining_symbol.get("relative_path") is not None
-        assert case.expected_definition_file in defining_symbol["relative_path"], (
-            f"Expected defining symbol in {case.expected_definition_file!r}, got: {defining_symbol}"
-        )
-        assert self._symbol_matches_expected_name(defining_symbol, case.expected_name), (
-            f"Expected defining symbol name {case.expected_name!r}, got: {defining_symbol}"
-        )
-        self._assert_symbol_info_present(serena_agent, defining_symbol)
 
     @pytest.mark.parametrize("serena_agent,case", FIND_DEFINING_SYMBOL_REGEX_CASES, indirect=["serena_agent"])
     def test_find_declaration(self, serena_agent: SerenaAgent, case: RegexDefiningSymbolCase) -> None:
@@ -1156,9 +1045,10 @@ class TestSerenaAgent:
         full_file_diagnostics = json.loads(result)
         diagnostic_case.assert_matches(full_file_diagnostics)
 
+        # testing diagnostics in range by removing second symbol
         project_root = get_repo_path(diagnostic_case.language)
-        pos1 = find_identifier_pos(project_root, diagnostic_case.relative_path, diagnostic_case.symbol1_id_str)
-        pos2 = find_identifier_pos(project_root, diagnostic_case.relative_path, cast(str, diagnostic_case.symbol2_id_str))
+        pos1 = find_identifier_pos(project_root / diagnostic_case.relative_path, diagnostic_case.symbol1_id_str)
+        pos2 = find_identifier_pos(project_root / diagnostic_case.relative_path, cast(str, diagnostic_case.symbol2_id_str))
         assert pos1 is not None
         assert pos2 is not None
         result = diagnostics_tool.apply(
@@ -1192,6 +1082,7 @@ class TestSerenaAgent:
     @pytest.mark.parametrize("serena_agent,case", FIND_SYMBOL_NAME_PATH_CASES, indirect=["serena_agent"])
     def test_find_symbol_name_path(self, serena_agent: SerenaAgent, case: FindSymbolNamePathCase) -> None:
         agent = serena_agent
+
         find_symbol_tool = agent.get_tool(FindSymbolTool)
         result = find_symbol_tool.apply_ex(
             name_path_pattern=case.name_path,
@@ -1202,6 +1093,7 @@ class TestSerenaAgent:
             exclude_kinds=None,
             substring_matching=case.substring_matching,
         )
+
         symbols = json.loads(result)
         assert any(
             case.expected_symbol_name == s["name_path"].split("/")[-1]
@@ -1213,27 +1105,32 @@ class TestSerenaAgent:
     @pytest.mark.parametrize("serena_agent,case", FIND_SYMBOL_NAME_PATH_NO_MATCH_CASES, indirect=["serena_agent"])
     def test_find_symbol_name_path_no_match(self, serena_agent: SerenaAgent, case: FindSymbolNoMatchCase) -> None:
         agent = serena_agent
+
         find_symbol_tool = agent.get_tool(FindSymbolTool)
         result = find_symbol_tool.apply_ex(
             name_path_pattern=case.name_path,
             depth=0,
             substring_matching=True,
         )
+
         symbols = json.loads(result)
         assert not symbols, f"Expected to find no symbols for {case.name_path}. Symbols found: {symbols}"
 
     @pytest.mark.parametrize("serena_agent,case", FIND_SYMBOL_OVERLOADED_FUNCTION_CASES, indirect=["serena_agent"])
     def test_find_symbol_overloaded_function(self, serena_agent: SerenaAgent, case: FindSymbolOverloadedCase) -> None:
-        """Tests whether the FindSymbolTool can find all overloads of a function/method
-        provided that the overload id remains unspecified in the name path
+        """
+        Tests whether the FindSymbolTool can find all overloads of a function/method
+        (provided that the overload id remains unspecified in the name path)
         """
         agent = serena_agent
+
         find_symbol_tool = agent.get_tool(FindSymbolTool)
         result = find_symbol_tool.apply_ex(
             name_path_pattern=case.name_path,
             depth=0,
             substring_matching=False,
         )
+
         symbols = json.loads(result)
         assert len(symbols) == case.num_expected, (
             f"Expected to find {case.num_expected} symbols for overloaded function {case.name_path}. Symbols found: {symbols}"
@@ -1245,13 +1142,14 @@ class TestSerenaAgent:
         serena_agent: SerenaAgent,
         case: NonUniqueSymbolReferenceCase,
     ) -> None:
-        """Tests whether the tools operating on a well-defined symbol raises an error when the symbol
-        reference is non-unique. We exemplarily test a retrieval tool (FindReferencingSymbolsTool)
-        and an editing tool (ReplaceSymbolBodyTool).
+        """
+        Tests whether the tools operating on a well-defined symbol raises an error when the symbol reference is non-unique.
+        We exemplarily test a retrieval tool (FindReferencingSymbolsTool) and an editing tool (ReplaceSymbolBodyTool).
         """
         find_refs_tool = serena_agent.get_tool(FindReferencingSymbolsTool)
         with pytest.raises(ValueError, match=case.expected_error_fragment):
             find_refs_tool.apply(name_path=case.name_path, relative_path=case.relative_path)
+
         replace_symbol_body_tool = serena_agent.get_tool(ReplaceSymbolBodyTool)
         with pytest.raises(ValueError, match=case.expected_error_fragment):
             replace_symbol_body_tool.apply(name_path=case.name_path, relative_path=case.relative_path, body="")
@@ -1264,13 +1162,15 @@ class TestSerenaAgent:
         indirect=["serena_agent"],
     )
     def test_replace_content_regex_with_wildcard_ok(self, serena_agent: SerenaAgent):
-        """Tests a regex-based content replacement that has a unique match"""
-        relative_path = "wsmanager.js"
+        """
+        Tests a regex-based content replacement that has a unique match
+        """
+        relative_path = "ws_manager.js"
         with project_file_modification_context(serena_agent, relative_path):
             replace_content_tool = serena_agent.get_tool(ReplaceContentTool)
             result = replace_content_tool.apply(
-                needle=r"catch\(error\) \{ console\.error\(.*Failed to connect.*?\)",
-                repl="catch(error) { console.log('Never mind') }",
+                needle=r'catch \(error\) \{\s*console.error\("Failed to connect.*?\}',
+                repl='catch(error) {console.log("Never mind"); }',
                 relative_path=relative_path,
                 mode="regex",
             )
@@ -1285,12 +1185,13 @@ class TestSerenaAgent:
     )
     @pytest.mark.parametrize("mode", ["literal", "regex"], ids=["literal_mode", "regex_mode"])
     def test_replace_content_with_backslashes(self, serena_agent: SerenaAgent, mode: Literal["literal", "regex"]):
-        """Tests a content replacement where the needle and replacement strings contain backslashes.
+        """
+        Tests a content replacement where the needle and replacement strings contain backslashes.
         This is a regression test for escaping issues.
         """
-        relative_path = "wsmanager.js"
-        needle = r'console.log("WebSocketManager initializing OK")'
-        repl = r'console.log("WebSocketManager initialized: systems go!")'
+        relative_path = "ws_manager.js"
+        needle = r'console.log("WebSocketManager initializing\nStatus OK");'
+        repl = r'console.log("WebSocketManager initialized\nAll systems go!");'
         replace_content_tool = serena_agent.get_tool(ReplaceContentTool)
         with project_file_modification_context(serena_agent, relative_path):
             result = replace_content_tool.apply(
@@ -1317,6 +1218,7 @@ class TestSerenaAgent:
         replace_content_tool = serena_agent.get_tool(ReplaceContentTool)
         try:
             replace_content_tool.ENABLE_DIAGNOSTICS = True
+
             with project_file_modification_context(serena_agent, relative_path):
                 result = replace_content_tool.apply(
                     relative_path=relative_path,
@@ -1324,11 +1226,12 @@ class TestSerenaAgent:
                     repl="return missing_container",
                     mode="literal",
                 )
-                diagnostics = parse_edit_diagnostics_result(result)
-                relative_path_result = diagnostics[relative_path]
-                diagnostic_messages = json.dumps(relative_path_result)
-                assert "missing_container" in diagnostic_messages
-                assert "create_service_container" in diagnostic_messages
+
+            diagnostics = parse_edit_diagnostics_result(result)
+            relative_path_result = diagnostics[relative_path]
+            diagnostic_messages = json.dumps(relative_path_result)
+            assert "missing_container" in diagnostic_messages
+            assert "create_service_container" in diagnostic_messages
         finally:
             replace_content_tool.ENABLE_DIAGNOSTICS = False
 
@@ -1346,17 +1249,22 @@ class TestSerenaAgent:
         replace_symbol_body_tool = serena_agent.get_tool(ReplaceSymbolBodyTool)
         try:
             replace_symbol_body_tool.ENABLE_DIAGNOSTICS = True
+
             with project_file_modification_context(serena_agent, relative_path):
                 result = replace_symbol_body_tool.apply(
                     name_path="create_service_container",
                     relative_path=relative_path,
-                    body="def create_service_container() -> dict[str, Any]:\n    return missing_container\n",
+                    body="""
+    def create_service_container() -> dict[str, Any]:
+        return missing_container
+    """,
                 )
-                diagnostics = parse_edit_diagnostics_result(result)
-                relative_path_result = diagnostics[relative_path]
-                diagnostic_messages = json.dumps(relative_path_result)
-                assert "missing_container" in diagnostic_messages
-                assert "create_service_container" in diagnostic_messages
+
+            diagnostics = parse_edit_diagnostics_result(result)
+            relative_path_result = diagnostics[relative_path]
+            diagnostic_messages = json.dumps(relative_path_result)
+            assert "missing_container" in diagnostic_messages
+            assert "create_service_container" in diagnostic_messages
         finally:
             replace_symbol_body_tool.ENABLE_DIAGNOSTICS = False
 
@@ -1368,105 +1276,49 @@ class TestSerenaAgent:
         indirect=["serena_agent"],
     )
     def test_replace_content_regex_with_wildcard_ambiguous(self, serena_agent: SerenaAgent):
-        """Tests that an ambiguous replacement where there is a larger match that internally
-        contains a smaller match triggers an exception
+        """
+        Tests that an ambiguous replacement where there is a larger match that internally contains
+        a smaller match triggers an exception
         """
         replace_content_tool = serena_agent.get_tool(ReplaceContentTool)
         with pytest.raises(ValueError, match="ambiguous"):
             replace_content_tool.apply(
-                needle=r"catch\(error\) \{.*?this\.updateConnectionStatus\(.*?Connection failed.*?, false\).*?\}",
-                repl="catch(error) { console.log('Never mind') }",
-                relative_path="wsmanager.js",
+                needle=r'catch \(error\) \{.*?this\.updateConnectionStatus\("Connection failed", false\);.*?\}',
+                repl='catch(error) {console.log("Never mind"); }',
+                relative_path="ws_manager.js",
                 mode="regex",
             )
 
-    @pytest.mark.parametrize(
-        "serena_agent",
-        [
-            pytest.param(
-                Language.TYPESCRIPT,
-                marks=get_pytest_markers(Language.TYPESCRIPT),
-                id="typescript_find_symbol_references_stable",
-            ),
-        ],
-        indirect=["serena_agent"],
-    )
-    def test_find_symbol_references_stable(self, serena_agent: SerenaAgent) -> None:
-        # Kept for backwards compat; full parametrized coverage is in FIND_REFERENCE_CASES
-        pass
-
-    @pytest.mark.parametrize(
-        "serena_agent,name_path,relative_path",
-        [
-            pytest.param(Language.PYTHON, "User", os.path.join("test_repo", "models.py"), marks=pytest.mark.python),
-            pytest.param(
-                Language.JAVA,
-                "Model",
-                os.path.join("src", "main", "java", "test_repo", "Model.java"),
-                marks=pytest.mark.java,
-            ),
-            pytest.param(
-                Language.KOTLIN,
-                "Model",
-                os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
-                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
-            ),
-            pytest.param(Language.TYPESCRIPT, "helperFunction", "index.ts", marks=pytest.mark.typescript),
-            pytest.param(
-                Language.BSL,
-                "ПолучитьПриветствие",
-                "CommonModule.bsl",
-                marks=[pytest.mark.bsl, pytest.mark.skipif(shutil.which("java") is None, reason="Java 11+ is required for BSL LSP")],
-            ),
-        ],
-        indirect=["serena_agent"],
-    )
-    def test_safe_delete_symbol_blocked_by_references(self, serena_agent: SerenaAgent, name_path: str, relative_path: str):
-        """Tests that SafeDeleteSymbol refuses to delete a symbol that is referenced elsewhere
+    @pytest.mark.parametrize("serena_agent,case", SAFE_DELETE_BLOCKED_CASES, indirect=["serena_agent"])
+    def test_safe_delete_symbol_blocked_by_references(self, serena_agent: SerenaAgent, case: SafeDeleteCase):
+        """
+        Tests that SafeDeleteSymbol refuses to delete a symbol that is referenced elsewhere
         and returns a message listing the referencing files.
         """
-        with project_file_modification_context(serena_agent, relative_path):
+        # wrap in modification context as a safety net: if the tool has a bug and deletes anyway,
+        # the file will be restored, preventing corruption of test resources
+        with project_file_modification_context(serena_agent, case.relative_path):
             safe_delete_tool = serena_agent.get_tool(SafeDeleteSymbol)
-            result = safe_delete_tool.apply(name_path_pattern=name_path, relative_path=relative_path)
+            result = safe_delete_tool.apply(name_path_pattern=case.name_path, relative_path=case.relative_path)
             assert "Cannot delete" in result, f"Expected deletion to be blocked due to existing references, but got: {result}"
             assert "referenced in" in result, f"Expected reference information in result, but got: {result}"
 
-    @pytest.mark.parametrize(
-        "serena_agent,name_path,relative_path",
-        [
-            pytest.param(Language.PYTHON, "User", os.path.join("test_repo", "models.py"), marks=pytest.mark.python),
-            pytest.param(Language.JAVA, "Model", os.path.join("src", "main", "java", "test_repo", "Model.java"), marks=pytest.mark.java),
-            pytest.param(
-                Language.KOTLIN,
-                "Model",
-                os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
-                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
-            ),
-            pytest.param(Language.TYPESCRIPT, "helperFunction", "index.ts", marks=pytest.mark.typescript),
-            pytest.param(
-                Language.BSL,
-                "ВывестиСообщение",
-                "CommonModule.bsl",
-                marks=[pytest.mark.bsl, pytest.mark.skipif(shutil.which("java") is None, reason="Java 11+ is required for BSL LSP")],
-            ),
-        ],
-        indirect=["serena_agent"],
-    )
-    def test_safe_delete_symbol_succeeds_when_no_references(self, serena_agent: SerenaAgent, name_path: str, relative_path: str):
+    @pytest.mark.parametrize("serena_agent,case", SAFE_DELETE_SUCCEEDS_CASES, indirect=["serena_agent"])
+    def test_safe_delete_symbol_succeeds_when_no_references(self, serena_agent: SerenaAgent, case: SafeDeleteCase):
         """
         Tests that SafeDeleteSymbol successfully deletes a symbol that has no references
         and that the symbol is actually removed from the file.
         """
-        with project_file_modification_context(serena_agent, relative_path):
+        with project_file_modification_context(serena_agent, case.relative_path):
             safe_delete_tool = serena_agent.get_tool(SafeDeleteSymbol)
-            result = safe_delete_tool.apply(name_path_pattern=name_path, relative_path=relative_path)
+            result = safe_delete_tool.apply(name_path_pattern=case.name_path, relative_path=case.relative_path)
             assert result == SUCCESS_RESULT, f"Expected successful deletion, but got: {result}"
+
             # verify the symbol was actually removed from the file
-            file_content = read_project_file(serena_agent.get_active_project(), relative_path)
-            assert name_path not in file_content, (
-                f"Expected symbol {name_path} to be removed from {relative_path}, but it still appears in the file content"
+            file_content = read_project_file(serena_agent.get_active_project(), case.relative_path)
+            assert case.name_path not in file_content, (
+                f"Expected symbol {case.name_path} to be removed from {case.relative_path}, but it still appears in the file content"
             )
-            # the file will be restored, preventing corruption of test resources
 
 
 class TestPromptProvision:
@@ -1475,14 +1327,13 @@ class TestPromptProvision:
             self.session = session_id
 
     @classmethod
-    def call_tool(cls, agent: SerenaAgent, tool_class: type[Tool], session_id: str = "global", **kwargs) -> str:
+    def _call_tool(cls, agent: SerenaAgent, tool_class: type[Tool], session_id: str = "global", **kwargs) -> str:
         result = agent.get_tool(tool_class).apply_ex(mcp_ctx=cls.MockContext(session_id), **kwargs)  # type: ignore
         return result
 
     @staticmethod
-    def assert_activation_message(result: str, project_name: str, present: bool) -> None:
-        escaped_project_name = re.escape(project_name)
-        regex = rf"^The project with name '?{escaped_project_name}'?.*?is activated\.$"
+    def _assert_activation_message(result: str, project_name: str, present: bool) -> None:
+        regex = r"^The project with name '" + project_name + r"'.*?is activated.$"
         match = re.search(regex, result, re.MULTILINE)
         if present:
             assert match is not None, f"Expected project activation message in result:\n{result}"
@@ -1491,53 +1342,73 @@ class TestPromptProvision:
 
     @pytest.mark.parametrize("serena_agent", [Language.PYTHON], indirect=True)
     def test_initial_instructions_provide_project_activation_message_once_per_session(self, serena_agent: SerenaAgent) -> None:
-        """Tests that the project activation message is provided on the first call to
-        InitialInstructionsTool for a session, but not on subsequent calls within the same session.
-        #1372
+        """
+        Tests that the project activation message is provided on the first call to InitialInstructionsTool for a session,
+        but not on subsequent calls within the same session. #1372
         """
         project_name = "test_repo_python"
         session1 = "session1"
         session2 = "session2"
 
-        result1 = self.call_tool(serena_agent, InitialInstructionsTool, session_id=session1)
-        self.assert_activation_message(result1, project_name, present=True)
+        result1 = self._call_tool(serena_agent, InitialInstructionsTool, session_id=session1)
+        self._assert_activation_message(result1, project_name, present=True)
 
-        result2 = self.call_tool(serena_agent, InitialInstructionsTool, session_id=session1)
-        self.assert_activation_message(result2, project_name, present=False)
+        result2 = self._call_tool(serena_agent, InitialInstructionsTool, session_id=session2)
+        self._assert_activation_message(result2, project_name, present=True)
 
-        result3 = self.call_tool(serena_agent, InitialInstructionsTool, session_id=session2)
-        self.assert_activation_message(result3, project_name, present=True)
+        result3 = self._call_tool(serena_agent, InitialInstructionsTool, session_id=session1)
+        self._assert_activation_message(result3, project_name, present=False)
 
-        project_name2 = "test_repo_python_ty"
+    @pytest.mark.parametrize("serena_agent", [Language.PYTHON], indirect=True)
+    def test_dynamically_activated_mode_is_provided_once_per_session(self, serena_agent: SerenaAgent) -> None:
+        """
+        Tests that when a new project is activated within a session that has a different mode configuration (e.g. no-onboarding),
+        the new mode's prompts are provided at project activation but not in subsequent initial instructions calls within the same
+        session, while they are provided in the initial instructions of a new session.
+        """
+        project_name1 = "test_repo_python"
+        project_name2 = "test_repo_java"
+        session1 = "session1"
+        session2 = "session2"
+
+        # the initial instructions must contain the project activation message for the first project
+        result1 = self._call_tool(serena_agent, InitialInstructionsTool, session_id=session1)
+        self._assert_activation_message(result1, project_name1, present=True)
+
+        # now activate another project which dynamically enables a new mode (no-onboarding)
         reg_project = serena_agent.serena_config.get_registered_project(project_name2)
         reg_project.project_config.default_modes = ["no-onboarding"]
         expected_new_mode_message = "The onboarding process is not applied."
+        result2 = self._call_tool(serena_agent, ActivateProjectTool, project=project_name2, session_id=session1)
 
-        result4_session1_before_activation = self.call_tool(serena_agent, InitialInstructionsTool, session_id=session1)
-        self.assert_activation_message(result4_session1_before_activation, project_name, present=False)
-
-        # now activate another project which dynamically enables a new mode (no-onboarding)
-        result_activate = self.call_tool(serena_agent, ActivateProjectTool, project=project_name2, session_id=session1)
-        self.assert_activation_message(result_activate, project_name2, present=True)
-
-        # the initial instructions must contain the project activation message for the first project
-        result4 = self.call_tool(serena_agent, InitialInstructionsTool, session_id=session2)
-        assert expected_new_mode_message in result4, (
-            f"Expected new mode message {expected_new_mode_message!r} to be included in new session, "
-            f"but it was not found in result:\n{result4}"
+        # the new mode's prompt must be included in the activation message
+        self._assert_activation_message(result2, project_name2, present=True)
+        assert expected_new_mode_message in result2, (
+            f"Expected new mode message '{expected_new_mode_message}' not found in result:\n{result2}"
         )
+
+        # the mode prompt must not be included in subsequent calls to the initial instructions tool within the same session
+        result3 = self._call_tool(serena_agent, InitialInstructionsTool, session_id=session1)
+        assert expected_new_mode_message not in result3, (
+            f"Expected new mode message '{expected_new_mode_message}' to not be included in subsequent calls, but it was found in result:\n{result3}"
+        )
+
         # the mode prompt must be included in the initial instructions of a new session
-        self.assert_activation_message(result4, project_name2, present=True)
+        result4 = self._call_tool(serena_agent, InitialInstructionsTool, session_id=session2)
+        assert expected_new_mode_message in result4, (
+            f"Expected new mode message '{expected_new_mode_message}' to be included in new session, but it was not found in result:\n{result4}"
+        )
+
+        # the initial instructions for the new session must also include the activation message for the project
+        self._assert_activation_message(result4, project_name2, present=True)
 
     @pytest.mark.parametrize("serena_agent", [Language.PYTHON], indirect=True)
     def test_activate_project_tool_always_returns_activation_message(self, serena_agent: SerenaAgent) -> None:
         project_name = "test_repo_python"
         session = "session1"
-        result1 = self.call_tool(serena_agent, ActivateProjectTool, project=project_name, session_id=session)
-        self.assert_activation_message(result1, project_name, present=True)
-        result2 = self.call_tool(serena_agent, ActivateProjectTool, project=project_name, session_id=session)
-        self.assert_activation_message(result2, project_name, present=True)
 
-        # the initial instructions for the new session must also include the activation message for the project
-        result3 = self.call_tool(serena_agent, InitialInstructionsTool, session_id=session)
-        self.assert_activation_message(result3, project_name, present=False)
+        result1 = self._call_tool(serena_agent, ActivateProjectTool, project=project_name, session_id=session)
+        self._assert_activation_message(result1, project_name, present=True)
+
+        result2 = self._call_tool(serena_agent, ActivateProjectTool, project=project_name, session_id=session)
+        self._assert_activation_message(result2, project_name, present=True)
