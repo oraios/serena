@@ -1395,6 +1395,32 @@ class TestSerenaAgent:
         # Kept for backwards compat; full parametrized coverage is in FIND_REFERENCE_CASES
         pass
 
+    @pytest.mark.parametrize(
+        "serena_agent,name_path,relative_path",
+        [
+            pytest.param(Language.PYTHON, "User", os.path.join("test_repo", "models.py"), marks=pytest.mark.python),
+            pytest.param(
+                Language.JAVA,
+                "Model",
+                os.path.join("src", "main", "java", "test_repo", "Model.java"),
+                marks=pytest.mark.java,
+            ),
+            pytest.param(
+                Language.KOTLIN,
+                "Model",
+                os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
+                marks=[pytest.mark.kotlin] + ([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
+            ),
+            pytest.param(Language.TYPESCRIPT, "helperFunction", "index.ts", marks=pytest.mark.typescript),
+            pytest.param(
+                Language.BSL,
+                "ПолучитьПриветствие",
+                "CommonModule.bsl",
+                marks=[pytest.mark.bsl, pytest.mark.skipif(shutil.which("java") is None, reason="Java 11+ is required for BSL LSP")],
+            ),
+        ],
+        indirect=["serena_agent"],
+    )
     def test_safe_delete_symbol_blocked_by_references(self, serena_agent: SerenaAgent, name_path: str, relative_path: str):
         """Tests that SafeDeleteSymbol refuses to delete a symbol that is referenced elsewhere
         and returns a message listing the referencing files.
@@ -1455,7 +1481,8 @@ class TestPromptProvision:
 
     @staticmethod
     def assert_activation_message(result: str, project_name: str, present: bool) -> None:
-        regex = rf"The project with name {project_name} .?is activated."
+        escaped_project_name = re.escape(project_name)
+        regex = rf"^The project with name '?{escaped_project_name}'?.*?is activated\.$"
         match = re.search(regex, result, re.MULTILINE)
         if present:
             assert match is not None, f"Expected project activation message in result:\n{result}"
