@@ -17,6 +17,12 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+INITIAL_YAML_LANGUAGE_SERVER_VERSION = "1.19.2"
+DEFAULT_YAML_LANGUAGE_SERVER_VERSION = "1.19.2"
+
 
 class YamlLanguageServer(SolidLanguageServer):
     """
@@ -66,7 +72,7 @@ class YamlLanguageServer(SolidLanguageServer):
             assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
             is_npm_installed = shutil.which("npm") is not None
             assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
-            yaml_language_server_version = self._custom_settings.get("yaml_language_server_version", "1.19.2")
+            yaml_language_server_version = self._custom_settings.get("yaml_language_server_version", DEFAULT_YAML_LANGUAGE_SERVER_VERSION)
             npm_registry = self._custom_settings.get("npm_registry")
 
             deps = RuntimeDependencyCollection(
@@ -80,8 +86,13 @@ class YamlLanguageServer(SolidLanguageServer):
                 ]
             )
 
-            # Install yaml-language-server if not already installed
-            yaml_ls_dir = os.path.join(self._ls_resources_dir, "yaml-lsp")
+            # legacy unversioned dir reserved for INITIAL; every other version goes into a versioned subdir
+            ls_dirname = (
+                "yaml-lsp"
+                if yaml_language_server_version == INITIAL_YAML_LANGUAGE_SERVER_VERSION
+                else f"yaml-lsp-{yaml_language_server_version}"
+            )
+            yaml_ls_dir = os.path.join(self._ls_resources_dir, ls_dirname)
             yaml_executable_path = os.path.join(yaml_ls_dir, "node_modules", ".bin", "yaml-language-server")
 
             # Handle Windows executable extension

@@ -28,11 +28,28 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
-AL_EXTENSION_VERSION = "18.0.2242655"
-AL_EXTENSION_URL = (
-    f"https://marketplace.visualstudio.com/_apis/public/gallery/publishers/ms-dynamics-smb/vsextensions/al/{AL_EXTENSION_VERSION}/vspackage"
-)
-AL_EXTENSION_SHA256 = "3971995e61a59dc4fcce4a65053072a67991ed624a16635c4f2911f12564b2b9"
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+INITIAL_AL_EXTENSION_VERSION = "18.0.2242655"
+INITIAL_AL_EXTENSION_SHA256 = "3971995e61a59dc4fcce4a65053072a67991ed624a16635c4f2911f12564b2b9"
+DEFAULT_AL_EXTENSION_VERSION = "18.0.2242655"
+DEFAULT_AL_EXTENSION_SHA256 = "3971995e61a59dc4fcce4a65053072a67991ed624a16635c4f2911f12564b2b9"
+
+
+def _al_extension_sha(version: str) -> str | None:
+    if version == INITIAL_AL_EXTENSION_VERSION:
+        return INITIAL_AL_EXTENSION_SHA256
+    if version == DEFAULT_AL_EXTENSION_VERSION:
+        return DEFAULT_AL_EXTENSION_SHA256
+    return None
+
+
+def _al_extension_dirname(version: str) -> str:
+    # legacy unversioned dir reserved for INITIAL; every other version goes into a versioned subdir
+    return "al-extension" if version == INITIAL_AL_EXTENSION_VERSION else f"al-extension-{version}"
+
+
 AL_EXTENSION_ALLOWED_HOSTS = ("marketplace.visualstudio.com",)
 
 
@@ -131,20 +148,12 @@ class ALLanguageServer(SolidLanguageServer):
         return path.replace("\\", "/")
 
     @classmethod
-    def _download_al_extension(cls, url: str, target_dir: str) -> bool:
+    def _download_al_extension(cls, url: str, target_dir: str, expected_sha256: str | None) -> bool:
         """
         Download and extract the AL extension from VS Code marketplace.
 
         The VS Code marketplace packages extensions as .vsix files (which are ZIP archives).
         This method downloads the VSIX file and extracts it to get the language server binaries.
-
-        Args:
-            logger: Logger for tracking download progress
-            url: VS Code marketplace URL for the AL extension
-            target_dir: Directory where the extension will be extracted
-
-        Returns:
-            True if successful, False otherwise
 
         Note:
             The download includes progress tracking and proper user-agent headers
@@ -158,7 +167,7 @@ class ALLanguageServer(SolidLanguageServer):
                 url,
                 target_dir,
                 "zip",
-                expected_sha256=AL_EXTENSION_SHA256 if url == AL_EXTENSION_URL else None,
+                expected_sha256=expected_sha256,
                 allowed_hosts=AL_EXTENSION_ALLOWED_HOSTS,
             )
             log.info("AL extension extracted successfully")
@@ -231,8 +240,10 @@ class ALLanguageServer(SolidLanguageServer):
         elif env_path:
             log.warning(f"AL_EXTENSION_PATH set but directory not found: {env_path}")
 
-        # Check default download location
-        default_path = os.path.join(cls.ls_resources_dir(solidlsp_settings), "al-extension", "extension")
+        # Check the resolved-version download location (versioned for non-INITIAL, legacy "al-extension" for INITIAL)
+        al_settings = solidlsp_settings.get_ls_specific_settings(Language.AL)
+        al_extension_version = al_settings.get("al_extension_version", DEFAULT_AL_EXTENSION_VERSION)
+        default_path = os.path.join(cls.ls_resources_dir(solidlsp_settings), _al_extension_dirname(al_extension_version), "extension")
         if os.path.exists(default_path):
             log.debug(f"Found AL extension in default location: {default_path}")
             return default_path
@@ -255,9 +266,9 @@ class ALLanguageServer(SolidLanguageServer):
             Path to installed extension or None if download failed
 
         """
-        al_extension_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "al-extension")
         al_settings = solidlsp_settings.get_ls_specific_settings(Language.AL)
-        al_extension_version = al_settings.get("al_extension_version", AL_EXTENSION_VERSION)
+        al_extension_version = al_settings.get("al_extension_version", DEFAULT_AL_EXTENSION_VERSION)
+        al_extension_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), _al_extension_dirname(al_extension_version))
         al_extension_url = (
             "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/ms-dynamics-smb/"
             f"vsextensions/al/{al_extension_version}/vspackage"
@@ -265,7 +276,7 @@ class ALLanguageServer(SolidLanguageServer):
 
         log.info(f"Downloading AL extension from: {al_extension_url}")
 
-        if cls._download_al_extension(al_extension_url, al_extension_dir):
+        if cls._download_al_extension(al_extension_url, al_extension_dir, _al_extension_sha(al_extension_version)):
             extension_path = os.path.join(al_extension_dir, "extension")
             if os.path.exists(extension_path):
                 log.info("AL extension downloaded and installed successfully")
