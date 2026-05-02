@@ -43,7 +43,7 @@ USER serena
 EXPOSE 9121 24282
 
 ENTRYPOINT ["serena"]
-CMD ["start-mcp-server", "--transport", "streamable-http", "--host", "0.0.0.0", "--port", "9121", "--project", "./"]
+CMD ["start-mcp-server", "--transport", "stdio", "--project", "./"]
 
 FROM base AS dev
 SHELL ["/bin/bash", "-c"]
@@ -78,4 +78,4 @@ RUN uv sync
 ENV PATH="/workspaces/serena/.venv/bin:${PATH}"
 
 ENTRYPOINT ["serena"]
-CMD ["start-mcp-server", "--transport", "streamable-http", "--host", "0.0.0.0", "--port", "9121", "--project", "./"]
+CMD ["start-mcp-server", "--transport", "stdio", "--project", "./"]
