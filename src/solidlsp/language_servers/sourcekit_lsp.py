@@ -33,6 +33,36 @@ class SourceKitLSP(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in [".build", ".swiftpm", "node_modules", "dist", "build"]
 
     @staticmethod
+    def _resolve_sourcekit_lsp_path() -> str:
+        """Resolve the path to sourcekit-lsp, preferring Xcode's version over Command Line Tools.
+
+        On macOS, bare `sourcekit-lsp` may resolve to the Command Line Tools version which
+        has limited capabilities. Using `xcrun --find sourcekit-lsp` resolves to Xcode's
+        full-featured version when Xcode is installed.
+        """
+        # Try xcrun with DEVELOPER_DIR pointing to Xcode (not Command Line Tools)
+        xcode_path = "/Applications/Xcode.app/Contents/Developer"
+        for env_override in [{"DEVELOPER_DIR": xcode_path}, {}]:
+            try:
+                run_env = {**os.environ, **env_override} if env_override else None
+                result = subprocess.run(
+                    ["xcrun", "--find", "sourcekit-lsp"],
+                    capture_output=True, text=True, check=False, timeout=10,
+                    env=run_env,
+                )
+                if result.returncode == 0:
+                    resolved = result.stdout.strip()
+                    if resolved and os.path.isfile(resolved):
+                        log.info(f"Resolved sourcekit-lsp via xcrun: {resolved}")
+                        return resolved
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                pass
+
+        # Fall back to bare command (Linux, or macOS without Xcode)
+        log.info("xcrun not available or failed, falling back to bare sourcekit-lsp")
+        return "sourcekit-lsp"
+
+    @staticmethod
     def _get_sourcekit_lsp_version() -> str:
         """Get the installed sourcekit-lsp version or raise error if sourcekit was not found."""
         try:
@@ -51,8 +81,18 @@ class SourceKitLSP(SolidLanguageServer):
         sourcekit_version = self._get_sourcekit_lsp_version()
         log.info(f"Starting sourcekit lsp with version: {sourcekit_version}")
 
+        # Resolve sourcekit-lsp path — prefer Xcode's version over Command Line Tools
+        sourcekit_path = self._resolve_sourcekit_lsp_path()
+
+        # sourcekit-lsp needs --scratch-path for background indexing and cross-file references.
+        # Without it, textDocument/references returns empty because there's no index store.
+        scratch_path = os.path.join(repository_root_path, ".build", "sourcekit-lsp")
+        os.makedirs(scratch_path, exist_ok=True)
+        cmd = [sourcekit_path, "--scratch-path", scratch_path]
+        log.info(f"sourcekit-lsp path: {sourcekit_path}, scratch path: {scratch_path}")
+
         super().__init__(
-            config, repository_root_path, ProcessLaunchInfo(cmd="sourcekit-lsp", cwd=repository_root_path), "swift", solidlsp_settings
+            config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "swift", solidlsp_settings
         )
         self.request_id = 0
         self._did_sleep_before_requesting_references = False
@@ -363,24 +403,26 @@ class SourceKitLSP(SolidLanguageServer):
             # Calculate minimum delay based on how much time has passed since initialization
             if self._initialization_timestamp:
                 elapsed = time.time() - self._initialization_timestamp
-                # Increased CI delay for project indexing: 15s CI, 5s local
-                base_delay = 15 if os.getenv("CI") else 5
+                # Increased delay for project indexing: 15s CI, 10s local
+                # 5s was insufficient for real projects — sourcekit-lsp needs time to index
+                base_delay = 15 if os.getenv("CI") else 10
                 remaining_delay = max(2, base_delay - elapsed)
             else:
                 # Fallback if initialization timestamp is missing
-                remaining_delay = 15 if os.getenv("CI") else 5
+                remaining_delay = 15 if os.getenv("CI") else 10
 
             log.info(f"Sleeping {remaining_delay:.1f}s before requesting references for the first time (CI needs extra indexing time)")
             time.sleep(remaining_delay)
             self._did_sleep_before_requesting_references = True
 
-        # Get references with retry logic for CI stability
+        # Get references with retry logic — indexing may not be complete on first request
         references = super().request_references(relative_file_path, line, column)
 
-        # In CI, if no references found, retry once after additional delay
-        if os.getenv("CI") and not references:
-            log.info("No references found in CI - retrying after additional 5s delay")
-            time.sleep(5)
+        # If no references found, retry once after additional delay (indexing may still be in progress)
+        if not references:
+            retry_delay = 5 if os.getenv("CI") else 3
+            log.info(f"No references found - retrying after additional {retry_delay}s delay (index may still be building)")
+            time.sleep(retry_delay)
             references = super().request_references(relative_file_path, line, column)
 
         return references
