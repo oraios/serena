@@ -225,6 +225,33 @@ class ElixirTools(SolidLanguageServer):
     def _normalize_symbol_name(self, symbol: RawDocumentSymbol, relative_file_path: str) -> str:
         return symbol["name"].removeprefix("defp ").removeprefix("def ").split("(", 1)[0].strip()
 
+    def _find_mix_exs(self) -> str | None:
+        """
+        Find mix.exs in the repository.
+
+        Checks {repository_root_path}/mix.exs first (standard layout), then scans
+        immediate subdirectories for mix.exs (monorepo layout). Returns the absolute
+        path to the first match found, or None if not found.
+        """
+        # Check root first
+        root_mix_exs = os.path.join(self.repository_root_path, "mix.exs")
+        if os.path.exists(root_mix_exs):
+            return root_mix_exs
+
+        # Search immediate subdirectories
+        try:
+            for entry in os.listdir(self.repository_root_path):
+                subdir_path = os.path.join(self.repository_root_path, entry)
+                if os.path.isdir(subdir_path):
+                    subdir_mix_exs = os.path.join(subdir_path, "mix.exs")
+                    if os.path.exists(subdir_mix_exs):
+                        log.info(f"Found mix.exs in subdirectory: {entry}/mix.exs")
+                        return subdir_mix_exs
+        except OSError as e:
+            log.warning(f"Error scanning for mix.exs in subdirectories: {e}")
+
+        return None
+
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """
@@ -364,8 +391,8 @@ class ElixirTools(SolidLanguageServer):
         # Without it Expert sits idle and never emits the $/progress signals we wait for,
         # causing a deadlock. Opening mix.exs is the minimal trigger; we close it again
         # once the server is ready so it does not linger in the open-file set.
-        mix_exs_path = os.path.join(self.repository_root_path, "mix.exs")
-        mix_exs_uri = pathlib.Path(mix_exs_path).as_uri() if os.path.exists(mix_exs_path) else None
+        mix_exs_path = self._find_mix_exs()
+        mix_exs_uri = pathlib.Path(mix_exs_path).as_uri() if mix_exs_path is not None else None
 
         if mix_exs_uri is not None:
             with open(mix_exs_path, encoding="utf-8") as f:

@@ -102,3 +102,55 @@ class TestElixirToolsStartup:
         language_server._start_server()
 
         server.notify.did_open_text_document.assert_not_called()
+
+    def test_finds_mix_exs_in_subdirectory(self, tmp_path):
+        """When mix.exs is only in a subdirectory (monorepo), search finds and opens it."""
+        (tmp_path / "server").mkdir()
+        (tmp_path / "server" / "mix.exs").write_text("defmodule App.MixProject do\n  use Mix.Project\nend\n", encoding="utf-8")
+
+        language_server = _make_elixir_tools(tmp_path)
+        server = _make_mock_server()
+        language_server.server = server
+        language_server.server_ready.set()
+
+        language_server._start_server()
+
+        calls = server.notify.did_open_text_document.call_args_list
+        assert len(calls) == 1, f"Expected one didOpen for server/mix.exs, got {len(calls)}"
+        text_doc = calls[0][0][0]["textDocument"]
+        assert text_doc["uri"].endswith("server/mix.exs"), f"Expected server/mix.exs URI, got {text_doc['uri']}"
+        assert text_doc["languageId"] == "elixir"
+
+    def test_prefers_root_mix_exs_over_subdirectory(self, tmp_path):
+        """When mix.exs exists in both root and subdirectory, root takes precedence."""
+        (tmp_path / "mix.exs").write_text("defmodule Root.MixProject do\n  use Mix.Project\nend\n", encoding="utf-8")
+        (tmp_path / "server").mkdir()
+        (tmp_path / "server" / "mix.exs").write_text("defmodule Server.MixProject do\n  use Mix.Project\nend\n", encoding="utf-8")
+
+        language_server = _make_elixir_tools(tmp_path)
+        server = _make_mock_server()
+        language_server.server = server
+        language_server.server_ready.set()
+
+        language_server._start_server()
+
+        calls = server.notify.did_open_text_document.call_args_list
+        assert len(calls) == 1, f"Expected one didOpen for root mix.exs, got {len(calls)}"
+        text_doc = calls[0][0][0]["textDocument"]
+        assert not text_doc["uri"].endswith("server/mix.exs"), (
+            f"Should not use subdirectory mix.exs when root exists, got {text_doc['uri']}"
+        )
+        assert text_doc["uri"].endswith("/mix.exs"), f"Expected root mix.exs URI, got {text_doc['uri']}"
+
+    def test_no_didopen_when_no_mix_exs_in_subdirectories(self, tmp_path):
+        """When no mix.exs exists in root or subdirectories, didOpen is not called."""
+        (tmp_path / "server").mkdir()
+
+        language_server = _make_elixir_tools(tmp_path)
+        server = _make_mock_server()
+        language_server.server = server
+        language_server.server_ready.set()
+
+        language_server._start_server()
+
+        server.notify.did_open_text_document.assert_not_called()
