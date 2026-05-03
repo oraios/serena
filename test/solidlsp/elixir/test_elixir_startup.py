@@ -142,6 +142,23 @@ class TestElixirToolsStartup:
         )
         assert text_doc["uri"].endswith("/mix.exs"), f"Expected root mix.exs URI, got {text_doc['uri']}"
 
+    def test_closes_subdirectory_mix_exs_after_server_ready(self, tmp_path):
+        """Subdirectory mix.exs is closed after Expert signals readiness."""
+        (tmp_path / "server").mkdir()
+        (tmp_path / "server" / "mix.exs").write_text("defmodule App.MixProject do\n  use Mix.Project\nend\n", encoding="utf-8")
+
+        language_server = _make_elixir_tools(tmp_path)
+        server = _make_mock_server()
+        language_server.server = server
+        language_server.server_ready.set()
+
+        language_server._start_server()
+
+        close_calls = server.notify.did_close_text_document.call_args_list
+        assert len(close_calls) == 1, f"Expected one didClose for server/mix.exs, got {len(close_calls)}"
+        text_doc = close_calls[0][0][0]["textDocument"]
+        assert text_doc["uri"].endswith("server/mix.exs"), f"Expected server/mix.exs URI, got {text_doc['uri']}"
+
     def test_no_didopen_when_no_mix_exs_in_subdirectories(self, tmp_path):
         """When no mix.exs exists in root or subdirectories, didOpen is not called."""
         (tmp_path / "server").mkdir()

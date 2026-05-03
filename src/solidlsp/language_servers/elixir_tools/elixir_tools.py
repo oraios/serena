@@ -230,8 +230,11 @@ class ElixirTools(SolidLanguageServer):
         Find mix.exs in the repository.
 
         Checks {repository_root_path}/mix.exs first (standard layout), then scans
-        immediate subdirectories for mix.exs (monorepo layout). Returns the absolute
-        path to the first match found, or None if not found.
+        immediate subdirectories for mix.exs (monorepo layout, e.g. server/mix.exs).
+        Returns the absolute path to the first match found, or None if not found.
+
+        Note: subdirectory iteration order depends on the filesystem (os.listdir).
+        In practice this is fine — monorepos typically have one Elixir app.
         """
         # Check root first
         root_mix_exs = os.path.join(self.repository_root_path, "mix.exs")
