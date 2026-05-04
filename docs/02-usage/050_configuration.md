@@ -227,7 +227,7 @@ ls_specific_settings:
 
 This is supported by all language servers deriving their dependency provider from `LanguageServerDependencyProviderSinglePath`,
 and by some additional wrappers that explicitly expose `ls_path`.
-Common examples include: `ansible`, `bash`, `clojure`, `cpp`, `cpp_ccls`, `css`, `hlsl`, `html`, `kotlin`, `lean4`, `luau`, `markdown`, `php`,
+Common examples include: `ansible`, `bash`, `clojure`, `cpp`, `cpp_ccls`, `hlsl`, `html`, `kotlin`, `lean4`, `luau`, `markdown`, `php`,
 `php_phpactor`, `python`, `rust`, `scss`, `solidity`, `systemverilog`, `toml`, `typescript`, and `yaml`.
 
 Note: `angular` does **not** support `ls_path` — the Angular language server is part of a multi-process orchestration
@@ -398,24 +398,6 @@ Supported settings:
 |---|---|---|
 | `omnisharp_version` | `1.39.10` | Override the OmniSharp version Serena downloads. |
 | `razor_omnisharp_version` | `7.0.0-preview.23363.1` | Override the Razor OmniSharp plugin version Serena downloads. |
-
-#### CSS
-
-Serena uses `vscode-css-language-server` from Microsoft's `vscode-langservers-extracted` npm package for the
-`css` language key. **Experimental** — must be explicitly listed in `project.yml`; not auto-detected. Cross-file
-`@import` navigation is limited; for SCSS / Sass, use the `scss` language instead.
-
-Supported settings:
-
-| Setting | Default | Description |
-|---|---|---|
-| `ls_path` | managed install | Override the `vscode-css-language-server` executable path. |
-| `vscode_langservers_package` | `vscode-langservers-extracted` | npm package providing the binary. Set to `@t1ckbase/vscode-langservers-extracted` (or any other source) to use the actively-maintained 2026 fork. |
-| `vscode_langservers_version` | `4.10.0` | Override the npm package version Serena installs when `ls_path` is not set. |
-| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
-
-Note: the CSS and HTML language servers default to the same npm package but are installed into separate
-directories so that overriding `vscode_langservers_package` for one does not invalidate the other.
 
 #### Dart
 
@@ -862,15 +844,17 @@ Supported settings:
 | `on_stale_lock` | `auto-clean` | How Serena handles stale Metals H2 database locks. Supported values: `auto-clean`, `warn`, `fail`. |
 | `log_multi_instance_notice` | `true` | Log a notice when another Metals instance is detected. |
 
-#### SCSS / Sass
+#### SCSS / Sass / CSS
 
 Serena uses [`some-sass-language-server`](https://github.com/wkillerud/some-sass) for the `scss` language key.
 **Experimental** — must be explicitly listed in `project.yml`; not auto-detected. Some Sass was chosen over the
 generic `vscode-css-language-server` because it provides full workspace-wide `@use` / `@forward` go-to-definition
 and find-references for variables, mixins, functions, and placeholders.
 
-Supports both `.scss` and `.sass` files. The indented Sass syntax (`.sass`) is opened with the `sass` LSP language
-id; `.scss` files use `scss`.
+Handles `.scss`, `.sass`, and `.css`. The three are dispatched by the LSP language id (`scss`, `sass`, `css`) and
+share the same engine; CSS feature toggles default to off upstream and Serena flips them on at startup so that
+plain CSS gets symbols, definitions, references, hover, and completion. Lint diagnostics are deliberately left
+off (the rules are opinionated about vendor prefixes / empty rules / etc.); only syntax-level diagnostics surface.
 
 Supported settings:
 

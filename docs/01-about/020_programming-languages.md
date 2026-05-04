@@ -30,18 +30,9 @@ Some languages require additional installations or setup steps, as noted.
 
 * **AL**
 * **Angular**  
-  (experimental; requires Node.js and npm; automatically installs `@angular/language-server`,
-  `@angular/language-service`, `typescript`, and `typescript-language-server`;
-  must be explicitly specified in the `languages` entry in the `project.yml`;
-  uses a dual-server architecture: `ngserver` handles standalone `.html` template files
-  (definition / completion / hover) while a companion `typescript-language-server` with
-  `@angular/language-service` loaded as a tsserver plugin handles all `.ts` operations
-  (document symbols, references, rename) including inline templates;
-  **requires the project itself to have `@angular/core` installed**, i.e. `npm install`
-  must have been run in the project root — otherwise template-aware features silently return empty;
-  do NOT also list `typescript` or `html` in `languages` when Angular is active — Angular
-  subsumes both for `.ts`/`.html` files;
-  for SCSS support in Angular projects, list `scss` separately)
+  (experimental; requires Node.js + npm, plus `npm install` having been run in the project root so that `@angular/core`
+  is resolvable — without it, template-aware features silently return empty;
+  subsumes `typescript` and `html` for `.ts`/`.html` files, so do not also list those)
 * **Ansible**  
   (experimental; requires Node.js and npm; automatically installs `@ansible/ansible-language-server`;
   must be explicitly specified in the `languages` entry in the `project.yml`; requires `ansible` in PATH for full functionality)
@@ -60,12 +51,6 @@ Some languages require additional installations or setup steps, as noted.
 * **Crystal**  
   (requires [Crystalline](https://github.com/elbywan/crystalline) language server to be installed and available on PATH;
   note: Crystalline has limited go-to-definition support and does not support find-references)
-* **CSS**
-  (experimental; requires Node.js and npm; automatically installs `vscode-langservers-extracted`;
-  must be explicitly specified in the `languages` entry in the `project.yml`;
-  uses `vscode-css-language-server` from Microsoft;
-  reports rules/selectors as document symbols; cross-file `@import` navigation is limited;
-  for SCSS/Sass, use the `scss` language instead)
 * **Dart**
 * **Elixir**  
   (requires Elixir installation; Expert language server is downloaded automatically)
@@ -91,11 +76,7 @@ Some languages require additional installations or setup steps, as noted.
   on macOS, requires Rust toolchain for building from source;
   note: reference search is not supported by this language server)
 * **HTML**
-  (experimental; requires Node.js and npm; automatically installs `vscode-langservers-extracted`;
-  must be explicitly specified in the `languages` entry in the `project.yml`;
-  uses `vscode-html-language-server` from Microsoft;
-  reports elements/IDs as document symbols; cross-file references are not meaningful for HTML;
-  also used as a companion server by the Angular LS for plain-HTML `documentSymbol`)
+  (experimental; requires Node.js + npm)
 * **Java**  
 * **JavaScript**  
   (supported via the TypeScript language server, i.e. use language `typescript` for both JavaScript and TypeScript)
@@ -132,11 +113,10 @@ Some languages require additional installations or setup steps, as noted.
   (requires [rustup](https://rustup.rs/) - uses rust-analyzer from your toolchain)
 * **Scala**  
   (requires some [manual setup](../03-special-guides/scala_setup_guide_for_serena); uses Metals LSP)
-* **SCSS / Sass**
-  (experimental; requires Node.js and npm; automatically installs [some-sass-language-server](https://github.com/wkillerud/some-sass);
-  must be explicitly specified in the `languages` entry in the `project.yml`;
-  supports `.scss` and `.sass` files;
-  provides full `@use`/`@forward` workspace-wide go-to-definition and find-references for variables, mixins, and functions)
+* **SCSS / Sass / CSS**
+  (experimental; requires Node.js + npm; uses [some-sass-language-server](https://github.com/wkillerud/some-sass) to handle
+  `.scss`, `.sass`, and `.css`; provides cross-file `@use`/`@forward` navigation for
+  variables, mixins, and functions in Sass)
 * **Solidity**  
   (experimental; requires Node.js and npm; automatically installs `@nomicfoundation/solidity-language-server`;
   works best with a `foundry.toml` or `hardhat.config.js` in the project root)
