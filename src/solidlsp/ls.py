@@ -567,6 +567,29 @@ class SolidLanguageServer(ABC):
 
         self._has_waited_for_cross_file_references = False
 
+        # resolving additional workspace folders
+        self._additional_workspace_abs_paths: list[str] = []
+        _seen: set[str] = set()
+        for additional_workspace_path in self._solidlsp_settings.additional_workspace_folders:
+            if not additional_workspace_path or additional_workspace_path == ".":
+                continue
+            if not os.path.isabs(additional_workspace_path):
+                additional_workspace_abs_path = os.path.realpath(os.path.join(self.repository_root_path, additional_workspace_path))
+            else:
+                additional_workspace_abs_path = str(Path(additional_workspace_path).resolve())
+            if not os.path.isdir(additional_workspace_abs_path):
+                log.error(
+                    "additional_workspace_folders: skipping non-existent directory %s (resolved to %s)",
+                    additional_workspace_abs_path,
+                    additional_workspace_abs_path,
+                )
+                continue
+            if additional_workspace_abs_path in _seen:
+                log.info("additional_workspace_folders: skipping duplicate %s", additional_workspace_path)
+                continue
+            _seen.add(additional_workspace_abs_path)
+            self._additional_workspace_abs_paths.append(additional_workspace_abs_path)
+
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         """
         Creates the dependency provider for this language server.
@@ -595,7 +618,7 @@ class SolidLanguageServer(ABC):
     # --- Cross-workspace / additional workspace folder support ---
 
     @staticmethod
-    def _is_cross_workspace_path(relative_file_path: str) -> bool:
+    def _path_contains_dots(relative_file_path: str) -> bool:
         """Check if a relative path traverses outside the workspace root via '..' components."""
         return ".." in PurePath(relative_file_path).parts
 
@@ -606,46 +629,20 @@ class SolidLanguageServer(ABC):
         produce a clean URI without '..' segments.
         """
         p = pathlib.Path(os.path.join(self.repository_root_path, relative_file_path))
-        if self._is_cross_workspace_path(relative_file_path):
+        if self._path_contains_dots(relative_file_path):
             p = p.resolve()
+            is_outside_of_configured_workspaces = True
+            configured_workspaces = [*self._additional_workspace_abs_paths, self.repository_root_path]
+            for workspace in configured_workspaces:
+                if p.is_relative_to(workspace):
+                    is_outside_of_configured_workspaces = False
+                    break
+            if is_outside_of_configured_workspaces:
+                raise ValueError(
+                    f"Path {relative_file_path} contains '..' segments and is outside of configured workspaces. "
+                    f"Configured workspaces: {configured_workspaces}. Resolved path: {p}."
+                )
         return p.as_uri()
-
-    def _resolve_additional_workspace_folders(self) -> list[str]:
-        """Resolve additional_workspace_folders from settings.
-
-        Returns a deduplicated list of absolute, resolved directory paths.
-        Non-existent paths are skipped with a warning, and paths that overlap
-        with the repository root are ignored. Results are cached after first call.
-        """
-        if not hasattr(self, "_cached_additional_workspace_folders"):
-            raw_folders = self._solidlsp_settings.additional_workspace_folders
-            if not raw_folders:
-                self._cached_additional_workspace_folders: list[str] = []
-                return self._cached_additional_workspace_folders
-
-            seen: set[str] = set()
-            resolved: list[str] = []
-            repo_real = os.path.realpath(self.repository_root_path)
-            for folder in raw_folders:
-                abs_folder = os.path.realpath(os.path.join(self.repository_root_path, folder))
-                if abs_folder == repo_real:
-                    log.info("additional_workspace_folders: skipping %s (same as repository root)", folder)
-                    continue
-                if not os.path.isdir(abs_folder):
-                    log.warning(
-                        "additional_workspace_folders: skipping non-existent directory %s (resolved to %s)",
-                        folder,
-                        abs_folder,
-                    )
-                    continue
-                if abs_folder in seen:
-                    log.info("additional_workspace_folders: skipping duplicate %s", folder)
-                    continue
-                seen.add(abs_folder)
-                resolved.append(abs_folder)
-
-            self._cached_additional_workspace_folders = resolved
-        return self._cached_additional_workspace_folders
 
     def _build_workspace_folders_param(self, repository_absolute_path: str) -> list[dict[str, str]]:
         """Build the ``workspaceFolders`` list for LSP initialization.
@@ -657,7 +654,7 @@ class SolidLanguageServer(ABC):
         folders: list[dict[str, str]] = [
             {"uri": root_uri, "name": os.path.basename(repository_absolute_path)},
         ]
-        for abs_folder in self._resolve_additional_workspace_folders():
+        for abs_folder in self._additional_workspace_abs_paths:
             folder_uri = pathlib.Path(abs_folder).as_uri()
             folders.append({"uri": folder_uri, "name": os.path.basename(abs_folder)})
         if len(folders) > 1:
@@ -676,19 +673,15 @@ class SolidLanguageServer(ABC):
         Subclasses must override :meth:`_find_representative_source_file` to
         enable this feature; the default implementation raises ``NotImplementedError``.
         """
-        additional_folders = self._resolve_additional_workspace_folders()
-        if not additional_folders:
-            return
-
         opened_count = 0
-        for folder in additional_folders:
-            source_file = self._find_representative_source_file(folder)
+        for additional_workspace in self._additional_workspace_abs_paths:
+            source_file = self._find_representative_source_file(additional_workspace)
             if source_file is None:
-                log.warning("No source file found in additional workspace folder: %s", folder)
+                log.warning("No source file found in additional workspace folder: %s", additional_workspace)
                 continue
 
             rel_path = os.path.relpath(source_file, self.repository_root_path)
-            log.info("Opening %s to trigger project loading for %s", rel_path, os.path.basename(folder))
+            log.info("Opening %s to trigger project loading for %s", rel_path, os.path.basename(additional_workspace))
 
             abs_path = pathlib.Path(source_file).resolve()
             uri = abs_path.as_uri()
@@ -899,7 +892,7 @@ class SolidLanguageServer(ABC):
             raise SolidLSPException("Language Server not started")
 
         absolute_file_path = Path(self.repository_root_path, relative_file_path)
-        if self._is_cross_workspace_path(relative_file_path):
+        if self._path_contains_dots(relative_file_path):
             absolute_file_path = absolute_file_path.resolve()
         uri = absolute_file_path.as_uri()
 
@@ -2024,7 +2017,7 @@ class SolidLanguageServer(ABC):
                     log.warning(f"Could not find containing symbol for {ref_path}:{ref_line}:{ref_col}. Returning file symbol instead")
                     fileRange = self._get_range_from_file_content(file_data.contents)
                     ref_abs_path = os.path.join(self.repository_root_path, ref_path)
-                    if self._is_cross_workspace_path(ref_path):
+                    if self._path_contains_dots(ref_path):
                         ref_abs_path = str(pathlib.Path(ref_abs_path).resolve())
                     location = ls_types.Location(
                         uri=self._resolve_file_uri(ref_path),
@@ -2135,7 +2128,7 @@ class SolidLanguageServer(ABC):
         # checking if the line is empty, unfortunately ugly and duplicating code, but I don't want to refactor
         with self.open_file(relative_file_path):
             absolute_file_path = os.path.join(self.repository_root_path, relative_file_path)
-            if self._is_cross_workspace_path(relative_file_path):
+            if self._path_contains_dots(relative_file_path):
                 absolute_file_path = str(pathlib.Path(absolute_file_path).resolve())
             content = FileUtils.read_file(absolute_file_path, self._encoding)
             if content.split("\n")[line].strip() == "":
@@ -2252,7 +2245,7 @@ class SolidLanguageServer(ABC):
 
     def _get_document_symbols_with_locations(self, relative_file_path: str) -> list[ls_types.UnifiedSymbolInformation]:
         abs_path = os.path.join(self.repository_root_path, relative_file_path)
-        if self._is_cross_workspace_path(relative_file_path):
+        if self._path_contains_dots(relative_file_path):
             abs_path = str(pathlib.Path(abs_path).resolve())
         document_symbols = self.request_document_symbols(relative_file_path)
         symbols = list(document_symbols.iter_symbols())
