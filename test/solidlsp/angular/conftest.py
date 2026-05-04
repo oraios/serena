@@ -1,12 +1,19 @@
 """
 Pytest fixtures for Angular language server tests.
 
-The Angular Language Server requires the project under test to have its
-``node_modules`` populated (specifically ``@angular/core``) — otherwise ngserver
-reports every file as "not in an Angular project" and template features return
-empty. This conftest installs the test fixture's npm dependencies once per
-session (cached in the test repo's ``node_modules``) before any Angular test
-runs.
+This conftest is NOT installing the language server itself — that is fully handled
+by ``RuntimeDependencyCollection`` inside ``AngularLanguageServer`` and lands in
+Serena's managed ``ls_resources_dir`` like every other LS download.
+
+What we install here is the *test fixture project's* npm dependencies (notably
+``@angular/core``) into the fixture's own ``node_modules``. ngserver requires
+``@angular/core`` to be resolvable from the workspace root or it silently treats
+every file as "not in an Angular project", at which point all template-aware
+features (definition / hover / references on .html, cross-file template→component
+navigation) return empty results — tests would pass vacuously while exercising
+nothing. Vendoring ``node_modules`` in-repo is impractical (~500MB), so we run
+``npm install`` once per checkout, cached across sessions, and serialised across
+xdist workers via ``filelock``.
 """
 
 from __future__ import annotations
@@ -34,7 +41,8 @@ INSTALL_LOCK = REPO_ROOT / ".angular-install.lock"
 @pytest.fixture(scope="session", autouse=True)
 def _install_angular_test_repo_node_modules() -> None:
     """
-    Install npm dependencies into the Angular test repo if not already present.
+    Populate the *test fixture project's* ``node_modules`` (NOT the language server's
+    install; see module docstring for the distinction).
 
     Cached across sessions: once ``node_modules/@angular/core/package.json`` exists,
     this is a no-op. Skipped (with the test session marked) if npm is unavailable.
