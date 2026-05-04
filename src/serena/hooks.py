@@ -256,15 +256,16 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
         super().__init__(client)
         self._tool_call_counter = self.ToolUseCounter.load(self)
 
-        # Extract the command name from an ``exec_command`` tool input.
-        #
-        # We use the basename of the first whitespace-separated token of the
-        # ``cmd`` field, lowercased, so that both bare names (``rg``) and
-        # path-prefixed invocations (``/usr/bin/grep``) are normalised the same
-        # way. Returns an empty string when the input is absent or empty.
+        # extract a shell ``cmd``/``command`` field (Codex ``exec_command``-style payloads):
+        # split into command name (basename, lowercased) and the remaining argument string
+        # so both bare names (``rg``) and path-prefixed invocations (``/usr/bin/grep``) are
+        # normalised the same way. Stays ``None`` when no shell command is present.
         self._command: str | None = None
         self._command_name: str | None = None
         self._command_args_str: str | None = None
+        # extract a direct file-path field (Claude Code's ``Read``/``Edit``/``Write`` tool
+        # payloads pass the target as ``file_path`` rather than via a shell command).
+        self._file_path: str | None = None
         if self._tool_input is not None:
             self._command = self._tool_input.get("cmd", self._tool_input.get("command", "")).strip()
             if self._command:
@@ -272,15 +273,23 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
                 if len(cmd_split) > 1:
                     self._command_args_str = cmd_split[1]
                 self._command_name = os.path.basename(cmd_split[0]).lower()
+            file_path = self._tool_input.get("file_path") or self._tool_input.get("filePath") or ""
+            self._file_path = str(file_path).strip() or None
 
-    def _cmd_args_contain_code_file(self) -> bool:
-        """Heuristic, looks whether the command string contains a substring that looks like a code extension."""
-        if not self._command_args_str:
+    def _call_targets_code_file(self) -> bool:
+        """:return: whether the call's payload references a source-code file. Heuristic that
+        scans every payload field that may hold a path — the shell-command argument string
+        (e.g. Codex ``exec_command``) and the direct ``file_path`` field (Claude Code's
+        ``Read``) — for a substring matching any supported language's source extensions.
+        """
+        candidates = [s for s in (self._command_args_str, self._file_path) if s]
+        if not candidates:
             return False
         for lang in Language.iter_all(include_non_programming_languages=False):
             file_matcher = lang.get_source_fn_matcher()
-            if file_matcher.string_contains_relevant_filename(self._command_args_str):
-                return True
+            for candidate in candidates:
+                if file_matcher.string_contains_relevant_filename(candidate):
+                    return True
         return False
 
     def is_grep_call(self) -> bool:
@@ -303,7 +312,7 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
         return any(verb in name for verb in self._READ_FILE_VERB_SUBSTRINGS)
 
     def is_read_code_file_call(self) -> bool:
-        return self.is_read_call() and self._cmd_args_contain_code_file()
+        return self.is_read_call() and self._call_targets_code_file()
 
     def execute(self) -> None:
         # gate the entire hook on the rate-limit window: while we are within

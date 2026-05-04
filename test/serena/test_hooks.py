@@ -23,11 +23,31 @@ def _make_stdin(data: dict) -> StringIO:
     return StringIO(json.dumps(data))
 
 
-def _base_input(tool_name: str = "grep_search", session_id: str = "test-session-123") -> dict:
+def _base_input(
+    tool_name: str = "grep_search",
+    session_id: str = "test-session-123",
+    tool_input: dict | None = None,
+) -> dict:
     return {
         "session_id": session_id,
         "tool_name": tool_name,
-        "tool_input": {"query": "foo"},
+        "tool_input": tool_input if tool_input is not None else {"query": "foo"},
+    }
+
+
+def _read_input(tool_name: str = "read", session_id: str = "test-session-123", file_path: str = "src/foo.py") -> dict:
+    """Build a hook payload for a read-style tool call against a code file.
+
+    Read-style tools are gated on :meth:`PreToolUseRemindAboutSerenaHook._call_targets_code_file`,
+    which scans the payload for a path with a known source-code extension. Tests that exercise
+    the read-counter path therefore must supply such a path; we use ``file_path`` (the field
+    Claude Code's ``Read`` tool emits) by default, which the hook also picks up for VS Code-
+    shaped payloads in non-Claude-Code clients.
+    """
+    return {
+        "session_id": session_id,
+        "tool_name": tool_name,
+        "tool_input": {"file_path": file_path},
     }
 
 
@@ -77,14 +97,22 @@ class TestPreToolUseRemindAboutSerenaHook:
             assert hook.is_grep_call() == expected, f"is_grep_tool() wrong for {name} (vscode)"
 
     def test_read_file_tool_detection_claude_code(self, tmp_path: Path):
-        """Claude Code uses the exact tool name ``Read`` (lowercased to ``read``)."""
+        """Claude Code uses the exact tool name ``Read`` (lowercased to ``read``); the call
+        only counts as a *code-file* read when the payload points at a source file.
+        """
         for name, expected in [("read", True), ("read_file", False), ("readFile", False), ("grep", False)]:
-            with patch("sys.stdin", _make_stdin(_base_input(tool_name=name))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            with (
+                patch("sys.stdin", _make_stdin(_read_input(tool_name=name))),
+                patch("serena.hooks.serena_home_dir", str(tmp_path)),
+            ):
                 hook = PreToolUseRemindAboutSerenaHook(HookClient.CLAUDE_CODE)
             assert hook.is_read_code_file_call() == expected, f"is_read_file_tool() wrong for {name} (claude-code)"
 
     def test_read_file_tool_detection_non_claude_code(self, tmp_path: Path):
-        """Non-Claude-Code clients accept any read-style verb (``read``/``view``/``open``/``show``) combined with ``file``."""
+        """Non-Claude-Code clients accept any read-style verb (``read``/``view``/``open``/``show``)
+        combined with ``file``; the call still only counts as a *code-file* read when the payload
+        points at a source file.
+        """
         cases = [
             # canonical names
             ("read_file", True),
@@ -100,9 +128,22 @@ class TestPreToolUseRemindAboutSerenaHook:
             ("edit_file", False),
         ]
         for name, expected in cases:
-            with patch("sys.stdin", _make_stdin(_base_input(tool_name=name))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            with (
+                patch("sys.stdin", _make_stdin(_read_input(tool_name=name))),
+                patch("serena.hooks.serena_home_dir", str(tmp_path)),
+            ):
                 hook = PreToolUseRemindAboutSerenaHook(HookClient.VSCODE)
             assert hook.is_read_code_file_call() == expected, f"is_read_file_tool() wrong for {name} (vscode)"
+
+    def test_read_non_code_file_does_not_count_as_code_read(self, tmp_path: Path):
+        """A ``Read`` call against a non-source file (e.g. plain text) must NOT trip the
+        code-file read counter, even though the tool name itself is recognised as a read.
+        """
+        payload = _read_input(tool_name="read", file_path="notes/todo.txt")
+        with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            hook = PreToolUseRemindAboutSerenaHook(HookClient.CLAUDE_CODE)
+        assert hook.is_read_call() is True
+        assert hook.is_read_code_file_call() is False
 
     def test_serena_tool_detection(self, tmp_path: Path):
         for name, expected in [("mcp_serena_find_symbol", True), ("serena_overview", True), ("grep_search", False)]:
@@ -142,16 +183,21 @@ class TestPreToolUseRemindAboutSerenaHook:
         assert "grep" in hook_output["additionalContext"].lower()
 
     def test_deny_output_after_threshold_reads(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        """After reaching the read file threshold, the hook should output a deny."""
+        """After reaching the read file threshold, the hook should output a deny.
+
+        The read counter only ticks up when the payload actually targets a source-code file,
+        so ``_read_input`` is used to supply a plausible ``.py`` ``file_path``.
+        """
         for _ in range(ToolUseCounter._READ_FILE_USES_THRESHOLD):
-            with patch("sys.stdin", _make_stdin(_base_input("read"))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            with patch("sys.stdin", _make_stdin(_read_input("read"))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
                 PreToolUseRemindAboutSerenaHook(HookClient.CLAUDE_CODE).execute()
 
         output = capsys.readouterr().out.strip()
         result = json.loads(output)
         hook_output = result["hookSpecificOutput"]
         assert hook_output["permissionDecision"] == "deny"
-        assert "read file" in hook_output["additionalContext"].lower()
+        assert "read" in hook_output["additionalContext"].lower()
+        assert "code file" in hook_output["additionalContext"].lower()
 
     def test_serena_tool_resets_counters(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
         """Using a Serena tool should reset counters, so the threshold is not reached."""
@@ -297,7 +343,7 @@ class TestToolUseCounter:
         counter.last_read_file_use_timestamp = now - timedelta(seconds=1)
         counter.n_recent_read_file_uses = 1
 
-        hook = self._make_hook_stub("read_file", now)
+        hook = self._make_hook_stub("read_file", now, file_path="src/foo.py")
         counter.update(hook)
 
         assert counter.n_recent_read_file_uses == 2
@@ -308,10 +354,23 @@ class TestToolUseCounter:
         counter.last_read_file_use_timestamp = now - timedelta(seconds=ToolUseCounter._READ_FILE_RESET_PERIOD_SECONDS + 1)
         counter.n_recent_read_file_uses = 2
 
-        hook = self._make_hook_stub("read_file", now)
+        hook = self._make_hook_stub("read_file", now, file_path="src/foo.py")
         counter.update(hook)
 
         assert counter.n_recent_read_file_uses == 1
+
+    def test_update_does_not_count_read_of_non_code_file(self):
+        """A read call whose payload points at a non-source file (e.g. ``.txt``) must
+        leave the read-file counter untouched — the per-tool counter is for *code* reads.
+        """
+        counter = ToolUseCounter()
+        now = datetime.now()
+
+        hook = self._make_hook_stub("read_file", now, file_path="notes/todo.txt")
+        counter.update(hook)
+
+        assert counter.n_recent_read_file_uses == 0
+        assert counter.last_read_file_use_timestamp is None
 
     def test_serena_tool_resets_all_counters(self):
         counter = ToolUseCounter(
@@ -393,18 +452,33 @@ class TestToolUseCounter:
         assert counter.last_deny_timestamp == base
 
     @staticmethod
-    def _make_hook_stub(tool_name: str, timestamp: datetime) -> PreToolUseRemindAboutSerenaHook:
+    def _make_hook_stub(
+        tool_name: str,
+        timestamp: datetime,
+        file_path: str | None = None,
+        command_args_str: str | None = None,
+    ) -> PreToolUseRemindAboutSerenaHook:
         """Create a minimal stub that satisfies ToolUseCounter.update without reading stdin.
 
         Uses ``HookClient.VSCODE`` so that ``is_grep_tool`` / ``is_read_file_tool`` apply the
         substring-matching branch — the counter tests below feed verbose tool names like
         ``grep_search`` / ``read_file`` which are only recognized under the non-Claude-Code
         branch (Claude Code uses exact names ``grep`` / ``read``).
+
+        :param file_path: optional payload path; when set to a source-extension path (e.g.
+            ``src/foo.py``), the stub will be classified as a *code-file* read by
+            :meth:`PreToolUseRemindAboutSerenaHook._call_targets_code_file`.
+        :param command_args_str: optional shell-argument tail; equivalent to ``file_path`` but
+            populates the ``cmd``-derived field instead of ``file_path``.
         """
         stub = object.__new__(PreToolUseRemindAboutSerenaHook)
         stub._tool_name = tool_name.lower()
         stub._client = HookClient.VSCODE
         stub.triggered_at_timestamp = timestamp
+        stub._command = None
+        stub._command_name = None
+        stub._command_args_str = command_args_str
+        stub._file_path = file_path
         return stub
 
 
