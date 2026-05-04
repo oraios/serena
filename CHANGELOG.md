@@ -4,12 +4,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Hooks:
   - `serena-hooks auto-approve` now also emits an `allow` decision when Claude Code reports
-    `permission_mode == "auto"`, in addition to the existing `acceptEdits` behavior. The two
-    modes are the user-facing permissive modes; covering both lets blanket approvals reach
-    Serena's MCP tools instead of falling through to per-call prompts. Note that this means
-    Serena tool calls in `auto` mode no longer go through Claude Code's auto-mode safety
-    classifier — they are pre-approved deterministically, matching `acceptEdits`'s posture
-    for built-in edits. #1386
+    `permission_mode == "auto"`, in addition to the existing `acceptEdits` behavior. #1386
 
 * General:
   - Breaking change in mode definitions: Projects (project.yml) can no longer override `base_modes`.
