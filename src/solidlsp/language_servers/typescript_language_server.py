@@ -261,12 +261,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             "processId": os.getpid(),
             "rootPath": repository_absolute_path,
             "rootUri": root_uri,
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
+            "workspaceFolders": self._build_workspace_folders_param(repository_absolute_path),
         }
         return cast(InitializeParams, initialize_params)
 
@@ -406,6 +401,45 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                 "TypeScript project indexing did not complete within %.0fs; proceeding anyway",
                 self.INDEXING_PROGRESS_TIMEOUT,
             )
+
+        self._activate_additional_workspaces()
+
+    @override
+    def _find_representative_source_file(self, directory: str) -> str | None:
+        """Find a TypeScript file suitable for triggering project loading.
+
+        Prefers a file adjacent to tsconfig.json (indicating the project root),
+        then falls back to the first .ts/.tsx file found.
+        """
+        for root, dirs, files in os.walk(directory):
+            dirs[:] = [d for d in dirs if not self.is_ignored_dirname(d)]
+            if "tsconfig.json" in files:
+                for f in files:
+                    if f.endswith((".ts", ".tsx")) and not f.endswith(".d.ts"):
+                        return os.path.join(root, f)
+                src_dir = os.path.join(root, "src")
+                if os.path.isdir(src_dir):
+                    for f in os.listdir(src_dir):
+                        if f.endswith((".ts", ".tsx")) and not f.endswith(".d.ts"):
+                            return os.path.join(src_dir, f)
+
+        for root, dirs, files in os.walk(directory):
+            dirs[:] = [d for d in dirs if not self.is_ignored_dirname(d)]
+            for f in files:
+                if f.endswith((".ts", ".tsx")) and not f.endswith(".d.ts"):
+                    return os.path.join(root, f)
+        return None
+
+    @override
+    def _signal_expect_indexing(self) -> None:
+        self.expect_indexing()
+
+    @override
+    def _wait_for_additional_workspace_indexing(self) -> None:
+        if self.wait_for_indexing(timeout=self.INDEXING_PROGRESS_TIMEOUT):
+            log.info("Additional workspace indexing complete")
+        else:
+            log.warning("Additional workspace indexing did not complete within timeout; proceeding anyway")
 
     @override
     def _get_published_diagnostics_uri(self, request_uri: str) -> str:

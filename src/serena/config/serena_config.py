@@ -271,6 +271,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
     project_name: str
     languages: list[Language]
     ignored_paths: list[str] = field(default_factory=list)
+    additional_workspace_folders: list[str] = field(default_factory=list)
     read_only: bool = False
     ignore_all_files_in_gitignore: bool = True
     initial_prompt: str = ""
@@ -482,6 +483,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         fixed_tools = data["fixed_tools"] or []
         excluded_tools = data["excluded_tools"] or []
         included_optional_tools = data["included_optional_tools"] or []
+        additional_workspace_folders = data.get("additional_workspace_folders") or []
 
         if "base_modes" in data and data["base_modes"] is not None:
             log.warning("The base_modes setting in project.yml is deprecated and will be ignored.")
@@ -490,6 +492,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
             project_name=data["project_name"],
             languages=languages,
             ignored_paths=ignored_paths,
+            additional_workspace_folders=additional_workspace_folders,
             excluded_tools=excluded_tools,
             fixed_tools=fixed_tools,
             included_optional_tools=included_optional_tools,

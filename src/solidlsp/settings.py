@@ -34,6 +34,13 @@ class SolidLSPSettings:
     Have a look at the docstring of the constructors of the corresponding LS implementations within solidlsp to see which options are available.
     No documentation on options means no options are available.
     """
+    additional_workspace_folders: list[str] = field(default_factory=list)
+    """
+    Additional workspace folder paths for cross-package reference support.
+    Paths can be absolute or relative to the project root. Each folder is added as a workspace
+    folder in the LSP initialization, enabling language servers to discover symbols and references
+    across package boundaries (e.g. in monorepos).
+    """
 
     def __post_init__(self) -> None:
         os.makedirs(str(self.solidlsp_dir), exist_ok=True)
