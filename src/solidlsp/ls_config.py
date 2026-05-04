@@ -2,6 +2,7 @@
 Configuration objects for language servers
 """
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -25,8 +26,12 @@ class FilenameMatcher:
         return False
 
     def string_contains_relevant_filename(self, string: str) -> bool:
+        """:return: whether ``string`` contains an occurrence of any registered extension as
+        a *complete* extension — i.e. the extension must either end the string or be followed
+        by a non-extension-character (anything other than a letter, digit, or underscore).
+        """
         for ext in self._file_extensions:
-            if ext in string:
+            if re.search(rf"{re.escape(ext)}(?:\W|$)", string):
                 return True
         return False
 
