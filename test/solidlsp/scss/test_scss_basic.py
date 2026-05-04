@@ -6,6 +6,7 @@ exercises both in-file document symbols and cross-file go-to-definition for
 variables and mixins.
 """
 
+import os
 from pathlib import Path
 
 import pytest
@@ -299,7 +300,9 @@ class TestSomeSassWithPlainCss:
         """The ``.css`` files alongside the SCSS workspace must populate the workspace symbol tree."""
         all_symbols = request_all_symbols(language_server)
         relative_paths = {s.get("location", {}).get("relativePath") for s in all_symbols}
-        for f in ("css/main.css", "css/reset.css", "css/theme.css"):
+        # `relativePath` uses OS-native separators (cf. test_symbol_retrieval.py),
+        # so build expected paths via os.path.join to keep this test cross-platform.
+        for f in (os.path.join("css", "main.css"), os.path.join("css", "reset.css"), os.path.join("css", "theme.css")):
             assert f in relative_paths, f"Expected {f} to appear in symbol tree"
 
     @pytest.mark.parametrize("language_server", [Language.SCSS], indirect=True)

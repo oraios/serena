@@ -115,8 +115,7 @@ Some languages require additional installations or setup steps, as noted.
   (requires some [manual setup](../03-special-guides/scala_setup_guide_for_serena); uses Metals LSP)
 * **SCSS / Sass / CSS**
   (experimental; requires Node.js + npm; uses [some-sass-language-server](https://github.com/wkillerud/some-sass) to handle
-  `.scss`, `.sass`, and `.css`; provides cross-file `@use`/`@forward` navigation for
-  variables, mixins, and functions in Sass)
+  `.scss`, `.sass`, and `.css`)
 * **Solidity**  
   (experimental; requires Node.js and npm; automatically installs `@nomicfoundation/solidity-language-server`;
   works best with a `foundry.toml` or `hardhat.config.js` in the project root)
