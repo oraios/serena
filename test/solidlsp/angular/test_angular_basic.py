@@ -14,9 +14,11 @@ from pathlib import Path
 
 import pytest
 
+from serena.util.text_utils import find_text_coordinates
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from test.solidlsp.conftest import request_all_symbols
+from test.conftest import language_has_verified_implementation_support
+from test.solidlsp.conftest import find_in_file, request_all_symbols
 
 
 @pytest.mark.angular
@@ -65,7 +67,7 @@ class TestAngularLanguageServerBasics:
         line of ``app.component.html``.
         """
         path = "src/app/app.component.html"
-        line, col = _find_in_file(language_server, path, "greeting()")
+        line, col = find_in_file(language_server, path, "greeting()")
         # +1 puts the cursor inside the identifier rather than on its leading boundary.
         definitions = language_server.request_definition(path, line, col + 1)
         assert definitions, f"Expected non-empty cross-file definition for template->component method, got {definitions}"
@@ -113,33 +115,17 @@ class TestAngularLanguageServerBasics:
         through ngserver which aggregates both .ts and .html usages.
         """
         src_path = "src/app/app.component.ts"
-        # Find the 'setName' method declaration to probe at an accurate cursor.
+        # Probe at the declaration site of setName, not a usage; the regex anchors on the
+        # parameter list signature so we always land on the method header even if calls move.
         abs_path = Path(language_server.language_server.repository_root_path) / src_path
-        lines = abs_path.read_text().splitlines()
-        line_idx = None
-        col = None
-        for i, line in enumerate(lines):
-            if "setName(" in line and "name:" in line:
-                line_idx = i
-                col = line.index("setName") + 1  # cursor into the identifier
-                break
-        assert line_idx is not None, "Could not locate setName declaration in app.component.ts"
-
-        refs = language_server.request_references(src_path, line_idx, col)
+        coords = find_text_coordinates(abs_path.read_text(), r"(setName)\(name:")
+        assert coords is not None, "Could not locate setName declaration in app.component.ts"
+        # +1 puts the cursor inside the identifier rather than on its leading boundary.
+        refs = language_server.request_references(src_path, coords.line, coords.col + 1)
         ref_paths = {r.get("relativePath", "") for r in refs}
         assert any(p.endswith("app.component.html") for p in ref_paths), (
             f"Expected references for setName to include its template callsite in app.component.html, got: {ref_paths}"
         )
-
-
-def _find_in_file(language_server: SolidLanguageServer, relative_path: str, needle: str) -> tuple[int, int]:
-    """Return (line, column) of the first occurrence of ``needle`` in the file."""
-    abs_path = Path(language_server.language_server.repository_root_path) / relative_path
-    for i, line in enumerate(abs_path.read_text().splitlines()):
-        idx = line.find(needle)
-        if idx >= 0:
-            return i, idx
-    raise AssertionError(f"Could not find '{needle}' in {relative_path}")
 
 
 @pytest.mark.angular
@@ -152,7 +138,7 @@ class TestAngularHover:
         and must yield a non-empty MarkupContent describing the method signature.
         """
         path = "src/app/app.component.ts"
-        line, col = _find_in_file(language_server, path, "setName(")
+        line, col = find_in_file(language_server, path, "setName(")
         # Cursor inside the identifier (one past the leading 's') so the LSP
         # treats the position as the symbol rather than a token boundary.
         hover = language_server.request_hover(path, line, col + 1)
@@ -168,7 +154,7 @@ class TestAngularHover:
         through ngserver and must yield Angular-aware type info.
         """
         path = "src/app/app.component.html"
-        line, col = _find_in_file(language_server, path, "greeting()")
+        line, col = find_in_file(language_server, path, "greeting()")
         # Cursor inside the identifier (one past the leading 'g').
         hover = language_server.request_hover(path, line, col + 1)
         assert hover is not None, f"Expected hover info for greeting() in {path}, got None"
@@ -186,7 +172,7 @@ class TestAngularDefinitionRouting:
         ``userName`` signal field declaration in app.component.ts.
         """
         path = "src/app/app.component.html"
-        line, col = _find_in_file(language_server, path, '[value]="userName()"')
+        line, col = find_in_file(language_server, path, '[value]="userName()"')
         # Cursor on the 'u' of userName inside the binding expression
         col = col + len('[value]="')
         definitions = language_server.request_definition(path, line, col)
@@ -202,7 +188,7 @@ class TestAngularDefinitionRouting:
         ``setName`` method declaration in app.component.ts.
         """
         path = "src/app/app.component.html"
-        line, col = _find_in_file(language_server, path, '(input)="setName(')
+        line, col = find_in_file(language_server, path, '(input)="setName(')
         col = col + len('(input)="')  # cursor on 's' of setName
         definitions = language_server.request_definition(path, line, col)
         assert definitions, f"Expected non-empty definition for setName binding, got {definitions}"
@@ -219,7 +205,7 @@ class TestAngularDefinitionRouting:
         path = "src/app/app.component.ts"
         # Probe at the constructor signature, not the import line, to make sure
         # we exercise the type-resolution path rather than the module-resolution path.
-        line, col = _find_in_file(language_server, path, "private readonly greetings: GreetingService")
+        line, col = find_in_file(language_server, path, "private readonly greetings: GreetingService")
         col = col + len("private readonly greetings: ")  # cursor on 'G' of GreetingService
         definitions = language_server.request_definition(path, line, col)
         assert definitions, f"Expected definition for GreetingService, got {definitions}"
@@ -238,7 +224,7 @@ class TestAngularDefinitionRouting:
         component class.
         """
         path = "src/app/app.component.html"
-        line, col = _find_in_file(language_server, path, "app-item-card")
+        line, col = find_in_file(language_server, path, "app-item-card")
         col = col + 1  # cursor inside 'app-item-card'
         definitions = language_server.request_definition(path, line, col)
         assert definitions, f"Expected definition for <app-item-card>, got {definitions}"
@@ -259,18 +245,12 @@ class TestAngularRename:
         and app.component.html (the ``(input)="setName(...)"`` binding).
         """
         path = "src/app/app.component.ts"
-        # Use the declaration site, where the identifier appears with a parameter list.
+        # Anchor on the declaration site (signature with the parameter list), not a usage.
         abs_path = Path(language_server.language_server.repository_root_path) / path
-        line_idx = None
-        col = None
-        for i, line in enumerate(abs_path.read_text().splitlines()):
-            if "setName(" in line and "name:" in line:
-                line_idx = i
-                col = line.index("setName") + 1
-                break
-        assert line_idx is not None, "Could not locate setName declaration in app.component.ts"
-
-        edit = language_server.request_rename_symbol_edit(path, line_idx, col, "updateName")
+        coords = find_text_coordinates(abs_path.read_text(), r"(setName)\(name:")
+        assert coords is not None, "Could not locate setName declaration in app.component.ts"
+        # +1 puts the cursor inside the identifier rather than on its leading boundary.
+        edit = language_server.request_rename_symbol_edit(path, coords.line, coords.col + 1, "updateName")
         assert edit is not None, "Expected WorkspaceEdit, got None"
         changes = edit.get("changes") or {}
         # Some servers return ``documentChanges`` instead of (or in addition to) ``changes``.
@@ -316,3 +296,30 @@ class TestAngularSymbolStructure:
         names = {s.get("name") for s in all_symbols}
         for expected in ("ExclaimPipe", "ItemCardComponent", "AppComponent", "GreetingService"):
             assert expected in names, f"Expected '{expected}' in full symbol tree, got: {sorted(names)}"
+
+
+@pytest.mark.angular
+class TestAngularImplementations:
+    """``textDocument/implementation`` is routed through tsserver via the Angular plugin."""
+
+    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    def test_find_implementations_of_interface_method(self, language_server: SolidLanguageServer) -> None:
+        """``Greeter.greet`` is implemented by ``GreetingService``; ``request_implementation``
+        invoked at the interface declaration must point at the service.
+
+        Routed through the Angular LS' companion typescript-language-server (with the
+        @angular/language-service plugin loaded as a tsserver plugin) — bare ngserver
+        does not own ``textDocument/implementation``.
+        """
+        if not language_has_verified_implementation_support(Language.ANGULAR):
+            pytest.skip("Angular language server is not marked as supporting implementation requests in this build")
+
+        path = "src/app/greeter.interface.ts"
+        line, col = find_in_file(language_server, path, "greet(")
+        # Cursor inside the identifier (one past 'g').
+        implementations = language_server.request_implementation(path, line, col + 1)
+        assert implementations, f"Expected at least one implementation of Greeter.greet, got {implementations}"
+        target_uris = [impl["uri"] for impl in implementations]
+        assert any(uri.endswith("greeting.service.ts") for uri in target_uris), (
+            f"Expected implementation to resolve into greeting.service.ts, got URIs: {target_uris}"
+        )

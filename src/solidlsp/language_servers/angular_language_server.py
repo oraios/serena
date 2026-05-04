@@ -76,6 +76,16 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+# Angular installs four interdependent npm packages into a single ``node_modules`` (npm
+# hoists them so ngserver's plugin resolution works); the install-dir name therefore
+# encodes all four versions, so overriding any single one routes to a fresh subdir.
+INITIAL_ANGULAR_LANGUAGE_SERVER_VERSION = "21.2.10"
+INITIAL_ANGULAR_LANGUAGE_SERVICE_VERSION = "21.2.10"
+INITIAL_TYPESCRIPT_VERSION = "5.9.3"
+INITIAL_TYPESCRIPT_LANGUAGE_SERVER_VERSION = "5.1.3"
 DEFAULT_ANGULAR_LANGUAGE_SERVER_VERSION = "21.2.10"
 DEFAULT_ANGULAR_LANGUAGE_SERVICE_VERSION = "21.2.10"
 DEFAULT_TYPESCRIPT_VERSION = "5.9.3"
@@ -239,6 +249,15 @@ class AngularLanguageServer(SolidLanguageServer):
         self._html_server: VsCodeHtmlLanguageServer | None = None
         self._html_server_started = False
 
+    @classmethod
+    @override
+    def supports_implementation_request(cls) -> bool:
+        # Angular templates and components are TypeScript code under the hood — ngserver
+        # delegates to tsserver, which supports textDocument/implementation for class
+        # members and interfaces (e.g. resolving an Angular lifecycle hook on a component
+        # back to its OnInit/OnDestroy interface declaration).
+        return True
+
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in [
@@ -292,7 +311,18 @@ class AngularLanguageServer(SolidLanguageServer):
         )
         npm_registry = ng_settings.get("npm_registry", ts_settings.get("npm_registry"))
 
-        install_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "angular-lsp")
+        # Per the version-pinning convention: the legacy unversioned install dir is
+        # reserved iff every one of the four package versions matches its INITIAL pin;
+        # otherwise everything goes into a fully-versioned subdir so a bump of any
+        # single package cannot silently reuse stale companions in a shared node_modules.
+        all_initial = (
+            ls_version == INITIAL_ANGULAR_LANGUAGE_SERVER_VERSION
+            and svc_version == INITIAL_ANGULAR_LANGUAGE_SERVICE_VERSION
+            and ts_version == INITIAL_TYPESCRIPT_VERSION
+            and tsls_version == INITIAL_TYPESCRIPT_LANGUAGE_SERVER_VERSION
+        )
+        ls_dirname = "angular-lsp" if all_initial else f"angular-lsp-{ls_version}-{svc_version}-{ts_version}-{tsls_version}"
+        install_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), ls_dirname)
         ng_executable = os.path.join(install_dir, "node_modules", ".bin", NGSERVER_BIN)
         ts_ls_executable = os.path.join(install_dir, "node_modules", ".bin", TSLS_BIN)
         if os.name == "nt":
@@ -302,18 +332,14 @@ class AngularLanguageServer(SolidLanguageServer):
         tsdk_path = os.path.join(install_dir, "node_modules", "typescript", "lib")
         angular_plugin_path = os.path.join(install_dir, "node_modules", "@angular", "language-service")
 
-        version_file = os.path.join(install_dir, ".installed_version")
-        expected_version = f"{ls_version}_{svc_version}_{ts_version}_{tsls_version}"
-
-        needs_install = not (os.path.exists(ng_executable) and os.path.exists(ts_ls_executable))
-        if not needs_install and os.path.exists(version_file):
-            with open(version_file) as f:
-                needs_install = f.read().strip() != expected_version
-        elif not needs_install:
-            needs_install = True
-
-        if needs_install:
-            log.info("Installing Angular LS stack: %s", expected_version)
+        if not (os.path.exists(ng_executable) and os.path.exists(ts_ls_executable)):
+            log.info(
+                "Installing Angular LS stack: ngserver=%s, language-service=%s, typescript=%s, typescript-language-server=%s",
+                ls_version,
+                svc_version,
+                ts_version,
+                tsls_version,
+            )
             deps = RuntimeDependencyCollection(
                 [
                     RuntimeDependency(
@@ -343,8 +369,6 @@ class AngularLanguageServer(SolidLanguageServer):
                 ]
             )
             deps.install(install_dir)
-            with open(version_file, "w") as f:
-                f.write(expected_version)
 
         for path, label in (
             (ng_executable, NGSERVER_BIN),
@@ -650,3 +674,36 @@ class AngularLanguageServer(SolidLanguageServer):
             with self._ts_server.open_file(relative_file_path):
                 return self._ts_server.request_hover(relative_file_path, line, column, file_buffer=file_buffer)
         return super().request_hover(relative_file_path, line, column, file_buffer=file_buffer)
+
+    @override
+    def request_implementation(self, relative_file_path: str, line: int, column: int) -> list[ls_types.Location]:
+        # ngserver does not advertise textDocument/implementation (returns -32601);
+        # the companion typescript-language-server (with the @angular/language-service
+        # plugin loaded) does, since the underlying tsserver implements it for
+        # interface→implementation, abstract→concrete, etc. Keep this routed even
+        # for .html paths because the LSP method is meaningless on plain HTML.
+        if self._ts_server is not None and self._is_typescript_file(relative_file_path):
+            with self._ts_server.open_file(relative_file_path):
+                return self._ts_server.request_implementation(relative_file_path, line, column)
+        return []
+
+    @override
+    def request_text_document_diagnostics(
+        self,
+        relative_file_path: str,
+        start_line: int = 0,
+        end_line: int = -1,
+        min_severity: int = 4,
+    ) -> list[ls_types.Diagnostic]:
+        # ngserver does not handle pull diagnostics for .ts files in the way tsserver
+        # does — it produces template diagnostics on .html attached via templateUrl,
+        # but for component classes we want the TS error stream, which lives in the
+        # companion typescript-language-server.
+        if self._ts_server is not None and self._is_typescript_file(relative_file_path):
+            with self._ts_server.open_file(relative_file_path):
+                return self._ts_server.request_text_document_diagnostics(
+                    relative_file_path, start_line=start_line, end_line=end_line, min_severity=min_severity
+                )
+        return super().request_text_document_diagnostics(
+            relative_file_path, start_line=start_line, end_line=end_line, min_severity=min_severity
+        )

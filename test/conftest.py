@@ -352,6 +352,7 @@ def languages_supporting_implementation(*languages: Language) -> list[Language]:
 
 
 _VERIFIED_IMPLEMENTATION_LANGUAGES = {
+    Language.ANGULAR,
     Language.CSHARP,
     Language.GO,
     Language.JAVA,
