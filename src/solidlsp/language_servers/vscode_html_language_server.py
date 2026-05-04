@@ -34,7 +34,11 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
 DEFAULT_PACKAGE_NAME = "vscode-langservers-extracted"
+INITIAL_PACKAGE_VERSION = "4.10.0"
 DEFAULT_PACKAGE_VERSION = "4.10.0"
 LS_BIN_NAME = "vscode-html-language-server"
 
@@ -78,26 +82,21 @@ class VsCodeHtmlLanguageServer(SolidLanguageServer):
             package_version = self._custom_settings.get("vscode_langservers_version", DEFAULT_PACKAGE_VERSION)
             npm_registry = self._custom_settings.get("npm_registry")
 
-            # Isolated from the CSS LS's install dir even though both default to the same npm
-            # package: users may override `vscode_langservers_package` for one and not the other,
-            # and a shared dir would make those overrides ping-pong on the version_file check.
-            install_dir = os.path.join(self._ls_resources_dir, "vscode-langservers-html")
+            # Per the version-pinning convention: the legacy unversioned install dir is
+            # reserved for INITIAL; everything else goes into a versioned subdir, so a
+            # version bump cannot silently reuse a stale binary. The install dir is also
+            # isolated from any other LS that defaults to the same npm package, since users
+            # may override ``vscode_langservers_package`` independently per language.
+            ls_dirname = (
+                "vscode-langservers-html" if package_version == INITIAL_PACKAGE_VERSION else f"vscode-langservers-html-{package_version}"
+            )
+            install_dir = os.path.join(self._ls_resources_dir, ls_dirname)
             executable_path = os.path.join(install_dir, "node_modules", ".bin", LS_BIN_NAME)
             if os.name == "nt":
                 executable_path += ".cmd"
 
-            version_file = os.path.join(install_dir, ".installed_version")
-            expected_version = f"{package_name}@{package_version}"
-
-            needs_install = not os.path.exists(executable_path)
-            if not needs_install and os.path.exists(version_file):
-                with open(version_file) as f:
-                    needs_install = f.read().strip() != expected_version
-            elif not needs_install:
-                # binary exists but no version file — refresh to record version
-                needs_install = True
-
-            if needs_install:
+            if not os.path.exists(executable_path):
+                expected_version = f"{package_name}@{package_version}"
                 log.info("Installing %s for HTML language server...", expected_version)
                 deps = RuntimeDependencyCollection(
                     [
@@ -110,12 +109,11 @@ class VsCodeHtmlLanguageServer(SolidLanguageServer):
                     ]
                 )
                 deps.install(install_dir)
-                with open(version_file, "w") as f:
-                    f.write(expected_version)
 
             if not os.path.exists(executable_path):
                 raise FileNotFoundError(
-                    f"{LS_BIN_NAME} executable not found at {executable_path}; npm install of {expected_version} did not produce the expected binary."
+                    f"{LS_BIN_NAME} executable not found at {executable_path}; "
+                    f"npm install of {package_name}@{package_version} did not produce the expected binary."
                 )
             return executable_path
 
