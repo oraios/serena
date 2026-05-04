@@ -218,9 +218,9 @@ The hooks will:
   `grep` or `read_file` calls without using any Serena tools in between.
 - **`activate`**: Prompt the agent to activate the project and read Serena's instructions at session start.
 - **`cleanup`**: Clean up hook session data when the session ends.
-- **`auto-approve`**: Auto-approve Serena tool calls whenever Claude Code is in `acceptEdits` mode,
-  so blanket edit approvals cover Serena's destructive tools (e.g. `replace_symbol_body`,
-  `rename_symbol`) instead of prompting on every call.
+- **`auto-approve`**: Auto-approve Serena tool calls whenever Claude Code is in a permissive
+  permission mode (`acceptEdits` or `auto`), so blanket approvals cover Serena's destructive
+  tools (e.g. `replace_symbol_body`, `rename_symbol`) instead of prompting on every call.
 
 For more details on Claude Code's hook system, see the
 [Claude Code hooks documentation](https://code.claude.com/docs/en/hooks).

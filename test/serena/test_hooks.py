@@ -409,7 +409,7 @@ class TestToolUseCounter:
 
 
 class TestPreToolUseAutoApproveSerenaHook:
-    """Tests for the auto-approve hook that allows Serena tools while the client is in ``acceptEdits`` mode."""
+    """Tests for the auto-approve hook that allows Serena tools while the client is in a permissive permission mode (``acceptEdits`` or ``auto``)."""
 
     @staticmethod
     def _approve_input(
@@ -440,6 +440,27 @@ class TestPreToolUseAutoApproveSerenaHook:
         assert hook_output["permissionDecision"] == "allow"
         assert "acceptedits" in hook_output["permissionDecisionReason"].lower()
 
+    def test_approves_serena_tool_in_auto_mode(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """When the tool is a Serena tool and the mode is ``auto``, an allow decision is emitted.
+
+        Claude Code's ``auto`` mode is the hands-off-execution mode users adopt for autonomous
+        runs; Serena tool calls should be auto-approved there for the same reason as in
+        ``acceptEdits`` (Serena's destructive tools would otherwise still prompt per call).
+        """
+        stdin_data = self._approve_input(permission_mode="auto")
+        with patch("sys.stdin", _make_stdin(stdin_data)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            PreToolUseAutoApproveSerenaHook(HookClient.CLAUDE_CODE).execute()
+
+        output = capsys.readouterr().out.strip()
+        result = json.loads(output)
+        hook_output = result["hookSpecificOutput"]
+        assert hook_output["hookEventName"] == "PreToolUse"
+        assert hook_output["permissionDecision"] == "allow"
+        # the reason must identify the actual mode that triggered the approval, not just say
+        # "auto-approved" — the substring " auto " (with surrounding spaces) discriminates the
+        # mode name from the unrelated "Auto-approved" prefix.
+        assert " auto " in hook_output["permissionDecisionReason"]
+
     def test_accepts_camel_case_permission_mode(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
         """The hook also reads the ``permissionMode`` (camelCase) variant of the field."""
         stdin_data = self._approve_input(permission_mode_key="permissionMode")
@@ -466,6 +487,27 @@ class TestPreToolUseAutoApproveSerenaHook:
     def test_stays_silent_in_plan_mode(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
         """Other permission modes (e.g. ``plan``) must not trigger an auto-approve."""
         stdin_data = self._approve_input(permission_mode="plan")
+        with patch("sys.stdin", _make_stdin(stdin_data)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            PreToolUseAutoApproveSerenaHook(HookClient.CLAUDE_CODE).execute()
+        assert capsys.readouterr().out == ""
+
+    def test_stays_silent_in_bypass_permissions_mode(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """``bypassPermissions`` already approves everything upstream in Claude Code, so the
+        hook deliberately does not emit an explicit allow there — it stays silent.
+
+        This test pins that boundary: only ``acceptEdits`` and ``auto`` are active modes for the
+        hook; expanding it further requires a deliberate change here.
+        """
+        stdin_data = self._approve_input(permission_mode="bypassPermissions")
+        with patch("sys.stdin", _make_stdin(stdin_data)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            PreToolUseAutoApproveSerenaHook(HookClient.CLAUDE_CODE).execute()
+        assert capsys.readouterr().out == ""
+
+    def test_stays_silent_in_dont_ask_mode(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """``dontAsk`` is the user's deny-by-default posture (auto-deny unless allow-listed);
+        the hook honors that choice and stays silent rather than overriding it.
+        """
+        stdin_data = self._approve_input(permission_mode="dontAsk")
         with patch("sys.stdin", _make_stdin(stdin_data)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
             PreToolUseAutoApproveSerenaHook(HookClient.CLAUDE_CODE).execute()
         assert capsys.readouterr().out == ""
@@ -533,6 +575,23 @@ class TestHookCli:
                 "tool_name": "mcp__serena__find_symbol",
                 "tool_input": {},
                 "permission_mode": "acceptEdits",
+            }
+        )
+        runner = CliRunner()
+        with patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            result = runner.invoke(hook_commands, ["auto-approve", "--client", "claude-code"], input=stdin_json)
+        assert result.exit_code == 0
+        output = json.loads(result.output)
+        assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
+
+    def test_auto_approve_command_in_auto_mode(self, tmp_path: Path):
+        """The ``auto-approve`` CLI command emits an allow for a Serena tool in ``auto`` mode."""
+        stdin_json = json.dumps(
+            {
+                "session_id": "cli-auto-approve-auto-mode",
+                "tool_name": "mcp__serena__find_symbol",
+                "tool_input": {},
+                "permission_mode": "auto",
             }
         )
         runner = CliRunner()

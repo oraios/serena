@@ -2,6 +2,10 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Hooks:
+  - `serena-hooks auto-approve` now also emits an `allow` decision when Claude Code reports
+    `permission_mode == "auto"`, in addition to the existing `acceptEdits` behavior. #1386
+
 * General:
   - Breaking change in mode definitions: Projects (project.yml) can no longer override `base_modes`.
     Instead, they can define `added_modes` to add modes on top of base and default modes.  
