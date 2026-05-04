@@ -215,6 +215,10 @@ class SomeSassLanguageServer(SolidLanguageServer):
             if section == "somesass":
                 result.append(somesass_section)  # type: ignore[arg-type]
             else:
+                # ``editor`` is the only other section Some Sass currently asks for; an unknown
+                # section means upstream added a new config slice we should consider supplying.
+                if section not in (None, "editor"):
+                    log.debug("workspace/configuration: unknown section %r; responding with empty dict", section)
                 result.append({})
         return result or [{}]
 

@@ -473,6 +473,7 @@ class AngularLanguageServer(SolidLanguageServer):
             start_dev = cur.stat().st_dev
         except OSError:
             start_dev = None
+        steps = 0
         for parent in [cur, *cur.parents]:
             # Stop *before* probing across a mount-point change: a different
             # st_dev typically means we've crossed a container/volume boundary
@@ -480,20 +481,26 @@ class AngularLanguageServer(SolidLanguageServer):
             if start_dev is not None:
                 try:
                     if parent.stat().st_dev != start_dev:
+                        log.debug("Stopping @angular/core probe at %s after %d step(s) (mount-point change)", parent, steps)
                         break
                 except OSError:
                     break
+            steps += 1
             candidate = parent / "node_modules" / "@angular" / "core" / "package.json"
             if candidate.exists():
+                log.debug("Found @angular/core after %d step(s) at %s", steps, candidate)
                 return str(candidate)
             workspace_pkg = parent / "package.json"
             if workspace_pkg.exists():
                 try:
                     with open(workspace_pkg, encoding="utf-8") as f:
                         if "workspaces" in json.load(f):
+                            log.debug("Stopping @angular/core probe at workspace root %s after %d step(s)", parent, steps)
                             break
                 except (OSError, ValueError) as e:
                     log.debug("Could not parse %s as JSON dict (%s); ignoring as workspace marker", workspace_pkg, e)
+        else:
+            log.debug("@angular/core probe walked %d ancestor(s) without finding an install or a workspace root", steps)
         return None
 
     def _check_angular_core_in_project(self) -> None:
@@ -685,6 +692,11 @@ class AngularLanguageServer(SolidLanguageServer):
         if self._ts_server is not None and self._is_typescript_file(relative_file_path):
             with self._ts_server.open_file(relative_file_path):
                 return self._ts_server.request_implementation(relative_file_path, line, column)
+        log.debug(
+            "request_implementation called on non-TS path %s; ngserver does not advertise the LSP method "
+            "and the request is meaningless on plain HTML — returning []",
+            relative_file_path,
+        )
         return []
 
     @override
