@@ -36,14 +36,7 @@ def _base_input(
 
 
 def _read_input(tool_name: str = "read", session_id: str = "test-session-123", file_path: str = "src/foo.py") -> dict:
-    """Build a hook payload for a read-style tool call against a code file.
-
-    Read-style tools are gated on :meth:`PreToolUseRemindAboutSerenaHook._call_targets_code_file`,
-    which scans the payload for a path with a known source-code extension. Tests that exercise
-    the read-counter path therefore must supply such a path; we use ``file_path`` (the field
-    Claude Code's ``Read`` tool emits) by default, which the hook also picks up for VS Code-
-    shaped payloads in non-Claude-Code clients.
-    """
+    """Build a hook payload for a read-style tool call against a file."""
     return {
         "session_id": session_id,
         "tool_name": tool_name,
@@ -96,22 +89,34 @@ class TestPreToolUseRemindAboutSerenaHook:
                 hook = PreToolUseRemindAboutSerenaHook(HookClient.VSCODE)
             assert hook.is_grep_call() == expected, f"is_grep_tool() wrong for {name} (vscode)"
 
+    def test_grep_tool_detection_codex_shell_commands(self, tmp_path: Path):
+        """Codex shell-command tools are classified by the command embedded in their payload."""
+        cases = [
+            ("exec_command", {"cmd": "rg -n foo README.md"}, True),
+            ("functions.shell_command", {"command": "rg -n foo README.md"}, True),
+            ("functions.shell_command", {"command": "Get-Content README.md"}, False),
+        ]
+        for tool_name, tool_input, expected in cases:
+            with (
+                patch("sys.stdin", _make_stdin(_base_input(tool_name=tool_name, tool_input=tool_input))),
+                patch("serena.hooks.serena_home_dir", str(tmp_path)),
+            ):
+                hook = PreToolUseRemindAboutSerenaHook(HookClient.CODEX)
+            assert hook.is_grep_call() == expected, f"is_grep_tool() wrong for {tool_name} / {tool_input}"
+
     def test_read_file_tool_detection_claude_code(self, tmp_path: Path):
-        """Claude Code uses the exact tool name ``Read`` (lowercased to ``read``); the call
-        only counts as a *code-file* read when the payload points at a source file.
-        """
+        """Claude Code uses the exact tool name ``Read`` (lowercased to ``read``)."""
         for name, expected in [("read", True), ("read_file", False), ("readFile", False), ("grep", False)]:
             with (
                 patch("sys.stdin", _make_stdin(_read_input(tool_name=name))),
                 patch("serena.hooks.serena_home_dir", str(tmp_path)),
             ):
                 hook = PreToolUseRemindAboutSerenaHook(HookClient.CLAUDE_CODE)
-            assert hook.is_read_code_file_call() == expected, f"is_read_file_tool() wrong for {name} (claude-code)"
+            assert hook.is_read_file_call() == expected, f"is_read_file_tool() wrong for {name} (claude-code)"
 
     def test_read_file_tool_detection_non_claude_code(self, tmp_path: Path):
         """Non-Claude-Code clients accept any read-style verb (``read``/``view``/``open``/``show``)
-        combined with ``file``; the call still only counts as a *code-file* read when the payload
-        points at a source file.
+        combined with ``file``.
         """
         cases = [
             # canonical names
@@ -133,17 +138,44 @@ class TestPreToolUseRemindAboutSerenaHook:
                 patch("serena.hooks.serena_home_dir", str(tmp_path)),
             ):
                 hook = PreToolUseRemindAboutSerenaHook(HookClient.VSCODE)
-            assert hook.is_read_code_file_call() == expected, f"is_read_file_tool() wrong for {name} (vscode)"
+            assert hook.is_read_file_call() == expected, f"is_read_file_tool() wrong for {name} (vscode)"
 
-    def test_read_non_code_file_does_not_count_as_code_read(self, tmp_path: Path):
-        """A ``Read`` call against a non-source file (e.g. plain text) must NOT trip the
-        code-file read counter, even though the tool name itself is recognised as a read.
-        """
+    def test_read_non_code_file_counts_as_file_read(self, tmp_path: Path):
+        """A ``Read`` call against a non-source file still counts as a file read."""
         payload = _read_input(tool_name="read", file_path="notes/todo.txt")
         with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
             hook = PreToolUseRemindAboutSerenaHook(HookClient.CLAUDE_CODE)
         assert hook.is_read_call() is True
+        assert hook.is_read_file_call() is True
         assert hook.is_read_code_file_call() is False
+
+    def test_read_code_file_detection(self, tmp_path: Path):
+        """Only source-like read targets count for the code-read reminder."""
+        cases = [
+            (HookClient.CLAUDE_CODE, _read_input(tool_name="read", file_path="README.md"), False),
+            (HookClient.CLAUDE_CODE, _read_input(tool_name="read", file_path="src/foo.py"), True),
+            (HookClient.CODEX, _base_input("functions.shell_command", tool_input={"command": "Get-Content README.md"}), False),
+            (HookClient.CODEX, _base_input("functions.shell_command", tool_input={"command": "Get-Content src/foo.py"}), True),
+        ]
+        for client, payload, expected in cases:
+            with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+                hook = PreToolUseRemindAboutSerenaHook(client)
+            assert hook.is_read_code_file_call() == expected, f"is_read_code_file_call() wrong for {client} / {payload}"
+
+    def test_read_file_tool_detection_codex_shell_commands(self, tmp_path: Path):
+        """Codex shell-command tools count PowerShell file reads, including non-code files."""
+        cases = [
+            ("exec_command", {"cmd": "cat README.md"}, True),
+            ("functions.shell_command", {"command": "Get-Content README.md"}, True),
+            ("functions.shell_command", {"command": "rg -n foo README.md"}, False),
+        ]
+        for tool_name, tool_input, expected in cases:
+            with (
+                patch("sys.stdin", _make_stdin(_base_input(tool_name=tool_name, tool_input=tool_input))),
+                patch("serena.hooks.serena_home_dir", str(tmp_path)),
+            ):
+                hook = PreToolUseRemindAboutSerenaHook(HookClient.CODEX)
+            assert hook.is_read_file_call() == expected, f"is_read_file_tool() wrong for {tool_name} / {tool_input}"
 
     def test_serena_tool_detection(self, tmp_path: Path):
         for name, expected in [("mcp_serena_find_symbol", True), ("serena_overview", True), ("grep_search", False)]:
@@ -182,11 +214,24 @@ class TestPreToolUseRemindAboutSerenaHook:
         assert hook_output["permissionDecision"] == "deny"
         assert "grep" in hook_output["additionalContext"].lower()
 
+    def test_deny_output_after_threshold_greps_codex_shell_command(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """After reaching the grep threshold, Codex ``functions.shell_command`` emits a deny."""
+        payload = _base_input("functions.shell_command", tool_input={"command": "rg -n foo README.md"})
+        for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
+            with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+                PreToolUseRemindAboutSerenaHook(HookClient.CODEX).execute()
+
+        output = capsys.readouterr().out.strip()
+        result = json.loads(output)
+        hook_output = result["hookSpecificOutput"]
+        assert hook_output["permissionDecision"] == "deny"
+        assert "additionalContext" not in hook_output
+        assert "grep" in hook_output["permissionDecisionReason"].lower()
+
     def test_deny_output_after_threshold_reads(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
         """After reaching the read file threshold, the hook should output a deny.
 
-        The read counter only ticks up when the payload actually targets a source-code file,
-        so ``_read_input`` is used to supply a plausible ``.py`` ``file_path``.
+        ``_read_input`` supplies the direct ``file_path`` field emitted by file-read tools.
         """
         for _ in range(ToolUseCounter._READ_FILE_USES_THRESHOLD):
             with patch("sys.stdin", _make_stdin(_read_input("read"))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
@@ -197,7 +242,29 @@ class TestPreToolUseRemindAboutSerenaHook:
         hook_output = result["hookSpecificOutput"]
         assert hook_output["permissionDecision"] == "deny"
         assert "read" in hook_output["additionalContext"].lower()
-        assert "code file" in hook_output["additionalContext"].lower()
+        assert "files" in hook_output["additionalContext"].lower()
+
+    def test_no_deny_after_threshold_get_content_markdown_codex(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """PowerShell ``Get-Content`` calls on markdown files do not count for the code-read reminder."""
+        payload = _base_input("functions.shell_command", tool_input={"command": "Get-Content README.md"})
+        for _ in range(ToolUseCounter._READ_FILE_USES_THRESHOLD):
+            with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+                PreToolUseRemindAboutSerenaHook(HookClient.CODEX).execute()
+
+        assert capsys.readouterr().out == ""
+
+    def test_deny_output_after_threshold_get_content_code_file_codex(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """PowerShell ``Get-Content`` calls on source files count for the code-read reminder."""
+        payload = _base_input("functions.shell_command", tool_input={"command": "Get-Content src/foo.py"})
+        for _ in range(ToolUseCounter._READ_FILE_USES_THRESHOLD):
+            with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+                PreToolUseRemindAboutSerenaHook(HookClient.CODEX).execute()
+
+        result = json.loads(capsys.readouterr().out.strip())
+        hook_output = result["hookSpecificOutput"]
+        assert hook_output["permissionDecision"] == "deny"
+        assert "additionalContext" not in hook_output
+        assert "read" in hook_output["permissionDecisionReason"].lower()
 
     def test_serena_tool_resets_counters(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
         """Using a Serena tool should reset counters, so the threshold is not reached."""
@@ -359,10 +426,8 @@ class TestToolUseCounter:
 
         assert counter.n_recent_read_file_uses == 1
 
-    def test_update_does_not_count_read_of_non_code_file(self):
-        """A read call whose payload points at a non-source file (e.g. ``.txt``) must
-        leave the read-file counter untouched — the per-tool counter is for *code* reads.
-        """
+    def test_update_ignores_read_of_non_code_file(self):
+        """A read call whose payload points at a non-source file does not increment the code-read counter."""
         counter = ToolUseCounter()
         now = datetime.now()
 
@@ -465,9 +530,8 @@ class TestToolUseCounter:
         ``grep_search`` / ``read_file`` which are only recognized under the non-Claude-Code
         branch (Claude Code uses exact names ``grep`` / ``read``).
 
-        :param file_path: optional payload path; when set to a source-extension path (e.g.
-            ``src/foo.py``), the stub will be classified as a *code-file* read by
-            :meth:`PreToolUseRemindAboutSerenaHook._call_targets_code_file`.
+        :param file_path: optional payload path; the hook classifies read-style tools as
+            file reads regardless of the path extension.
         :param command_args_str: optional shell-argument tail; equivalent to ``file_path`` but
             populates the ``cmd``-derived field instead of ``file_path``.
         """
