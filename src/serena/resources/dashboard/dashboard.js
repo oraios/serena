@@ -296,6 +296,10 @@ class Dashboard {
         this.$availableContextsDisplay = $('#available-contexts-display');
         this.$addLanguageModal = $('#add-language-modal');
         this.$modalLanguageSelect = $('#modal-language-select');
+        this.$modalLanguageCombobox = $('#modal-language-combobox');
+        this.$modalLanguageOptions = $('#modal-language-options');
+        this.$modalLanguageEmpty = $('#modal-language-empty');
+        this.modalLanguageAvailable = [];
         this.$modalProjectName = $('#modal-project-name');
         this.$modalAddBtn = $('#modal-add-btn');
         this.$modalCancelBtn = $('#modal-cancel-btn');
@@ -360,6 +364,7 @@ class Dashboard {
         this.$modalAddBtn.click(this.addLanguageFromModal.bind(this));
         this.$modalCancelBtn.click(this.closeLanguageModal.bind(this));
         this.$modalClose.click(this.closeLanguageModal.bind(this));
+        this.bindLanguageCombobox();
         this.$removeModalOkBtn.click(this.confirmRemoveLanguageOk.bind(this));
         this.$removeModalCancelBtn.click(this.closeRemoveLanguageModal.bind(this));
         this.$modalCloseRemove.click(this.closeRemoveLanguageModal.bind(this));
@@ -1730,7 +1735,10 @@ class Dashboard {
 
     closeLanguageModal() {
         this.$addLanguageModal.fadeOut(200);
-        this.$modalLanguageSelect.empty();
+        this.closeLanguageDropdown();
+        this.$modalLanguageSelect.val('');
+        this.$modalLanguageOptions.empty();
+        this.modalLanguageAvailable = [];
         this.$modalAddBtn.prop('disabled', false).text('Add Language');
     }
 
@@ -1738,19 +1746,19 @@ class Dashboard {
         let self = this;
         $.ajax({
             url: '/get_available_languages', type: 'GET', success: function (response) {
-                const languages = response.languages || [];
-                // Clear all existing options
-                self.$modalLanguageSelect.empty();
+                const languages = (response.languages || []).slice().sort();
+                self.modalLanguageAvailable = languages;
+                self.$modalLanguageSelect.val('');
 
                 if (languages.length === 0) {
-                    // Show message if no languages available
-                    self.$modalLanguageSelect.append($('<option>').val('').text('No languages available to add'));
+                    self.$modalLanguageOptions.empty().hide();
+                    self.$modalLanguageEmpty.show();
+                    self.$modalLanguageSelect.prop('disabled', true).attr('placeholder', 'No languages available');
                     self.$modalAddBtn.prop('disabled', true);
                 } else {
-                    // Add language options
-                    languages.forEach(function (language) {
-                        self.$modalLanguageSelect.append($('<option>').val(language).text(language));
-                    });
+                    self.$modalLanguageEmpty.hide();
+                    self.$modalLanguageSelect.prop('disabled', false).attr('placeholder', 'Type to filter…');
+                    self.renderLanguageOptions('');
                     self.$modalAddBtn.prop('disabled', false);
                 }
             }, error: function (xhr, status, error) {
@@ -1759,12 +1767,141 @@ class Dashboard {
         });
     }
 
+    renderLanguageOptions(filter) {
+        const self = this;
+        const needle = (filter || '').toLowerCase();
+        const matches = this.modalLanguageAvailable.filter(function (lang) {
+            return lang.toLowerCase().includes(needle);
+        });
+
+        this.$modalLanguageOptions.empty();
+        if (matches.length === 0) {
+            this.$modalLanguageOptions.append(
+                $('<li class="no-match"></li>').text('No matches')
+            );
+        } else {
+            matches.forEach(function (lang, idx) {
+                let label = lang;
+                if (needle) {
+                    const i = lang.toLowerCase().indexOf(needle);
+                    if (i !== -1) {
+                        const before = lang.slice(0, i);
+                        const hit = lang.slice(i, i + needle.length);
+                        const after = lang.slice(i + needle.length);
+                        label = $('<span></span>')
+                            .append(document.createTextNode(before))
+                            .append($('<mark></mark>').text(hit))
+                            .append(document.createTextNode(after))
+                            .html();
+                    }
+                }
+                const $li = $('<li role="option"></li>')
+                    .attr('data-value', lang)
+                    .html(label);
+                if (idx === 0) {
+                    $li.addClass('highlighted');
+                }
+                $li.on('mousedown', function (e) {
+                    e.preventDefault(); // keep input focus
+                    self.selectLanguage(lang);
+                });
+                self.$modalLanguageOptions.append($li);
+            });
+        }
+    }
+
+    openLanguageDropdown() {
+        if (this.modalLanguageAvailable.length === 0) return;
+        this.renderLanguageOptions(this.$modalLanguageSelect.val());
+        this.$modalLanguageOptions.show();
+        this.$modalLanguageCombobox.addClass('open');
+    }
+
+    closeLanguageDropdown() {
+        this.$modalLanguageOptions.hide();
+        this.$modalLanguageCombobox.removeClass('open');
+    }
+
+    selectLanguage(lang) {
+        this.$modalLanguageSelect.val(lang);
+        this.closeLanguageDropdown();
+    }
+
+    moveLanguageHighlight(delta) {
+        const $items = this.$modalLanguageOptions.find('li:not(.no-match)');
+        if ($items.length === 0) return;
+        let idx = $items.index($items.filter('.highlighted'));
+        idx = (idx + delta + $items.length) % $items.length;
+        $items.removeClass('highlighted');
+        const $target = $items.eq(idx).addClass('highlighted');
+        const target = $target[0];
+        if (target && target.scrollIntoView) {
+            target.scrollIntoView({ block: 'nearest' });
+        }
+    }
+
+    bindLanguageCombobox() {
+        const self = this;
+        this.$modalLanguageSelect
+            .off('focus.combobox click.combobox input.combobox keydown.combobox')
+            .on('focus.combobox click.combobox', function () { self.openLanguageDropdown(); })
+            .on('input.combobox', function () {
+                self.renderLanguageOptions(self.$modalLanguageSelect.val());
+                self.openLanguageDropdown();
+            })
+            .on('keydown.combobox', function (e) {
+                const key = e.key;
+                if (key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (self.$modalLanguageOptions.is(':visible')) {
+                        self.moveLanguageHighlight(1);
+                    } else {
+                        self.openLanguageDropdown();
+                    }
+                } else if (key === 'ArrowUp') {
+                    e.preventDefault();
+                    self.moveLanguageHighlight(-1);
+                } else if (key === 'Enter') {
+                    const $hl = self.$modalLanguageOptions.find('li.highlighted:not(.no-match)');
+                    if ($hl.length) {
+                        e.preventDefault();
+                        self.selectLanguage($hl.attr('data-value'));
+                    }
+                } else if (key === 'Escape') {
+                    if (self.$modalLanguageOptions.is(':visible')) {
+                        e.stopPropagation(); // don't close the modal
+                        self.closeLanguageDropdown();
+                    }
+                }
+            });
+
+        this.$modalLanguageCombobox
+            .off('click.caret')
+            .on('click.caret', '.combobox-caret', function () {
+                self.$modalLanguageSelect.trigger('focus');
+                self.openLanguageDropdown();
+            });
+
+        $(document).off('mousedown.langCombobox').on('mousedown.langCombobox', function (e) {
+            if (!self.$modalLanguageCombobox.is(':visible')) return;
+            if (!$.contains(self.$modalLanguageCombobox[0], e.target)) {
+                self.closeLanguageDropdown();
+            }
+        });
+    }
+
     addLanguageFromModal() {
-        const selectedLanguage = this.$modalLanguageSelect.val();
-        if (!selectedLanguage) {
-            alert('No language selected or no languages available to add');
+        const typed = (this.$modalLanguageSelect.val() || '').trim();
+        const matched = this.modalLanguageAvailable.find(function (l) {
+            return l.toLowerCase() === typed.toLowerCase();
+        });
+        if (!matched) {
+            alert(typed
+                ? 'Unknown language: ' + typed + '. Pick one from the dropdown.'
+                : 'No language selected.');
             return;
         }
+        const selectedLanguage = matched;
 
         const self = this;
 
