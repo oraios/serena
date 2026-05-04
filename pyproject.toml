@@ -350,8 +350,7 @@ markers = [
   "ansible: language server running for Ansible (uses @ansible/ansible-language-server)",
   "msl: language server running for mSL (mIRC Scripting Language)",
   "html: language server running for HTML (vscode-html-language-server, used as companion by Angular)",
-  "css: language server running for CSS (vscode-css-language-server)",
-  "scss: language server running for SCSS / Sass (some-sass-language-server)",
+  "scss: language server running for SCSS / Sass / CSS (some-sass-language-server)",
   "angular: language server running for Angular (uses @angular/language-server + @angular/language-service tsserver plugin)",
 ]
 

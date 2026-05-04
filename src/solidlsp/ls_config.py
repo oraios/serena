@@ -163,17 +163,13 @@ class Language(str, Enum):
     are not meaningful for HTML. Also used as a companion server by Angular LS for
     plain HTML documentSymbol support.
     """
-    CSS = "css"
-    """CSS language server (experimental) using vscode-css-language-server from
-    Microsoft's vscode-langservers-extracted npm package. Supports *.css files.
-    Must be explicitly specified in project.yml. Requires Node.js and npm.
-    Note: SCSS files are routed to the dedicated Some Sass language server (see ``scss``).
-    """
     SCSS = "scss"
-    """SCSS / Sass language server (experimental) using some-sass-language-server
-    (https://github.com/wkillerud/some-sass). Supports *.scss and *.sass files.
+    """SCSS / Sass / CSS language server (experimental) using some-sass-language-server
+    (https://github.com/wkillerud/some-sass). Handles *.scss, *.sass, and *.css.
     Must be explicitly specified in project.yml. Requires Node.js and npm.
-    Provides full @use/@forward workspace navigation across SCSS files.
+    Provides full @use/@forward workspace navigation across SCSS files; CSS support
+    relies on the same vscode-css-languageservice engine and is enabled at startup
+    via the somesass.css.* feature toggles (which default to off upstream).
     """
     ANGULAR = "angular"
     """Angular Language Server (experimental) using the official @angular/language-server
@@ -217,7 +213,6 @@ class Language(str, Enum):
             self.CPP_CCLS,
             self.SOLIDITY,
             self.HTML,
-            self.CSS,
             self.SCSS,
             self.ANGULAR,
         }
@@ -381,10 +376,11 @@ class Language(str, Enum):
                 return FilenameMatcher("*.mrc")
             case self.HTML:
                 return FilenameMatcher("*.html", "*.htm")
-            case self.CSS:
-                return FilenameMatcher("*.css")
             case self.SCSS:
-                return FilenameMatcher("*.scss", "*.sass")
+                # *.css is handled by the same engine (vscode-css-languageservice) that powers
+                # Microsoft's CSS LS, so we route plain CSS through Some Sass too. The CSS feature
+                # toggles default off upstream and are flipped on at initialization time.
+                return FilenameMatcher("*.scss", "*.sass", "*.css")
             case self.ANGULAR:
                 # Angular templates can be standalone .html files or inline templates
                 # within .ts component files; the dual-server architecture handles both.
@@ -629,10 +625,6 @@ class Language(str, Enum):
                 from solidlsp.language_servers.vscode_html_language_server import VsCodeHtmlLanguageServer
 
                 return VsCodeHtmlLanguageServer
-            case self.CSS:
-                from solidlsp.language_servers.vscode_css_language_server import VsCodeCssLanguageServer
-
-                return VsCodeCssLanguageServer
             case self.SCSS:
                 from solidlsp.language_servers.some_sass_language_server import SomeSassLanguageServer
 

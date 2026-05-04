@@ -1,15 +1,23 @@
 """
-Provides SCSS / Sass-specific instantiation of the LanguageServer class using the
+Provides SCSS / Sass / CSS instantiation of the LanguageServer class using the
 ``some-sass-language-server`` npm package (https://github.com/wkillerud/some-sass).
 
-Some Sass is the dedicated, actively maintained SCSS LSP. Compared to the generic
-``vscode-css-language-server``, it provides full ``@use`` / ``@forward`` workspace
-navigation (cross-file go-to-definition and find-references for mixins, functions,
-variables, placeholders), SassDoc, and the indented Sass syntax.
+Some Sass is the dedicated, actively maintained SCSS LSP. It also accepts plain
+``.css`` files via the same ``vscode-css-languageservice`` engine that powers
+Microsoft's standalone CSS LS — so Serena routes ``.scss`` / ``.sass`` / ``.css``
+through this single server.
+
+Compared to the generic ``vscode-css-language-server`` server, Some Sass also
+provides full ``@use`` / ``@forward`` workspace navigation (cross-file
+go-to-definition and find-references for mixins, functions, variables,
+placeholders), SassDoc, and the indented Sass syntax.
 
 Caveats:
-    * Cross-file navigation requires the workspace to be configured (the LS scans
-      the project root after initialization).
+    * Cross-file Sass navigation requires the workspace to be configured (the LS
+      scans the project root after initialization).
+    * For ``.css`` files, every ``somesass.css.*.enabled`` toggle defaults to
+      ``false`` upstream; we flip them on at initialization. See
+      ``SOMESASS_CSS_FEATURES`` below for the full set.
     * Language is registered as experimental.
 """
 
@@ -31,8 +39,45 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+INITIAL_PACKAGE_VERSION = "2.3.8"
 DEFAULT_PACKAGE_VERSION = "2.3.8"
 LS_BIN_NAME = "some-sass-language-server"
+
+# Every ``somesass.css.*.enabled`` toggle (per the upstream package.json
+# ``contributes.configuration``) defaults to false in some-sass — meaning a request
+# for ``.css`` files would be hard-gated off at the top of every handler. Flipping
+# the full set on at initialization is what makes plain CSS usable through Some Sass.
+# We deliberately leave ``diagnostics.lint.enabled`` off because the lint rules are
+# opinionated (vendor prefixes, empty rules, etc.) and would be noisy on user code.
+SOMESASS_CSS_FEATURES: dict[str, dict[str, object]] = {
+    "codeAction": {"enabled": True},
+    "colors": {"enabled": True},
+    "completion": {"enabled": True},
+    "definition": {"enabled": True},
+    "diagnostics": {"enabled": True, "lint": {"enabled": False}},
+    "documentSymbols": {"enabled": True},
+    "foldingRanges": {"enabled": True},
+    "highlights": {"enabled": True},
+    "hover": {"enabled": True},
+    "links": {"enabled": True},
+    "references": {"enabled": True},
+    "rename": {"enabled": True},
+    "selectionRanges": {"enabled": True},
+    "signatureHelp": {"enabled": True},
+    "workspaceSymbol": {"enabled": True},
+}
+
+SOMESASS_INIT_OPTIONS: dict[str, object] = {
+    # See https://wkillerud.github.io/some-sass/user-guide/settings.html
+    "somesass": {
+        "css": SOMESASS_CSS_FEATURES,
+        "workspace": {"loadPaths": []},
+        "suggest": {"suggestFromUseOnly": False},
+    },
+}
 
 
 class SomeSassLanguageServer(SolidLanguageServer):
@@ -61,11 +106,16 @@ class SomeSassLanguageServer(SolidLanguageServer):
 
     @override
     def _get_language_id_for_file(self, relative_file_path: str) -> str:
-        # The indented Sass syntax (.sass) is a different parser from SCSS:
-        # whitespace-significant, no braces or semicolons. Some Sass disambiguates
-        # via the textDocument language id.
-        if os.path.splitext(relative_file_path)[1].lower() == ".sass":
+        # Some Sass switches behavior off the LSP languageId in its
+        # ``languageConfiguration()`` selector, picking the matching
+        # ``LanguageServerConfiguration.{css,sass,scss}`` slice. Sending the wrong id
+        # for plain CSS would route the file to the SCSS parser and skip the
+        # ``somesass.css.*`` feature gate entirely.
+        ext = os.path.splitext(relative_file_path)[1].lower()
+        if ext == ".sass":
             return "sass"
+        if ext == ".css":
+            return "css"
         return "scss"
 
     @override
@@ -80,40 +130,33 @@ class SomeSassLanguageServer(SolidLanguageServer):
             package_version = self._custom_settings.get("some_sass_version", DEFAULT_PACKAGE_VERSION)
             npm_registry = self._custom_settings.get("npm_registry")
 
-            install_dir = os.path.join(self._ls_resources_dir, "some-sass")
+            # Per the version-pinning convention: the legacy unversioned install dir is
+            # reserved for INITIAL; everything else goes into a versioned subdir.
+            ls_dirname = "some-sass" if package_version == INITIAL_PACKAGE_VERSION else f"some-sass-{package_version}"
+            install_dir = os.path.join(self._ls_resources_dir, ls_dirname)
             executable_path = os.path.join(install_dir, "node_modules", ".bin", LS_BIN_NAME)
             if os.name == "nt":
                 executable_path += ".cmd"
 
-            version_file = os.path.join(install_dir, ".installed_version")
-            expected_version = f"some-sass-language-server@{package_version}"
-
-            needs_install = not os.path.exists(executable_path)
-            if not needs_install and os.path.exists(version_file):
-                with open(version_file) as f:
-                    needs_install = f.read().strip() != expected_version
-            elif not needs_install:
-                needs_install = True
-
-            if needs_install:
+            if not os.path.exists(executable_path):
+                expected_version = f"some-sass-language-server@{package_version}"
                 log.info("Installing %s...", expected_version)
                 deps = RuntimeDependencyCollection(
                     [
                         RuntimeDependency(
                             id="some-sass-language-server",
-                            description="Some Sass language server (SCSS / Sass)",
+                            description="Some Sass language server (SCSS / Sass / CSS)",
                             command=build_npm_install_command("some-sass-language-server", package_version, npm_registry),
                             platform_id="any",
                         ),
                     ]
                 )
                 deps.install(install_dir)
-                with open(version_file, "w") as f:
-                    f.write(expected_version)
 
             if not os.path.exists(executable_path):
                 raise FileNotFoundError(
-                    f"{LS_BIN_NAME} executable not found at {executable_path}; npm install of {expected_version} did not produce the expected binary."
+                    f"{LS_BIN_NAME} executable not found at {executable_path}; "
+                    f"npm install of some-sass-language-server@{package_version} did not produce the expected binary."
                 )
             return executable_path
 
@@ -145,17 +188,7 @@ class SomeSassLanguageServer(SolidLanguageServer):
                     "symbol": {"dynamicRegistration": True},
                 },
             },
-            "initializationOptions": {
-                # See https://wkillerud.github.io/some-sass/user-guide/settings.html
-                "somesass": {
-                    "workspace": {
-                        "loadPaths": [],
-                    },
-                    "suggest": {
-                        "suggestFromUseOnly": False,
-                    },
-                }
-            },
+            "initializationOptions": SOMESASS_INIT_OPTIONS,
             "processId": os.getpid(),
             "rootPath": repository_absolute_path,
             "rootUri": root_uri,
@@ -168,6 +201,23 @@ class SomeSassLanguageServer(SolidLanguageServer):
         }
         return initialize_params  # type: ignore[return-value]
 
+    @staticmethod
+    def _handle_workspace_configuration(params: dict) -> list[dict]:
+        # Some Sass calls workspace/configuration after init to fetch ``somesass`` and
+        # ``editor`` sections. The LSP contract is one entry per requested item, in order.
+        # We respond with our pinned somesass slice for the somesass section and an empty
+        # dict for everything else (currently only ``editor``).
+        items = params.get("items", []) if isinstance(params, dict) else []
+        somesass_section = SOMESASS_INIT_OPTIONS["somesass"]
+        result: list[dict] = []
+        for item in items:
+            section = (item or {}).get("section") if isinstance(item, dict) else None
+            if section == "somesass":
+                result.append(somesass_section)  # type: ignore[arg-type]
+            else:
+                result.append({})
+        return result or [{}]
+
     def _start_server(self) -> None:
         def do_nothing(_params: dict) -> None:
             return
@@ -179,7 +229,7 @@ class SomeSassLanguageServer(SolidLanguageServer):
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_request("client/registerCapability", lambda _params: None)
-        self.server.on_request("workspace/configuration", lambda _params: [{}])
+        self.server.on_request("workspace/configuration", self._handle_workspace_configuration)
 
         log.info("Starting some-sass-language-server")
         self.server.start()

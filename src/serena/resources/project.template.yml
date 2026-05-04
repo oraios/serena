@@ -5,16 +5,16 @@ project_name: "project_name"
 # list of languages for which language servers are started; choose from:
 #   al                  angular             ansible             bash                clojure
 #   cpp                 cpp_ccls            crystal             csharp              csharp_omnisharp
-#   css                 dart                elixir              elm                 erlang
-#   fortran             fsharp              go                  groovy              haskell
-#   haxe                hlsl                html                java                json
-#   julia               kotlin              lean4               lua                 luau
-#   markdown            matlab              msl                 nix                 ocaml
-#   pascal              perl                php                 php_phpactor        powershell
-#   python              python_jedi         python_ty           r                   rego
-#   ruby                ruby_solargraph     rust                scala               scss
-#   solidity            swift               systemverilog       terraform           toml
-#   typescript          typescript_vts      vue                 yaml                zig
+#   dart                elixir              elm                 erlang              fortran
+#   fsharp              go                  groovy              haskell             haxe
+#   hlsl                html                java                json                julia
+#   kotlin              lean4               lua                 luau                markdown
+#   matlab              msl                 nix                 ocaml               pascal
+#   perl                php                 php_phpactor        powershell          python
+#   python_jedi         python_ty           r                   rego                ruby
+#   ruby_solargraph     rust                scala               scss                solidity
+#   swift               systemverilog       terraform           toml                typescript
+#   typescript_vts      vue                 yaml                zig
 #   (This list may be outdated. For the current list, see values of Language enum here:
 #   https://github.com/oraios/serena/blob/main/src/solidlsp/ls_config.py
 #   For some languages, there are alternative language servers, e.g. csharp_omnisharp, ruby_solargraph.)
@@ -22,7 +22,7 @@ project_name: "project_name"
 #   - For C, use cpp
 #   - For JavaScript, use typescript
 #   - For Angular projects, use angular (subsumes typescript+html; requires `npm install` in the project root)
-#   - For SCSS/Sass, use scss (uses some-sass-language-server)
+#   - For SCSS / Sass / plain CSS, use scss (some-sass-language-server handles all three)
 #   - For Free Pascal/Lazarus, use pascal
 # Special requirements:
 #   Some languages require additional setup/installations.
