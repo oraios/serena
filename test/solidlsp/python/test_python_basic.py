@@ -12,6 +12,7 @@ import pytest
 from serena.project import Project
 from serena.util.text_utils import LineType
 from solidlsp import SolidLanguageServer
+from test.conftest import PYTHON_LANGUAGE_BACKENDS
 from test.solidlsp.conftest import PYTHON_BACKEND_LANGUAGES, format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
@@ -78,6 +79,26 @@ class TestPythonLanguageServerBasics:
         sel_start = create_user_symbol["selectionRange"]["start"]
         references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         assert len(references) > 1, "Should get valid references for create_user (using selectionRange if present)"
+
+    @pytest.mark.parametrize("language_server", PYTHON_LANGUAGE_BACKENDS, indirect=True)
+    def test_request_text_document_diagnostics_with_filters(self, language_server: SolidLanguageServer) -> None:
+        file_path = os.path.join("test_repo", "diagnostics_sample.py")
+
+        diagnostics = language_server.request_text_document_diagnostics(file_path)
+        assert len(diagnostics) >= 2
+        diagnostic_messages = [diagnostic["message"] for diagnostic in diagnostics]
+        assert any("missing_user" in message for message in diagnostic_messages), diagnostic_messages
+        assert any("undefined_name" in message for message in diagnostic_messages), diagnostic_messages
+
+        factory_diagnostics = language_server.request_text_document_diagnostics(file_path, start_line=3, end_line=5, min_severity=1)
+        factory_messages = [diagnostic["message"] for diagnostic in factory_diagnostics]
+        assert factory_messages, "Expected diagnostics in broken_factory range"
+        assert all("missing_user" in message for message in factory_messages), factory_messages
+
+        consumer_diagnostics = language_server.request_text_document_diagnostics(file_path, start_line=7, end_line=10, min_severity=1)
+        consumer_messages = [diagnostic["message"] for diagnostic in consumer_diagnostics]
+        assert consumer_messages, "Expected diagnostics in broken_consumer range"
+        assert all("undefined_name" in message for message in consumer_messages), consumer_messages
 
 
 class TestProjectBasics:

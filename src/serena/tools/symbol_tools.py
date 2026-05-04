@@ -6,20 +6,24 @@ import copy
 import os
 from collections import Counter, defaultdict
 from collections.abc import Sequence
+from typing import Any
 
 from serena.symbol import LanguageServerSymbol, LanguageServerSymbolDictGrouper
 from serena.tools import (
     SUCCESS_RESULT,
+    EditingToolWithDiagnostics,
     Tool,
     ToolMarkerSymbolicEdit,
     ToolMarkerSymbolicRead,
 )
 from serena.tools.tools_base import ToolMarkerOptional
+from serena.util.ls_diagnostics import GroupedDiagnostics
+from serena.util.text_utils import find_text_coordinates
 from solidlsp.ls_types import SymbolKind
 
 
 class RestartLanguageServerTool(Tool, ToolMarkerOptional):
-    """Restarts the language server, may be necessary when edits not through Serena happen."""
+    """Restarts the language server(s)."""
 
     def apply(self) -> str:
         """Use this tool only on explicit user request or after confirmation.
@@ -324,7 +328,242 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
         return self._limit_length(result_json, max_answer_chars, shortened_result_factories=shortened_results)
 
 
-class ReplaceSymbolBodyTool(Tool, ToolMarkerSymbolicEdit):
+class FindImplementationsTool(Tool, ToolMarkerSymbolicRead):
+    """
+    Finds symbols that implement the given symbol using the language server backend.
+    """
+
+    # noinspection PyDefaultArgument
+    def apply(
+        self,
+        name_path: str,
+        relative_path: str,
+        include_info: bool = False,
+        include_kinds: list[int] = [],  # noqa: B006
+        exclude_kinds: list[int] = [],  # noqa: B006
+        max_answer_chars: int = -1,
+    ) -> str:
+        """
+        Finds implementations of the symbol at the given `name_path`.
+
+        :param name_path: for finding the symbol to find implementations for, same logic as in the `find_symbol` tool.
+        :param relative_path: the relative path to the file containing the symbol for which to find implementations.
+            Note that here you can't pass a directory but must pass a file.
+        :param include_info: whether to include additional info (hover-like, typically including docstring and signature),
+            about the implementing symbols.
+        :param include_kinds: same as in the `find_symbol` tool.
+        :param exclude_kinds: same as in the `find_symbol` tool.
+        :param max_answer_chars: same as in the `find_symbol` tool.
+        :return: a list of JSON objects with the symbols implementing the requested symbol
+        """
+        include_body = False
+        parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
+        parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
+        symbol_retriever = self.create_language_server_symbol_retriever()
+
+        implementing_symbols = symbol_retriever.find_implementing_symbols(
+            name_path,
+            relative_file_path=relative_path,
+            include_body=include_body,
+            include_kinds=parsed_include_kinds,
+            exclude_kinds=parsed_exclude_kinds,
+        )
+
+        symbol_dicts = [
+            dict(s.to_dict(kind=True, relative_path=True, depth=0, body=include_body, body_location=True)) for s in implementing_symbols
+        ]
+        if include_info:
+            info_by_symbol = symbol_retriever.request_info_for_symbol_batch(implementing_symbols)
+            for s, s_dict in zip(implementing_symbols, symbol_dicts, strict=True):
+                if symbol_info := info_by_symbol.get(s):
+                    s_dict["info"] = symbol_info
+                    s_dict.pop("name", None)  # name is included in the info
+
+        result = self._to_json(symbol_dicts)
+        return self._limit_length(result, max_answer_chars)
+
+
+class FindDeclarationTool(Tool, ToolMarkerSymbolicRead):
+    """
+    Finds the declaration/definition of a symbol
+    """
+
+    def apply(
+        self,
+        relative_path: str,
+        regex: str,
+        containing_symbol_name_path: str | None = None,
+        include_body: bool = False,
+        include_info: bool = False,
+    ) -> str:
+        r"""
+        Finds the declaration of a symbol.
+
+        :param relative_path: the relative path to the source file containing the symbol for which to find the declaration.
+        :param regex: a regular expression with one group, where the group matches the symbol for which to perform the lookup.
+            For example, to find the declaration of the `process` method in a call like `obj.process()`,
+            pass an expression like "obj\.(process)\(process_input_arg=37\)".
+            Prefer regexes with sufficiently large context around the group to render the match unambiguous.
+            Uses Python syntax with MULTILINE and DOTALL flags enabled.
+        :param containing_symbol_name_path: optional name path of a containing symbol whose body shall be searched instead of the full file.
+        :param include_body: whether to include the symbol's body in the result. Default False.
+        :param include_info: whether to include additional info (hover-like). Default False.
+        """
+        symbol_retriever = self.create_language_server_symbol_retriever()
+        relative_path = self._sanitize_input_param(relative_path)
+        regex = self._sanitize_input_param(regex)
+
+        # find relevant location for lookup
+        editor = self.create_code_editor()
+        if not containing_symbol_name_path:
+            content = editor.read_file(relative_path)
+            coords = find_text_coordinates(content, regex, require_unique=True)
+            assert coords is not None
+        else:
+            symbol = symbol_retriever.find_unique(name_path_pattern=containing_symbol_name_path, within_relative_path=relative_path)
+            body_line_numers = symbol.get_body_line_numbers_or_raise()
+            content = editor.read_file(relative_path, lines=body_line_numers)
+            coords = find_text_coordinates(content, regex, require_unique=True)
+            assert coords is not None
+            coords.line += body_line_numers[0]
+
+        # retrieve declaration
+        defining_symbol = symbol_retriever.find_declaration(
+            relative_file_path=relative_path,
+            line=coords.line,
+            column=coords.col,
+            include_body=include_body,
+        )
+        if defining_symbol is None:
+            raise ValueError(
+                f"No symbol declaration found at the location of the regex match. Location: {relative_path}:{coords.line}:{coords.col}."
+            )
+
+        # create output
+        symbol_dict = self._defining_symbol_to_result_dict(
+            symbol_retriever,
+            defining_symbol,
+            include_body,
+            include_info,
+        )
+        result = self._to_json(symbol_dict)
+        return result
+
+    @staticmethod
+    def _defining_symbol_to_result_dict(
+        symbol_retriever: Any,
+        defining_symbol: LanguageServerSymbol,
+        include_body: bool,
+        include_info: bool,
+    ) -> dict[str, Any]:
+        symbol_dict = dict(defining_symbol.to_dict(kind=True, relative_path=True, depth=0, body=include_body, body_location=True))
+        if not include_body and include_info:
+            if symbol_info := symbol_retriever.request_info_for_symbol(defining_symbol):
+                symbol_dict["info"] = symbol_info
+                symbol_dict.pop("name", None)
+        return symbol_dict
+
+
+class GetDiagnosticsForFileTool(Tool, ToolMarkerSymbolicRead):
+    """
+    Gets diagnostics for a file, optionally restricted to a line range, grouped by file, severity, and containing symbol.
+    """
+
+    FILE_LEVEL_DIAGNOSTIC_BUCKET = "<file>"
+
+    def apply(
+        self,
+        relative_path: str,
+        start_line: int = 0,
+        end_line: int = -1,
+        min_severity: int = 4,
+        max_answer_chars: int = -1,
+    ) -> str:
+        """
+        Gets diagnostics for a file. Diagnostics are grouped as `relative_path -> severity -> name_path -> diagnostics_results`.
+        If a diagnostic cannot be mapped to a symbol, it is grouped under the special name path `<file>`.
+
+        :param relative_path: the relative path to the file to inspect.
+        :param start_line: the first 0-based line to include. Defaults to 0.
+        :param end_line: the last 0-based line to include. Defaults to -1, which means until the end of the file.
+        :param min_severity: minimum LSP severity to include, where 1=Error, 2=Warning, 3=Information, 4=Hint.
+            Diagnostics with lower-or-equal numeric severity are returned.
+        :param max_answer_chars: same as in the `find_symbol` tool.
+        :return: grouped diagnostics for the requested file.
+        """
+        symbol_retriever = self.create_language_server_symbol_retriever()
+        diagnostics = symbol_retriever.get_file_diagnostics(
+            relative_file_path=relative_path,
+            start_line=start_line,
+            end_line=end_line,
+            min_severity=min_severity,
+        )
+
+        grouped_diagnostics = GroupedDiagnostics()
+        for diagnostic in diagnostics:
+            diag_range = diagnostic["range"]["start"]
+            name_path = self.FILE_LEVEL_DIAGNOSTIC_BUCKET
+            owner_symbol = symbol_retriever.find_diagnostic_owner_symbol(
+                relative_file_path=relative_path,
+                line=diag_range["line"],
+                column=diag_range["character"],
+            )
+            if owner_symbol is not None:
+                name_path = owner_symbol.get_name_path()
+            grouped_diagnostics.add(relative_path, name_path, diagnostic)
+
+        result = self._to_json(grouped_diagnostics.get_dict())
+        return self._limit_length(result, max_answer_chars)
+
+
+class GetDiagnosticsForSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+    """
+    Gets diagnostics for a symbol and, optionally, for symbols that reference it.
+    """
+
+    def apply(
+        self,
+        name_path: str,
+        reference_file: str = "",
+        check_symbol_references: bool = False,
+        min_severity: int = 4,
+        max_answer_chars: int = -1,
+    ) -> str:
+        """
+        Gets diagnostics for the specified symbol. When `check_symbol_references` is true, diagnostics for all
+        referencing symbols are also included. The result is grouped as
+        `relative_path -> severity -> name_path -> diagnostics_results`.
+
+        :param name_path: the name path of the symbol to inspect.
+        :param reference_file: optional file path used to disambiguate the symbol search.
+        :param check_symbol_references: whether to additionally collect diagnostics for symbols that reference the symbol.
+        :param min_severity: minimum LSP severity to include, where 1=Error, 2=Warning, 3=Information, 4=Hint.
+            Diagnostics with lower-or-equal numeric severity are returned.
+        :param max_answer_chars: same as in the `find_symbol` tool.
+        :return: grouped diagnostics for the requested symbol and, optionally, its referencing symbols.
+        """
+        symbol_retriever = self.create_language_server_symbol_retriever()
+        diagnostics_by_symbol = symbol_retriever.get_symbol_diagnostics(
+            name_path=name_path,
+            reference_file=reference_file or None,
+            check_symbol_references=check_symbol_references,
+            min_severity=min_severity,
+        )
+
+        grouped_diagnostics = GroupedDiagnostics()
+        for symbol, diagnostics in diagnostics_by_symbol.items():
+            relative_path = symbol.relative_path
+            if relative_path is None:
+                continue
+            symbol_name_path = symbol.get_name_path()
+            for diagnostic in diagnostics:
+                grouped_diagnostics.add(relative_path, symbol_name_path, diagnostic)
+
+        result = self._to_json(grouped_diagnostics.get_dict())
+        return self._limit_length(result, max_answer_chars)
+
+
+class ReplaceSymbolBodyTool(EditingToolWithDiagnostics):
     """
     Replaces the full definition of a symbol using the language server backend.
     """
@@ -348,16 +587,17 @@ class ReplaceSymbolBodyTool(Tool, ToolMarkerSymbolicEdit):
             in the programming language, including e.g. the signature line for functions.
             IMPORTANT: The body does NOT include any preceding docstrings/comments or imports, in particular.
         """
-        code_editor = self.create_code_editor()
-        code_editor.replace_body(
-            name_path,
-            relative_file_path=relative_path,
-            body=body,
-        )
-        return SUCCESS_RESULT
+        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
+            code_editor = self.create_code_editor()
+            code_editor.replace_body(
+                name_path,
+                relative_file_path=relative_path,
+                body=body,
+            )
+            return diagnostics_context.format_result(SUCCESS_RESULT)
 
 
-class InsertAfterSymbolTool(Tool, ToolMarkerSymbolicEdit):
+class InsertAfterSymbolTool(EditingToolWithDiagnostics):
     """
     Inserts content after the end of the definition of a given symbol.
     """
@@ -377,12 +617,13 @@ class InsertAfterSymbolTool(Tool, ToolMarkerSymbolicEdit):
         :param body: the body/content to be inserted. The inserted code shall begin with the next line after
             the symbol.
         """
-        code_editor = self.create_code_editor()
-        code_editor.insert_after_symbol(name_path, relative_file_path=relative_path, body=body)
-        return SUCCESS_RESULT
+        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
+            code_editor = self.create_code_editor()
+            code_editor.insert_after_symbol(name_path, relative_file_path=relative_path, body=body)
+            return diagnostics_context.format_result(SUCCESS_RESULT)
 
 
-class InsertBeforeSymbolTool(Tool, ToolMarkerSymbolicEdit):
+class InsertBeforeSymbolTool(EditingToolWithDiagnostics):
     """
     Inserts content before the beginning of the definition of a given symbol.
     """
@@ -402,9 +643,10 @@ class InsertBeforeSymbolTool(Tool, ToolMarkerSymbolicEdit):
         :param relative_path: the relative path to the file containing the symbol
         :param body: the body/content to be inserted before the line in which the referenced symbol is defined
         """
-        code_editor = self.create_code_editor()
-        code_editor.insert_before_symbol(name_path, relative_file_path=relative_path, body=body)
-        return SUCCESS_RESULT
+        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
+            code_editor = self.create_code_editor()
+            code_editor.insert_before_symbol(name_path, relative_file_path=relative_path, body=body)
+            return diagnostics_context.format_result(SUCCESS_RESULT)
 
 
 class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):

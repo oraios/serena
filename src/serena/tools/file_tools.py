@@ -12,7 +12,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Literal
 
-from serena.tools import SUCCESS_RESULT, EditedFileContext, Tool, ToolMarkerCanEdit, ToolMarkerOptional
+from serena.tools import SUCCESS_RESULT, EditedFileContext, EditingToolWithDiagnostics, Tool, ToolMarkerOptional
 from serena.util.file_system import scan_directory
 from serena.util.text_utils import ContentReplacer, search_files
 
@@ -48,7 +48,7 @@ class ReadFileTool(Tool):
         return self._limit_length(result, max_answer_chars)
 
 
-class CreateTextFileTool(Tool, ToolMarkerCanEdit):
+class CreateTextFileTool(EditingToolWithDiagnostics):
     """
     Creates/overwrites a file in the project directory.
     """
@@ -61,23 +61,27 @@ class CreateTextFileTool(Tool, ToolMarkerCanEdit):
         :param content: the (appropriately encoded) content to write to the file
         :return: a message indicating success or failure
         """
-        project_root = self.get_project_root()
-        abs_path = (Path(project_root) / relative_path).resolve()
-        will_overwrite_existing = abs_path.exists()
+        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
+            # validating the destination path
+            project_root = self.get_project_root()
+            abs_path = (Path(project_root) / relative_path).resolve()
+            will_overwrite_existing = abs_path.exists()
 
-        if will_overwrite_existing:
-            self.project.validate_relative_path(relative_path, require_not_ignored=True)
-        else:
-            assert abs_path.is_relative_to(self.get_project_root()), (
-                f"Cannot create file outside of the project directory, got {relative_path=}"
-            )
+            if will_overwrite_existing:
+                self.project.validate_relative_path(relative_path, require_not_ignored=True)
+            else:
+                assert abs_path.is_relative_to(self.get_project_root()), (
+                    f"Cannot create file outside of the project directory, got {relative_path=}"
+                )
 
-        abs_path.parent.mkdir(parents=True, exist_ok=True)
-        abs_path.write_text(content, encoding=self.project.project_config.encoding, newline=self.project.line_ending.newline_str)
-        answer = f"File created: {relative_path}."
-        if will_overwrite_existing:
-            answer += " Overwrote existing file."
-        return answer
+            # writing the file
+            abs_path.parent.mkdir(parents=True, exist_ok=True)
+            abs_path.write_text(content, encoding=self.project.project_config.encoding, newline=self.project.line_ending.newline_str)
+            answer = f"File created: {relative_path}."
+            if will_overwrite_existing:
+                answer += " Overwrote existing file."
+
+            return diagnostics_context.format_result(answer)
 
 
 class ListDirTool(Tool):
@@ -156,7 +160,7 @@ class FindFileTool(Tool):
         return result
 
 
-class ReplaceContentTool(Tool, ToolMarkerCanEdit):
+class ReplaceContentTool(EditingToolWithDiagnostics):
     """
     Replaces content in a file (optionally using regular expressions).
     """
@@ -212,16 +216,17 @@ class ReplaceContentTool(Tool, ToolMarkerCanEdit):
         Performs the replacement, with additional options not exposed in the tool.
         This function can be used internally by other tools.
         """
-        self.project.validate_relative_path(relative_path, require_not_ignored=require_not_ignored)
-        with EditedFileContext(relative_path, self.create_code_editor()) as context:
-            original_content = context.get_original_content()
-            replacer = ContentReplacer(mode=mode, allow_multiple_occurrences=allow_multiple_occurrences)
-            updated_content = replacer.replace(original_content, needle, repl)
-            context.set_updated_content(updated_content)
-        return SUCCESS_RESULT
+        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
+            self.project.validate_relative_path(relative_path, require_not_ignored=require_not_ignored)
+            with EditedFileContext(relative_path, self.create_code_editor()) as context:
+                original_content = context.get_original_content()
+                replacer = ContentReplacer(mode=mode, allow_multiple_occurrences=allow_multiple_occurrences)
+                updated_content = replacer.replace(original_content, needle, repl)
+                context.set_updated_content(updated_content)
+            return diagnostics_context.format_result(SUCCESS_RESULT)
 
 
-class DeleteLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
+class DeleteLinesTool(EditingToolWithDiagnostics, ToolMarkerOptional):
     """
     Deletes a range of lines within a file.
     """
@@ -241,12 +246,13 @@ class DeleteLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
         :param start_line: the 0-based index of the first line to be deleted
         :param end_line: the 0-based index of the last line to be deleted
         """
-        code_editor = self.create_code_editor()
-        code_editor.delete_lines(relative_path, start_line, end_line)
-        return SUCCESS_RESULT
+        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
+            code_editor = self.create_code_editor()
+            code_editor.delete_lines(relative_path, start_line, end_line)
+            return diagnostics_context.format_result(SUCCESS_RESULT)
 
 
-class ReplaceLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
+class ReplaceLinesTool(EditingToolWithDiagnostics, ToolMarkerOptional):
     """
     Replaces a range of lines within a file with new content.
     """
@@ -268,16 +274,19 @@ class ReplaceLinesTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
         :param end_line: the 0-based index of the last line to be deleted
         :param content: the content to insert
         """
+        # normalizing the replacement content
         if not content.endswith("\n"):
             content += "\n"
-        result = self.agent.get_tool(DeleteLinesTool).apply(relative_path, start_line, end_line)
-        if result != SUCCESS_RESULT:
-            return result
-        self.agent.get_tool(InsertAtLineTool).apply(relative_path, start_line, content)
-        return SUCCESS_RESULT
+
+        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
+            code_editor = self.create_code_editor()
+            code_editor.delete_lines(relative_path, start_line, end_line)
+            code_editor.insert_at_line(relative_path, start_line, content)
+
+            return diagnostics_context.format_result(SUCCESS_RESULT)
 
 
-class InsertAtLineTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
+class InsertAtLineTool(EditingToolWithDiagnostics, ToolMarkerOptional):
     """
     Inserts content at a given line in a file.
     """
@@ -298,11 +307,15 @@ class InsertAtLineTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
         :param line: the 0-based index of the line to insert content at
         :param content: the content to be inserted
         """
+        # normalizing the inserted content
         if not content.endswith("\n"):
             content += "\n"
-        code_editor = self.create_code_editor()
-        code_editor.insert_at_line(relative_path, line, content)
-        return SUCCESS_RESULT
+
+        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
+            code_editor = self.create_code_editor()
+            code_editor.insert_at_line(relative_path, line, content)
+
+            return diagnostics_context.format_result(SUCCESS_RESULT)
 
 
 class SearchForPatternTool(Tool):

@@ -1,0 +1,3 @@
+String brokenFactory() {
+  return 'broken'
+}

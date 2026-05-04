@@ -8,14 +8,16 @@ from pathlib import Path
 from pprint import pprint
 
 from serena.agent import SerenaAgent
-from serena.config.serena_config import SerenaConfig
+from serena.config.serena_config import LanguageBackend, SerenaConfig
 from serena.constants import REPO_ROOT
 from serena.tools import (
     FindFileTool,
     FindReferencingSymbolsTool,
+    GetDiagnosticsForFileTool,
     JetBrainsFindSymbolTool,
     JetBrainsGetSymbolsOverviewTool,
     JetBrainsInlineSymbol,
+    JetBrainsRunInspectionsTool,
     JetBrainsSafeDeleteTool,
     SearchForPatternTool,
 )
@@ -23,6 +25,7 @@ from serena.tools import (
 if __name__ == "__main__":
     serena_config = SerenaConfig.from_config_file()
     serena_config.web_dashboard = False
+    serena_config.language_backend = LanguageBackend.LSP
     # project = Path(REPO_ROOT).parent / "serena-jetbrains-plugin-copy"
     project = Path(REPO_ROOT)
     agent = SerenaAgent(project=str(project), serena_config=serena_config)
@@ -35,12 +38,13 @@ if __name__ == "__main__":
     overview_tool = agent.get_tool(JetBrainsGetSymbolsOverviewTool)
     safe_delete_tool = agent.get_tool(JetBrainsSafeDeleteTool)
     inline_symbol = agent.get_tool(JetBrainsInlineSymbol)
+    diagnostics_in_file_tool = agent.get_tool(GetDiagnosticsForFileTool)
+    jb_inspections_tool = agent.get_tool(JetBrainsRunInspectionsTool)
 
     result = agent.execute_task(
-        lambda: overview_tool.apply(
+        lambda: diagnostics_in_file_tool.apply(
             # name_path_pattern="SerenaAgent",
-            relative_path="src/serena/agent.py",
-            depth=2,
+            relative_path="test/resources/repos/clojure/test_repo/src/test_app/diagnostics_sample.clj",
             # keep_definition=True,
         )
     )

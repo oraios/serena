@@ -79,6 +79,8 @@ downloads/
 eggs/
 .eggs/
 lib/
+!test/resources/repos/dart/test_repo/lib/
+!test/resources/repos/dart/test_repo/lib/diagnostics_sample.dart
 lib64/
 parts/
 sdist/

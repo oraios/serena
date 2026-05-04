@@ -1,0 +1,27 @@
+<div class="news-item">
+    <h3>Serena v1.2.0</h3>
+    <p class="date">April 27, 2026</p>
+    <p>
+        <b>Interactive Debugging.</b>
+        With the <a target="_blank" href="https://oraios.github.io/serena/02-usage/025_jetbrains_plugin.html">Serena JetBrains plugin</a>,
+        your agent can set now set breakpoints, inspect variables, evaluate expressions and control execution flow
+        by directly interacting with the IDE's debugger.
+        Our REPL-based interface is highly flexible, allowing all of this to be provided via a single tool.
+    </p>
+    <p>
+        <b>Counteracting Claude Code Regressions.</b>
+        We analysed the issues causing Claude Code to use external tools increasingly suboptimally and implemented
+        another workaround (in addition to the existing hooks): a system prompt override.
+        Read our updated <a target="_blank" href="https://oraios.github.io/serena/02-usage/030_clients.html#claude-code">Claude code usage instructions</a> for more information.
+    </p>
+    <p>
+        The update also adds JSON as a new supported "language" for the LSP backend,
+        improvements in token efficiency/prompt provision, as well as a multitude of general improvements and fixes.
+        See our <a target="_blank" href="https://github.com/oraios/serena/blob/main/CHANGELOG.md">change log</a> for details.<br>
+    </p>
+    <p>
+        <b>Update Now.</b>
+        If you are using the uv tool installation of Serena, upgrade as follows:<br>
+        uv tool upgrade serena-agent --prerelease=allow
+    </p>
+</div>

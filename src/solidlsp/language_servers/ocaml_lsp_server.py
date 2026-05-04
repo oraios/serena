@@ -242,7 +242,7 @@ class OcamlLanguageServer(SolidLanguageServer):
         """
         ocaml_ok = self._ocaml_version >= (5, 2, 0)
         lsp_ok = self._lsp_version >= self.MIN_LSP_VERSION_FOR_CROSS_FILE_REFS
-        return ocaml_ok and lsp_ok
+        return ocaml_ok and lsp_ok and self._index_built
 
     @staticmethod
     def _build_ocaml_index_static(repository_root_path: str) -> bool:
@@ -340,6 +340,14 @@ class OcamlLanguageServer(SolidLanguageServer):
                     "configuration": True,
                 },
                 "textDocument": {
+                    "publishDiagnostics": {
+                        "relatedInformation": True,
+                        "versionSupport": False,
+                        "tagSupport": {"valueSet": [1, 2]},
+                        "codeDescriptionSupport": True,
+                        "dataSupport": True,
+                    },
+                    "diagnostic": {"dynamicRegistration": True, "relatedDocumentSupport": False},
                     "synchronization": {
                         "dynamicRegistration": True,
                         "willSave": True,

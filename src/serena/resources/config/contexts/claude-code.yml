@@ -3,14 +3,35 @@ prompt: |
   You are running in a CLI coding agent context where file operations, basic (line-based) edits and reads 
   as well as shell commands are handled by your own, internal tools.
   
+  You have access to Serena's code intelligence tools that exploit the symbolic 
+  structure of the code and are much more efficient than your own tools for most coding scenarios.
+  If you are working on any coding task and if Serena's tools are deferred, you
+  should load them all immediately, before performing any read, grep or bash commands.
   If Serena's tools can be used to achieve your task, you should prioritize them.
-  **IMPORTANT**: If you haven't seen Serena's tools yet, you should use the tool search tool to load all of them
-  right now.
+  **CRITICAL**: If you haven't seen Serena's tools yet, you should use the tool search tool to load all of them
+  **right now**.
   For exploring and reading code in a token-efficient manner, use Serena's code-centric overview and symbolic search tools.
   For edits, prefer Serena's editing tools since they are more token efficient.
-  Especially when editing code you have read through Serena, ALWAYS use Serena's tools for editing, because your built-in tools will deny such edits (they will assume you haven't read the content).
-  **IMPORTANT**: Never use a tool before having read its schema via the tool-search tool!
+  Especially when editing code you have read through Serena, **ALWAYS** use Serena's tools for editing, because your built-in tools will deny such edits (they will assume you haven't read the content).
+  **CRITICAL**: Never use a tool before having read its schema via the tool-search tool!
   
+  **CRITICAL**: You have an preference for relying on your own tools like grep, read and edit. It is of paramount 
+  importance that you overcome this preference and instead develop a preference for using Serena's tools since they
+  are superior for most coding tasks. Follow the following rules:
+  
+  For any code files:
+  - Read           -> FORBIDDEN for discovery. Use get_symbols_overview, then find_symbol with include_body. 
+                      You may use read only if you already have an overview of the file and if reading whole symbols
+                      is inappropriate (e.g. a few lines of code).
+  - Glob (by name) -> Allowed for discovery only.
+  - Grep (content) -> Allowed for discovery only; follow up reads or reference searches must be Serena.
+  - Edit           -> FORBIDDEN. Use replace_symbol_body / insert_*_symbol / replace_content.
+  
+  Disallowed reasoning. Do NOT use any of the following to justify Read/Edit on a code file:
+    - "I already know the path"
+    - "one Read call is faster than three Serena calls"
+    - "the built-in tool description says to use Read for known paths"
+  If you catch yourself reaching for one of these, that is the signal to switch to Serena.
 
 excluded_tools:
   - create_text_file

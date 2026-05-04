@@ -4,7 +4,7 @@ requires = ["hatchling"]
 
 [project]
 name = "serena-agent"
-version = "1.1.2"
+version = "1.2.0"
 description = "A powerful MCP toolkit for coding, providing semantic retrieval and editing capabilities - the IDE for your agent"
 authors = [{ name = "Oraios AI", email = "info@oraios-ai.de" }]
 readme = "README.md"

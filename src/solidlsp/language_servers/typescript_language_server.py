@@ -23,6 +23,14 @@ from .common import RuntimeDependency, RuntimeDependencyCollection, build_npm_in
 
 log = logging.getLogger(__name__)
 
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+INITIAL_TYPESCRIPT_VERSION = "5.9.3"
+DEFAULT_TYPESCRIPT_VERSION = "5.9.3"
+INITIAL_TYPESCRIPT_LANGUAGE_SERVER_VERSION = "5.1.3"
+DEFAULT_TYPESCRIPT_LANGUAGE_SERVER_VERSION = "5.1.3"
+
 # Platform-specific imports
 if os.name != "nt":  # Unix-like systems
     import pwd
@@ -67,6 +75,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         - typescript_language_server_version: Version of typescript-language-server to install (default: "5.1.3")
     """
 
+    @classmethod
+    def supports_implementation_request(cls) -> bool:
+        return True
+
     # Safety timeout for $/progress-based indexing wait. Normally the event fires
     # well within this window; the timeout is only hit if the server never sends progress.
     INDEXING_PROGRESS_TIMEOUT = 15.0 if os.name == "nt" else 10.0
@@ -85,7 +97,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         self.server_ready = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
 
-        # Progress tracking for $/progress notifications (project indexing, etc.)
+        # tracking asynchronous diagnostics publication
+        self._published_diagnostics_timeout = 5.0
+
+        # tracking project indexing progress
         self._progress_lock = threading.Lock()
         self._active_progress_tokens: set[str] = set()
         self._indexing_complete = threading.Event()
@@ -147,8 +162,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
 
             # Get version settings from ls_specific_settings or use defaults
             language_specific_config = self._custom_settings
-            typescript_version = language_specific_config.get("typescript_version", "5.9.3")
-            typescript_language_server_version = language_specific_config.get("typescript_language_server_version", "5.1.3")
+            typescript_version = language_specific_config.get("typescript_version", DEFAULT_TYPESCRIPT_VERSION)
+            typescript_language_server_version = language_specific_config.get(
+                "typescript_language_server_version", DEFAULT_TYPESCRIPT_LANGUAGE_SERVER_VERSION
+            )
             npm_registry = language_specific_config.get("npm_registry")
 
             deps = RuntimeDependencyCollection(
@@ -174,38 +191,19 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             is_npm_installed = shutil.which("npm") is not None
             assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
-            # Install typescript and typescript-language-server if not already installed or version mismatch
-            tsserver_ls_dir = os.path.join(self._ls_resources_dir, "ts-lsp")
+            # legacy unversioned dir reserved for INITIAL pair; any other version combination goes into a versioned subdir
+            is_initial = (
+                typescript_version == INITIAL_TYPESCRIPT_VERSION
+                and typescript_language_server_version == INITIAL_TYPESCRIPT_LANGUAGE_SERVER_VERSION
+            )
+            ls_dirname = "ts-lsp" if is_initial else f"ts-lsp-{typescript_version}-{typescript_language_server_version}"
+            tsserver_ls_dir = os.path.join(self._ls_resources_dir, ls_dirname)
             tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
 
-            # Check if installation is needed based on executable AND version
-            version_file = os.path.join(tsserver_ls_dir, ".installed_version")
-            expected_version = f"{typescript_version}_{typescript_language_server_version}"
-
-            needs_install = False
             if not os.path.exists(tsserver_executable_path):
-                log.info(f"Typescript Language Server executable not found at {tsserver_executable_path}.")
-                needs_install = True
-            elif os.path.exists(version_file):
-                with open(version_file) as f:
-                    installed_version = f.read().strip()
-                if installed_version != expected_version:
-                    log.info(
-                        f"TypeScript Language Server version mismatch: installed={installed_version}, expected={expected_version}. Reinstalling..."
-                    )
-                    needs_install = True
-            else:
-                # No version file exists, assume old installation needs refresh
-                log.info("TypeScript Language Server version file not found. Reinstalling to ensure correct version...")
-                needs_install = True
-
-            if needs_install:
-                log.info("Installing TypeScript Language Server dependencies...")
+                log.info(f"Typescript Language Server executable not found at {tsserver_executable_path}. Installing...")
                 with LogTime("Installation of TypeScript language server dependencies", logger=log):
                     deps.install(tsserver_ls_dir)
-                # Write version marker file
-                with open(version_file, "w") as f:
-                    f.write(expected_version)
                 log.info("TypeScript language server dependencies installed successfully")
 
             if not os.path.exists(tsserver_executable_path):
@@ -216,6 +214,15 @@ class TypeScriptLanguageServer(SolidLanguageServer):
 
         def _create_launch_command(self, core_path: str) -> list[str]:
             return [core_path, "--stdio"]
+
+    def _get_language_id_for_file(self, relative_file_path: str) -> str:
+        # JSX is parsed as TS without this, which silently truncates symbol
+        # ranges at the first multi-line JSX expression.
+        if relative_file_path.endswith(".tsx"):
+            return "typescriptreact"
+        if relative_file_path.endswith(".jsx"):
+            return "javascriptreact"
+        return self.language_id
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
@@ -239,9 +246,11 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                     "signatureHelp": {"dynamicRegistration": True},
                     "codeAction": {"dynamicRegistration": True},
                     "rename": {"dynamicRegistration": True, "prepareSupport": True},
+                    "publishDiagnostics": {"relatedInformation": True},
                 },
                 "workspace": {
                     "workspaceFolders": True,
+                    "configuration": True,
                     "didChangeConfiguration": {"dynamicRegistration": True},
                     "symbol": {"dynamicRegistration": True},
                 },
@@ -283,6 +292,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
 
         def execute_client_command_handler(params: dict) -> list:
             return []
+
+        def configuration_handler(params: dict) -> list:
+            items = params.get("items", [])
+            return [{} for _ in items]
 
         def do_nothing(params: dict) -> None:
             return
@@ -343,6 +356,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                         self._indexing_complete.set()
 
         self.server.on_request("client/registerCapability", register_capability_handler)
+        self.server.on_request("workspace/configuration", configuration_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
         self.server.on_request("window/workDoneProgress/create", work_done_progress_create)
@@ -426,6 +440,20 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             log.info("Additional workspace indexing complete")
         else:
             log.warning("Additional workspace indexing did not complete within timeout; proceeding anyway")
+
+    @override
+    def _get_published_diagnostics_uri(self, request_uri: str) -> str:
+        if os.name != "nt" or not request_uri.startswith("file:///"):
+            return request_uri
+
+        path_part = request_uri[len("file:///") :]
+        if len(path_part) >= 2 and path_part[0].isalpha() and path_part[1] == ":":
+            return f"file:///{path_part[0].lower()}%3A{path_part[2:]}"
+        return request_uri
+
+    @override
+    def _get_published_diagnostics_wait_timeout(self, pull_diagnostics_failed: bool) -> float:
+        return self._published_diagnostics_timeout
 
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:

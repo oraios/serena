@@ -11,6 +11,7 @@ let package = Package(
     targets: [
         .target(
             name: "test_repo",
-            dependencies: []),
+            dependencies: [],
+            path: "src"),
     ]
 )

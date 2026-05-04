@@ -2,13 +2,35 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Hooks:
+  - `serena-hooks auto-approve` now also emits an `allow` decision when Claude Code reports
+    `permission_mode == "auto"`, in addition to the existing `acceptEdits` behavior. #1386
+
 * General:
-  - Add cross-package reference support via `additional_workspace_folders` project setting (currently implemented for TypeScript).
-    Configure additional workspace folder paths in `project.yml` to enable `find_referencing_symbols` and `request_references`
-    to discover symbols across package boundaries in monorepos. The base `SolidLanguageServer` class provides the workspace
-    folder resolution and activation framework; other language servers can enable support by overriding
-    `_find_representative_source_file()`. #750
-  - Support `serena --version` CLI command for displaying the current version #1347
+  - Breaking change in mode definitions: Projects (project.yml) can no longer override `base_modes`.
+    Instead, they can define `added_modes` to add modes on top of base and default modes.  
+    See updated [documentation on modes](https://oraios.github.io/serena/02-usage/050_configuration.html#modes).
+  - Serena's default configuration now uses `interactive` and `editing` as `base_modes` instead of as `default_modes`. 
+  - Add cross-package reference support via `additional_workspace_folders` setting (currently implemented for TypeScript).
+  
+* JetBrains:
+  - Add new tools:
+    - `jet_brains_list_inspections`: Lists available IDE inspections (akin to diagnostics), optionally filtered by language or group
+    - `jet_brains_run_inspections`: Runs IDE inspections on a file and returns the results
+
+* LSP Tools:
+  - Add new tools:
+    - `find_declaration`: Finds the declaration/definition of a symbol
+    - `find_implementations`: Finds the implementations of an interface or abstract method
+    - `get_diagnostics_for_file`: Retrieves diagnostics for a specific file (errors, warnings, etc.)
+    - `get_diagnostics_for_symbol`: Retrieves diagnostics pertaining to a specific symbol
+
+* Language Servers:
+  - Java (`eclipse.jdt.ls`): Add upstream JDTLS mode for offline / restricted-network use. Setting both `jdtls_path` and `lombok_path` in `ls_specific_settings.java` makes Serena use an existing upstream JDTLS installation (e.g. `brew install jdtls`) and the system JDK 21+, skipping the ~500 MB vscode-java VSIX, Gradle, and IntelliCode downloads. New related setting `java_home` lets the user override the JDK used to launch JDTLS. Default behavior unchanged — the JDTLS workspace hash is preserved bit-for-bit for users on the default route, so existing project caches are reused without a one-time reindex; the launcher path is mixed into the hash only when `jdtls_path` is set, isolating upstream installations from the default workspace. #1415
+
+# v1.2.0 (2026-04-27)
+
+* General:
   - Fix: Check for ignored path ignored `.git` folder only at the top level, not in every subdirectory (`Project._is_ignored_relative_path`) #1350
   - `GetSymbolsOverviewTool`: ignored paths were not respected in LSP variant (fix in `SolidLanguageServer`)
   - Fix: Duplicate comments in re-saved YAML configuration files #1285
@@ -36,6 +58,13 @@ Status of the `main` branch. Changes prior to the next official version change w
     The `initial_instructions` tool provides the full prompt on demand, keeping the initial context lean.
   - Add `serena_info` tool for on-demand retrieval of usage information
 
+* CLI:
+  - Support `serena --version` CLI command for displaying the current version #1347
+  - Extend `prompts` subcommand with `print-prompt-template` and `print-cc-system-prompt-override`, improve `list` subcommand
+
+* Clients:
+  - Document workaround to make Claude Code use Serena's tools after recent degradations caused by changes in CC harness and Opus 4.7 release.
+
 * JetBrains:
   - Add `debug` tool: The agent can set breakpoints, inspect variables, evaluate expressions and control execution flow
     by directly interacting with the IDE's debugger, using a REPL-style interface for maximum flexibility.  
@@ -55,10 +84,13 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add JSON language server support via `vscode-json-languageserver` (experimental) #1391
   - Fix: Elixir/Expert deadlock on startup — Expert's build pipeline requires a `textDocument/didOpen` notification to start; Serena now opens `mix.exs` immediately after `initialized` so Expert begins compiling instead of waiting indefinitely #1397
 
-Dashboard:
+* Dashboard:
   - Add configurable dashboard interface mode (new global configuration setting `web_dashboard_interface`):
     Three modes (browser, native app with tray, tray manager for aggregating multiple instances) are supported, depending on the OS
   - Fix: Memory leaks in frontend when using Chromium-based browsers/Windows webview #1389
+
+* Hooks:
+  - Adjusted wording of startup hook, improving project activation instructions #1401.
 
 # v1.1.2 (2026-04-14)
 

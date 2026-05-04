@@ -661,6 +661,54 @@ class JetBrainsPluginClient(ToStringMixin):
         }
         return self._make_request("POST", "/debugReplClose", request_data)
 
+    def run_inspections(
+        self,
+        relative_path: str,
+        min_severity: str | None = None,
+        inspection_names: list[str] | None = None,
+        start_line: int | None = None,
+        end_line: int | None = None,
+    ) -> jb.RunInspectionsResponse:
+        """
+        Runs IDE inspections on the given file and returns the results.
+
+        :param relative_path: the relative path to the file to inspect
+        :param min_severity: minimum severity level to include (e.g. "WARNING", "ERROR")
+        :param inspection_names: optional list of specific inspection names to run
+        :param start_line: optional start line to restrict the inspection range
+        :param end_line: optional end line to restrict the inspection range
+        """
+        request_data: dict[str, Any] = {
+            "relativePath": relative_path,
+        }
+        if min_severity is not None:
+            request_data["minSeverity"] = min_severity
+        if inspection_names is not None:
+            request_data["inspectionNames"] = inspection_names
+        if start_line is not None:
+            request_data["startLine"] = start_line
+        if end_line is not None:
+            request_data["endLine"] = end_line
+        return cast(jb.RunInspectionsResponse, self._make_request("POST", "/runInspectionsOnFile", request_data))
+
+    def list_inspections(
+        self,
+        language: str | None = None,
+        group_path_contains: str | None = None,
+    ) -> jb.ListInspectionsResponse:
+        """
+        Lists available IDE inspections, optionally filtered by language and/or group path.
+
+        :param language: optional language to filter inspections by (e.g. "Java", "Python")
+        :param group_path_contains: optional substring to filter inspection group paths
+        """
+        request_data: dict[str, Any] = {}
+        if language is not None:
+            request_data["language"] = language
+        if group_path_contains is not None:
+            request_data["groupPathContains"] = group_path_contains
+        return cast(jb.ListInspectionsResponse, self._make_request("POST", "/listInspections", request_data))
+
     def close(self) -> None:
         self._session.close()
 

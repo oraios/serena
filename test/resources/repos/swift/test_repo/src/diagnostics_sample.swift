@@ -1,0 +1,3 @@
+func brokenFactory() -> String {
+    return
+}

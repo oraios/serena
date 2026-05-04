@@ -339,8 +339,9 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
 class SessionStartActivateProjectHook(Hook):
     def execute(self) -> None:
         message = (
-            "**IMPORTANT**: Activate the current working directory as project using Serena's tools if not already done. "
-            "If you haven't read Serena Instructions Manual yet, do so. "
+            "**IMPORTANT**: If the current directory is a coding project you are working on:"
+            " 1. activate it using Serena's activate_project tool unless already done. "
+            " 2. if you haven't read Serena Instructions Manual yet, do so. "
             "Follow this instruction before doing anything else."
         )
         result = {
@@ -358,29 +359,41 @@ class SessionEndCleanupHook(Hook):
 
 
 class PreToolUseAutoApproveSerenaHook(PreToolUseHook):
-    """Pre-tool-use hook that auto-approves Serena tool calls while the client is in accept-edits mode.
+    """Pre-tool-use hook that auto-approves Serena tool calls while the client is in a permissive permission mode.
 
-    Claude Code's ``acceptEdits`` permission mode only applies to its built-in editing tools;
-    Serena's destructive tools (e.g. ``replace_symbol_body`` or ``rename_symbol``) would still
-    prompt the user on every call. This hook emits an ``allow`` decision for any Serena MCP
-    tool call whenever the client reports ``acceptEdits`` as the active permission mode, so
-    blanket edit approvals also cover Serena's tools. In all other situations it stays silent,
-    preserving the default approval flow.
+    Claude Code's permissive permission modes (``acceptEdits`` for blanket edit approval and
+    ``auto`` for hands-off autonomous execution) only apply to its built-in editing tools or
+    its auto-mode classifier; Serena's destructive tools (e.g. ``replace_symbol_body`` or
+    ``rename_symbol``) would still prompt the user on every call. This hook emits an ``allow``
+    decision for any Serena MCP tool call whenever the client reports one of these modes as
+    the active permission mode, so blanket approvals also cover Serena's tools. In all other
+    situations it stays silent, preserving the default approval flow.
+
+    ``bypassPermissions`` and ``dontAsk`` are deliberately excluded. ``bypassPermissions``
+    already approves everything before the hook would matter, so silence here is harmless.
+    ``dontAsk`` is the user's deliberate deny-by-default posture (auto-deny unless an explicit
+    allow rule matches); the hook honors that choice and stays silent rather than blanket
+    overriding it.
     """
 
-    _ACCEPT_EDITS_MODE = "acceptEdits"
+    #: permission modes for which this hook emits an ``allow`` decision. Frozen so the
+    #: set is immutable at the class level; matching is exact (case-sensitive) against
+    #: the canonical mode strings emitted by Claude Code's hook payload.
+    _AUTO_APPROVE_MODES: frozenset[str] = frozenset({"acceptEdits", "auto"})
 
-    def is_accept_edits_mode(self) -> bool:
-        return self._permission_mode == self._ACCEPT_EDITS_MODE
+    def is_auto_approve_mode(self) -> bool:
+        return self._permission_mode in self._AUTO_APPROVE_MODES
 
     def execute(self) -> None:
         # only emit a decision when both the tool and the mode match; stay silent otherwise
-        if not self.is_serena_tool() or not self.is_accept_edits_mode():
+        if not self.is_serena_tool() or not self.is_auto_approve_mode():
             return
 
+        # name the actual mode in the reason so logs/debug output are unambiguous
+        # (the same hook handles multiple modes now)
         output_data = self.OutputData(
             permission_decision="allow",
-            permission_decision_reason="Auto-approved: Serena tool call while client is in acceptEdits mode.",
+            permission_decision_reason=f"Auto-approved: Serena tool call while client is in {self._permission_mode} mode.",
         )
         click.echo(output_data.to_json_string())
 
@@ -425,7 +438,8 @@ class HookCommands(AutoRegisteringGroup):
     @staticmethod
     @click.command(
         "auto-approve",
-        help="Set this as hook at PreToolUse to auto-approve Serena tool calls while the client is in acceptEdits mode (Claude Code).",
+        help="Set this as hook at PreToolUse to auto-approve Serena tool calls while the client is in a "
+        "permissive permission mode (acceptEdits or auto, Claude Code).",
     )
     @_client_option
     def auto_approve(client: str) -> None:
