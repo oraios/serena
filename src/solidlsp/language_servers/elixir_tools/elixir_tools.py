@@ -395,9 +395,10 @@ class ElixirTools(SolidLanguageServer):
         # causing a deadlock. Opening mix.exs is the minimal trigger; we close it again
         # once the server is ready so it does not linger in the open-file set.
         mix_exs_path = self._find_mix_exs()
-        mix_exs_uri = pathlib.Path(mix_exs_path).as_uri() if mix_exs_path is not None else None
+        mix_exs_uri: str | None = None
 
-        if mix_exs_uri is not None:
+        if mix_exs_path is not None:
+            mix_exs_uri = pathlib.Path(mix_exs_path).as_uri()
             with open(mix_exs_path, encoding="utf-8") as f:
                 mix_exs_content = f.read()
             self.server.notify.did_open_text_document(
