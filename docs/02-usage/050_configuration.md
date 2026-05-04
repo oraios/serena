@@ -848,8 +848,7 @@ Supported settings:
 | `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
 
 TypeScript supports [additional workspace folders](additional-workspace-folders) for cross-package
-reference discovery in monorepos. Configure `additional_workspace_folders` in `project.yml` (not
-under `ls_specific_settings`) to enable this feature.
+reference discovery. Configure `additional_workspace_folders` in `project.yml` to enable this feature.
 
 #### TypeScript via `vtsls`
 
