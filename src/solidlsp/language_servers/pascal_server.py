@@ -69,7 +69,34 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
-PASLS_VERSION = "v0.2.0"
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+INITIAL_PASLS_VERSION = "v0.2.0"
+INITIAL_PASLS_SHA256_BY_PLATFORM = {
+    "linux-x64": "517259395b0a385a5e848cf48b967645a984be3dd456118bc08771283a822a5b",
+    "linux-arm64": "cb4986941cfdcf9cb74ece6bbb53a443390a908e880108a37f4ccf82b2d6c502",
+    "osx-x64": "0abfcd98f63f77dba74094339a40d4407b69317c1c77b13a26b9b7dbdfd885f1",
+    "osx-arm64": "d4c2411e406af96ceae12b11e77fdb0c684ca15a68bfd8b4f9c6fe1fbdf515a7",
+    "win-x64": "1493c31552e6f90a59800b2d44669e01fc4551d3647f3cea5dd105a9f6bc73e5",
+}
+DEFAULT_PASLS_VERSION = "v0.2.0"
+DEFAULT_PASLS_SHA256_BY_PLATFORM = {
+    "linux-x64": "517259395b0a385a5e848cf48b967645a984be3dd456118bc08771283a822a5b",
+    "linux-arm64": "cb4986941cfdcf9cb74ece6bbb53a443390a908e880108a37f4ccf82b2d6c502",
+    "osx-x64": "0abfcd98f63f77dba74094339a40d4407b69317c1c77b13a26b9b7dbdfd885f1",
+    "osx-arm64": "d4c2411e406af96ceae12b11e77fdb0c684ca15a68bfd8b4f9c6fe1fbdf515a7",
+    "win-x64": "1493c31552e6f90a59800b2d44669e01fc4551d3647f3cea5dd105a9f6bc73e5",
+}
+PASLS_VERSION = DEFAULT_PASLS_VERSION
+
+
+def _pasls_sha(version: str, platform_key: str) -> str | None:
+    if version == INITIAL_PASLS_VERSION:
+        return INITIAL_PASLS_SHA256_BY_PLATFORM.get(platform_key)
+    if version == DEFAULT_PASLS_VERSION:
+        return DEFAULT_PASLS_SHA256_BY_PLATFORM.get(platform_key)
+    return None
 
 
 class PascalLanguageServer(SolidLanguageServer):
@@ -629,7 +656,12 @@ class PascalLanguageServer(SolidLanguageServer):
             log.info(f"Found pasls in PATH: {pasls_in_path}")
             return quote_windows_path(pasls_in_path)
 
-        pasls_dir = cls.ls_resources_dir(solidlsp_settings)
+        # legacy unversioned dir reserved for INITIAL; every other version goes into a versioned subdir
+        pasls_dir = (
+            cls.ls_resources_dir(solidlsp_settings)
+            if pasls_version == INITIAL_PASLS_VERSION
+            else os.path.join(cls.ls_resources_dir(solidlsp_settings), f"pasls-{pasls_version}")
+        )
         os.makedirs(pasls_dir, exist_ok=True)
 
         # Clean up old files from previous sessions
@@ -647,7 +679,7 @@ class PascalLanguageServer(SolidLanguageServer):
                     platform_id="linux-x64",
                     archive_type="gztar",
                     binary_name="pasls",
-                    sha256="517259395b0a385a5e848cf48b967645a984be3dd456118bc08771283a822a5b",
+                    sha256=_pasls_sha(pasls_version, "linux-x64"),
                 ),
                 RuntimeDependency(
                     id="PascalLanguageServer",
@@ -656,7 +688,7 @@ class PascalLanguageServer(SolidLanguageServer):
                     platform_id="linux-arm64",
                     archive_type="gztar",
                     binary_name="pasls",
-                    sha256="cb4986941cfdcf9cb74ece6bbb53a443390a908e880108a37f4ccf82b2d6c502",
+                    sha256=_pasls_sha(pasls_version, "linux-arm64"),
                 ),
                 RuntimeDependency(
                     id="PascalLanguageServer",
@@ -665,7 +697,7 @@ class PascalLanguageServer(SolidLanguageServer):
                     platform_id="osx-x64",
                     archive_type="zip",
                     binary_name="pasls",
-                    sha256="0abfcd98f63f77dba74094339a40d4407b69317c1c77b13a26b9b7dbdfd885f1",
+                    sha256=_pasls_sha(pasls_version, "osx-x64"),
                 ),
                 RuntimeDependency(
                     id="PascalLanguageServer",
@@ -674,7 +706,7 @@ class PascalLanguageServer(SolidLanguageServer):
                     platform_id="osx-arm64",
                     archive_type="zip",
                     binary_name="pasls",
-                    sha256="d4c2411e406af96ceae12b11e77fdb0c684ca15a68bfd8b4f9c6fe1fbdf515a7",
+                    sha256=_pasls_sha(pasls_version, "osx-arm64"),
                 ),
                 RuntimeDependency(
                     id="PascalLanguageServer",
@@ -683,7 +715,7 @@ class PascalLanguageServer(SolidLanguageServer):
                     platform_id="win-x64",
                     archive_type="zip",
                     binary_name="pasls.exe",
-                    sha256="1493c31552e6f90a59800b2d44669e01fc4551d3647f3cea5dd105a9f6bc73e5",
+                    sha256=_pasls_sha(pasls_version, "win-x64"),
                 ),
             ]
         )
@@ -777,6 +809,14 @@ class PascalLanguageServer(SolidLanguageServer):
             if value:
                 initialization_options[var] = value
 
+        initialization_options.update(
+            {
+                "checkSyntax": True,
+                "publishDiagnostics": True,
+                "showSyntaxErrors": True,
+            }
+        )
+
         initialize_params = {
             "locale": "en",
             "capabilities": {
@@ -831,6 +871,7 @@ class PascalLanguageServer(SolidLanguageServer):
                     },
                     "formatting": {"dynamicRegistration": True},
                     "rangeFormatting": {"dynamicRegistration": True},
+                    "publishDiagnostics": {"relatedInformation": True},
                 },
                 "workspace": {
                     "workspaceFolders": True,

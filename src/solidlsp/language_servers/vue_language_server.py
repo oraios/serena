@@ -426,6 +426,18 @@ class VueLanguageServer(SolidLanguageServer):
         with self._ts_server.open_file(relative_file_path):
             return self._ts_server.request_rename_symbol_edit(relative_file_path, line, column, new_name)
 
+    @override
+    def request_text_document_diagnostics(
+        self,
+        relative_file_path: str,
+        start_line: int = 0,
+        end_line: int = -1,
+        min_severity: int = 4,
+    ) -> list[ls_types.Diagnostic]:
+        self._ensure_ls_operational()
+        assert self._ts_server is not None
+        return self._ts_server.request_text_document_diagnostics(relative_file_path, start_line, end_line, min_severity)
+
     def _forward_edit_to_ts_server_if_needed(self, relative_file_path: str, edit_fn: Callable[[], object]) -> None:
         """
         Calls ``edit_fn`` on the TypeScript server if the file is open there.
@@ -598,6 +610,7 @@ class VueLanguageServer(SolidLanguageServer):
                     "signatureHelp": {"dynamicRegistration": True},
                     "codeAction": {"dynamicRegistration": True},
                     "rename": {"dynamicRegistration": True, "prepareSupport": True},
+                    "publishDiagnostics": {"relatedInformation": True},
                 },
                 "workspace": {
                     "workspaceFolders": True,

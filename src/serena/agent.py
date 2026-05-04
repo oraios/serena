@@ -31,6 +31,8 @@ from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import (
     LanguageBackend,
     ModeSelectionDefinition,
+    ModeSelectionDefinitionWithAddedModes,
+    ModeSelectionDefinitionWithBaseModes,
     NamedToolInclusionDefinition,
     RegisteredProject,
     SerenaConfig,
@@ -206,18 +208,36 @@ class ActiveModes:
     def __init__(self) -> None:
         self._configured_base_modes: Sequence[str] | None = None
         self._configured_default_modes: Sequence[str] | None = None
+        self._added_modes: set[str] = set()
+        self._dynamically_activated_mode_names: set[str] = set()
+        """
+        the subset of active mode names that are dynamically activated (not necessarily enabled after project change)
+        """
         self._active_mode_names: Sequence[str] = []
+        """
+        the full list of active mode names
+        """
 
     def apply(self, mode_selection: ModeSelectionDefinition) -> None:
+        log.debug("Applying mode selection definition %s", mode_selection)
+
         # apply overrides
-        log.debug("Applying mode selection: default_modes=%s, base_modes=%s", mode_selection.default_modes, mode_selection.base_modes)
-        if mode_selection.base_modes is not None:
-            self._configured_base_modes = mode_selection.base_modes
+        if isinstance(mode_selection, ModeSelectionDefinitionWithBaseModes):
+            if mode_selection.base_modes is not None:
+                self._configured_base_modes = mode_selection.base_modes
         if mode_selection.default_modes is not None:
             self._configured_default_modes = mode_selection.default_modes
         log.debug("Current mode selection: base_modes=%s, default_modes=%s", self._configured_base_modes, self._configured_default_modes)
 
-        self._active_mode_names = sorted(set(self._configured_base_modes or []) | set(self._configured_default_modes or []))
+        # apply added modes (if any)
+        if isinstance(mode_selection, ModeSelectionDefinitionWithAddedModes):
+            if mode_selection.added_modes:
+                log.debug("Adding modes: %s", mode_selection.added_modes)
+                self._added_modes.update(mode_selection.added_modes)
+                log.debug("Current added modes: %s", self._added_modes)
+
+        self._dynamically_activated_mode_names = set(self._configured_default_modes or []) | self._added_modes
+        self._active_mode_names = sorted(set(self._configured_base_modes or []) | self._dynamically_activated_mode_names)
 
     def get_mode_names(self) -> Sequence[str]:
         return self._active_mode_names
@@ -231,8 +251,8 @@ class ActiveModes:
     def get_modes(self) -> Sequence[SerenaAgentMode]:
         return [self.get_mode_instance(mode_name) for mode_name in self._active_mode_names]
 
-    def get_default_modes(self) -> Sequence[SerenaAgentMode]:
-        return [self.get_mode_instance(mode_name) for mode_name in self._configured_default_modes or []]
+    def get_dynamically_activated_modes(self) -> Sequence[SerenaAgentMode]:
+        return [self.get_mode_instance(mode_name) for mode_name in self._dynamically_activated_mode_names]
 
     def get_base_modes(self) -> Sequence[SerenaAgentMode]:
         return [self.get_mode_instance(mode_name) for mode_name in self._configured_base_modes or []]
@@ -511,8 +531,7 @@ class SerenaAgent:
         :param serena_config: the Serena configuration or None to read the configuration from the default location.
         :param context: the context in which the agent is operating, None for default context.
             The context may adjust prompts, tool availability, and tool descriptions.
-        :param modes: list of modes in which the agent is operating (they will be combined), None for default modes.
-            The modes may adjust prompts, tool availability, and tool descriptions.
+        :param modes: mode selection definition to apply for this session
         :param memory_log_handler: a MemoryLogHandler instance from which to read log messages; if None, a new one will be created
             if necessary.
         """
@@ -521,7 +540,7 @@ class SerenaAgent:
         self._gui_log_viewer: Optional["GuiLogViewer"] = None
         self._dashboard_manager: DashboardManager | None = None
         self._project_prompt_status = ProjectPromptProvisionStatus()
-        self._mode_overrides = modes
+        self._session_mode_selection_definition = modes
         self.version = serena_version()
 
         # obtain serena configuration using the decoupled factory function
@@ -712,9 +731,11 @@ class SerenaAgent:
         # * base modes: These cannot be changed, so they are fully applied
         for base_mode in modes.get_base_modes():
             tool_inclusion_definitions.append(base_mode)
-        # * default modes: When not in a single-project context, these modes are dynamic (can later be turned off),
-        #   so we consider only their inclusions (but not their exclusions, because these must not be hard)
-        for mode in modes.get_default_modes():
+        # * dynamically activated modes:
+        #    - When not in a single-project context, these modes can later be turned off,
+        #      so we consider only their inclusions (but not their exclusions, because these must not be hard).
+        #    - In a single-project context, we can consider them fully.
+        for mode in modes.get_dynamically_activated_modes():
             if is_single_project:
                 tool_inclusion_definitions.append(mode)
             else:
@@ -986,8 +1007,8 @@ class SerenaAgent:
         self._active_modes.apply(self.serena_config)
         if self._active_project:
             self._active_modes.apply(self._active_project.project_config)
-        if self._mode_overrides:
-            self._active_modes.apply(self._mode_overrides)
+        if self._session_mode_selection_definition:
+            self._active_modes.apply(self._session_mode_selection_definition)
         if log_message:
             active_mode_names = self._active_modes.get_mode_names()
             log.info(f"Active modes ({len(active_mode_names)}): {', '.join(active_mode_names)}")

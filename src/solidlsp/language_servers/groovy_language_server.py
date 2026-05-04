@@ -18,13 +18,34 @@ from solidlsp.settings import SolidLSPSettings
 log = logging.getLogger(__name__)
 
 VSCODE_JAVA_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
-VSCODE_JAVA_SHA256_BY_PLATFORM = {
+
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+INITIAL_VSCODE_JAVA_VERSION = "1.42.0-561"
+INITIAL_VSCODE_JAVA_SHA256_BY_PLATFORM = {
     "win-x64": "ef195b45bd260976ad2e84618f4044b5d7248deed41d647573f0ee22c4233df3",
     "linux-x64": "7660b7b527be6fda46a917966b34d828e7416d5cc84287b29b88e7b99c1737f9",
     "linux-arm64": "e15bc9b2a665d3453203402621b5441062aa41b0ec2d140661f439326fd248c1",
     "osx-x64": "03ae1db1a22c15561a620f1b722d6797d35d4faaa7c4666dbe6ca2715089852f",
     "osx-arm64": "bc00c2699d4b8d478eb9a1621db9d6d3a12ea0dcc247a9cd8040e8ac19c03933",
 }
+DEFAULT_VSCODE_JAVA_VERSION = "1.42.0-561"
+DEFAULT_VSCODE_JAVA_SHA256_BY_PLATFORM = {
+    "win-x64": "ef195b45bd260976ad2e84618f4044b5d7248deed41d647573f0ee22c4233df3",
+    "linux-x64": "7660b7b527be6fda46a917966b34d828e7416d5cc84287b29b88e7b99c1737f9",
+    "linux-arm64": "e15bc9b2a665d3453203402621b5441062aa41b0ec2d140661f439326fd248c1",
+    "osx-x64": "03ae1db1a22c15561a620f1b722d6797d35d4faaa7c4666dbe6ca2715089852f",
+    "osx-arm64": "bc00c2699d4b8d478eb9a1621db9d6d3a12ea0dcc247a9cd8040e8ac19c03933",
+}
+
+
+def _vscode_java_sha(version: str, platform_key: str) -> str | None:
+    if version == INITIAL_VSCODE_JAVA_VERSION:
+        return INITIAL_VSCODE_JAVA_SHA256_BY_PLATFORM[platform_key]
+    if version == DEFAULT_VSCODE_JAVA_VERSION:
+        return DEFAULT_VSCODE_JAVA_SHA256_BY_PLATFORM[platform_key]
+    return None
 
 
 @dataclasses.dataclass
@@ -93,7 +114,7 @@ class GroovyLanguageServer(SolidLanguageServer):
         """
         platform_id = PlatformUtils.get_platform_id()
         groovy_settings = solidlsp_settings.get_ls_specific_settings(Language.GROOVY)
-        vscode_java_version = groovy_settings.get("vscode_java_version", "1.42.0-561")
+        vscode_java_version = groovy_settings.get("vscode_java_version", DEFAULT_VSCODE_JAVA_VERSION)
         vscode_java_tag = f"v{vscode_java_version.rsplit('-', 1)[0]}"
 
         # Verify platform support
@@ -128,35 +149,35 @@ class GroovyLanguageServer(SolidLanguageServer):
                         "archiveType": "zip",
                         "java_home_path": "extension/jre/21.0.7-win32-x86_64",
                         "java_path": "extension/jre/21.0.7-win32-x86_64/bin/java.exe",
-                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["win-x64"] if vscode_java_version == "1.42.0-561" else None,
+                        "sha256": _vscode_java_sha(vscode_java_version, "win-x64"),
                     },
                     "linux-x64": {
                         "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-linux-x64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
                         "java_home_path": "extension/jre/21.0.7-linux-x86_64",
                         "java_path": "extension/jre/21.0.7-linux-x86_64/bin/java",
-                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["linux-x64"] if vscode_java_version == "1.42.0-561" else None,
+                        "sha256": _vscode_java_sha(vscode_java_version, "linux-x64"),
                     },
                     "linux-arm64": {
                         "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-linux-arm64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
                         "java_home_path": "extension/jre/21.0.7-linux-aarch64",
                         "java_path": "extension/jre/21.0.7-linux-aarch64/bin/java",
-                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["linux-arm64"] if vscode_java_version == "1.42.0-561" else None,
+                        "sha256": _vscode_java_sha(vscode_java_version, "linux-arm64"),
                     },
                     "osx-x64": {
                         "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-darwin-x64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
                         "java_home_path": "extension/jre/21.0.7-macosx-x86_64",
                         "java_path": "extension/jre/21.0.7-macosx-x86_64/bin/java",
-                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["osx-x64"] if vscode_java_version == "1.42.0-561" else None,
+                        "sha256": _vscode_java_sha(vscode_java_version, "osx-x64"),
                     },
                     "osx-arm64": {
                         "url": f"https://github.com/redhat-developer/vscode-java/releases/download/{vscode_java_tag}/java-darwin-arm64-{vscode_java_version}.vsix",
                         "archiveType": "zip",
                         "java_home_path": "extension/jre/21.0.7-macosx-aarch64",
                         "java_path": "extension/jre/21.0.7-macosx-aarch64/bin/java",
-                        "sha256": VSCODE_JAVA_SHA256_BY_PLATFORM["osx-arm64"] if vscode_java_version == "1.42.0-561" else None,
+                        "sha256": _vscode_java_sha(vscode_java_version, "osx-arm64"),
                     },
                 },
             }
@@ -174,7 +195,9 @@ class GroovyLanguageServer(SolidLanguageServer):
             static_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "groovy_language_server")
             os.makedirs(static_dir, exist_ok=True)
 
-            java_dir = os.path.join(static_dir, "java")
+            # legacy unversioned "java" dir reserved for INITIAL; every other version goes into a versioned subdir
+            java_dirname = "java" if vscode_java_version == INITIAL_VSCODE_JAVA_VERSION else f"java-{vscode_java_version}"
+            java_dir = os.path.join(static_dir, java_dirname)
             os.makedirs(java_dir, exist_ok=True)
 
             java_home_path = os.path.join(java_dir, java_home_relative_path)

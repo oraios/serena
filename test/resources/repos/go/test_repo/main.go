@@ -5,6 +5,8 @@ import "fmt"
 func main() {
     fmt.Println("Hello, Go!")
     Helper()
+    var greeter Greeter = ConsoleGreeter{}
+    fmt.Println(greeter.FormatGreeting("Go"))
 }
 
 func Helper() {
@@ -21,4 +23,14 @@ func (d *DemoStruct) Value() int {
 
 func UsingHelper() {
     Helper()
+}
+
+type Greeter interface {
+    FormatGreeting(name string) string
+}
+
+type ConsoleGreeter struct{}
+
+func (ConsoleGreeter) FormatGreeting(name string) string {
+    return "Hello, " + name + "!"
 }

@@ -124,6 +124,7 @@ class Lean4LanguageServer(SolidLanguageServer):
                             "documentationFormat": ["markdown", "plaintext"],
                         },
                     },
+                    "publishDiagnostics": {"relatedInformation": True},
                 },
                 "workspace": {
                     "workspaceFolders": True,

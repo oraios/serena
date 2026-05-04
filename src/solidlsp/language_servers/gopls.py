@@ -23,6 +23,10 @@ class Gopls(SolidLanguageServer):
     Provides Go specific instantiation of the LanguageServer class using gopls.
     """
 
+    @classmethod
+    def supports_implementation_request(cls) -> bool:
+        return True
+
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         # For Go projects, we should ignore:

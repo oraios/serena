@@ -5,6 +5,12 @@ from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
 PYTHON_BACKEND_LANGUAGES = [Language.PYTHON, Language.PYTHON_TY]
 
 
+def is_diagnostics_test_file(relative_path: str) -> bool:
+    normalized_path = relative_path.replace("\\", "/")
+    filename = normalized_path.rsplit("/", 1)[-1].lower()
+    return filename.startswith(("diagnosticssample.", "diagnostics_sample."))
+
+
 def has_malformed_name(
     symbol: UnifiedSymbolInformation,
     whitespace_allowed: bool = False,
@@ -36,6 +42,9 @@ def request_all_symbols(language_server: SolidLanguageServer) -> list[UnifiedSym
     result: list[UnifiedSymbolInformation] = []
 
     def visit(symbol: UnifiedSymbolInformation) -> None:
+        relative_path = symbol.get("location", {}).get("relativePath", "")
+        if relative_path and is_diagnostics_test_file(relative_path):
+            return
         result.append(symbol)
         for child in symbol.get("children", []):
             visit(child)

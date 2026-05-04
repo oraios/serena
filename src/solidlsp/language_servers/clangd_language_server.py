@@ -34,6 +34,39 @@ class ClangdLanguageServer(SolidLanguageServer):
           (default: the bundled Serena version).
     """
 
+    @staticmethod
+    def _determine_log_level(line: str) -> int:
+        """
+        Classify a clangd stderr line using clangd's explicit level prefix.
+
+        See `clang::clangd::Logger::indicator` for details:
+        https://clang.llvm.org/extra/doxygen/classclang_1_1clangd_1_1Logger.html
+
+        Clangd emits each log record prefixed by a single indicator character
+        followed by a timestamp in square brackets, e.g. ``I[12:27:16.234]``.
+
+        The indicators are ``D`` (Debug), ``I`` (Info), ``E`` (Error) and
+        ``F`` (Fatal). Continuation lines of multi-line records carry no
+        prefix and are treated as informational.
+
+        Without this override, the base implementation scans the line for
+        the substrings ``error`` and ``exception``, which produces false
+        positives on clangd's reconstructed compile commands in some cases
+        (e.g. ``-DNO_EXCEPTIONS``, ``-fno-exceptions``).
+        """
+        # classify by clangd's level indicator character
+        if len(line) >= 2 and line[1] == "[":
+            indicator = line[0]
+            if indicator in ("E", "F"):
+                return logging.ERROR
+            if indicator == "I":
+                return logging.INFO
+            if indicator == "D":
+                return logging.DEBUG
+
+        # continuation line or non-prefixed output: default to INFO, do not keyword-scan
+        return logging.INFO
+
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a ClangdLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.

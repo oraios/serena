@@ -23,6 +23,7 @@ from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import (
     LanguageBackend,
     ModeSelectionDefinition,
+    ModeSelectionDefinitionWithAddedModes,
     ProjectConfig,
     RegisteredProject,
     SerenaConfig,
@@ -37,7 +38,6 @@ from serena.constants import (
 )
 from serena.prompt_factory import SerenaPromptFactory
 from serena.util.cli_util import AutoRegisteringGroup
-from serena.util.dataclass import get_dataclass_default
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
@@ -46,15 +46,17 @@ from solidlsp.util.subprocess_util import subprocess_kwargs
 log = logging.getLogger(__name__)
 
 _MAX_CONTENT_WIDTH = 200
-_MODES_EXPLANATION = f"""\b\nBuilt-in mode names or paths to custom mode YAMLs with which to 
-override the default modes defined in the global Serena configuration or 
+_MODES_EXPLANATION = """\b\nBuilt-in mode names or paths to custom mode YAMLs with which to 
+override the default_modes defined in the global Serena configuration or 
 the active project.
 For details on mode configuration, see 
   https://oraios.github.io/serena/02-usage/050_configuration.html#modes.
-If no configuration changes were made, the base defaults are: 
-  {get_dataclass_default(SerenaConfig, "default_modes")}.
-Overriding them means that they no longer apply, so you will need to 
-re-specify them in addition to further modes if you want to keep them."""
+"""
+_ADD_MODES_EXPLANATION = """\b\nMode names or paths to custom mode YAMLs which shall
+be added on top of the other modes specified by the global/project configuration.
+For details on mode configuration, see 
+  https://oraios.github.io/serena/02-usage/050_configuration.html#modes.
+"""
 
 
 def find_project_root(root: str | Path | None = None) -> str | None:
@@ -228,12 +230,21 @@ class TopLevelCommands(AutoRegisteringGroup):
     )
     @click.option(
         "--mode",
-        "modes",
+        "default_modes",
         type=str,
         multiple=True,
         default=(),
         show_default=False,
         help=_MODES_EXPLANATION,
+    )
+    @click.option(
+        "--add-mode",
+        "added_modes",
+        type=str,
+        multiple=True,
+        default=(),
+        show_default=False,
+        help=_ADD_MODES_EXPLANATION,
     )
     @click.option(
         "--language-backend",
@@ -300,7 +311,8 @@ class TopLevelCommands(AutoRegisteringGroup):
         project_file_arg: str | None,
         project_from_cwd: bool | None,
         context: str,
-        modes: Sequence[str],
+        default_modes: Sequence[str],
+        added_modes: Sequence[str],
         language_backend: str | None,
         transport: Literal["stdio", "sse", "streamable-http"],
         host: str,
@@ -346,11 +358,15 @@ class TopLevelCommands(AutoRegisteringGroup):
 
         project_file = project_file_arg or project
 
+        mode_selection_def: ModeSelectionDefinition | None = None
+        if default_modes or added_modes:
+            mode_selection_def = ModeSelectionDefinitionWithAddedModes(default_modes=default_modes or None, added_modes=added_modes or None)
+
         factory = SerenaMCPFactory(context=context, project=project_file, memory_log_handler=memory_log_handler)
         server = factory.create_mcp_server(
             host=host,
             port=port,
-            modes=modes,
+            mode_selection_def=mode_selection_def,
             language_backend=LanguageBackend.from_str(language_backend) if language_backend else None,
             enable_web_dashboard=enable_web_dashboard,
             open_web_dashboard=open_web_dashboard,

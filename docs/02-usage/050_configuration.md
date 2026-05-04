@@ -118,32 +118,26 @@ Examples of built-in modes include:
 
 Find the concrete definitions of these modes [here](https://github.com/oraios/serena/tree/main/src/serena/resources/config/modes).
 
-Active modes are configured in (from lowest to highest precedence):
+The modes to be activated are configured in:
   * the global configuration file (`serena_config.yml`)
+     - defines `base_modes`, which are always included
+     - defines `default_modes`, which can be overridden by projects or command line parameters
   * the project configuration file (`project.yml`)
+     - defines `default_modes` (overriding the default modes in the global configuration)
+     - defines `added_modes`, which are added on top
   * at startup via command-line parameters
+     - can override default modes with `--mode`
+     - can define modes to be added on top with `--add-mode`
 
-The two former sources define both **base modes** and **default modes**.
-Ultimately, the active modes are the union of base modes and default modes (after applying all overrides).
-Command-line parameters override default modes but not base modes.
-Base modes should thus be used to define modes that you always want to be active, regardless of command-line parameters.
+Ultimately, the active modes are given by the union of 
+  * `base_modes` defined in the global configuration (always active)  
+  * `default_modes` (defined in the global configuration, optionally overridden by the project/CLI)
+  * `added_modes` (defined in the project configuration/via CLI parameters)
 
-Command-line parameters for overriding default modes:
-When launching the MCP sever, specify modes using `--mode <mode-name>`; multiple modes can be specified, e.g. `--mode planning --mode no-onboarding`.
-
-:::{important}
-By default, Serena activates the two modes `interactive` and `editing` (as defined in the global configuration).
-
-As soon as you start to specify modes via the command line, only the modes you explicitly specify will be active, however.
-Therefore, if you want to keep the default modes, you must specify them as well.  
-For example, to add mode `no-memories` to the default behaviour, specify
-```shell
---mode interactive --mode editing --mode no-memories
-```
-
-If you want to keep certain modes as always active, regardless of command-line parameters, 
-define them as *base modes* in the global or project configuration.
-:::
+So you should 
+ * define modes you definitely always want to use in `base_modes`,
+ * define modes that you typically want to use but sometimes want to override in `default_modes`,
+ * use `added_modes` to add modes that you need only for specific projects/sessions.
 
 :::{note}
 **Mode Compatibility**: While you can combine modes, some may be semantically incompatible (e.g., `interactive` and `one-shot`). 
@@ -504,28 +498,72 @@ ls_specific_settings:
 
 #### Java (`eclipse.jdt.ls`)
 
+Java support has two installation modes:
+
+1. **Default vscode-java VSIX mode** (no extra config required): Serena downloads the platform-specific
+   vscode-java VSIX (~500 MB: JDTLS + bundled JRE 21 + Lombok + IntelliCode), Gradle distribution and
+   IntelliCode VSIX from public hosts on first use.
+2. **Upstream JDTLS mode** (offline-friendly): Activated by setting both `jdtls_path` and `lombok_path`.
+   Uses an existing JDTLS installation (~100 MB) and the system JDK 21+. Nothing is downloaded.
+   Recommended for restricted-network/corporate environments.
+
+**When to use which mode:**
+
+- **Default vscode-java VSIX mode** — recommended for most users. No setup required;
+  Serena downloads everything on first use.
+- **Upstream JDTLS mode** — recommended when:
+  - you cannot reach `github.com`, `services.gradle.org` or `marketplace.visualstudio.com`
+    from the host (corporate proxy, air-gapped network);
+  - you want a smaller on-disk footprint (~100 MB vs ~500 MB);
+  - you already maintain a JDTLS installation (e.g. for `nvim-jdtls` or another editor);
+  - your security policy prohibits per-project runtime downloads.
+
+**JDK 21+ is required** in upstream mode. Serena resolves the JDK in this order:
+`ls_specific_settings.java.java_home` → `JAVA_HOME` env var → first `java` on `PATH`.
+The resolved JVM is interrogated and rejected if its `java.specification.version` is below 21.
+
 The following settings are supported for the Java language server:
 
 | Setting | Default | Description |
 |---|---|---|
+| `jdtls_path` | `null` | Activates upstream JDTLS mode. Path to upstream JDTLS root (containing `plugins/` and `config_<platform>/`). Get via `brew install jdtls` or extract `jdt-language-server-*.tar.gz` from <https://download.eclipse.org/jdtls/snapshots/>. Must be set together with `lombok_path`. |
+| `lombok_path` | `null` | Path to the Lombok jar. Activates upstream JDTLS mode together with `jdtls_path`. Get from `~/.m2/repository/org/projectlombok/lombok/<ver>/lombok-<ver>.jar` or download from <https://projectlombok.org/downloads/>. |
+| `java_home` | `null` | (upstream-jdtls mode only) Path to JDK 21+ home directory used to launch JDTLS. Falls back to `JAVA_HOME` env var, then `which java`. |
 | `maven_user_settings` | `~/.m2/settings.xml` | Path to Maven `settings.xml` |
 | `gradle_user_home` | `~/.gradle` | Path to Gradle user home directory |
 | `gradle_wrapper_enabled` | `false` | Use the project's Gradle wrapper (`gradlew`) instead of the bundled Gradle distribution. Enable this for projects with custom plugins or repositories. |
 | `gradle_java_home` | `null` | Path to the JDK used by Gradle. When unset, Gradle uses the bundled JRE. |
 | `use_system_java_home` | `false` | Use the system's `JAVA_HOME` environment variable for JDTLS itself. Enable this if your project requires a specific JDK vendor or version for Gradle's JDK checks. |
-| `gradle_version` | `8.14.2` | Override the Gradle distribution version Serena downloads by default. |
-| `vscode_java_version` | `1.42.0-561` | Override the bundled `vscode-java` runtime bundle version Serena downloads by default. |
-| `intellicode_version` | `1.2.30` | Override the IntelliCode VSIX version Serena downloads by default. |
+| `gradle_version` | `8.14.2` | (vscode-java mode only) Override the Gradle distribution version Serena downloads by default. |
+| `vscode_java_version` | `1.42.0-561` | (vscode-java mode only) Override the bundled `vscode-java` runtime bundle version Serena downloads by default. |
+| `intellicode_version` | `1.2.30` | (vscode-java mode only) Override the IntelliCode VSIX version Serena downloads by default. |
 | `jdtls_xmx` | `3G` | Maximum heap size for the JDTLS server JVM. |
 | `jdtls_xms` | `100m` | Initial heap size for the JDTLS server JVM. |
-| `intellicode_xmx` | `1G` | Maximum heap size for the IntelliCode embedded JVM. |
-| `intellicode_xms` | `100m` | Initial heap size for the IntelliCode embedded JVM. |
+| `intellicode_xmx` | `1G` | (vscode-java mode only) Maximum heap size for the IntelliCode embedded JVM. |
+| `intellicode_xms` | `100m` | (vscode-java mode only) Initial heap size for the IntelliCode embedded JVM. |
 
-Note:
+Notes:
 - When overriding `vscode_java_version`, Serena still assumes that the downloaded runtime bundle keeps the same internal
   directory layout and file names as the bundled default version.
+- In upstream-jdtls mode, IntelliCode is not loaded (it's an ML completions ranker that is irrelevant to Serena's
+  symbol-tools workflow), and Serena does not ship a Gradle distribution. Maven projects work via JDTLS's bundled m2e.
+  Gradle projects must have `./gradlew` in the project, or rely on a system-installed Gradle through Buildship's
+  default discovery rules.
+- In upstream-jdtls mode the `gradle_version`, `vscode_java_version`, `intellicode_version`,
+  `intellicode_xmx`, `intellicode_xms` settings are silently ignored — they only apply to the
+  vscode-java VSIX mode.
 
-Example for a project with custom Gradle plugins and JDK requirements:
+Example: upstream-jdtls mode (offline / corporate network):
+
+```yaml
+ls_specific_settings:
+  java:
+    jdtls_path: "/opt/homebrew/Cellar/jdtls/1.50.0/libexec"
+    lombok_path: "/Users/me/.m2/repository/org/projectlombok/lombok/1.18.36/lombok-1.18.36.jar"
+    # java_home: "/opt/homebrew/opt/openjdk@21"  # optional
+```
+
+Example: default vscode-java VSIX mode for a project with custom Gradle plugins:
 
 ```yaml
 ls_specific_settings:

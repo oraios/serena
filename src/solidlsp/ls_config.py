@@ -219,6 +219,12 @@ class Language(str, Enum):
             case _:
                 return 2
 
+    def supports_implementation_request(self) -> bool:
+        """
+        Return whether the default language server for this language supports ``textDocument/implementation``.
+        """
+        return self.get_ls_class().supports_implementation_request()
+
     def get_source_fn_matcher(self) -> FilenameMatcher:
         match self:
             case self.PYTHON | self.PYTHON_JEDI | self.PYTHON_TY:

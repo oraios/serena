@@ -124,6 +124,14 @@ class TextUtils:
         end_idx = TextUtils.get_index_from_line_col(text, end_line, end_col)
         return text[start_idx:end_idx]
 
+    @staticmethod
+    def get_text_in_lines_range(text: str, start_line: int, end_line: int) -> str:
+        """
+        Returns the text encompassed by the given start and end lines (inclusive).
+        """
+        lines = text.splitlines(keepends=True)
+        return "".join(lines[start_line : end_line + 1])
+
 
 class PathUtils:
     """

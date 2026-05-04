@@ -10,6 +10,7 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
+from test.conftest import find_identifier_position, get_repo_path, language_has_verified_implementation_support
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
@@ -82,6 +83,33 @@ class TestLuaLanguageServer:
         # Check for Logger class/table
         assert "Logger" in all_symbols or any("Logger" in s for s in all_symbols), "Logger not found in symbols"
 
+    if language_has_verified_implementation_support(Language.LUA):
+
+        @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
+        def test_find_implementations(self, language_server: SolidLanguageServer) -> None:
+            repo_path = get_repo_path(Language.LUA)
+            pos = find_identifier_position(repo_path / "src" / "animals.lua", "speak")
+            assert pos is not None, "Could not find Animal:speak in fixture"
+
+            implementations = language_server.request_implementation("src/animals.lua", *pos)
+            assert implementations, "Expected at least one implementation of Animal:speak"
+            assert any("animals.lua" in implementation.get("relativePath", "") for implementation in implementations), (
+                f"Expected Dog:speak in implementations, got: {implementations}"
+            )
+
+        @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
+        def test_request_implementing_symbols(self, language_server: SolidLanguageServer) -> None:
+            repo_path = get_repo_path(Language.LUA)
+            pos = find_identifier_position(repo_path / "src" / "animals.lua", "speak")
+            assert pos is not None, "Could not find Animal:speak in fixture"
+
+            implementing_symbols = language_server.request_implementing_symbols("src/animals.lua", *pos)
+            assert implementing_symbols, "Expected implementing symbols for Animal:speak"
+            assert any(
+                symbol.get("name") == "speak" and "animals.lua" in symbol["location"].get("relativePath", "")
+                for symbol in implementing_symbols
+            ), f"Expected Dog:speak symbol, got: {implementing_symbols}"
+
     @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
     def test_find_symbols_in_main(self, language_server: SolidLanguageServer) -> None:
         """Test finding functions in main.lua."""
@@ -133,7 +161,7 @@ class TestLuaLanguageServer:
 
         assert refs is not None
         assert isinstance(refs, list)
-        # add function appears in: main.lua (lines 16, 71), test_calculator.lua (lines 22, 23, 24)
+        # add function appears in: main.lua (lines 17, 78), test_calculator.lua (lines 22, 23, 24)
         # Note: The declaration itself may or may not be included as a reference
         assert len(refs) >= 5, f"Should find at least 5 references to calculator.add, found {len(refs)}"
 
@@ -153,7 +181,7 @@ class TestLuaLanguageServer:
 
         # Check main.lua has usages
         assert "main.lua" in ref_files, "Should find add usages in main.lua"
-        assert 15 in ref_files["main.lua"] or 70 in ref_files["main.lua"], (
+        assert 16 in ref_files["main.lua"] or 77 in ref_files["main.lua"], (
             f"Should find add usage in main.lua, found at lines {ref_files.get('main.lua', [])}"
         )
 
@@ -189,7 +217,7 @@ class TestLuaLanguageServer:
 
         assert refs is not None
         assert isinstance(refs, list)
-        # trim function appears in: usage (line 32 in main.lua)
+        # trim function appears in: usage (line 33 in main.lua)
         # Note: The declaration itself may or may not be included as a reference
         assert len(refs) >= 1, f"Should find at least 1 reference to utils.trim, found {len(refs)}"
 
@@ -209,8 +237,8 @@ class TestLuaLanguageServer:
 
         # Check main.lua has usage
         assert "main.lua" in ref_files, "Should find trim usage in main.lua"
-        assert 31 in ref_files["main.lua"], (
-            f"Should find trim usage at line 32 (0-indexed: 31) in main.lua, found at lines {ref_files.get('main.lua', [])}"
+        assert 32 in ref_files["main.lua"], (
+            f"Should find trim usage at line 33 (0-indexed: 32) in main.lua, found at lines {ref_files.get('main.lua', [])}"
         )
 
         # Check for cross-file references from main.lua

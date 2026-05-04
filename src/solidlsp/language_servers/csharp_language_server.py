@@ -206,6 +206,10 @@ class CSharpLanguageServer(SolidLanguageServer):
     scripts. If you have a custom .NET installation, ensure 'dotnet' is available in PATH with version 10 or higher.
     """
 
+    @classmethod
+    def supports_implementation_request(cls) -> bool:
+        return True
+
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a CSharpLanguageServer instance. This class is not meant to be instantiated directly.
