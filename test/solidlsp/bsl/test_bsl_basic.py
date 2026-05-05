@@ -7,9 +7,7 @@ import pytest
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
 
-REPO_PATH = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "resources", "repos", "bsl", "test_repo")
-)
+REPO_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "resources", "repos", "bsl", "test_repo"))
 
 _java_available = shutil.which("java") is not None
 _skip_no_java = pytest.mark.skipif(
@@ -80,9 +78,7 @@ def test_bsl_dependency_provider_default_version():
 
     expected_version = DEFAULT_BSL_LS_VERSION
     expected_jar_dir = os.path.join("/tmp/ls_resources", f"bsl-ls-{expected_version}")
-    expected_jar_path = os.path.join(
-        expected_jar_dir, f"bsl-language-server-{expected_version}-exec.jar"
-    )
+    expected_jar_path = os.path.join(expected_jar_dir, f"bsl-language-server-{expected_version}-exec.jar")
 
     with (
         mock.patch("shutil.which", return_value="/usr/bin/java"),
@@ -105,9 +101,7 @@ def test_bsl_dependency_provider_custom_version_no_sha():
 
     custom_version = "0.28.0"
     expected_jar_dir = os.path.join("/tmp/ls_resources", f"bsl-ls-{custom_version}")
-    expected_jar_path = os.path.join(
-        expected_jar_dir, f"bsl-language-server-{custom_version}-exec.jar"
-    )
+    expected_jar_path = os.path.join(expected_jar_dir, f"bsl-language-server-{custom_version}-exec.jar")
 
     installed_deps = []
 
