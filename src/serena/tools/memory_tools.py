@@ -1,6 +1,7 @@
 from typing import Literal
 
-from serena.tools import Tool, ToolMarkerCanEdit
+from serena.tools import Tool, ToolMarkerCanEdit, ToolMarkerOptional
+from serena.util.frontmatter import parse_frontmatter
 
 
 class WriteMemoryTool(Tool, ToolMarkerCanEdit):
@@ -56,6 +57,40 @@ class ListMemoriesTool(Tool):
         Lists available memories, optionally filtered by topic.
         """
         return self._to_json(self.memories_manager.list_memories(topic).to_dict())
+
+
+class MemoryGetFrontmatterTool(Tool, ToolMarkerOptional):
+    """
+    OPTIONAL. Reads and returns the frontmatter of a memory file (if present).
+
+    The frontmatter is a YAML-like block at the very top of a memory file:
+
+    ---
+    key: "value"
+    another_key: "value2"
+    ---
+    Body content...
+
+    Use this tool only when the metadata is useful for the current task.
+    Avoid storing long summaries in frontmatter, as it can waste tokens.
+    """
+
+    def apply(self, memory_name: str) -> str:
+        """
+        Returns the frontmatter as JSON (a dict). If the memory has no frontmatter,
+        returns an empty dict.
+
+        :param memory_name: memory name (may include "/")
+        """
+        memory_file_path = self.memories_manager.get_memory_file_path(memory_name)
+        if not memory_file_path.exists():
+            return self._to_json({"error": f"Memory {memory_name} not found"})
+
+        with open(memory_file_path, encoding=self.memories_manager._encoding) as f:
+            raw = f.read()
+
+        frontmatter, _ = parse_frontmatter(raw)
+        return self._to_json(frontmatter)
 
 
 class DeleteMemoryTool(Tool, ToolMarkerCanEdit):
