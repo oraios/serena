@@ -38,6 +38,7 @@ INTELLICODE_ALLOWED_HOSTS = (
     "download.visualstudio.microsoft.com",
 )
 
+
 # Version pinning convention (read this before bumping anything below):
 #
 #   INITIAL_* — the very first version we shipped runtime-dependency support for, paired with
@@ -62,6 +63,22 @@ INTELLICODE_ALLOWED_HOSTS = (
 #     custom_settings and the matching cached subdir is picked up without re-downloading.
 #   - INITIAL_* and DEFAULT_* hold identical literals when first introduced; they diverge on
 #     the first DEFAULT_* bump and stay independent thereafter.
+@dataclasses.dataclass(frozen=True)
+class VsixResourcePaths:
+    """
+    Paths to resources inside the vscode-java VSIX archive. These vary between vscode-java
+    releases (JRE bundle, Lombok jar, Equinox launcher all have versioned filenames inside
+    the VSIX), so we pin them per-version alongside SHA256 — bumping the VSIX version means
+    bumping these too. Without this, a user requesting a non-DEFAULT pinned version would
+    extract the right archive but then crash on FileNotFoundError trying to find the wrong
+    JRE / Lombok / launcher inside it.
+    """
+
+    jre_version: str  # e.g. "21.0.7"; expanded to extension/jre/{jre_version}-{platform-suffix}
+    lombok_jar_basename: str  # e.g. "lombok-1.18.36.jar"
+    equinox_launcher_basename: str  # e.g. "org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar"
+
+
 INITIAL_VSCODE_JAVA_VERSION = "1.42.0-561"
 INITIAL_VSCODE_JAVA_SHA256_BY_PLATFORM = {
     "osx-arm64": "bc00c2699d4b8d478eb9a1621db9d6d3a12ea0dcc247a9cd8040e8ac19c03933",
@@ -70,14 +87,26 @@ INITIAL_VSCODE_JAVA_SHA256_BY_PLATFORM = {
     "linux-x64": "7660b7b527be6fda46a917966b34d828e7416d5cc84287b29b88e7b99c1737f9",
     "win-x64": "ef195b45bd260976ad2e84618f4044b5d7248deed41d647573f0ee22c4233df3",
 }
-DEFAULT_VSCODE_JAVA_VERSION = "1.42.0-561"
+INITIAL_VSCODE_JAVA_PATHS = VsixResourcePaths(
+    jre_version="21.0.7",
+    lombok_jar_basename="lombok-1.18.36.jar",
+    equinox_launcher_basename="org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+)
+# Bumped from 1.42.0-561 to surface Lombok-generated methods (#1432); brings JDTLS commit b2d8952
+# (java.symbols.includeGeneratedCode), JRE 21.0.10, Lombok 1.18.39 and Equinox launcher 1.7.100.
+DEFAULT_VSCODE_JAVA_VERSION = "1.54.0-923"
 DEFAULT_VSCODE_JAVA_SHA256_BY_PLATFORM = {
-    "osx-arm64": "bc00c2699d4b8d478eb9a1621db9d6d3a12ea0dcc247a9cd8040e8ac19c03933",
-    "osx-x64": "03ae1db1a22c15561a620f1b722d6797d35d4faaa7c4666dbe6ca2715089852f",
-    "linux-arm64": "e15bc9b2a665d3453203402621b5441062aa41b0ec2d140661f439326fd248c1",
-    "linux-x64": "7660b7b527be6fda46a917966b34d828e7416d5cc84287b29b88e7b99c1737f9",
-    "win-x64": "ef195b45bd260976ad2e84618f4044b5d7248deed41d647573f0ee22c4233df3",
+    "osx-arm64": "c54c45cb0d2579d8e0a4ddeb24d4a9dd0b460d07d9366adea2b38a1da22a463c",
+    "osx-x64": "dfc98abc4e54165a78372e280242a039671729b1b03420608df3b10c6b629fb6",
+    "linux-arm64": "e2bb22c427d90da8dbb1afff72ff1e2dce38d50b76deb02d7bc313a330a1330c",
+    "linux-x64": "9d4b15da54e25a0192f9bac073f086c015397d3676623b68dbf83a5dbaf5132b",
+    "win-x64": "66f3914987edeccfee8a2558470e0fde4f8c4154232ff4baa5d73373ebc819d4",
 }
+DEFAULT_VSCODE_JAVA_PATHS = VsixResourcePaths(
+    jre_version="21.0.10",
+    lombok_jar_basename="lombok-1.18.39-4050.jar",
+    equinox_launcher_basename="org.eclipse.equinox.launcher_1.7.100.v20251111-0406.jar",
+)
 
 INITIAL_INTELLICODE_VERSION = "1.2.30"
 INITIAL_INTELLICODE_SHA256 = "7f61a7f96d101cdf230f96821be3fddd8f890ebfefb3695d18beee43004ae251"
@@ -156,8 +185,16 @@ class EclipseJDTLS(SolidLanguageServer):
         - jdtls_xms: Initial heap size for the JDTLS server JVM (default: "100m")
         - intellicode_xmx: Maximum heap size for the IntelliCode embedded JVM (default: "1G")
         - intellicode_xms: Initial heap size for the IntelliCode embedded JVM (default: "100m")
+        - lombok_show_generated: Show Lombok-generated methods (getX/setX/builder()/...) in document
+              symbols by sending java.symbols.includeGeneratedCode=true to JDTLS (default: true).
+              Set to false for @Data-heavy projects where the extra getters/setters are noise.
+              Requires JDTLS commit b2d8952+ (vscode-java >= 1.53.0); older servers ignore the
+              key silently. See eclipse-jdtls/eclipse.jdt.ls#3706 and serena #1432.
         - gradle_version: Override the pinned Gradle distribution version downloaded by Serena
-        - vscode_java_version: Override the pinned vscode-java runtime bundle version downloaded by Serena
+        - vscode_java_version: Override the pinned vscode-java runtime bundle version downloaded by Serena.
+              Pinned versions: "1.54.0-923" (default) and "1.42.0-561" (legacy / initial). Other versions
+              are not supported in default VSIX mode (the resource paths inside the archive change between
+              releases); use upstream-jdtls mode for arbitrary versions.
         - intellicode_version: Override the pinned IntelliCode VSIX version downloaded by Serena
 
     Example configuration for upstream JDTLS mode (no downloads, suitable for offline/corporate):
@@ -184,8 +221,9 @@ class EclipseJDTLS(SolidLanguageServer):
         jdtls_xms: "100m"  # initial heap size for the JDTLS server JVM
         intellicode_xmx: "1G"  # maximum heap size for the IntelliCode embedded JVM
         intellicode_xms: "100m"  # initial heap size for the IntelliCode embedded JVM
+        lombok_show_generated: true  # show Lombok-generated methods in document symbols (default true)
         gradle_version: "8.14.2"
-        vscode_java_version: "1.42.0-561"
+        vscode_java_version: "1.54.0-923"  # also accepts pinned legacy "1.42.0-561"
         intellicode_version: "1.2.30"
     ```
     """
@@ -305,6 +343,23 @@ class EclipseJDTLS(SolidLanguageServer):
                     return DEFAULT_INTELLICODE_SHA256
                 return None
 
+            # Resolve internal VSIX paths (JRE / Lombok / launcher filenames). For pinned versions
+            # these are known; for any other user-supplied version we bail out — guessing would
+            # silently produce broken paths at JDTLS launch time, which is a worse UX than failing
+            # fast here with a pointer to upstream-JDTLS mode (which doesn't need pinned paths).
+            if vscode_java_version == INITIAL_VSCODE_JAVA_VERSION:
+                vsix_paths = INITIAL_VSCODE_JAVA_PATHS
+            elif vscode_java_version == DEFAULT_VSCODE_JAVA_VERSION:
+                vsix_paths = DEFAULT_VSCODE_JAVA_PATHS
+            else:
+                raise SolidLSPException(
+                    f"Resource paths inside the vscode-java {vscode_java_version} VSIX are not pinned in serena "
+                    f"(known: {INITIAL_VSCODE_JAVA_VERSION}, {DEFAULT_VSCODE_JAVA_VERSION}). "
+                    f"Either remove the 'vscode_java_version' override (defaults to {DEFAULT_VSCODE_JAVA_VERSION}), "
+                    f"or use upstream JDTLS mode by setting both 'jdtls_path' and 'lombok_path' in "
+                    f"ls_specific_settings.java (no pinning required)."
+                )
+
             runtime_dependencies: dict[str, dict[str, dict[str, object]]] = {
                 "gradle": {
                     "platform-agnostic": {
@@ -329,10 +384,10 @@ class EclipseJDTLS(SolidLanguageServer):
                         "relative_extraction_path": vscode_java_dirname,
                         "sha256": vscode_java_sha("osx-arm64"),
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
-                        "jre_home_path": "extension/jre/21.0.7-macosx-aarch64",
-                        "jre_path": "extension/jre/21.0.7-macosx-aarch64/bin/java",
-                        "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
-                        "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+                        "jre_home_path": f"extension/jre/{vsix_paths.jre_version}-macosx-aarch64",
+                        "jre_path": f"extension/jre/{vsix_paths.jre_version}-macosx-aarch64/bin/java",
+                        "lombok_jar_path": f"extension/lombok/{vsix_paths.lombok_jar_basename}",
+                        "jdtls_launcher_jar_path": f"extension/server/plugins/{vsix_paths.equinox_launcher_basename}",
                         "jdtls_readonly_config_path": "extension/server/config_mac_arm",
                     },
                     "osx-x64": {
@@ -341,10 +396,10 @@ class EclipseJDTLS(SolidLanguageServer):
                         "relative_extraction_path": vscode_java_dirname,
                         "sha256": vscode_java_sha("osx-x64"),
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
-                        "jre_home_path": "extension/jre/21.0.7-macosx-x86_64",
-                        "jre_path": "extension/jre/21.0.7-macosx-x86_64/bin/java",
-                        "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
-                        "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+                        "jre_home_path": f"extension/jre/{vsix_paths.jre_version}-macosx-x86_64",
+                        "jre_path": f"extension/jre/{vsix_paths.jre_version}-macosx-x86_64/bin/java",
+                        "lombok_jar_path": f"extension/lombok/{vsix_paths.lombok_jar_basename}",
+                        "jdtls_launcher_jar_path": f"extension/server/plugins/{vsix_paths.equinox_launcher_basename}",
                         "jdtls_readonly_config_path": "extension/server/config_mac",
                     },
                     "linux-arm64": {
@@ -353,10 +408,10 @@ class EclipseJDTLS(SolidLanguageServer):
                         "relative_extraction_path": vscode_java_dirname,
                         "sha256": vscode_java_sha("linux-arm64"),
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
-                        "jre_home_path": "extension/jre/21.0.7-linux-aarch64",
-                        "jre_path": "extension/jre/21.0.7-linux-aarch64/bin/java",
-                        "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
-                        "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+                        "jre_home_path": f"extension/jre/{vsix_paths.jre_version}-linux-aarch64",
+                        "jre_path": f"extension/jre/{vsix_paths.jre_version}-linux-aarch64/bin/java",
+                        "lombok_jar_path": f"extension/lombok/{vsix_paths.lombok_jar_basename}",
+                        "jdtls_launcher_jar_path": f"extension/server/plugins/{vsix_paths.equinox_launcher_basename}",
                         "jdtls_readonly_config_path": "extension/server/config_linux_arm",
                     },
                     "linux-x64": {
@@ -365,10 +420,10 @@ class EclipseJDTLS(SolidLanguageServer):
                         "relative_extraction_path": vscode_java_dirname,
                         "sha256": vscode_java_sha("linux-x64"),
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
-                        "jre_home_path": "extension/jre/21.0.7-linux-x86_64",
-                        "jre_path": "extension/jre/21.0.7-linux-x86_64/bin/java",
-                        "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
-                        "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+                        "jre_home_path": f"extension/jre/{vsix_paths.jre_version}-linux-x86_64",
+                        "jre_path": f"extension/jre/{vsix_paths.jre_version}-linux-x86_64/bin/java",
+                        "lombok_jar_path": f"extension/lombok/{vsix_paths.lombok_jar_basename}",
+                        "jdtls_launcher_jar_path": f"extension/server/plugins/{vsix_paths.equinox_launcher_basename}",
                         "jdtls_readonly_config_path": "extension/server/config_linux",
                     },
                     "win-x64": {
@@ -377,10 +432,10 @@ class EclipseJDTLS(SolidLanguageServer):
                         "relative_extraction_path": vscode_java_dirname,
                         "sha256": vscode_java_sha("win-x64"),
                         "allowed_hosts": VSCODE_JAVA_ALLOWED_HOSTS,
-                        "jre_home_path": "extension/jre/21.0.7-win32-x86_64",
-                        "jre_path": "extension/jre/21.0.7-win32-x86_64/bin/java.exe",
-                        "lombok_jar_path": "extension/lombok/lombok-1.18.36.jar",
-                        "jdtls_launcher_jar_path": "extension/server/plugins/org.eclipse.equinox.launcher_1.7.0.v20250424-1814.jar",
+                        "jre_home_path": f"extension/jre/{vsix_paths.jre_version}-win32-x86_64",
+                        "jre_path": f"extension/jre/{vsix_paths.jre_version}-win32-x86_64/bin/java.exe",
+                        "lombok_jar_path": f"extension/lombok/{vsix_paths.lombok_jar_basename}",
+                        "jdtls_launcher_jar_path": f"extension/server/plugins/{vsix_paths.equinox_launcher_basename}",
                         "jdtls_readonly_config_path": "extension/server/config_win",
                     },
                 },
@@ -883,6 +938,15 @@ class EclipseJDTLS(SolidLanguageServer):
         intellicode_xmx = self._custom_settings.get("intellicode_xmx", "1G")
         intellicode_xms = self._custom_settings.get("intellicode_xms", "100m")
 
+        # Lombok-generated symbols (getX/setX/builder()/equals/hashCode/toString/...): JDTLS filters
+        # these out of documentSymbol results by default. Without them, find_symbol/get_symbols_overview
+        # return only user-written sources, which breaks navigation around @Data/@Builder/@Getter/@Setter
+        # classes. Default to True so agentic workflows can find_symbol -> replace_symbol_body on generated
+        # members. Requires JDTLS commit b2d8952 or newer (vscode-java >= 1.53.0, or upstream JDTLS
+        # snapshot after 2026-02-24); older servers ignore the unknown preference key silently.
+        # See eclipse-jdtls/eclipse.jdt.ls#3706.
+        lombok_show_generated = self._custom_settings.get("lombok_show_generated", True)
+
         # Gradle wrapper: default to False to preserve existing behaviour
         gradle_wrapper_enabled = self._custom_settings.get("gradle_wrapper_enabled", False)
         log.info(
@@ -1096,9 +1160,10 @@ class EclipseJDTLS(SolidLanguageServer):
                                 "defaultMojoExecutionAction": "ignore",
                             },
                             "workspaceCacheLimit": 90,
-                            "runtimes": [
-                                {"name": "JavaSE-21", "path": "static/vscode-java/extension/jre/21.0.7-linux-x86_64", "default": True}
-                            ],
+                            # Placeholder; the real `runtimes` array is overwritten below from
+                            # self.runtime_dependency_paths.jre_home_path (works for both default
+                            # VSIX mode and upstream-jdtls mode, which uses the system JDK).
+                            "runtimes": [],
                         },
                         "trace": {"server": "verbose"},
                         "import": {
@@ -1162,7 +1227,11 @@ class EclipseJDTLS(SolidLanguageServer):
                         "references": {"includeAccessors": True, "includeDecompiledSources": True},
                         "typeHierarchy": {"lazyLoad": False},
                         "settings": {"url": None},
-                        "symbols": {"includeSourceMethodDeclarations": False},
+                        "symbols": {
+                            "includeSourceMethodDeclarations": False,
+                            # Surface Lombok-generated methods in document symbols (#1432).
+                            "includeGeneratedCode": lombok_show_generated,
+                        },
                         "inlayHints": {"parameterNames": {"enabled": "literals", "exclusions": []}},
                         "codeAction": {"sortMembers": {"avoidVolatileChanges": True}},
                         "compile": {
