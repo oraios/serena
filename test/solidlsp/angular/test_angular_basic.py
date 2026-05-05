@@ -10,6 +10,7 @@ component injects, plus a template (.html) that interpolates component methods.
 """
 
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,7 @@ from serena.util.text_utils import find_text_coordinates
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from test.conftest import language_has_verified_implementation_support
-from test.solidlsp.conftest import find_in_file, request_all_symbols
+from test.solidlsp.conftest import read_repo_file, request_all_symbols
 
 
 @pytest.mark.angular
@@ -67,7 +68,10 @@ class TestAngularLanguageServerBasics:
         line of ``app.component.html``.
         """
         path = "src/app/app.component.html"
-        line, col = find_in_file(language_server, path, "greeting()")
+        needle = "greeting()"
+        coords = find_text_coordinates(read_repo_file(language_server, path), f"({re.escape(needle)})")
+        assert coords is not None, f"Could not find {needle!r} in {path}"
+        line, col = coords.line, coords.col
         # +1 puts the cursor inside the identifier rather than on its leading boundary.
         definitions = language_server.request_definition(path, line, col + 1)
         assert definitions, f"Expected non-empty cross-file definition for template->component method, got {definitions}"
@@ -117,8 +121,7 @@ class TestAngularLanguageServerBasics:
         src_path = "src/app/app.component.ts"
         # Probe at the declaration site of setName, not a usage; the regex anchors on the
         # parameter list signature so we always land on the method header even if calls move.
-        abs_path = Path(language_server.language_server.repository_root_path) / src_path
-        coords = find_text_coordinates(abs_path.read_text(), r"(setName)\(name:")
+        coords = find_text_coordinates(read_repo_file(language_server, src_path), r"(setName)\(name:")
         assert coords is not None, "Could not locate setName declaration in app.component.ts"
         # +1 puts the cursor inside the identifier rather than on its leading boundary.
         refs = language_server.request_references(src_path, coords.line, coords.col + 1)
@@ -138,7 +141,10 @@ class TestAngularHover:
         and must yield a non-empty MarkupContent describing the method signature.
         """
         path = "src/app/app.component.ts"
-        line, col = find_in_file(language_server, path, "setName(")
+        needle = "setName("
+        coords = find_text_coordinates(read_repo_file(language_server, path), f"({re.escape(needle)})")
+        assert coords is not None, f"Could not find {needle!r} in {path}"
+        line, col = coords.line, coords.col
         # Cursor inside the identifier (one past the leading 's') so the LSP
         # treats the position as the symbol rather than a token boundary.
         hover = language_server.request_hover(path, line, col + 1)
@@ -154,7 +160,10 @@ class TestAngularHover:
         through ngserver and must yield Angular-aware type info.
         """
         path = "src/app/app.component.html"
-        line, col = find_in_file(language_server, path, "greeting()")
+        needle = "greeting()"
+        coords = find_text_coordinates(read_repo_file(language_server, path), f"({re.escape(needle)})")
+        assert coords is not None, f"Could not find {needle!r} in {path}"
+        line, col = coords.line, coords.col
         # Cursor inside the identifier (one past the leading 'g').
         hover = language_server.request_hover(path, line, col + 1)
         assert hover is not None, f"Expected hover info for greeting() in {path}, got None"
@@ -172,7 +181,10 @@ class TestAngularDefinitionRouting:
         ``userName`` signal field declaration in app.component.ts.
         """
         path = "src/app/app.component.html"
-        line, col = find_in_file(language_server, path, '[value]="userName()"')
+        needle = '[value]="userName()"'
+        coords = find_text_coordinates(read_repo_file(language_server, path), f"({re.escape(needle)})")
+        assert coords is not None, f"Could not find {needle!r} in {path}"
+        line, col = coords.line, coords.col
         # Cursor on the 'u' of userName inside the binding expression
         col = col + len('[value]="')
         definitions = language_server.request_definition(path, line, col)
@@ -188,7 +200,10 @@ class TestAngularDefinitionRouting:
         ``setName`` method declaration in app.component.ts.
         """
         path = "src/app/app.component.html"
-        line, col = find_in_file(language_server, path, '(input)="setName(')
+        needle = '(input)="setName('
+        coords = find_text_coordinates(read_repo_file(language_server, path), f"({re.escape(needle)})")
+        assert coords is not None, f"Could not find {needle!r} in {path}"
+        line, col = coords.line, coords.col
         col = col + len('(input)="')  # cursor on 's' of setName
         definitions = language_server.request_definition(path, line, col)
         assert definitions, f"Expected non-empty definition for setName binding, got {definitions}"
@@ -205,7 +220,10 @@ class TestAngularDefinitionRouting:
         path = "src/app/app.component.ts"
         # Probe at the constructor signature, not the import line, to make sure
         # we exercise the type-resolution path rather than the module-resolution path.
-        line, col = find_in_file(language_server, path, "private readonly greetings: GreetingService")
+        needle = "private readonly greetings: GreetingService"
+        coords = find_text_coordinates(read_repo_file(language_server, path), f"({re.escape(needle)})")
+        assert coords is not None, f"Could not find {needle!r} in {path}"
+        line, col = coords.line, coords.col
         col = col + len("private readonly greetings: ")  # cursor on 'G' of GreetingService
         definitions = language_server.request_definition(path, line, col)
         assert definitions, f"Expected definition for GreetingService, got {definitions}"
@@ -224,7 +242,10 @@ class TestAngularDefinitionRouting:
         component class.
         """
         path = "src/app/app.component.html"
-        line, col = find_in_file(language_server, path, "app-item-card")
+        needle = "app-item-card"
+        coords = find_text_coordinates(read_repo_file(language_server, path), f"({re.escape(needle)})")
+        assert coords is not None, f"Could not find {needle!r} in {path}"
+        line, col = coords.line, coords.col
         col = col + 1  # cursor inside 'app-item-card'
         definitions = language_server.request_definition(path, line, col)
         assert definitions, f"Expected definition for <app-item-card>, got {definitions}"
@@ -246,8 +267,7 @@ class TestAngularRename:
         """
         path = "src/app/app.component.ts"
         # Anchor on the declaration site (signature with the parameter list), not a usage.
-        abs_path = Path(language_server.language_server.repository_root_path) / path
-        coords = find_text_coordinates(abs_path.read_text(), r"(setName)\(name:")
+        coords = find_text_coordinates(read_repo_file(language_server, path), r"(setName)\(name:")
         assert coords is not None, "Could not locate setName declaration in app.component.ts"
         # +1 puts the cursor inside the identifier rather than on its leading boundary.
         edit = language_server.request_rename_symbol_edit(path, coords.line, coords.col + 1, "updateName")
@@ -315,7 +335,10 @@ class TestAngularImplementations:
             pytest.skip("Angular language server is not marked as supporting implementation requests in this build")
 
         path = "src/app/greeter.interface.ts"
-        line, col = find_in_file(language_server, path, "greet(")
+        needle = "greet("
+        coords = find_text_coordinates(read_repo_file(language_server, path), f"({re.escape(needle)})")
+        assert coords is not None, f"Could not find {needle!r} in {path}"
+        line, col = coords.line, coords.col
         # Cursor inside the identifier (one past 'g').
         implementations = language_server.request_implementation(path, line, col + 1)
         assert implementations, f"Expected at least one implementation of Greeter.greet, got {implementations}"

@@ -1,7 +1,5 @@
-import re
 from pathlib import Path
 
-from serena.util.text_utils import find_text_coordinates
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
@@ -9,17 +7,14 @@ from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
 PYTHON_BACKEND_LANGUAGES = [Language.PYTHON, Language.PYTHON_TY]
 
 
-def find_in_file(language_server: SolidLanguageServer, relative_path: str, needle: str) -> tuple[int, int]:
-    """Locate the (line, column) of the first occurrence of literal ``needle`` in ``relative_path``.
+def read_repo_file(language_server: SolidLanguageServer, relative_path: str) -> str:
+    """Read the text content of ``relative_path`` resolved against the LS's repository root.
 
-    Thin convenience wrapper around :func:`serena.util.text_utils.find_text_coordinates` that
-    reads the file via the language server's repository root and accepts a literal substring
-    instead of a regex; returns a plain ``(line, col)`` tuple for ergonomic test code.
+    Convenience for test code that needs to feed file content to
+    :func:`serena.util.text_utils.find_text_coordinates`.
     """
     abs_path = Path(language_server.language_server.repository_root_path) / relative_path
-    coords = find_text_coordinates(abs_path.read_text(), f"({re.escape(needle)})")
-    assert coords is not None, f"Could not find '{needle}' in {relative_path}"
-    return coords.line, coords.col
+    return abs_path.read_text()
 
 
 def is_diagnostics_test_file(relative_path: str) -> bool:

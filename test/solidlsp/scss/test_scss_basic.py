@@ -7,15 +7,17 @@ variables and mixins.
 """
 
 import os
+import re
 from pathlib import Path
 
 import pytest
 
+from serena.util.text_utils import find_text_coordinates
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
 from solidlsp.lsp_protocol_handler import lsp_types as LSPTypes
-from test.solidlsp.conftest import find_in_file, request_all_symbols
+from test.solidlsp.conftest import read_repo_file, request_all_symbols
 
 
 @pytest.mark.scss
@@ -55,7 +57,10 @@ class TestScssLanguageServerBasics:
     def test_cross_file_definition_variable(self, language_server: SolidLanguageServer) -> None:
         """`vars.$color-text` in buttons.scss must resolve into _variables.scss."""
         path = "buttons.scss"
-        line, col = find_in_file(language_server, path, "$color-text")
+        needle = "$color-text"
+        coords = find_text_coordinates(read_repo_file(language_server, path), f"({re.escape(needle)})")
+        assert coords is not None, f"Could not find {needle!r} in {path}"
+        line, col = coords.line, coords.col
         # Cursor inside the variable identifier.
         definitions = language_server.request_definition(path, line, col + 2)
         assert definitions, f"Expected non-empty cross-file definition list for vars.$color-text, got {definitions}"
@@ -68,7 +73,10 @@ class TestScssLanguageServerBasics:
     def test_cross_file_definition_mixin(self, language_server: SolidLanguageServer) -> None:
         """`mix.card-surface` in buttons.scss must resolve into _mixins.scss."""
         path = "buttons.scss"
-        line, col = find_in_file(language_server, path, "card-surface")
+        needle = "card-surface"
+        coords = find_text_coordinates(read_repo_file(language_server, path), f"({re.escape(needle)})")
+        assert coords is not None, f"Could not find {needle!r} in {path}"
+        line, col = coords.line, coords.col
         definitions = language_server.request_definition(path, line, col + 2)
         assert definitions, f"Expected non-empty cross-file definition list for mix.card-surface, got {definitions}"
         target_uris = [d["uri"] for d in definitions]
@@ -80,7 +88,10 @@ class TestScssLanguageServerBasics:
     def test_cross_file_definition_function(self, language_server: SolidLanguageServer) -> None:
         """`mix.rem(16)` in main.scss must resolve into _mixins.scss (an @function)."""
         path = "main.scss"
-        line, col = find_in_file(language_server, path, "mix.rem")
+        needle = "mix.rem"
+        coords = find_text_coordinates(read_repo_file(language_server, path), f"({re.escape(needle)})")
+        assert coords is not None, f"Could not find {needle!r} in {path}"
+        line, col = coords.line, coords.col
         # Cursor inside the function identifier (skip the `mix.` prefix).
         definitions = language_server.request_definition(path, line, col + 5)
         assert definitions, f"Expected non-empty cross-file definition list for mix.rem, got {definitions}"
@@ -113,7 +124,10 @@ class TestScssReferences:
         find-references in practice.
         """
         path = "buttons.scss"
-        line, col = find_in_file(language_server, path, "card-surface")
+        needle = "card-surface"
+        coords = find_text_coordinates(read_repo_file(language_server, path), f"({re.escape(needle)})")
+        assert coords is not None, f"Could not find {needle!r} in {path}"
+        line, col = coords.line, coords.col
         refs = language_server.request_references(path, line, col + 2)
         ref_paths = {r.get("relativePath", "") for r in refs}
         assert any(p.endswith("buttons.scss") for p in ref_paths), (
@@ -128,7 +142,10 @@ class TestScssReferences:
         from the ``buttons.scss`` usage site must include both files.
         """
         path = "buttons.scss"
-        line, col = find_in_file(language_server, path, "$color-primary")
+        needle = "$color-primary"
+        coords = find_text_coordinates(read_repo_file(language_server, path), f"({re.escape(needle)})")
+        assert coords is not None, f"Could not find {needle!r} in {path}"
+        line, col = coords.line, coords.col
         refs = language_server.request_references(path, line, col + 2)
         ref_paths = {r.get("relativePath", "") for r in refs}
         assert any(p.endswith("buttons.scss") for p in ref_paths), (
@@ -162,7 +179,10 @@ class TestScssHover:
     @pytest.mark.parametrize("language_server", [Language.SCSS], indirect=True)
     def test_hover_on_variable_use(self, language_server: SolidLanguageServer) -> None:
         path = "buttons.scss"
-        line, col = find_in_file(language_server, path, "$color-text")
+        needle = "$color-text"
+        coords = find_text_coordinates(read_repo_file(language_server, path), f"({re.escape(needle)})")
+        assert coords is not None, f"Could not find {needle!r} in {path}"
+        line, col = coords.line, coords.col
         hover = language_server.request_hover(path, line, col + 2)
         assert hover is not None, f"Expected hover info for $color-text in {path}, got None"
         contents = hover.get("contents")
@@ -173,7 +193,10 @@ class TestScssHover:
     @pytest.mark.parametrize("language_server", [Language.SCSS], indirect=True)
     def test_hover_on_mixin_call(self, language_server: SolidLanguageServer) -> None:
         path = "buttons.scss"
-        line, col = find_in_file(language_server, path, "card-surface")
+        needle = "card-surface"
+        coords = find_text_coordinates(read_repo_file(language_server, path), f"({re.escape(needle)})")
+        assert coords is not None, f"Could not find {needle!r} in {path}"
+        line, col = coords.line, coords.col
         hover = language_server.request_hover(path, line, col + 2)
         assert hover is not None, f"Expected hover info for card-surface in {path}, got None"
         contents = hover.get("contents")
@@ -194,7 +217,10 @@ class TestScssCompletions:
         path = "buttons.scss"
         # `color: vars.$color-text;` — invoke completion at the `.` position so the
         # LSP sees the namespace prefix and offers its members.
-        line, col = find_in_file(language_server, path, "vars.$color-text")
+        needle = "vars.$color-text"
+        coords = find_text_coordinates(read_repo_file(language_server, path), f"({re.escape(needle)})")
+        assert coords is not None, f"Could not find {needle!r} in {path}"
+        line, col = coords.line, coords.col
         # Position the cursor right after the `.` (4 chars: 'v','a','r','s','.' -> idx 5)
         completions = language_server.request_completions(path, line, col + 5)
         labels = {c.get("completionText", "") for c in completions}
@@ -247,7 +273,10 @@ class TestScssSymbolKinds:
         to classify the completion.
         """
         path = "buttons.scss"
-        line, col = find_in_file(language_server, path, "vars.$color-text")
+        needle = "vars.$color-text"
+        coords = find_text_coordinates(read_repo_file(language_server, path), f"({re.escape(needle)})")
+        assert coords is not None, f"Could not find {needle!r} in {path}"
+        line, col = coords.line, coords.col
         completions = language_server.request_completions(path, line, col + 5)
         var_items = [c for c in completions if "color-primary" in c.get("completionText", "")]
         assert var_items, "no $color-primary completion item found"
@@ -311,7 +340,10 @@ class TestSomeSassWithPlainCss:
         (Some Sass forwards ``vscode-css-languageservice``'s property reference data).
         """
         path = "css/main.css"
-        line, col = find_in_file(language_server, path, "background-color")
+        needle = "background-color"
+        coords = find_text_coordinates(read_repo_file(language_server, path), f"({re.escape(needle)})")
+        assert coords is not None, f"Could not find {needle!r} in {path}"
+        line, col = coords.line, coords.col
         hover = language_server.request_hover(path, line, col + 2)
         assert hover is not None, f"Expected hover info for background-color in {path}, got None"
         contents = hover.get("contents")
@@ -325,7 +357,10 @@ class TestSomeSassWithPlainCss:
         proves ``somesass.css.completion.enabled = true`` is being honoured.
         """
         path = "css/main.css"
-        line, col = find_in_file(language_server, path, "padding:")
+        needle = "padding:"
+        coords = find_text_coordinates(read_repo_file(language_server, path), f"({re.escape(needle)})")
+        assert coords is not None, f"Could not find {needle!r} in {path}"
+        line, col = coords.line, coords.col
         completions = language_server.request_completions(path, line, col)
         labels = {c.get("completionText", "") for c in completions}
         assert any(label in labels for label in ("padding", "margin", "color", "border")), (
@@ -350,7 +385,10 @@ class TestSomeSassWithPlainCss:
         # ``    color: var(--color-text);`` — invoke completion right after the
         # leading dashes so the LS treats the request as a partial custom-property
         # identifier and offers matching declarations from the workspace.
-        line, col = find_in_file(language_server, path, "var(--color-text")
+        needle = "var(--color-text"
+        coords = find_text_coordinates(read_repo_file(language_server, path), f"({re.escape(needle)})")
+        assert coords is not None, f"Could not find {needle!r} in {path}"
+        line, col = coords.line, coords.col
         cursor_col = col + len("var(--")
         completions = language_server.request_completions(path, line, cursor_col)
         labels = {c.get("completionText", "") for c in completions}
