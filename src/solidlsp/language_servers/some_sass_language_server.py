@@ -39,10 +39,6 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
-# Version pinning convention (see eclipse_jdtls.py for the full spec):
-#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
-#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
-INITIAL_PACKAGE_VERSION = "2.3.8"
 DEFAULT_PACKAGE_VERSION = "2.3.8"
 LS_BIN_NAME = "some-sass-language-server"
 
@@ -130,9 +126,7 @@ class SomeSassLanguageServer(SolidLanguageServer):
             package_version = self._custom_settings.get("some_sass_version", DEFAULT_PACKAGE_VERSION)
             npm_registry = self._custom_settings.get("npm_registry")
 
-            # Per the version-pinning convention: the legacy unversioned install dir is
-            # reserved for INITIAL; everything else goes into a versioned subdir.
-            ls_dirname = "some-sass" if package_version == INITIAL_PACKAGE_VERSION else f"some-sass-{package_version}"
+            ls_dirname = f"some-sass-{package_version}"
             install_dir = os.path.join(self._ls_resources_dir, ls_dirname)
             executable_path = os.path.join(install_dir, "node_modules", ".bin", LS_BIN_NAME)
             if os.name == "nt":

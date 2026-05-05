@@ -76,16 +76,9 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
-# Version pinning convention (see eclipse_jdtls.py for the full spec):
-#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
-#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
 # Angular installs four interdependent npm packages into a single ``node_modules`` (npm
-# hoists them so ngserver's plugin resolution works); the install-dir name therefore
-# encodes all four versions, so overriding any single one routes to a fresh subdir.
-INITIAL_ANGULAR_LANGUAGE_SERVER_VERSION = "21.2.10"
-INITIAL_ANGULAR_LANGUAGE_SERVICE_VERSION = "21.2.10"
-INITIAL_TYPESCRIPT_VERSION = "5.9.3"
-INITIAL_TYPESCRIPT_LANGUAGE_SERVER_VERSION = "5.1.3"
+# hoists them so ngserver's plugin resolution works); the install-dir name encodes all
+# four versions so a bump of any single one routes to a fresh subdir.
 DEFAULT_ANGULAR_LANGUAGE_SERVER_VERSION = "21.2.10"
 DEFAULT_ANGULAR_LANGUAGE_SERVICE_VERSION = "21.2.10"
 DEFAULT_TYPESCRIPT_VERSION = "5.9.3"
@@ -311,17 +304,9 @@ class AngularLanguageServer(SolidLanguageServer):
         )
         npm_registry = ng_settings.get("npm_registry", ts_settings.get("npm_registry"))
 
-        # Per the version-pinning convention: the legacy unversioned install dir is
-        # reserved iff every one of the four package versions matches its INITIAL pin;
-        # otherwise everything goes into a fully-versioned subdir so a bump of any
-        # single package cannot silently reuse stale companions in a shared node_modules.
-        all_initial = (
-            ls_version == INITIAL_ANGULAR_LANGUAGE_SERVER_VERSION
-            and svc_version == INITIAL_ANGULAR_LANGUAGE_SERVICE_VERSION
-            and ts_version == INITIAL_TYPESCRIPT_VERSION
-            and tsls_version == INITIAL_TYPESCRIPT_LANGUAGE_SERVER_VERSION
-        )
-        ls_dirname = "angular-lsp" if all_initial else f"angular-lsp-{ls_version}-{svc_version}-{ts_version}-{tsls_version}"
+        # Fully-versioned subdir so a bump of any single package cannot silently reuse
+        # stale companions in a shared node_modules.
+        ls_dirname = f"angular-lsp-{ls_version}-{svc_version}-{ts_version}-{tsls_version}"
         install_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), ls_dirname)
         ng_executable = os.path.join(install_dir, "node_modules", ".bin", NGSERVER_BIN)
         ts_ls_executable = os.path.join(install_dir, "node_modules", ".bin", TSLS_BIN)

@@ -18,7 +18,6 @@ import pytest
 from serena.util.text_utils import find_text_coordinates
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from test.conftest import language_has_verified_implementation_support
 from test.solidlsp.conftest import read_repo_file, request_all_symbols
 
 
@@ -331,9 +330,6 @@ class TestAngularImplementations:
         @angular/language-service plugin loaded as a tsserver plugin) — bare ngserver
         does not own ``textDocument/implementation``.
         """
-        if not language_has_verified_implementation_support(Language.ANGULAR):
-            pytest.skip("Angular language server is not marked as supporting implementation requests in this build")
-
         path = "src/app/greeter.interface.ts"
         needle = "greet("
         coords = find_text_coordinates(read_repo_file(language_server, path), f"({re.escape(needle)})")

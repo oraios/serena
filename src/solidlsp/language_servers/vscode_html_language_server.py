@@ -34,11 +34,7 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
-# Version pinning convention (see eclipse_jdtls.py for the full spec):
-#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
-#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
 DEFAULT_PACKAGE_NAME = "vscode-langservers-extracted"
-INITIAL_PACKAGE_VERSION = "4.10.0"
 DEFAULT_PACKAGE_VERSION = "4.10.0"
 LS_BIN_NAME = "vscode-html-language-server"
 
@@ -82,14 +78,10 @@ class VsCodeHtmlLanguageServer(SolidLanguageServer):
             package_version = self._custom_settings.get("vscode_langservers_version", DEFAULT_PACKAGE_VERSION)
             npm_registry = self._custom_settings.get("npm_registry")
 
-            # Per the version-pinning convention: the legacy unversioned install dir is
-            # reserved for INITIAL; everything else goes into a versioned subdir, so a
-            # version bump cannot silently reuse a stale binary. The install dir is also
-            # isolated from any other LS that defaults to the same npm package, since users
-            # may override ``vscode_langservers_package`` independently per language.
-            ls_dirname = (
-                "vscode-langservers-html" if package_version == INITIAL_PACKAGE_VERSION else f"vscode-langservers-html-{package_version}"
-            )
+            # Versioned subdir keeps a bump from silently reusing a stale binary. The dir
+            # is also isolated from any other LS that defaults to the same npm package,
+            # since users may override ``vscode_langservers_package`` independently per language.
+            ls_dirname = f"vscode-langservers-html-{package_version}"
             install_dir = os.path.join(self._ls_resources_dir, ls_dirname)
             executable_path = os.path.join(install_dir, "node_modules", ".bin", LS_BIN_NAME)
             if os.name == "nt":
