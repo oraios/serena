@@ -227,8 +227,13 @@ ls_specific_settings:
 
 This is supported by all language servers deriving their dependency provider from `LanguageServerDependencyProviderSinglePath`,
 and by some additional wrappers that explicitly expose `ls_path`.
-Common examples include: `ansible`, `bash`, `clojure`, `cpp`, `cpp_ccls`, `hlsl`, `kotlin`, `lean4`, `luau`, `markdown`, `php`,
-`php_phpactor`, `python`, `rust`, `solidity`, `systemverilog`, `toml`, `typescript`, and `yaml`.
+Common examples include: `ansible`, `bash`, `clojure`, `cpp`, `cpp_ccls`, `hlsl`, `html`, `kotlin`, `lean4`, `luau`, `markdown`, `php`,
+`php_phpactor`, `python`, `rust`, `scss`, `solidity`, `systemverilog`, `toml`, `typescript`, and `yaml`.
+
+Note: `angular` does **not** support `ls_path` — the Angular language server is part of a multi-process orchestration
+(`ngserver` plus a companion TypeScript language server with the `@angular/language-service` plugin and an HTML
+companion) where the dependency layout matters; use the version overrides documented in the Angular section below
+to pin specific releases of the bundled stack.
 
 If a language server supports `ls_path`, setting it bypasses Serena's managed download or install for that server.
 In that case, any server-specific version or registry settings only apply when `ls_path` is not set.
@@ -242,6 +247,36 @@ Supported settings:
 | Setting | Default | Description |
 |---|---|---|
 | `al_extension_version` | `18.0.2242655` | Override the AL VS Code extension version Serena downloads from the VS Code Marketplace. |
+
+#### Angular
+
+Serena uses `@angular/language-server` (`ngserver`) for the `angular` language key, orchestrated together with a
+companion `typescript-language-server` (with `@angular/language-service` loaded as a tsserver plugin) and a
+companion `vscode-html-language-server` for `.html` `documentSymbol`. This is an **experimental** language and
+must be explicitly listed in `project.yml`; it is not auto-detected.
+
+**Project requirements:**
+
+- The project itself must have `@angular/core` installed (i.e. `npm install` must have been run in the project root,
+  or in a workspace root above it for monorepo layouts). Without it, `ngserver` reports every file as "not in an
+  Angular project" and template-aware features silently return empty.
+- A `tsconfig.json` must be reachable at or above any opened `.ts` file.
+- Do **not** also list `typescript` or `html` in `languages` when `angular` is active — Angular subsumes both
+  for `.ts` / `.html` files. SCSS is **not** subsumed; list `scss` separately if needed.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `angular_language_server_version` | `21.2.10` | Override the bundled `@angular/language-server` npm package version Serena installs. |
+| `angular_language_service_version` | `21.2.10` | Override the bundled `@angular/language-service` tsserver plugin version. |
+| `typescript_version` | `5.9.3` | Override the bundled `typescript` npm package version. Falls back to `ls_specific_settings.typescript.typescript_version` if unset. |
+| `typescript_language_server_version` | `5.1.3` | Override the bundled `typescript-language-server` version. Falls back to `ls_specific_settings.typescript.typescript_language_server_version` if unset. |
+| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. Falls back to `ls_specific_settings.typescript.npm_registry` if unset. |
+
+Notes:
+- The HTML companion (`vscode-html-language-server`) is configured via `ls_specific_settings.html` — see the HTML section below.
+- `ls_path` is not supported (see note above the AL section).
 
 #### Ansible
 
@@ -496,6 +531,25 @@ ls_specific_settings:
     renameSourceFolders: ["src", "lib"]
 ```
 
+#### HTML
+
+Serena uses `vscode-html-language-server` from Microsoft's `vscode-langservers-extracted` npm package for the
+`html` language key. **Experimental** — must be explicitly listed in `project.yml`; not auto-detected. The HTML
+LSP returns in-file element / id symbols via `documentSymbol`; cross-file `definition` / `references` are not
+meaningful for HTML and are not exposed.
+
+This same language server is also used as a tertiary companion by the Angular language server (see the Angular
+section), since `ngserver` does not implement `textDocument/documentSymbol` for `.html` files.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed install | Override the `vscode-html-language-server` executable path. |
+| `vscode_langservers_package` | `vscode-langservers-extracted` | npm package providing the binary. Set to `@t1ckbase/vscode-langservers-extracted` (or any other source) to use the actively-maintained 2026 fork. |
+| `vscode_langservers_version` | `4.10.0` | Override the npm package version Serena installs when `ls_path` is not set. |
+| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
+
 #### Java (`eclipse.jdt.ls`)
 
 Java support has two installation modes:
@@ -535,8 +589,9 @@ The following settings are supported for the Java language server:
 | `gradle_java_home` | `null` | Path to the JDK used by Gradle. When unset, Gradle uses the bundled JRE. |
 | `use_system_java_home` | `false` | Use the system's `JAVA_HOME` environment variable for JDTLS itself. Enable this if your project requires a specific JDK vendor or version for Gradle's JDK checks. |
 | `gradle_version` | `8.14.2` | (vscode-java mode only) Override the Gradle distribution version Serena downloads by default. |
-| `vscode_java_version` | `1.42.0-561` | (vscode-java mode only) Override the bundled `vscode-java` runtime bundle version Serena downloads by default. |
+| `vscode_java_version` | `1.54.0-923` | (vscode-java mode only) Override the bundled `vscode-java` runtime bundle version Serena downloads by default. |
 | `intellicode_version` | `1.2.30` | (vscode-java mode only) Override the IntelliCode VSIX version Serena downloads by default. |
+| `lombok_show_generated` | `true` | Show Lombok-generated methods (`getX/setX`, `builder()`, `equals/hashCode/toString`, `withX`, fluent accessors) in `find_symbol`, `get_symbols_overview` and the symbol-edit tools. Set to `false` to restore the previous JDTLS default and hide the synthetic methods (e.g. when `@Data` classes pollute the outline with too many getters/setters). Requires JDTLS commit `b2d8952` / `vscode-java >= 1.53.0`; the bundled default already meets this. |
 | `jdtls_xmx` | `3G` | Maximum heap size for the JDTLS server JVM. |
 | `jdtls_xms` | `100m` | Initial heap size for the JDTLS server JVM. |
 | `intellicode_xmx` | `1G` | (vscode-java mode only) Maximum heap size for the IntelliCode embedded JVM. |
@@ -559,7 +614,7 @@ Example: upstream-jdtls mode (offline / corporate network):
 ls_specific_settings:
   java:
     jdtls_path: "/opt/homebrew/Cellar/jdtls/1.50.0/libexec"
-    lombok_path: "/Users/me/.m2/repository/org/projectlombok/lombok/1.18.36/lombok-1.18.36.jar"
+    lombok_path: "/Users/me/.m2/repository/org/projectlombok/lombok/1.18.38/lombok-1.18.38.jar"
     # java_home: "/opt/homebrew/opt/openjdk@21"  # optional
 ```
 
@@ -790,6 +845,26 @@ Supported settings:
 | `on_stale_lock` | `auto-clean` | How Serena handles stale Metals H2 database locks. Supported values: `auto-clean`, `warn`, `fail`. |
 | `log_multi_instance_notice` | `true` | Log a notice when another Metals instance is detected. |
 
+#### SCSS / Sass / CSS
+
+Serena uses [`some-sass-language-server`](https://github.com/wkillerud/some-sass) for the `scss` language key.
+**Experimental** — must be explicitly listed in `project.yml`; not auto-detected. Some Sass was chosen over the
+generic `vscode-css-language-server` because it provides full workspace-wide `@use` / `@forward` go-to-definition
+and find-references for variables, mixins, functions, and placeholders.
+
+Handles `.scss`, `.sass`, and `.css`. The three are dispatched by the LSP language id (`scss`, `sass`, `css`) and
+share the same engine; CSS feature toggles default to off upstream and Serena flips them on at startup so that
+plain CSS gets symbols, definitions, references, hover, and completion. Lint diagnostics are deliberately left
+off (the rules are opinionated about vendor prefixes / empty rules / etc.); only syntax-level diagnostics surface.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed install | Override the `some-sass-language-server` executable path. |
+| `some_sass_version` | `2.3.8` | Override the npm package version Serena installs when `ls_path` is not set. |
+| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
+
 #### Solidity
 
 Serena uses `@nomicfoundation/solidity-language-server` for Solidity support.
@@ -846,6 +921,9 @@ Supported settings:
 | `typescript_version` | `5.9.3` | Override the bundled `typescript` npm package version Serena installs when `ls_path` is not set. |
 | `typescript_language_server_version` | `5.1.3` | Override the bundled `typescript-language-server` npm package version Serena installs when `ls_path` is not set. |
 | `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
+
+TypeScript supports [additional workspace folders](additional-workspace-folders) for cross-package
+reference discovery. Configure `additional_workspace_folders` in `project.yml` to enable this feature.
 
 #### TypeScript via `vtsls`
 

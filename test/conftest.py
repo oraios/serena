@@ -61,6 +61,7 @@ def _create_ls(
     ignored_paths: list[str] | None = None,
     trace_lsp_communication: bool = False,
     ls_specific_settings: dict[Language, dict[str, Any]] | None = None,
+    additional_workspace_folders: list[str] | None = None,
     solidlsp_dir: Path | None = None,
 ) -> SolidLanguageServer:
     ignored_paths = ignored_paths or []
@@ -83,6 +84,7 @@ def _create_ls(
             solidlsp_dir=effective_solidlsp_dir,
             project_data_path=project_data_path,
             ls_specific_settings=ls_specific_settings or {},
+            additional_workspace_folders=additional_workspace_folders or [],
         ),
     )
 
@@ -94,9 +96,12 @@ def start_ls_context(
     ignored_paths: list[str] | None = None,
     trace_lsp_communication: bool = False,
     ls_specific_settings: dict[Language, dict[str, Any]] | None = None,
+    additional_workspace_folders: list[str] | None = None,
     solidlsp_dir: Path | None = None,
 ) -> Iterator[SolidLanguageServer]:
-    ls = _create_ls(language, repo_path, ignored_paths, trace_lsp_communication, ls_specific_settings, solidlsp_dir)
+    ls = _create_ls(
+        language, repo_path, ignored_paths, trace_lsp_communication, ls_specific_settings, additional_workspace_folders, solidlsp_dir
+    )
     log.info(f"Starting language server for {language} {repo_path}")
     ls.start()
     try:
@@ -272,6 +277,9 @@ _LANGUAGE_PYTEST_MARKERS: dict[Language, list[MarkDecorator | Mark]] = {
     Language.PYTHON_TY: [pytest.mark.python],
     Language.RUST: [pytest.mark.rust],
     Language.TYPESCRIPT: [pytest.mark.typescript],
+    Language.ANGULAR: [pytest.mark.angular],
+    Language.HTML: [pytest.mark.html],
+    Language.SCSS: [pytest.mark.scss],
 }
 
 
@@ -344,6 +352,7 @@ def languages_supporting_implementation(*languages: Language) -> list[Language]:
 
 
 _VERIFIED_IMPLEMENTATION_LANGUAGES = {
+    Language.ANGULAR,
     Language.CSHARP,
     Language.GO,
     Language.JAVA,

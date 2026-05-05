@@ -1,8 +1,20 @@
+from pathlib import Path
+
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
 
 PYTHON_BACKEND_LANGUAGES = [Language.PYTHON, Language.PYTHON_TY]
+
+
+def read_repo_file(language_server: SolidLanguageServer, relative_path: str) -> str:
+    """Read the text content of ``relative_path`` resolved against the LS's repository root.
+
+    Convenience for test code that needs to feed file content to
+    :func:`serena.util.text_utils.find_text_coordinates`.
+    """
+    abs_path = Path(language_server.language_server.repository_root_path) / relative_path
+    return abs_path.read_text()
 
 
 def is_diagnostics_test_file(relative_path: str) -> bool:

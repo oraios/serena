@@ -7,7 +7,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     Instead, they can define `added_modes` to add modes on top of base and default modes.  
     See updated [documentation on modes](https://oraios.github.io/serena/02-usage/050_configuration.html#modes).
   - Serena's default configuration now uses `interactive` and `editing` as `base_modes` instead of as `default_modes`. 
-
+  - Add cross-package reference support via `additional_workspace_folders` setting (currently implemented for TypeScript).
+  
 * JetBrains:
   - Add new tools:
     - `jet_brains_list_inspections`: Lists available IDE inspections (akin to diagnostics), optionally filtered by language or group
@@ -21,7 +22,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     - `get_diagnostics_for_symbol`: Retrieves diagnostics pertaining to a specific symbol
 
 * Language Servers:
+  - Elixir (`elixir-tools/next-ls`): Fix deadlock in monorepo projects where `mix.exs` lives in a subdirectory. The server now searches immediate subdirectories when no `mix.exs` is found at the repository root. #1444
   - Java (`eclipse.jdt.ls`): Add upstream JDTLS mode for offline / restricted-network use. Setting both `jdtls_path` and `lombok_path` in `ls_specific_settings.java` makes Serena use an existing upstream JDTLS installation (e.g. `brew install jdtls`) and the system JDK 21+, skipping the ~500 MB vscode-java VSIX, Gradle, and IntelliCode downloads. New related setting `java_home` lets the user override the JDK used to launch JDTLS. Default behavior unchanged — the JDTLS workspace hash is preserved bit-for-bit for users on the default route, so existing project caches are reused without a one-time reindex; the launcher path is mixed into the hash only when `jdtls_path` is set, isolating upstream installations from the default workspace. #1415
+  - Java (eclipse.jdt.ls): Lombok-generated methods (getters/setters, builder(), equals/hashCode/toString, etc.) are now included in symbol-based tools (find_symbol, get_symbols_overview, edits). Added lombok_show_generated setting (default: on) to toggle this. Updated bundled vscode-java to 1.54.0-923. Issue #1432.
+  - Add **Angular** (experimental) via a dual-server architecture: `@angular/language-server` (ngserver) handles standalone `.html` template files, while a companion `typescript-language-server` with `@angular/language-service` loaded as a tsserver plugin handles all `.ts` operations including inline templates. Provides type-aware navigation between templates and component classes. Requires Node.js, npm, and `@angular/core` installed in the project (`npm install` in the project root). Subsumes `typescript`+`html` for `.ts`/`.html` files when active; SCSS is not subsumed.
+  - Add **HTML** (experimental) using `vscode-html-language-server` from the `vscode-langservers-extracted` npm package. Provides in-file element/id symbols via documentSymbol; cross-file references are not meaningful for HTML. Also used as a companion server by the Angular LS for plain HTML documentSymbol support.
+  - Add **SCSS / Sass / CSS** (experimental) using [some-sass-language-server](https://github.com/wkillerud/some-sass). Handles `.scss`, `.sass`, and `.css` through one server, with full `@use`/`@forward` workspace-wide go-to-definition and find-references for variables, mixins, and functions across Sass files. The `.css` path uses the same `vscode-css-languageservice` engine that powers the standalone CSS LS; CSS feature toggles default off upstream and are flipped on at startup so symbols, hover, completion, and syntax-level diagnostics work for plain CSS as well.
 
 * Hooks:
   - `serena-hooks auto-approve` now also emits an `allow` decision when Claude Code reports
