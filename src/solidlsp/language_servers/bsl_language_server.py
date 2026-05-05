@@ -2,6 +2,13 @@
 Provides BSL (1C:Enterprise) specific instantiation of the LanguageServer class
 using bsl-language-server by 1c-syntax. Supports .bsl and .os files.
 Requires Java 11+ on PATH.
+
+You can configure the following options in ls_specific_settings (in serena_config.yml):
+
+    ls_specific_settings:
+      bsl:
+        ls_path: '/path/to/bsl-language-server.jar'  # Custom path to BSL Language Server JAR
+        bsl_ls_version: '0.29.0'  # BSL Language Server version (default: current bundled version)
 """
 
 import logging
@@ -22,9 +29,10 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
-BSL_LS_VERSION = "0.29.0"
-BSL_LS_JAR_URL = "https://github.com/1c-syntax/bsl-language-server/releases/download/v0.29.0/bsl-language-server-0.29.0-exec.jar"
-BSL_LS_JAR_SHA256 = "d6fa9ad638ba51855e260b88ad1f8ce4e602385845a4ee43600d148f779bcf0b"
+DEFAULT_BSL_LS_VERSION = "0.29.0"
+BSL_LS_JAR_SHA256_BY_VERSION = {
+    "0.29.0": "d6fa9ad638ba51855e260b88ad1f8ce4e602385845a4ee43600d148f779bcf0b",
+}
 
 
 class BSLLanguageServer(SolidLanguageServer):
@@ -54,25 +62,49 @@ class BSLLanguageServer(SolidLanguageServer):
         def _get_or_install_core_dependency(self) -> str:
             if shutil.which("java") is None:
                 raise RuntimeError("Java 11+ is required for BSL Language Server but was not found on PATH.")
-            jar_dir = os.path.join(self._ls_resources_dir, "bsl-ls")
-            jar_path = os.path.join(jar_dir, "bsl-language-server.jar")
+
+            # Check if user provided a custom path
+            custom_path = self._custom_settings.get("ls_path")
+            if custom_path:
+                if not os.path.exists(custom_path):
+                    raise FileNotFoundError(f"Custom BSL Language Server JAR not found at {custom_path}")
+                log.info(f"Using custom BSL Language Server JAR at {custom_path}")
+                return custom_path
+
+            # Determine version (user can override, no SHA check in that case)
+            bsl_version = self._custom_settings.get("bsl_ls_version", DEFAULT_BSL_LS_VERSION)
+            user_overrode_version = bsl_version != DEFAULT_BSL_LS_VERSION
+
+            jar_dir = os.path.join(self._ls_resources_dir, f"bsl-ls-{bsl_version}")
+            jar_path = os.path.join(jar_dir, f"bsl-language-server-{bsl_version}-exec.jar")
+
             if not os.path.exists(jar_path):
+                jar_url = (
+                    f"https://github.com/1c-syntax/bsl-language-server/releases/download/"
+                    f"v{bsl_version}/bsl-language-server-{bsl_version}-exec.jar"
+                )
+                # Only verify SHA256 for the default (known) version
+                expected_sha256 = None if user_overrode_version else BSL_LS_JAR_SHA256_BY_VERSION.get(bsl_version)
+
                 deps = RuntimeDependencyCollection(
                     [
                         RuntimeDependency(
                             id="bsl-language-server",
                             description="BSL Language Server JAR by 1c-syntax",
-                            url=BSL_LS_JAR_URL,
-                            sha256=BSL_LS_JAR_SHA256,
+                            url=jar_url,
+                            sha256=expected_sha256,
                             archive_type="binary",
-                            binary_name="bsl-language-server.jar",
+                            binary_name=f"bsl-language-server-{bsl_version}-exec.jar",
                             platform_id="any",
                         ),
                     ]
                 )
                 deps.install(jar_dir)
+
             if not os.path.exists(jar_path):
                 raise FileNotFoundError(f"BSL Language Server JAR not found at {jar_path} after installation.")
+
+            log.info(f"Using BSL Language Server v{bsl_version} at {jar_path}")
             return jar_path
 
         def _create_launch_command(self, core_path: str) -> list[str]:
