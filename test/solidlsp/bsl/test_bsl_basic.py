@@ -1,13 +1,15 @@
 import os
 import shutil
-import unittest.mock as mock
+from unittest import mock
 
 import pytest
 
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
 
-REPO_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "resources", "repos", "bsl", "test_repo"))
+REPO_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "resources", "repos", "bsl", "test_repo")
+)
 
 _java_available = shutil.which("java") is not None
 _skip_no_java = pytest.mark.skipif(
@@ -68,9 +70,8 @@ def test_bsl_enum_registration():
 def test_bsl_dependency_provider_default_version():
     """DependencyProvider uses default version and includes SHA in deps."""
     from solidlsp.language_servers.bsl_language_server import (
-        BSLLanguageServer,
         DEFAULT_BSL_LS_VERSION,
-        BSL_LS_JAR_SHA256_BY_VERSION,
+        BSLLanguageServer,
     )
 
     settings = SolidLSPSettings()
@@ -79,10 +80,14 @@ def test_bsl_dependency_provider_default_version():
 
     expected_version = DEFAULT_BSL_LS_VERSION
     expected_jar_dir = os.path.join("/tmp/ls_resources", f"bsl-ls-{expected_version}")
-    expected_jar_path = os.path.join(expected_jar_dir, f"bsl-language-server-{expected_version}-exec.jar")
+    expected_jar_path = os.path.join(
+        expected_jar_dir, f"bsl-language-server-{expected_version}-exec.jar"
+    )
 
-    with mock.patch("shutil.which", return_value="/usr/bin/java"), \
-         mock.patch("os.path.exists", return_value=True):
+    with (
+        mock.patch("shutil.which", return_value="/usr/bin/java"),
+        mock.patch("os.path.exists", return_value=True),
+    ):
         jar_path = provider._get_or_install_core_dependency()
 
     assert jar_path == expected_jar_path
@@ -100,26 +105,27 @@ def test_bsl_dependency_provider_custom_version_no_sha():
 
     custom_version = "0.28.0"
     expected_jar_dir = os.path.join("/tmp/ls_resources", f"bsl-ls-{custom_version}")
-    expected_jar_path = os.path.join(expected_jar_dir, f"bsl-language-server-{custom_version}-exec.jar")
+    expected_jar_path = os.path.join(
+        expected_jar_dir, f"bsl-language-server-{custom_version}-exec.jar"
+    )
 
     installed_deps = []
 
     def fake_install(self_inner, install_dir):
-        # Capture the dependency to verify sha256 is None
         installed_deps.extend(self_inner._dependencies)
-        # Simulate file creation so the check after install passes
         os.makedirs(install_dir, exist_ok=True)
-        open(expected_jar_path, "w").close()
+        open(expected_jar_path, "w").close()  # noqa: SIM115
 
-    with mock.patch("shutil.which", return_value="/usr/bin/java"), \
-         mock.patch.object(RuntimeDependencyCollection, "install", fake_install):
+    with (
+        mock.patch("shutil.which", return_value="/usr/bin/java"),
+        mock.patch.object(RuntimeDependencyCollection, "install", fake_install),
+    ):
         jar_path = provider._get_or_install_core_dependency()
 
     assert jar_path == expected_jar_path
     assert len(installed_deps) == 1
     assert installed_deps[0].sha256 is None, "SHA256 must be None for user-overridden version"
 
-    # Cleanup
     if os.path.exists(expected_jar_path):
         os.remove(expected_jar_path)
     if os.path.exists(expected_jar_dir):
@@ -135,8 +141,10 @@ def test_bsl_dependency_provider_custom_ls_path():
     custom_settings["ls_path"] = "/custom/path/bsl-language-server.jar"
     provider = BSLLanguageServer.DependencyProvider(custom_settings, "/tmp/ls_resources")
 
-    with mock.patch("shutil.which", return_value="/usr/bin/java"), \
-         mock.patch("os.path.exists", return_value=True):
+    with (
+        mock.patch("shutil.which", return_value="/usr/bin/java"),
+        mock.patch("os.path.exists", return_value=True),
+    ):
         jar_path = provider._get_or_install_core_dependency()
 
     assert jar_path == "/custom/path/bsl-language-server.jar"
