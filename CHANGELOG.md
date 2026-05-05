@@ -28,10 +28,12 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Language Servers:
   - Elixir (`elixir-tools/next-ls`): Fix deadlock in monorepo projects where `mix.exs` lives in a subdirectory. The server now searches immediate subdirectories when no `mix.exs` is found at the repository root. #1444
   - Java (`eclipse.jdt.ls`): Add upstream JDTLS mode for offline / restricted-network use. Setting both `jdtls_path` and `lombok_path` in `ls_specific_settings.java` makes Serena use an existing upstream JDTLS installation (e.g. `brew install jdtls`) and the system JDK 21+, skipping the ~500 MB vscode-java VSIX, Gradle, and IntelliCode downloads. New related setting `java_home` lets the user override the JDK used to launch JDTLS. Default behavior unchanged — the JDTLS workspace hash is preserved bit-for-bit for users on the default route, so existing project caches are reused without a one-time reindex; the launcher path is mixed into the hash only when `jdtls_path` is set, isolating upstream installations from the default workspace. #1415
+  - Add BSL (1C:Enterprise) language server support via bsl-language-server by 1c-syntax. Supports `.bsl` and `.os` files. Requires Java 11+ on PATH.
 
 # v1.2.0 (2026-04-27)
 
 * General:
+  - Support `serena --version` CLI command for displaying the current version #1347
   - Fix: Check for ignored path ignored `.git` folder only at the top level, not in every subdirectory (`Project._is_ignored_relative_path`) #1350
   - `GetSymbolsOverviewTool`: ignored paths were not respected in LSP variant (fix in `SolidLanguageServer`)
   - Fix: Duplicate comments in re-saved YAML configuration files #1285
@@ -59,13 +61,6 @@ Status of the `main` branch. Changes prior to the next official version change w
     The `initial_instructions` tool provides the full prompt on demand, keeping the initial context lean.
   - Add `serena_info` tool for on-demand retrieval of usage information
 
-* CLI:
-  - Support `serena --version` CLI command for displaying the current version #1347
-  - Extend `prompts` subcommand with `print-prompt-template` and `print-cc-system-prompt-override`, improve `list` subcommand
-
-* Clients:
-  - Document workaround to make Claude Code use Serena's tools after recent degradations caused by changes in CC harness and Opus 4.7 release.
-
 * JetBrains:
   - Add `debug` tool: The agent can set breakpoints, inspect variables, evaluate expressions and control execution flow
     by directly interacting with the IDE's debugger, using a REPL-style interface for maximum flexibility.  
@@ -89,9 +84,6 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add configurable dashboard interface mode (new global configuration setting `web_dashboard_interface`):
     Three modes (browser, native app with tray, tray manager for aggregating multiple instances) are supported, depending on the OS
   - Fix: Memory leaks in frontend when using Chromium-based browsers/Windows webview #1389
-
-* Hooks:
-  - Adjusted wording of startup hook, improving project activation instructions #1401.
 
 # v1.1.2 (2026-04-14)
 
@@ -194,7 +186,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Tools:
   * Additional symbol meta-information (hover, docstring, quick-info) is now provided as part of `find_symbol` and related tool responses.
-  * Added `QueryProjectTool` and `ListQueryableProjectTool` (see above)
+  * Added `QueryProjectTool` and `ListQueryableProjectsTool` (see above)
   * Added `RenameSymbolTool` for renaming symbols across the codebase (if LS supports this operation).
   * Replaced `ReplaceRegexTool` with `ReplaceContentTool`, which supports both plain text and regex-based replacements
     (and which requires no escaping in the replacement text, making it more robust)

@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -366,6 +367,8 @@ FIND_DEFINING_SYMBOL_CASES = [
         expected_name="add",
         expected_definition_file="Calculator.fs",
     ).to_pytest_param(
+        pytest.mark.bsl,
+        pytest.mark.skipif(shutil.which("java") is None, reason="Java 11+ is required for BSL LSP"),
         pytest.mark.xfail(reason="F# language server cannot reliably resolve defining symbols"),
     ),
 ]
@@ -724,6 +727,15 @@ SAFE_DELETE_BLOCKED_CASES = [
         name_path="helperFunction",
         relative_path="index.ts",
     ).to_pytest_param(),
+    SafeDeleteCase(
+        language=Language.BSL,
+        id="bsl_get_greeting",
+        name_path="ПолучитьПриветствие",
+        relative_path="CommonModule.bsl",
+    ).to_pytest_param(
+        pytest.mark.bsl,
+        pytest.mark.skipif(shutil.which("java") is None, reason="Java 11+ is required for BSL LSP"),
+    ),
 ]
 
 SAFE_DELETE_SUCCEEDS_CASES = [
@@ -753,6 +765,15 @@ SAFE_DELETE_SUCCEEDS_CASES = [
         name_path="unusedStandaloneFunction",
         relative_path="index.ts",
     ).to_pytest_param(),
+    SafeDeleteCase(
+        language=Language.BSL,
+        id="bsl_unused_function",
+        name_path="НеИспользуемаяФункция",
+        relative_path="CommonModule.bsl",
+    ).to_pytest_param(
+        pytest.mark.bsl,
+        pytest.mark.skipif(shutil.which("java") is None, reason="Java 11+ is required for BSL LSP"),
+    ),
 ]
 
 
@@ -779,6 +800,7 @@ def serena_config():
         Language.HAXE,
         Language.LEAN4,
         Language.MSL,
+        Language.BSL,
     ]:
         repo_path = get_repo_path(language)
         if repo_path.exists():
@@ -920,6 +942,28 @@ class TestSerenaAgent:
         )
         for symbol in symbols:
             self._assert_symbol_info_present(serena_agent, symbol, case.symbol_name)
+
+    @pytest.mark.parametrize(
+        "serena_agent,symbol_name,expected_kind,expected_file",
+        [
+            pytest.param(
+                Language.BSL,
+                "ВывестиСообщение",
+                "Method",
+                "CommonModule.bsl",
+                marks=[pytest.mark.bsl, pytest.mark.skipif(shutil.which("java") is None, reason="Java 11+ is required for BSL LSP")],
+            ),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_find_symbol_bsl(self, serena_agent: SerenaAgent, symbol_name: str, expected_kind: str, expected_file: str) -> None:
+        find_symbol_tool = serena_agent.get_tool(FindSymbolTool)
+        result = find_symbol_tool.apply(name_path_pattern=symbol_name, include_info=True)
+        symbols = json.loads(result)
+        assert any(
+            symbol_name in s["name_path"] and expected_kind.lower() in s["kind"].lower() and expected_file in s["relative_path"]
+            for s in symbols
+        ), f"Expected to find {symbol_name} ({expected_kind}) in {expected_file}. Symbols: {symbols}"
 
     @pytest.mark.parametrize("serena_agent,case", FIND_REFERENCE_CASES, indirect=["serena_agent"])
     def test_find_symbol_references(self, serena_agent: SerenaAgent, case: FindReferenceCase) -> None:
