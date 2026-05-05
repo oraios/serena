@@ -7,14 +7,14 @@ Status of the `main` branch. Changes prior to the next official version change w
     Instead, they can define `added_modes` to add modes on top of base and default modes.  
     See updated [documentation on modes](https://oraios.github.io/serena/02-usage/050_configuration.html#modes).
   - Serena's default configuration now uses `interactive` and `editing` as `base_modes` instead of as `default_modes`. 
-  - Add cross-package reference support via `additional_workspace_folders` setting (currently implemented for TypeScript).
   
 * JetBrains:
   - Add new tools:
     - `jet_brains_list_inspections`: Lists available IDE inspections (akin to diagnostics), optionally filtered by language or group
     - `jet_brains_run_inspections`: Runs IDE inspections on a file and returns the results
 
-* LSP Tools:
+* LSP Backend:
+  - Add cross-package reference support via `additional_workspace_folders` setting (currently implemented for TypeScript).
   - Add new tools:
     - `find_declaration`: Finds the declaration/definition of a symbol
     - `find_implementations`: Finds the implementations of an interface or abstract method

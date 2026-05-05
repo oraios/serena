@@ -87,12 +87,13 @@ encoding: utf-8
 # Set this to a list of mode names to always include the respective modes for this project.
 base_modes:
 
-# list of mode names that are to be activated by default.
+# list of mode names that are to be activated by default, overriding the setting in the global configuration.
 # The full set of modes to be activated is base_modes (from global config) + default_modes + added_modes.
-# If the setting is undefined, the default_modes from the global configuration (serena_config.yml) apply.
+# If the setting is undefined/empty, the default_modes from the global configuration (serena_config.yml) apply.
 # Otherwise, this overrides the setting from the global configuration (serena_config.yml).
+# Therefore, you can set this to [] if you do not want the default modes defined in the global config to apply
+# for this project.
 # This setting can, in turn, be overridden by CLI parameters (--mode).
-# Set this to [] to not use the default modes defined in the global config for this project.
 # See https://oraios.github.io/serena/02-usage/050_configuration.html#modes
 default_modes:
 
@@ -137,9 +138,18 @@ ignored_memory_patterns: []
 # No documentation on options means no options are available.
 ls_specific_settings: {}
 
-# list of mode names to be activated additionally for this project.
+# list of mode names to be activated additionally for this project, e.g. ["query-projects"]
 # The full set of modes to be activated is base_modes (from global config) + default_modes + added_modes.
-# Otherwise, this setting overrides the global configuration.
-# Set this to a list of mode names to always include the respective modes for this project.
 # See https://oraios.github.io/serena/02-usage/050_configuration.html#modes
 added_modes:
+
+# list of additional workspace folder paths for cross-package reference support (e.g. in monorepos).
+# Paths can be absolute or relative to the project root.
+# Each folder is registered as an LSP workspace folder, enabling language servers to discover
+# symbols and references across package boundaries.
+# Currently supported for: TypeScript.
+# Example:
+#   additional_workspace_folders:
+#     - ../sibling-package
+#     - ../shared-lib
+additional_workspace_folders: []
