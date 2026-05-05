@@ -535,8 +535,9 @@ The following settings are supported for the Java language server:
 | `gradle_java_home` | `null` | Path to the JDK used by Gradle. When unset, Gradle uses the bundled JRE. |
 | `use_system_java_home` | `false` | Use the system's `JAVA_HOME` environment variable for JDTLS itself. Enable this if your project requires a specific JDK vendor or version for Gradle's JDK checks. |
 | `gradle_version` | `8.14.2` | (vscode-java mode only) Override the Gradle distribution version Serena downloads by default. |
-| `vscode_java_version` | `1.42.0-561` | (vscode-java mode only) Override the bundled `vscode-java` runtime bundle version Serena downloads by default. |
+| `vscode_java_version` | `1.54.0-923` | (vscode-java mode only) Override the bundled `vscode-java` runtime bundle version Serena downloads by default. |
 | `intellicode_version` | `1.2.30` | (vscode-java mode only) Override the IntelliCode VSIX version Serena downloads by default. |
+| `lombok_show_generated` | `true` | Show Lombok-generated methods (`getX/setX`, `builder()`, `equals/hashCode/toString`, `withX`, fluent accessors) in `find_symbol`, `get_symbols_overview` and the symbol-edit tools. Set to `false` to restore the previous JDTLS default and hide the synthetic methods (e.g. when `@Data` classes pollute the outline with too many getters/setters). Requires JDTLS commit `b2d8952` / `vscode-java >= 1.53.0`; the bundled default already meets this. |
 | `jdtls_xmx` | `3G` | Maximum heap size for the JDTLS server JVM. |
 | `jdtls_xms` | `100m` | Initial heap size for the JDTLS server JVM. |
 | `intellicode_xmx` | `1G` | (vscode-java mode only) Maximum heap size for the IntelliCode embedded JVM. |
@@ -559,7 +560,7 @@ Example: upstream-jdtls mode (offline / corporate network):
 ls_specific_settings:
   java:
     jdtls_path: "/opt/homebrew/Cellar/jdtls/1.50.0/libexec"
-    lombok_path: "/Users/me/.m2/repository/org/projectlombok/lombok/1.18.36/lombok-1.18.36.jar"
+    lombok_path: "/Users/me/.m2/repository/org/projectlombok/lombok/1.18.38/lombok-1.18.38.jar"
     # java_home: "/opt/homebrew/opt/openjdk@21"  # optional
 ```
 
