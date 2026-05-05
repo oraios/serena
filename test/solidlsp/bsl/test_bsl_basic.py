@@ -68,8 +68,8 @@ def test_bsl_enum_registration():
 def test_bsl_dependency_provider_default_version():
     """DependencyProvider uses default version and includes SHA in deps."""
     from solidlsp.language_servers.bsl_language_server import (
-        BSLLanguageServer,
         DEFAULT_BSL_LS_VERSION,
+        BSLLanguageServer,
     )
 
     settings = SolidLSPSettings()
@@ -108,7 +108,7 @@ def test_bsl_dependency_provider_custom_version_no_sha():
     def fake_install(self_inner, install_dir):
         installed_deps.extend(self_inner._dependencies)
         os.makedirs(install_dir, exist_ok=True)
-        open(expected_jar_path, "w").close()  # noqa: SIM115
+        open(expected_jar_path, "w").close()
 
     with (
         mock.patch("shutil.which", return_value="/usr/bin/java"),
