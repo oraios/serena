@@ -38,6 +38,7 @@ INTELLICODE_ALLOWED_HOSTS = (
     "download.visualstudio.microsoft.com",
 )
 
+
 # Version pinning convention (read this before bumping anything below):
 #
 #   INITIAL_* — the very first version we shipped runtime-dependency support for, paired with
