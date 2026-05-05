@@ -155,6 +155,33 @@ class Language(str, Enum):
     Must be explicitly specified in project.yml. Requires Node.js and npm.
     Requires ``ansible`` in PATH for full functionality.
     """
+    HTML = "html"
+    """HTML language server (experimental) using vscode-html-language-server from
+    Microsoft's vscode-langservers-extracted npm package. Supports *.html and *.htm files.
+    Must be explicitly specified in project.yml. Requires Node.js and npm.
+    Note: HTML LSP provides in-file element/id symbols only; cross-file references
+    are not meaningful for HTML. Also used as a companion server by Angular LS for
+    plain HTML documentSymbol support.
+    """
+    SCSS = "scss"
+    """SCSS / Sass / CSS language server (experimental) using some-sass-language-server
+    (https://github.com/wkillerud/some-sass). Handles *.scss, *.sass, and *.css.
+    Must be explicitly specified in project.yml. Requires Node.js and npm.
+    Provides full @use/@forward workspace navigation across SCSS files; CSS support
+    relies on the same vscode-css-languageservice engine and is enabled at startup
+    via the somesass.css.* feature toggles (which default to off upstream).
+    """
+    ANGULAR = "angular"
+    """Angular Language Server (experimental) using the official @angular/language-server
+    (ngserver). Supports *.ts and *.html files (Angular templates can be external or inline).
+    Understands Angular template syntax (*ngIf, [prop], (event), {{ interpolation }},
+    @if/@for blocks, etc.) and provides type-aware navigation between templates and
+    component classes — which the plain HTML and TypeScript LSPs cannot.
+    Requires Node.js, npm, and a valid Angular workspace (angular.json or Nx project.json
+    at the repository root). When activated, do not also enable typescript or html in
+    project.yml — Angular LS supersedes both for Angular projects.
+    Must be explicitly specified in project.yml.
+    """
 
     @classmethod
     def iter_all(cls, include_experimental: bool = False) -> Iterable[Self]:
@@ -185,6 +212,9 @@ class Language(str, Enum):
             self.GROOVY,
             self.CPP_CCLS,
             self.SOLIDITY,
+            self.HTML,
+            self.SCSS,
+            self.ANGULAR,
         }
 
     def __str__(self) -> str:
@@ -344,6 +374,22 @@ class Language(str, Enum):
                 return FilenameMatcher("*.yaml", "*.yml")
             case self.MSL:
                 return FilenameMatcher("*.mrc")
+            case self.HTML:
+                return FilenameMatcher("*.html", "*.htm")
+            case self.SCSS:
+                # *.css is handled by the same engine (vscode-css-languageservice) that powers
+                # Microsoft's CSS LS, so we route plain CSS through Some Sass too. The CSS feature
+                # toggles default off upstream and are flipped on at initialization time.
+                return FilenameMatcher("*.scss", "*.sass", "*.css")
+            case self.ANGULAR:
+                # Angular templates can be standalone .html files or inline templates
+                # within .ts component files; the dual-server architecture handles both.
+                # SCSS / styles are deliberately NOT subsumed — use Language.SCSS for those.
+                path_patterns = ["*.html", "*.htm"]
+                for prefix in ["c", "m", ""]:
+                    for postfix in ["x", ""]:
+                        path_patterns.append(f"*.{prefix}ts{postfix}")
+                return FilenameMatcher(*path_patterns)
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -575,6 +621,18 @@ class Language(str, Enum):
                 from solidlsp.language_servers.msl_language_server import MslLanguageServer
 
                 return MslLanguageServer
+            case self.HTML:
+                from solidlsp.language_servers.vscode_html_language_server import VsCodeHtmlLanguageServer
+
+                return VsCodeHtmlLanguageServer
+            case self.SCSS:
+                from solidlsp.language_servers.some_sass_language_server import SomeSassLanguageServer
+
+                return SomeSassLanguageServer
+            case self.ANGULAR:
+                from solidlsp.language_servers.angular_language_server import AngularLanguageServer
+
+                return AngularLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

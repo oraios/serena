@@ -277,6 +277,9 @@ _LANGUAGE_PYTEST_MARKERS: dict[Language, list[MarkDecorator | Mark]] = {
     Language.PYTHON_TY: [pytest.mark.python],
     Language.RUST: [pytest.mark.rust],
     Language.TYPESCRIPT: [pytest.mark.typescript],
+    Language.ANGULAR: [pytest.mark.angular],
+    Language.HTML: [pytest.mark.html],
+    Language.SCSS: [pytest.mark.scss],
 }
 
 
@@ -349,6 +352,7 @@ def languages_supporting_implementation(*languages: Language) -> list[Language]:
 
 
 _VERIFIED_IMPLEMENTATION_LANGUAGES = {
+    Language.ANGULAR,
     Language.CSHARP,
     Language.GO,
     Language.JAVA,

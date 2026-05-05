@@ -1,0 +1,22 @@
+@use "variables" as vars;
+@use "mixins" as mix;
+
+.button {
+    @include mix.card-surface();
+    color: vars.$color-text;
+    cursor: pointer;
+
+    &:focus-visible {
+        @include mix.focus-ring();
+    }
+}
+
+.button-primary {
+    @include mix.card-surface(vars.$color-primary);
+    color: white;
+}
+
+.button-secondary {
+    @include mix.card-surface(vars.$color-secondary);
+    color: white;
+}

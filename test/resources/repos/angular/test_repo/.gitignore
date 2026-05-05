@@ -1,0 +1,5 @@
+node_modules
+.angular
+dist
+out-tsc
+.angular-install.lock
