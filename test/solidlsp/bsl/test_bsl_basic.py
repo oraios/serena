@@ -7,7 +7,9 @@ import pytest
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
 
-REPO_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "resources", "repos", "bsl", "test_repo"))
+pytestmark = [pytest.mark.bsl]
+
+TEST_REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "test_repo"))
 
 _java_available = shutil.which("java") is not None
 _skip_no_java = pytest.mark.skipif(
@@ -21,20 +23,18 @@ def bsl_ls():
     config = LanguageServerConfig(code_language=Language.BSL)
     settings = SolidLSPSettings()
     ls_class = Language.BSL.get_ls_class()
-    server = ls_class(config, REPO_PATH, settings)
+    server = ls_class(config, TEST_REPO, settings)
     server.start()
     yield server
     server.stop()
 
 
-@pytest.mark.bsl
 @pytest.mark.slow
 @_skip_no_java
 def test_bsl_server_starts(bsl_ls):
     assert bsl_ls.server_ready.is_set()
 
 
-@pytest.mark.bsl
 @pytest.mark.slow
 @_skip_no_java
 def test_bsl_document_symbols(bsl_ls):
@@ -45,7 +45,6 @@ def test_bsl_document_symbols(bsl_ls):
     assert "ВызватьПриветствие" in names
 
 
-@pytest.mark.bsl
 @pytest.mark.slow
 @_skip_no_java
 def test_bsl_find_references(bsl_ls):
@@ -67,14 +66,14 @@ def test_bsl_enum_registration():
 
 def test_bsl_dependency_provider_default_version():
     """DependencyProvider uses default version and includes SHA in deps."""
-    from solidlsp.language_servers.bsl_language_server import (
-        DEFAULT_BSL_LS_VERSION,
-        BSLLanguageServer,
-    )
+    from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
+    from solidlsp.language_servers.bsl_language_server import DEFAULT_BSL_LS_VERSION
 
     settings = SolidLSPSettings()
-    custom_settings = settings.get_custom_ls_settings("bsl")
-    provider = BSLLanguageServer.DependencyProvider(custom_settings, "/tmp/ls_resources")
+    provider = BSLLanguageServer.DependencyProvider(
+        settings.get_ls_specific_settings(Language.BSL),
+        "/tmp/ls_resources",
+    )
 
     expected_version = DEFAULT_BSL_LS_VERSION
     expected_jar_dir = os.path.join("/tmp/ls_resources", f"bsl-ls-{expected_version}")
@@ -95,9 +94,11 @@ def test_bsl_dependency_provider_custom_version_no_sha():
     from solidlsp.language_servers.common import RuntimeDependencyCollection
 
     settings = SolidLSPSettings()
-    custom_settings = settings.get_custom_ls_settings("bsl")
-    custom_settings["bsl_ls_version"] = "0.28.0"
-    provider = BSLLanguageServer.DependencyProvider(custom_settings, "/tmp/ls_resources")
+    settings.ls_specific_settings[Language.BSL] = {"bsl_ls_version": "0.28.0"}
+    provider = BSLLanguageServer.DependencyProvider(
+        settings.get_ls_specific_settings(Language.BSL),
+        "/tmp/ls_resources",
+    )
 
     custom_version = "0.28.0"
     expected_jar_dir = os.path.join("/tmp/ls_resources", f"bsl-ls-{custom_version}")
@@ -131,9 +132,11 @@ def test_bsl_dependency_provider_custom_ls_path():
     from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
 
     settings = SolidLSPSettings()
-    custom_settings = settings.get_custom_ls_settings("bsl")
-    custom_settings["ls_path"] = "/custom/path/bsl-language-server.jar"
-    provider = BSLLanguageServer.DependencyProvider(custom_settings, "/tmp/ls_resources")
+    settings.ls_specific_settings[Language.BSL] = {"ls_path": "/custom/path/bsl-language-server.jar"}
+    provider = BSLLanguageServer.DependencyProvider(
+        settings.get_ls_specific_settings(Language.BSL),
+        "/tmp/ls_resources",
+    )
 
     with (
         mock.patch("shutil.which", return_value="/usr/bin/java"),
