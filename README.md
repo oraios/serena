@@ -145,10 +145,13 @@ without reading entire files.
 | find referencing symbols         | yes              | yes              |
 | search in project dependencies   | --               | yes              |
 | type hierarchy                   | --               | yes              |
-| find declaration                 | yes              | yes              |
-| find implementations             | yes              | yes              |
+| find declaration                 | yes*             | yes              |
+| find implementations             | yes**            | yes              |
 | query external projects          | yes              | yes              |
 | diagnostics/inspections          | yes              | yes              |
+
+*: Will generally not work for declarations in external dependencies. <br>
+**: Only available for some languages, limited by the language server functionality.
 
 ### Refactoring
 

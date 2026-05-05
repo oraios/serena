@@ -66,15 +66,16 @@ class PreToolUseHook(Hook, ABC):
         permission_decision_reason: str
         additional_context: str = ""
 
-        def to_json_string(self) -> str:
+        def to_json_string(self, client: HookClient) -> str:
             hook_output = {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
                     "permissionDecision": self.permission_decision,
                     "permissionDecisionReason": self.permission_decision_reason,
-                    "additionalContext": self.additional_context,
                 }
             }
+            if client != HookClient.CODEX:
+                hook_output["hookSpecificOutput"]["additionalContext"] = self.additional_context
             return json.dumps(hook_output)
 
     def is_serena_tool(self) -> bool:
@@ -190,8 +191,8 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
                 return
 
             now = hook.triggered_at_timestamp
-            is_grep = hook.is_grep_tool()
-            is_read = hook.is_read_file_tool()
+            is_grep = hook.is_grep_call()
+            is_code_file_read = hook.is_read_code_file_call()
 
             # update grep counter
             if is_grep:
@@ -203,7 +204,7 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
                 self.last_grep_use_timestamp = now
 
             # update read file counter
-            if is_read:
+            if is_code_file_read:
                 read_period = self._READ_FILE_RESET_PERIOD_SECONDS
                 if (
                     self.last_read_file_use_timestamp is not None
@@ -216,7 +217,7 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
 
             # update combined non-symbolic counter — catches mixed bursts (e.g.
             # alternating grep/read) that neither per-tool counter would trip
-            if is_grep or is_read:
+            if is_grep or is_code_file_read:
                 combined_period = self._NON_SYMBOLIC_RESET_PERIOD_SECONDS
                 if (
                     self.last_non_symbolic_use_timestamp is not None
@@ -241,24 +242,153 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
     #: ingest. Conservative on purpose: only verbs that strongly imply *reading*
     #: a file, never *modifying* one — so ``view_file``/``open_file``/``show_file``
     #: are caught alongside ``read_file``, while ``write_file``/``edit_file`` are not.
-    _READ_FILE_VERB_SUBSTRINGS: tuple[str, ...] = ("read", "view", "open", "show")
+    _READ_FILE_VERB_SUBSTRINGS: frozenset[str] = frozenset(("read", "view", "open", "show"))
+
+    #: Shell commands that perform grep-like search; used to classify Codex
+    #: shell-command tool calls whose ``cmd`` or ``command`` field starts with one of these.
+    _GREP_SHELL_COMMANDS: frozenset[str] = frozenset(("grep", "rg", "ag", "ack", "fgrep", "egrep"))
+
+    #: Shell commands that perform file-read operations; used to classify Codex
+    #: shell-command tool calls whose ``cmd`` or ``command`` field starts with one of these.
+    _READ_SHELL_COMMANDS: frozenset[str] = frozenset(("cat", "head", "tail", "sed", "less", "more", "bat", "get-content", "gc"))
+
+    #: file suffixes for source-like files where symbolic tools are usually more
+    #: appropriate than repeated raw reads. Lowercase and extension-only.
+    _CODE_FILE_EXTENSIONS: frozenset[str] = frozenset(
+        (
+            ".al",
+            ".bash",
+            ".c",
+            ".clj",
+            ".cljs",
+            ".cpp",
+            ".cs",
+            ".css",
+            ".dart",
+            ".elm",
+            ".ex",
+            ".exs",
+            ".fs",
+            ".fsx",
+            ".go",
+            ".groovy",
+            ".h",
+            ".hpp",
+            ".hs",
+            ".html",
+            ".java",
+            ".jl",
+            ".js",
+            ".jsx",
+            ".kt",
+            ".kts",
+            ".lean",
+            ".lua",
+            ".m",
+            ".matlab",
+            ".php",
+            ".ps1",
+            ".py",
+            ".r",
+            ".rb",
+            ".rs",
+            ".scala",
+            ".sh",
+            ".sol",
+            ".svelte",
+            ".swift",
+            ".ts",
+            ".tsx",
+            ".vue",
+            ".zig",
+        )
+    )
 
     def __init__(self, client: HookClient):
         super().__init__(client)
         self._tool_call_counter = self.ToolUseCounter.load(self)
 
-    def is_grep_tool(self) -> bool:
+        # extract a shell ``cmd``/``command`` field (Codex shell-command-style payloads):
+        # split into command name (basename, lowercased) and the remaining argument string
+        # so both bare names (``rg``) and path-prefixed invocations (``/usr/bin/grep``) are
+        # normalised the same way. Stays ``None`` when no shell command is present.
+        self._command: str | None = None
+        self._command_name: str | None = None
+        self._command_args_str: str | None = None
+        # extract a direct file-path field (Claude Code's ``Read``/``Edit``/``Write`` tool
+        # payloads pass the target as ``file_path`` rather than via a shell command).
+        self._file_path: str | None = None
+        if self._tool_input is not None:
+            self._command = self._tool_input.get("cmd", self._tool_input.get("command", "")).strip()
+            if self._command:
+                cmd_split = self._command.split(maxsplit=1)
+                if len(cmd_split) > 1:
+                    self._command_args_str = cmd_split[1]
+                self._command_name = os.path.basename(cmd_split[0]).lower()
+            file_path = self._tool_input.get("file_path") or self._tool_input.get("filePath") or ""
+            self._file_path = str(file_path).strip() or None
+
+    def is_grep_call(self) -> bool:
         if self._client == HookClient.CLAUDE_CODE:
             return self._tool_name == "grep"
+        if self._client == HookClient.CODEX and self._is_shell_command_call():
+            return self._command_name in self._GREP_SHELL_COMMANDS
+        # heuristic for other clients
         return "grep" in self._tool_name
 
-    def is_read_file_tool(self) -> bool:
+    def is_read_call(self) -> bool:
         if self._client == HookClient.CLAUDE_CODE:
             return self._tool_name == "read"
+        if self._client == HookClient.CODEX and self._is_shell_command_call():
+            return self._command_name in self._READ_SHELL_COMMANDS
+        # heuristic for other clients
         name = self._tool_name
         if "file" not in name:
             return False
         return any(verb in name for verb in self._READ_FILE_VERB_SUBSTRINGS)
+
+    def _is_shell_command_call(self) -> bool:
+        """:return: whether the hook payload represents a shell-command tool call."""
+        return self._command_name is not None
+
+    def is_read_file_call(self) -> bool:
+        """:return: whether the tool call reads a file-like target."""
+        return self.is_read_call()
+
+    def is_read_code_file_call(self) -> bool:
+        """:return: whether the tool call reads a source-like file target."""
+        if not self.is_read_file_call():
+            return False
+
+        if self._file_path is not None:
+            return self._is_code_file_path(self._file_path)
+
+        if self._client == HookClient.CODEX and self._command_args_str is not None:
+            return any(self._is_code_file_path(argument) for argument in self._iter_shell_path_arguments())
+
+        return True
+
+    def _iter_shell_path_arguments(self) -> list[str]:
+        """:return: path-like shell arguments with quoting and common options removed."""
+        arguments: list[str] = []
+        if self._command_args_str is None:
+            return arguments
+
+        for raw_argument in self._command_args_str.split():
+            argument = raw_argument.strip().strip("'\"")
+            if not argument or argument.startswith("-"):
+                continue
+            arguments.append(argument)
+
+        return arguments
+
+    @classmethod
+    def _is_code_file_path(cls, file_path: str) -> bool:
+        """:return: whether ``file_path`` has a source-like suffix."""
+        cleaned_path = file_path.strip().strip("'\"")
+        if not cleaned_path:
+            return False
+        return Path(cleaned_path).suffix.lower() in cls._CODE_FILE_EXTENSIONS
 
     def execute(self) -> None:
         # gate the entire hook on the rate-limit window: while we are within
@@ -280,14 +410,14 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
         too_many_non_symbolic = self._tool_call_counter.too_many_recent_non_symbolic()
 
         output_data: PreToolUseHook.OutputData | None = None
-        if self.is_grep_tool() and too_many_greps:
+        if self.is_grep_call() and too_many_greps:
             output_data = self._build_grep_deny()
-        elif self.is_read_file_tool() and too_many_reads:
-            output_data = self._build_read_deny()
+        elif self.is_read_code_file_call() and too_many_reads:
+            output_data = self._build_code_read_deny()
         elif too_many_greps:
             output_data = self._build_grep_deny()
         elif too_many_reads:
-            output_data = self._build_read_deny()
+            output_data = self._build_code_read_deny()
         elif too_many_non_symbolic:
             output_data = self._build_non_symbolic_deny()
 
@@ -297,7 +427,7 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
             # ensures we never reach this branch within the rate-limit window.
             self._tool_call_counter.reset()
             self._tool_call_counter.last_deny_timestamp = self.triggered_at_timestamp
-            click.echo(output_data.to_json_string())
+            click.echo(output_data.to_json_string(self._client))
         self._tool_call_counter.save(self)
 
     def _build_grep_deny(self) -> "PreToolUseHook.OutputData":
@@ -311,13 +441,13 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
             ),
         )
 
-    def _build_read_deny(self) -> "PreToolUseHook.OutputData":
+    def _build_code_read_deny(self) -> "PreToolUseHook.OutputData":
         return self.OutputData(
             permission_decision="deny",
-            permission_decision_reason="Too many consecutive read calls without using symbolic tools. "
+            permission_decision_reason="Too many consecutive read calls of files without using symbolic tools. "
             "You can continue using read now if needed, the counter was reset.",
             additional_context=(
-                "You were using many read file calls recently. Consider using Serena's symbolic "
+                "You were using many read calls on files recently. Consider using Serena's symbolic "
                 "mcp tools instead for more targeted reads. You can continue using read now if needed, the counter was reset."
             ),
         )
@@ -395,7 +525,7 @@ class PreToolUseAutoApproveSerenaHook(PreToolUseHook):
             permission_decision="allow",
             permission_decision_reason=f"Auto-approved: Serena tool call while client is in {self._permission_mode} mode.",
         )
-        click.echo(output_data.to_json_string())
+        click.echo(output_data.to_json_string(self._client))
 
 
 _client_option = click.option(

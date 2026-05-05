@@ -2,23 +2,19 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
-* Hooks:
-  - `serena-hooks auto-approve` now also emits an `allow` decision when Claude Code reports
-    `permission_mode == "auto"`, in addition to the existing `acceptEdits` behavior. #1386
-
 * General:
   - Breaking change in mode definitions: Projects (project.yml) can no longer override `base_modes`.
     Instead, they can define `added_modes` to add modes on top of base and default modes.  
     See updated [documentation on modes](https://oraios.github.io/serena/02-usage/050_configuration.html#modes).
   - Serena's default configuration now uses `interactive` and `editing` as `base_modes` instead of as `default_modes`. 
-  - Add cross-package reference support via `additional_workspace_folders` setting (currently implemented for TypeScript).
   
 * JetBrains:
   - Add new tools:
     - `jet_brains_list_inspections`: Lists available IDE inspections (akin to diagnostics), optionally filtered by language or group
     - `jet_brains_run_inspections`: Runs IDE inspections on a file and returns the results
 
-* LSP Tools:
+* LSP Backend:
+  - Add cross-package reference support via `additional_workspace_folders` setting (currently implemented for TypeScript).
   - Add new tools:
     - `find_declaration`: Finds the declaration/definition of a symbol
     - `find_implementations`: Finds the implementations of an interface or abstract method
@@ -32,6 +28,12 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add **Angular** (experimental) via a dual-server architecture: `@angular/language-server` (ngserver) handles standalone `.html` template files, while a companion `typescript-language-server` with `@angular/language-service` loaded as a tsserver plugin handles all `.ts` operations including inline templates. Provides type-aware navigation between templates and component classes. Requires Node.js, npm, and `@angular/core` installed in the project (`npm install` in the project root). Subsumes `typescript`+`html` for `.ts`/`.html` files when active; SCSS is not subsumed.
   - Add **HTML** (experimental) using `vscode-html-language-server` from the `vscode-langservers-extracted` npm package. Provides in-file element/id symbols via documentSymbol; cross-file references are not meaningful for HTML. Also used as a companion server by the Angular LS for plain HTML documentSymbol support.
   - Add **SCSS / Sass / CSS** (experimental) using [some-sass-language-server](https://github.com/wkillerud/some-sass). Handles `.scss`, `.sass`, and `.css` through one server, with full `@use`/`@forward` workspace-wide go-to-definition and find-references for variables, mixins, and functions across Sass files. The `.css` path uses the same `vscode-css-languageservice` engine that powers the standalone CSS LS; CSS feature toggles default off upstream and are flipped on at startup so symbols, hover, completion, and syntax-level diagnostics work for plain CSS as well.
+
+* Hooks:
+  - `serena-hooks auto-approve` now also emits an `allow` decision when Claude Code reports
+    `permission_mode == "auto"`, in addition to the existing `acceptEdits` behavior. #1386
+  - Extension: heuristics for parsing commands and firing a hook on too many greps or reads. Important for clients that, unlike claude code, don't have dedicated grep/read tools.
+  - Read hook now only fires on reads of code files (using heuristics to parse the read command string)
 
 # v1.2.0 (2026-04-27)
 
