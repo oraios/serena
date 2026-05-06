@@ -5,6 +5,19 @@ This module contains the exceptions raised by the framework.
 from solidlsp.ls_config import Language
 
 
+class LanguageServerTerminatedException(Exception):
+    """Raised when the language server process has terminated unexpectedly."""
+
+    def __init__(self, message: str, language: Language, cause: Exception | None = None) -> None:
+        super().__init__(message)
+        self.message = message
+        self.language = language
+        self.cause = cause
+
+    def __str__(self) -> str:
+        return f"LanguageServerTerminatedException: {self.message}" + (f"; Cause: {self.cause}" if self.cause else "")
+
+
 class SolidLSPException(Exception):
     def __init__(self, message: str, cause: Exception | None = None) -> None:
         """
@@ -24,16 +37,12 @@ class SolidLSPException(Exception):
         :return: True if the exception is caused by the language server having terminated as indicated
             by the causing exception being an instance of LanguageServerTerminatedException.
         """
-        from .ls_process import LanguageServerTerminatedException
-
         return isinstance(self.cause, LanguageServerTerminatedException)
 
     def get_affected_language(self) -> Language | None:
         """
         :return: the affected language for the case where the exception is caused by the language server having terminated
         """
-        from .ls_process import LanguageServerTerminatedException
-
         if isinstance(self.cause, LanguageServerTerminatedException):
             return self.cause.language
         return None

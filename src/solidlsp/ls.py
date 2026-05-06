@@ -45,6 +45,7 @@ from solidlsp.lsp_protocol_handler.server import (
     ProcessLaunchInfo,
     StringDict,
 )
+from solidlsp.lsp_transport import StdioTransport
 from solidlsp.settings import SolidLSPSettings
 from solidlsp.util.cache import load_cache, save_cache
 
@@ -551,12 +552,16 @@ class SolidLanguageServer(ABC):
             self._dependency_provider = self._create_dependency_provider()
             process_launch_info = self._create_process_launch_info()
         log.debug(f"Creating language server instance with {language_id=} and process launch info: {process_launch_info}")
-        self.server = LanguageServerProcess(
+        transport = StdioTransport(
             process_launch_info,
+            language=self.language,
+            start_independent_lsp_process=config.start_independent_lsp_process,
+        )
+        self.server = LanguageServerProcess(
+            transport,
             language=self.language,
             determine_log_level=self._determine_log_level,
             logger=logging_fn,
-            start_independent_lsp_process=config.start_independent_lsp_process,
         )
         self.server.on_any_notification(self._observe_server_notification)
 
