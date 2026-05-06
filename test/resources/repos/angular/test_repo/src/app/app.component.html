@@ -1,0 +1,21 @@
+<section>
+    <h1>{{ title() | exclaim }}</h1>
+    <p>{{ greeting() }}</p>
+
+    <input
+        type="text"
+        [value]="userName()"
+        (input)="setName($any($event.target).value)"
+        placeholder="Enter your name"
+    />
+
+    @if (items().length > 0) {
+        <ul>
+            @for (item of items(); track item) {
+                <app-item-card [label]="item"></app-item-card>
+            }
+        </ul>
+    } @else {
+        <p>No items.</p>
+    }
+</section>

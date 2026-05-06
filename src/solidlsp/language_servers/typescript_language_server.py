@@ -23,6 +23,14 @@ from .common import RuntimeDependency, RuntimeDependencyCollection, build_npm_in
 
 log = logging.getLogger(__name__)
 
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+INITIAL_TYPESCRIPT_VERSION = "5.9.3"
+DEFAULT_TYPESCRIPT_VERSION = "5.9.3"
+INITIAL_TYPESCRIPT_LANGUAGE_SERVER_VERSION = "5.1.3"
+DEFAULT_TYPESCRIPT_LANGUAGE_SERVER_VERSION = "5.1.3"
+
 # Platform-specific imports
 if os.name != "nt":  # Unix-like systems
     import pwd
@@ -154,8 +162,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
 
             # Get version settings from ls_specific_settings or use defaults
             language_specific_config = self._custom_settings
-            typescript_version = language_specific_config.get("typescript_version", "5.9.3")
-            typescript_language_server_version = language_specific_config.get("typescript_language_server_version", "5.1.3")
+            typescript_version = language_specific_config.get("typescript_version", DEFAULT_TYPESCRIPT_VERSION)
+            typescript_language_server_version = language_specific_config.get(
+                "typescript_language_server_version", DEFAULT_TYPESCRIPT_LANGUAGE_SERVER_VERSION
+            )
             npm_registry = language_specific_config.get("npm_registry")
 
             deps = RuntimeDependencyCollection(
@@ -181,38 +191,19 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             is_npm_installed = shutil.which("npm") is not None
             assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
-            # Install typescript and typescript-language-server if not already installed or version mismatch
-            tsserver_ls_dir = os.path.join(self._ls_resources_dir, "ts-lsp")
+            # legacy unversioned dir reserved for INITIAL pair; any other version combination goes into a versioned subdir
+            is_initial = (
+                typescript_version == INITIAL_TYPESCRIPT_VERSION
+                and typescript_language_server_version == INITIAL_TYPESCRIPT_LANGUAGE_SERVER_VERSION
+            )
+            ls_dirname = "ts-lsp" if is_initial else f"ts-lsp-{typescript_version}-{typescript_language_server_version}"
+            tsserver_ls_dir = os.path.join(self._ls_resources_dir, ls_dirname)
             tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
 
-            # Check if installation is needed based on executable AND version
-            version_file = os.path.join(tsserver_ls_dir, ".installed_version")
-            expected_version = f"{typescript_version}_{typescript_language_server_version}"
-
-            needs_install = False
             if not os.path.exists(tsserver_executable_path):
-                log.info(f"Typescript Language Server executable not found at {tsserver_executable_path}.")
-                needs_install = True
-            elif os.path.exists(version_file):
-                with open(version_file) as f:
-                    installed_version = f.read().strip()
-                if installed_version != expected_version:
-                    log.info(
-                        f"TypeScript Language Server version mismatch: installed={installed_version}, expected={expected_version}. Reinstalling..."
-                    )
-                    needs_install = True
-            else:
-                # No version file exists, assume old installation needs refresh
-                log.info("TypeScript Language Server version file not found. Reinstalling to ensure correct version...")
-                needs_install = True
-
-            if needs_install:
-                log.info("Installing TypeScript Language Server dependencies...")
+                log.info(f"Typescript Language Server executable not found at {tsserver_executable_path}. Installing...")
                 with LogTime("Installation of TypeScript language server dependencies", logger=log):
                     deps.install(tsserver_ls_dir)
-                # Write version marker file
-                with open(version_file, "w") as f:
-                    f.write(expected_version)
                 log.info("TypeScript language server dependencies installed successfully")
 
             if not os.path.exists(tsserver_executable_path):
@@ -270,12 +261,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             "processId": os.getpid(),
             "rootPath": repository_absolute_path,
             "rootUri": root_uri,
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
+            "workspaceFolders": self._build_workspace_folders_param(repository_absolute_path),
         }
         return cast(InitializeParams, initialize_params)
 
@@ -415,6 +401,45 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                 "TypeScript project indexing did not complete within %.0fs; proceeding anyway",
                 self.INDEXING_PROGRESS_TIMEOUT,
             )
+
+        self._activate_additional_workspaces()
+
+    @override
+    def _find_representative_source_file(self, directory: str) -> str | None:
+        """Find a TypeScript file suitable for triggering project loading.
+
+        Prefers a file adjacent to tsconfig.json (indicating the project root),
+        then falls back to the first .ts/.tsx file found.
+        """
+        for root, dirs, files in os.walk(directory):
+            dirs[:] = [d for d in dirs if not self.is_ignored_dirname(d)]
+            if "tsconfig.json" in files:
+                for f in files:
+                    if f.endswith((".ts", ".tsx")) and not f.endswith(".d.ts"):
+                        return os.path.join(root, f)
+                src_dir = os.path.join(root, "src")
+                if os.path.isdir(src_dir):
+                    for f in os.listdir(src_dir):
+                        if f.endswith((".ts", ".tsx")) and not f.endswith(".d.ts"):
+                            return os.path.join(src_dir, f)
+
+        for root, dirs, files in os.walk(directory):
+            dirs[:] = [d for d in dirs if not self.is_ignored_dirname(d)]
+            for f in files:
+                if f.endswith((".ts", ".tsx")) and not f.endswith(".d.ts"):
+                    return os.path.join(root, f)
+        return None
+
+    @override
+    def _signal_expect_indexing(self) -> None:
+        self.expect_indexing()
+
+    @override
+    def _wait_for_additional_workspace_indexing(self) -> None:
+        if self.wait_for_indexing(timeout=self.INDEXING_PROGRESS_TIMEOUT):
+            log.info("Additional workspace indexing complete")
+        else:
+            log.warning("Additional workspace indexing did not complete within timeout; proceeding anyway")
 
     @override
     def _get_published_diagnostics_uri(self, request_uri: str) -> str:

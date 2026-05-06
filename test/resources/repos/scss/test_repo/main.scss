@@ -1,0 +1,16 @@
+@use "variables" as vars;
+@use "mixins" as mix;
+@forward "buttons";
+
+body {
+    background-color: vars.$color-bg;
+    color: vars.$color-text;
+    margin: 0;
+    padding: vars.$space-lg;
+    font-size: mix.rem(16);
+}
+
+.panel {
+    @include mix.card-surface();
+    margin-bottom: vars.$space-md;
+}

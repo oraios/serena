@@ -27,6 +27,7 @@ class LanguageServerFactory:
         ignored_patterns: list[str],
         ls_timeout: float | None = None,
         ls_specific_settings: dict | None = None,
+        additional_workspace_folders: list[str] | None = None,
         trace_lsp_communication: bool = False,
     ):
         self.project_root = project_root
@@ -35,6 +36,7 @@ class LanguageServerFactory:
         self.ignored_patterns = ignored_patterns
         self.ls_timeout = ls_timeout
         self.ls_specific_settings = ls_specific_settings
+        self.additional_workspace_folders = additional_workspace_folders or []
         self.trace_lsp_communication = trace_lsp_communication
 
     def create_language_server(self, language: Language) -> SolidLanguageServer:
@@ -54,6 +56,7 @@ class LanguageServerFactory:
                 solidlsp_dir=SerenaPaths().serena_user_home_dir,
                 project_data_path=self.project_data_path,
                 ls_specific_settings=self.ls_specific_settings or {},
+                additional_workspace_folders=self.additional_workspace_folders,
             ),
         )
 

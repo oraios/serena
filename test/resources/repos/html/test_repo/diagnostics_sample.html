@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<!-- Diagnostics smoke fixture — vscode-html-language-server does not emit
+     diagnostics for HTML structure; this file just gives the LS something to
+     chew on so the diagnostics endpoint round-trip can be exercised. -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Diagnostics Sample</title>
+</head>
+<body>
+    <div id="dup">first</div>
+    <div id="dup">second</div>
+</body>
+</html>

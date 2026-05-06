@@ -29,6 +29,10 @@ We currently provide direct, out-of-the-box support for the programming language
 Some languages require additional installations or setup steps, as noted.
 
 * **AL**
+* **Angular**  
+  (experimental; requires Node.js + npm, plus `npm install` having been run in the project root so that `@angular/core`
+  is resolvable — without it, template-aware features silently return empty;
+  subsumes `typescript` and `html` for `.ts`/`.html` files, so do not also list those)
 * **Ansible**  
   (experimental; requires Node.js and npm; automatically installs `@ansible/ansible-language-server`;
   must be explicitly specified in the `languages` entry in the `project.yml`; requires `ansible` in PATH for full functionality)
@@ -71,6 +75,8 @@ Some languages require additional installations or setup steps, as noted.
   (uses [shader-language-server](https://github.com/antaalt/shader-sense) (language `hlsl`); automatically downloaded;
   on macOS, requires Rust toolchain for building from source;
   note: reference search is not supported by this language server)
+* **HTML**
+  (experimental; requires Node.js + npm)
 * **Java**  
 * **JavaScript**  
   (supported via the TypeScript language server, i.e. use language `typescript` for both JavaScript and TypeScript)
@@ -107,6 +113,9 @@ Some languages require additional installations or setup steps, as noted.
   (requires [rustup](https://rustup.rs/) - uses rust-analyzer from your toolchain)
 * **Scala**  
   (requires some [manual setup](../03-special-guides/scala_setup_guide_for_serena); uses Metals LSP)
+* **SCSS / Sass / CSS**
+  (experimental; requires Node.js + npm; uses [some-sass-language-server](https://github.com/wkillerud/some-sass) to handle
+  `.scss`, `.sass`, and `.css`)
 * **Solidity**  
   (experimental; requires Node.js and npm; automatically installs `@nomicfoundation/solidity-language-server`;
   works best with a `foundry.toml` or `hardhat.config.js` in the project root)

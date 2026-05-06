@@ -13,6 +13,10 @@ excluded_tools:
   - restart_language_server
   - safe_delete_symbol
   - rename_symbol
+  - find_declaration
+  - find_implementations
+  - get_diagnostics_for_file
+  - get_diagnostics_for_symbol
 included_optional_tools:
   - jet_brains_find_declaration
   - jet_brains_find_implementations

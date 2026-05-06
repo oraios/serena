@@ -28,6 +28,34 @@ log = logging.getLogger(__name__)
 
 MARKSMAN_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
 
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+INITIAL_MARKSMAN_VERSION = "2024-12-18"
+INITIAL_MARKSMAN_SHA256_BY_PLATFORM = {
+    "linux-x64": "b9cb666c643dfd9b699811fdfc445ed4c56be65c1d878c21d46847f0d7b0e475",
+    "linux-arm64": "b8d6972a56f3f9b7bbbf7c77ef8998e3b66fa82fb03c01398e224144486c9e73",
+    "osx-x64": "7e18803966231a33ee107d0d26f69b41f2f0dc1332c52dd9729c2e29fb77be83",
+    "osx-arm64": "7e18803966231a33ee107d0d26f69b41f2f0dc1332c52dd9729c2e29fb77be83",
+    "win-x64": "39de9df039c8b0d627ac5918a9d8792ad20fc49e2461d1f5c906975c016799ec",
+}
+DEFAULT_MARKSMAN_VERSION = "2024-12-18"
+DEFAULT_MARKSMAN_SHA256_BY_PLATFORM = {
+    "linux-x64": "b9cb666c643dfd9b699811fdfc445ed4c56be65c1d878c21d46847f0d7b0e475",
+    "linux-arm64": "b8d6972a56f3f9b7bbbf7c77ef8998e3b66fa82fb03c01398e224144486c9e73",
+    "osx-x64": "7e18803966231a33ee107d0d26f69b41f2f0dc1332c52dd9729c2e29fb77be83",
+    "osx-arm64": "7e18803966231a33ee107d0d26f69b41f2f0dc1332c52dd9729c2e29fb77be83",
+    "win-x64": "39de9df039c8b0d627ac5918a9d8792ad20fc49e2461d1f5c906975c016799ec",
+}
+
+
+def _marksman_sha(version: str, platform_key: str) -> str | None:
+    if version == INITIAL_MARKSMAN_VERSION:
+        return INITIAL_MARKSMAN_SHA256_BY_PLATFORM[platform_key]
+    if version == DEFAULT_MARKSMAN_VERSION:
+        return DEFAULT_MARKSMAN_SHA256_BY_PLATFORM[platform_key]
+    return None
+
 
 class Marksman(SolidLanguageServer):
     """
@@ -39,12 +67,9 @@ class Marksman(SolidLanguageServer):
     """
 
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
-        DEFAULT_MARKSMAN_VERSION = "2024-12-18"
-
         @classmethod
         def _runtime_dependencies(cls, version: str) -> RuntimeDependencyCollection:
             marksman_releases = f"https://github.com/artempyanykh/marksman/releases/download/{version}"
-            default_version = version == cls.DEFAULT_MARKSMAN_VERSION
             return RuntimeDependencyCollection(
                 [
                     RuntimeDependency(
@@ -53,7 +78,7 @@ class Marksman(SolidLanguageServer):
                         platform_id="linux-x64",
                         archive_type="binary",
                         binary_name="marksman",
-                        sha256="b9cb666c643dfd9b699811fdfc445ed4c56be65c1d878c21d46847f0d7b0e475" if default_version else None,
+                        sha256=_marksman_sha(version, "linux-x64"),
                         allowed_hosts=MARKSMAN_ALLOWED_HOSTS,
                     ),
                     RuntimeDependency(
@@ -62,7 +87,7 @@ class Marksman(SolidLanguageServer):
                         platform_id="linux-arm64",
                         archive_type="binary",
                         binary_name="marksman",
-                        sha256="b8d6972a56f3f9b7bbbf7c77ef8998e3b66fa82fb03c01398e224144486c9e73" if default_version else None,
+                        sha256=_marksman_sha(version, "linux-arm64"),
                         allowed_hosts=MARKSMAN_ALLOWED_HOSTS,
                     ),
                     RuntimeDependency(
@@ -71,7 +96,7 @@ class Marksman(SolidLanguageServer):
                         platform_id="osx-x64",
                         archive_type="binary",
                         binary_name="marksman",
-                        sha256="7e18803966231a33ee107d0d26f69b41f2f0dc1332c52dd9729c2e29fb77be83" if default_version else None,
+                        sha256=_marksman_sha(version, "osx-x64"),
                         allowed_hosts=MARKSMAN_ALLOWED_HOSTS,
                     ),
                     RuntimeDependency(
@@ -80,7 +105,7 @@ class Marksman(SolidLanguageServer):
                         platform_id="osx-arm64",
                         archive_type="binary",
                         binary_name="marksman",
-                        sha256="7e18803966231a33ee107d0d26f69b41f2f0dc1332c52dd9729c2e29fb77be83" if default_version else None,
+                        sha256=_marksman_sha(version, "osx-arm64"),
                         allowed_hosts=MARKSMAN_ALLOWED_HOSTS,
                     ),
                     RuntimeDependency(
@@ -89,7 +114,7 @@ class Marksman(SolidLanguageServer):
                         platform_id="win-x64",
                         archive_type="binary",
                         binary_name="marksman.exe",
-                        sha256="39de9df039c8b0d627ac5918a9d8792ad20fc49e2461d1f5c906975c016799ec" if default_version else None,
+                        sha256=_marksman_sha(version, "win-x64"),
                         allowed_hosts=MARKSMAN_ALLOWED_HOSTS,
                     ),
                 ]
@@ -97,11 +122,16 @@ class Marksman(SolidLanguageServer):
 
         def _get_or_install_core_dependency(self) -> str:
             """Setup runtime dependencies for marksman and return the command to start the server."""
-            marksman_version = self._custom_settings.get("marksman_version", self.DEFAULT_MARKSMAN_VERSION)
+            marksman_version = self._custom_settings.get("marksman_version", DEFAULT_MARKSMAN_VERSION)
             deps = self._runtime_dependencies(marksman_version)
             dependency = deps.get_single_dep_for_current_platform()
 
-            marksman_ls_dir = self._ls_resources_dir
+            # legacy unversioned dir reserved for INITIAL; every other version goes into a versioned subdir
+            marksman_ls_dir = (
+                self._ls_resources_dir
+                if marksman_version == INITIAL_MARKSMAN_VERSION
+                else os.path.join(self._ls_resources_dir, f"marksman-{marksman_version}")
+            )
             marksman_executable_path = deps.binary_path(marksman_ls_dir)
             if not os.path.exists(marksman_executable_path):
                 log.info(

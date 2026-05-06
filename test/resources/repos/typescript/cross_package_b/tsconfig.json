@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "module": "commonjs",
+    "strict": true,
+    "esModuleInterop": true,
+    "rootDir": ".",
+    "paths": {
+      "../cross_package_a/*": ["../cross_package_a/*"]
+    }
+  },
+  "include": ["*.ts"]
+}

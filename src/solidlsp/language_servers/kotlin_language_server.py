@@ -41,16 +41,36 @@ log = logging.getLogger(__name__)
 # -Xmx2G: 2GB heap is sufficient for most projects; override via ls_specific_settings for large codebases
 DEFAULT_KOTLIN_JVM_OPTIONS = "-Xmx2G"
 
-# Default Kotlin Language Server version (can be overridden via ls_specific_settings)
-DEFAULT_KOTLIN_LSP_VERSION = "261.13587.0"
 KOTLIN_LSP_ALLOWED_HOSTS = ("download-cdn.jetbrains.com",)
-KOTLIN_LSP_SHA256_BY_SUFFIX = {
+
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+INITIAL_KOTLIN_LSP_VERSION = "261.13587.0"
+INITIAL_KOTLIN_LSP_SHA256_BY_SUFFIX = {
     "win-x64": "2806c2bd4810bd8e7ccc27d8c0ca4a5232a1c4f26ea1f4ba40e578b60860ccad",
     "linux-x64": "dc0ed2e70cb0d61fdabb26aefce8299b7a75c0dcfffb9413715e92caec6e83ec",
     "linux-aarch64": "d1dceb000fe06c5e2c30b95e7f4ab01d05101bd03ed448167feeb544a9f1d651",
     "mac-x64": "a3972f27229eba2c226060e54baea1c958c82c326dfc971bf53f72a74d0564a3",
     "mac-aarch64": "d4ea28b22b29cf906fe16d23698a8468f11646a6a66dcb15584f306aaefbee6c",
 }
+DEFAULT_KOTLIN_LSP_VERSION = "261.13587.0"
+DEFAULT_KOTLIN_LSP_SHA256_BY_SUFFIX = {
+    "win-x64": "2806c2bd4810bd8e7ccc27d8c0ca4a5232a1c4f26ea1f4ba40e578b60860ccad",
+    "linux-x64": "dc0ed2e70cb0d61fdabb26aefce8299b7a75c0dcfffb9413715e92caec6e83ec",
+    "linux-aarch64": "d1dceb000fe06c5e2c30b95e7f4ab01d05101bd03ed448167feeb544a9f1d651",
+    "mac-x64": "a3972f27229eba2c226060e54baea1c958c82c326dfc971bf53f72a74d0564a3",
+    "mac-aarch64": "d4ea28b22b29cf906fe16d23698a8468f11646a6a66dcb15584f306aaefbee6c",
+}
+
+
+def _kotlin_lsp_sha(version: str, kotlin_suffix: str) -> str | None:
+    if version == INITIAL_KOTLIN_LSP_VERSION:
+        return INITIAL_KOTLIN_LSP_SHA256_BY_SUFFIX.get(kotlin_suffix)
+    if version == DEFAULT_KOTLIN_LSP_VERSION:
+        return DEFAULT_KOTLIN_LSP_SHA256_BY_SUFFIX.get(kotlin_suffix)
+    return None
+
 
 # Platform-specific Kotlin LSP download suffixes
 PLATFORM_KOTLIN_SUFFIX = {
@@ -108,8 +128,14 @@ class KotlinLanguageServer(SolidLanguageServer):
             kotlin_suffix = PLATFORM_KOTLIN_SUFFIX.get(platform_id.value)
             assert kotlin_suffix, f"Unsupported platform for Kotlin LSP: {platform_id.value}"
 
-            # Setup paths for dependencies
-            static_dir = os.path.join(self._ls_resources_dir, "kotlin_language_server")
+            # Setup paths for dependencies; legacy unversioned dir reserved for INITIAL only
+            kotlin_lsp_version = self._custom_settings.get("kotlin_lsp_version", DEFAULT_KOTLIN_LSP_VERSION)
+            ls_dirname = (
+                "kotlin_language_server"
+                if kotlin_lsp_version == INITIAL_KOTLIN_LSP_VERSION
+                else f"kotlin_language_server-{kotlin_lsp_version}"
+            )
+            static_dir = os.path.join(self._ls_resources_dir, ls_dirname)
             os.makedirs(static_dir, exist_ok=True)
 
             # Setup Kotlin Language Server
@@ -117,11 +143,8 @@ class KotlinLanguageServer(SolidLanguageServer):
             kotlin_script = os.path.join(static_dir, kotlin_script_name)
 
             if not os.path.exists(kotlin_script):
-                kotlin_lsp_version = self._custom_settings.get("kotlin_lsp_version", DEFAULT_KOTLIN_LSP_VERSION)
                 kotlin_url = f"https://download-cdn.jetbrains.com/kotlin-lsp/{kotlin_lsp_version}/kotlin-lsp-{kotlin_lsp_version}-{kotlin_suffix}.zip"
-                expected_sha256 = None
-                if kotlin_lsp_version == DEFAULT_KOTLIN_LSP_VERSION:
-                    expected_sha256 = KOTLIN_LSP_SHA256_BY_SUFFIX[kotlin_suffix]
+                expected_sha256 = _kotlin_lsp_sha(kotlin_lsp_version, kotlin_suffix)
                 log.info("Downloading Kotlin Language Server...")
                 FileUtils.download_and_extract_archive_verified(
                     kotlin_url,

@@ -1,0 +1,15 @@
+:root {
+    --color-bg: #ffffff;
+    --color-text: #1a1a1a;
+    --color-primary: #2563eb;
+    --color-secondary: #f97316;
+    --font-body: "Inter", system-ui, sans-serif;
+    --font-heading: "Inter", system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --color-bg: #0f172a;
+        --color-text: #f1f5f9;
+    }
+}

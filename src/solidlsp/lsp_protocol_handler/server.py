@@ -131,11 +131,14 @@ class StopLoopException(Exception):
     pass
 
 
-def create_message(payload: PayloadLike) -> tuple[bytes, bytes, bytes]:
+def create_message(payload: PayloadLike) -> tuple[bytes, bytes]:
     body = json.dumps(payload, check_circular=False, ensure_ascii=False, separators=(",", ":")).encode(ENCODING)
+    # NOTE: only Content-Length is sent. Content-Type is optional per the LSP
+    # spec (default: application/vscode-jsonrpc; charset=utf-8), and Godot's
+    # GDScript LSP parser only handles Content-Length — any additional header
+    # makes it silently drop the message.
     return (
-        f"Content-Length: {len(body)}\r\n".encode(ENCODING),
-        "Content-Type: application/vscode-jsonrpc; charset=utf-8\r\n\r\n".encode(ENCODING),
+        f"Content-Length: {len(body)}\r\n\r\n".encode(ENCODING),
         body,
     )
 

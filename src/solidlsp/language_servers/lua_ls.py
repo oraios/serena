@@ -26,15 +26,42 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
-LUA_LS_VERSION = "3.15.0"
 LUA_LS_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
-LUA_LS_SHA256_BY_ASSET = {
+
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+INITIAL_LUA_LS_VERSION = "3.15.0"
+INITIAL_LUA_LS_SHA256_BY_ASSET = {
     "lua-language-server-3.15.0-linux-x64.tar.gz": "4877b874c52fb7587707898da9026cc3a6c854d9bbab115ef49ac4e6a1b88007",
     "lua-language-server-3.15.0-linux-arm64.tar.gz": "7dff8edfed4f34cf6325ff384791287d95f9a8dd9615a5279c7c6af81cf8c45d",
     "lua-language-server-3.15.0-darwin-x64.tar.gz": "01d28a31e264434e51662814a68f584af068393caecfa158c4df5f7fdc3ca2f7",
     "lua-language-server-3.15.0-darwin-arm64.tar.gz": "050f5f493f65112afc116e31281a9f73918546782d3696485dc052724838f58b",
     "lua-language-server-3.15.0-win32-x64.zip": "76a10c05e8c947a448f00a61acead4240484cd1e2e8c66d54401c67d99b77535",
 }
+DEFAULT_LUA_LS_VERSION = "3.15.0"
+DEFAULT_LUA_LS_SHA256_BY_ASSET = {
+    "lua-language-server-3.15.0-linux-x64.tar.gz": "4877b874c52fb7587707898da9026cc3a6c854d9bbab115ef49ac4e6a1b88007",
+    "lua-language-server-3.15.0-linux-arm64.tar.gz": "7dff8edfed4f34cf6325ff384791287d95f9a8dd9615a5279c7c6af81cf8c45d",
+    "lua-language-server-3.15.0-darwin-x64.tar.gz": "01d28a31e264434e51662814a68f584af068393caecfa158c4df5f7fdc3ca2f7",
+    "lua-language-server-3.15.0-darwin-arm64.tar.gz": "050f5f493f65112afc116e31281a9f73918546782d3696485dc052724838f58b",
+    "lua-language-server-3.15.0-win32-x64.zip": "76a10c05e8c947a448f00a61acead4240484cd1e2e8c66d54401c67d99b77535",
+}
+
+
+def _lua_ls_sha(version: str, asset_name: str) -> str | None:
+    if version == INITIAL_LUA_LS_VERSION:
+        return INITIAL_LUA_LS_SHA256_BY_ASSET.get(asset_name)
+    if version == DEFAULT_LUA_LS_VERSION:
+        return DEFAULT_LUA_LS_SHA256_BY_ASSET.get(asset_name)
+    return None
+
+
+def _lua_ls_install_dir(ls_resources_dir: str, version: str) -> Path:
+    # legacy unversioned dir reserved for INITIAL; every other version goes into a versioned subdir
+    if version == INITIAL_LUA_LS_VERSION:
+        return Path(ls_resources_dir) / "lua"
+    return Path(ls_resources_dir) / f"lua-{version}"
 
 
 class LuaLanguageServer(SolidLanguageServer):
@@ -67,7 +94,9 @@ class LuaLanguageServer(SolidLanguageServer):
         ]
 
         if solidlsp_settings is not None:
-            ls_resource_dir = Path(LuaLanguageServer.ls_resources_dir(solidlsp_settings)) / "lua"
+            lua_settings = solidlsp_settings.get_ls_specific_settings(Language.LUA)
+            lua_ls_version = lua_settings.get("lua_language_server_version", DEFAULT_LUA_LS_VERSION)
+            ls_resource_dir = _lua_ls_install_dir(LuaLanguageServer.ls_resources_dir(solidlsp_settings), lua_ls_version)
             possible_paths.extend(
                 [
                     ls_resource_dir / "bin" / "lua-language-server",
@@ -93,7 +122,7 @@ class LuaLanguageServer(SolidLanguageServer):
     def _download_lua_ls(solidlsp_settings: SolidLSPSettings) -> str:
         """Download and install lua-language-server if not present."""
         lua_settings = solidlsp_settings.get_ls_specific_settings(Language.LUA)
-        lua_ls_version = lua_settings.get("lua_language_server_version", LUA_LS_VERSION)
+        lua_ls_version = lua_settings.get("lua_language_server_version", DEFAULT_LUA_LS_VERSION)
         system = platform.system()
         machine = platform.machine().lower()
 
@@ -122,7 +151,7 @@ class LuaLanguageServer(SolidLanguageServer):
 
         download_url = f"https://github.com/LuaLS/lua-language-server/releases/download/{lua_ls_version}/{download_name}"
 
-        install_dir = Path(LuaLanguageServer.ls_resources_dir(solidlsp_settings)) / "lua"
+        install_dir = _lua_ls_install_dir(LuaLanguageServer.ls_resources_dir(solidlsp_settings), lua_ls_version)
         install_dir.mkdir(parents=True, exist_ok=True)
 
         log.info("Downloading lua-language-server from %s", download_url)
@@ -131,7 +160,7 @@ class LuaLanguageServer(SolidLanguageServer):
             download_url,
             str(install_dir),
             archive_type,
-            expected_sha256=LUA_LS_SHA256_BY_ASSET.get(download_name) if lua_ls_version == LUA_LS_VERSION else None,
+            expected_sha256=_lua_ls_sha(lua_ls_version, download_name),
             allowed_hosts=LUA_LS_ALLOWED_HOSTS,
         )
 

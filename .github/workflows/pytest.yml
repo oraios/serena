@@ -564,6 +564,13 @@ jobs:
         uses: leanprover/lean-action@v1
         with:
           lake-package-directory: test/resources/repos/lean4/test_repo
+      - name: Install npm deps for Angular test repo
+        shell: bash
+        run: |
+          if [ -d test/resources/repos/angular/test_repo ]; then
+            cd test/resources/repos/angular/test_repo
+            npm install --no-audit --no-fund --loglevel=warn
+          fi
       - name: Cache language servers
         id: cache-language-servers
         uses: actions/cache@v3

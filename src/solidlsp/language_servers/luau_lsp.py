@@ -37,15 +37,34 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
-# Pin to a known stable release
-LUAU_LSP_VERSION = "1.63.0"
 LUAU_LSP_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
-LUAU_LSP_SHA256_BY_ASSET = {
+
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+INITIAL_LUAU_LSP_VERSION = "1.63.0"
+INITIAL_LUAU_LSP_SHA256_BY_ASSET = {
     "luau-lsp-linux-x86_64.zip": "e4b633ad9a2c15437f60f9e721263f79aa0da606867d8458f0e159a325bf2db8",
     "luau-lsp-linux-arm64.zip": "355be010f337a6772df6255c92e1fb28a59d194abe5c570453f4186472244355",
     "luau-lsp-macos.zip": "01c1d6dd5fee27295b2968915dabb08c192192c46d9fe9c97bf31a130c96b8cb",
     "luau-lsp-win64.zip": "eea596d47dc1c94a61ba1b78e6472bb4445bc3309780751515e6ab0a0abba57d",
 }
+DEFAULT_LUAU_LSP_VERSION = "1.63.0"
+DEFAULT_LUAU_LSP_SHA256_BY_ASSET = {
+    "luau-lsp-linux-x86_64.zip": "e4b633ad9a2c15437f60f9e721263f79aa0da606867d8458f0e159a325bf2db8",
+    "luau-lsp-linux-arm64.zip": "355be010f337a6772df6255c92e1fb28a59d194abe5c570453f4186472244355",
+    "luau-lsp-macos.zip": "01c1d6dd5fee27295b2968915dabb08c192192c46d9fe9c97bf31a130c96b8cb",
+    "luau-lsp-win64.zip": "eea596d47dc1c94a61ba1b78e6472bb4445bc3309780751515e6ab0a0abba57d",
+}
+
+
+def _luau_lsp_sha(version: str, asset_name: str) -> str | None:
+    if version == INITIAL_LUAU_LSP_VERSION:
+        return INITIAL_LUAU_LSP_SHA256_BY_ASSET.get(asset_name)
+    if version == DEFAULT_LUAU_LSP_VERSION:
+        return DEFAULT_LUAU_LSP_SHA256_BY_ASSET.get(asset_name)
+    return None
+
 
 # Luau built-in docs CDN
 LUAU_DOCS_URL = "https://luau-lsp.pages.dev/api-docs/luau-en-us.json"
@@ -98,14 +117,19 @@ class LuauLanguageServer(SolidLanguageServer):
             return cmd
 
         def _download_luau_lsp(self) -> str:
-            install_dir = Path(self._ls_resources_dir)
+            luau_lsp_version = self._custom_settings.get("luau_lsp_version", DEFAULT_LUAU_LSP_VERSION)
+            # legacy unversioned dir reserved for INITIAL; every other version goes into a versioned subdir
+            install_dir = (
+                Path(self._ls_resources_dir)
+                if luau_lsp_version == INITIAL_LUAU_LSP_VERSION
+                else Path(self._ls_resources_dir) / f"luau-lsp-{luau_lsp_version}"
+            )
             install_dir.mkdir(parents=True, exist_ok=True)
 
             binary_path = self._find_existing_binary(install_dir)
             if binary_path is not None:
                 return binary_path
 
-            luau_lsp_version = self._custom_settings.get("luau_lsp_version", LUAU_LSP_VERSION)
             asset_name = self._get_luau_lsp_asset_name()
             download_url = f"https://github.com/JohnnyMorganz/luau-lsp/releases/download/{luau_lsp_version}/{asset_name}"
 
@@ -114,7 +138,7 @@ class LuauLanguageServer(SolidLanguageServer):
                 download_url,
                 str(install_dir),
                 "zip",
-                expected_sha256=LUAU_LSP_SHA256_BY_ASSET.get(asset_name) if luau_lsp_version == LUAU_LSP_VERSION else None,
+                expected_sha256=_luau_lsp_sha(luau_lsp_version, asset_name),
                 allowed_hosts=LUAU_LSP_ALLOWED_HOSTS,
             )
 

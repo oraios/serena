@@ -24,6 +24,12 @@ from .common import RuntimeDependency, RuntimeDependencyCollection, build_npm_in
 
 log = logging.getLogger(__name__)
 
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+INITIAL_VTSLS_VERSION = "0.2.9"
+DEFAULT_VTSLS_VERSION = "0.2.9"
+
 
 class VtsLanguageServer(SolidLanguageServer):
     """
@@ -73,7 +79,7 @@ class VtsLanguageServer(SolidLanguageServer):
         ]
         assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for vtsls at the moment"
         vts_config = solidlsp_settings.get_ls_specific_settings(Language.TYPESCRIPT_VTS)
-        vtsls_version = vts_config.get("vtsls_version", "0.2.9")
+        vtsls_version = vts_config.get("vtsls_version", DEFAULT_VTSLS_VERSION)
         npm_registry = vts_config.get("npm_registry")
 
         deps = RuntimeDependencyCollection(
@@ -86,7 +92,9 @@ class VtsLanguageServer(SolidLanguageServer):
                 ),
             ]
         )
-        vts_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "vts-lsp")
+        # legacy unversioned dir reserved for INITIAL; every other version goes into a versioned subdir
+        ls_dirname = "vts-lsp" if vtsls_version == INITIAL_VTSLS_VERSION else f"vts-lsp-{vtsls_version}"
+        vts_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), ls_dirname)
         vts_executable_path = os.path.join(vts_ls_dir, "vtsls")
 
         # Verify both node and npm are installed

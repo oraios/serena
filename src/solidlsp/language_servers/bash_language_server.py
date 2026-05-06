@@ -28,6 +28,14 @@ log = logging.getLogger(__name__)
 # ShellCheck binary release info; download directly from upstream GitHub releases rather than
 # relying on the `shellcheck` npm wrapper (which lazily downloads on first invocation and
 # turned the bash LS install into a fragile, network-dependent step).
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+INITIAL_BASH_LANGUAGE_SERVER_VERSION = "5.6.0"
+DEFAULT_BASH_LANGUAGE_SERVER_VERSION = "5.6.0"
+
+# ShellCheck binary path already encodes _SHELLCHECK_VERSION (see _shellcheck_binary_path),
+# so version bumps trigger reinstall correctly without further intervention.
 _SHELLCHECK_VERSION = "0.10.0"
 _SHELLCHECK_RELEASE_BASE = f"https://github.com/koalaman/shellcheck/releases/download/v{_SHELLCHECK_VERSION}"
 _SHELLCHECK_ALLOWED_HOSTS = (
@@ -110,10 +118,10 @@ class BashLanguageServer(SolidLanguageServer):
             assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
             is_npm_installed = shutil.which("npm") is not None
             assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
-            bash_language_server_version = self._custom_settings.get("bash_language_server_version", "5.6.0")
+            bash_language_server_version = self._custom_settings.get("bash_language_server_version", DEFAULT_BASH_LANGUAGE_SERVER_VERSION)
             npm_registry = self._custom_settings.get("npm_registry")
 
-            bash_ls_dir = os.path.join(self._ls_resources_dir, "bash-lsp")
+            bash_ls_dir = self._resolve_bash_ls_dir(bash_language_server_version)
             managed_bin_dir = os.path.join(bash_ls_dir, "node_modules", ".bin")
             bash_executable_path = os.path.join(managed_bin_dir, "bash-language-server")
             if os.name == "nt":
@@ -180,12 +188,22 @@ class BashLanguageServer(SolidLanguageServer):
                 os.chmod(binary_path, current | 0o111)
 
         def create_launch_command_env(self) -> dict[str, str]:
-            bash_ls_dir = os.path.join(self._ls_resources_dir, "bash-lsp")
+            bash_language_server_version = self._custom_settings.get("bash_language_server_version", DEFAULT_BASH_LANGUAGE_SERVER_VERSION)
+            bash_ls_dir = self._resolve_bash_ls_dir(bash_language_server_version)
             managed_bin_dir = os.path.join(bash_ls_dir, "node_modules", ".bin")
             return {
                 "PATH": managed_bin_dir + os.pathsep + os.environ.get("PATH", ""),
                 "SHELLCHECK_PATH": _shellcheck_binary_path(bash_ls_dir),
             }
+
+        def _resolve_bash_ls_dir(self, bash_language_server_version: str) -> str:
+            # legacy unversioned dir reserved for INITIAL; every other version goes into a versioned subdir
+            ls_dirname = (
+                "bash-lsp"
+                if bash_language_server_version == INITIAL_BASH_LANGUAGE_SERVER_VERSION
+                else f"bash-lsp-{bash_language_server_version}"
+            )
+            return os.path.join(self._ls_resources_dir, ls_dirname)
 
         def _create_launch_command(self, core_path: str) -> list[str]:
             return [core_path, "start"]

@@ -97,7 +97,7 @@ class Language(str, Enum):
         match self:
             # Existing cases...
             case self.NEW_LANGUAGE:
-                return FilenameMatcher("*.newlang", "*.nl")  # File extensions
+                return FilenameMatcher(".newlang", ".nl")  # File extensions
 ```
 
 ### 2.2 Update Language Server Factory

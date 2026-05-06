@@ -18,6 +18,34 @@ log = logging.getLogger(__name__)
 
 TERRAFORM_LS_ALLOWED_HOSTS = ("releases.hashicorp.com",)
 
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+INITIAL_TERRAFORM_LS_VERSION = "0.36.5"
+INITIAL_TERRAFORM_LS_SHA256_BY_PLATFORM = {
+    "osx-arm64": "fee8743aa71fe2d8b0b9b91283b844cfa57d58457306a62e53a8f38d143cec8c",
+    "osx-x64": "17c5c480f8eec7e528292565f1c05d5097a41edf7ef8ee2a9f3a18d288a1415a",
+    "linux-arm64": "724f45029f32d02d88b1952c7d1526c59fc8cd5dae49e31b9fed676a83f6cae7",
+    "linux-x64": "37e645cc54fd03e863157e2a3e773e7a5ff1d6cb3d045e4c20860cac1f550a44",
+    "win-x64": "a9223462cac9e1c0e6ba33043fbf9fb4483609b6970b5681a6306b04366698ec",
+}
+DEFAULT_TERRAFORM_LS_VERSION = "0.36.5"
+DEFAULT_TERRAFORM_LS_SHA256_BY_PLATFORM = {
+    "osx-arm64": "fee8743aa71fe2d8b0b9b91283b844cfa57d58457306a62e53a8f38d143cec8c",
+    "osx-x64": "17c5c480f8eec7e528292565f1c05d5097a41edf7ef8ee2a9f3a18d288a1415a",
+    "linux-arm64": "724f45029f32d02d88b1952c7d1526c59fc8cd5dae49e31b9fed676a83f6cae7",
+    "linux-x64": "37e645cc54fd03e863157e2a3e773e7a5ff1d6cb3d045e4c20860cac1f550a44",
+    "win-x64": "a9223462cac9e1c0e6ba33043fbf9fb4483609b6970b5681a6306b04366698ec",
+}
+
+
+def _terraform_ls_sha(version: str, platform_key: str) -> str | None:
+    if version == INITIAL_TERRAFORM_LS_VERSION:
+        return INITIAL_TERRAFORM_LS_SHA256_BY_PLATFORM[platform_key]
+    if version == DEFAULT_TERRAFORM_LS_VERSION:
+        return DEFAULT_TERRAFORM_LS_SHA256_BY_PLATFORM[platform_key]
+    return None
+
 
 class TerraformLS(SolidLanguageServer):
     """
@@ -99,7 +127,7 @@ class TerraformLS(SolidLanguageServer):
         """
         cls._ensure_tf_command_available()
         terraform_settings = solidlsp_settings.get_ls_specific_settings(Language.TERRAFORM)
-        terraform_ls_version = terraform_settings.get("terraform_ls_version", "0.36.5")
+        terraform_ls_version = terraform_settings.get("terraform_ls_version", DEFAULT_TERRAFORM_LS_VERSION)
         platform_id = PlatformUtils.get_platform_id()
         deps = RuntimeDependencyCollection(
             [
@@ -110,7 +138,7 @@ class TerraformLS(SolidLanguageServer):
                     platform_id="osx-arm64",
                     archive_type="zip",
                     binary_name="terraform-ls",
-                    sha256="fee8743aa71fe2d8b0b9b91283b844cfa57d58457306a62e53a8f38d143cec8c" if terraform_ls_version == "0.36.5" else None,
+                    sha256=_terraform_ls_sha(terraform_ls_version, "osx-arm64"),
                     allowed_hosts=TERRAFORM_LS_ALLOWED_HOSTS,
                 ),
                 RuntimeDependency(
@@ -120,7 +148,7 @@ class TerraformLS(SolidLanguageServer):
                     platform_id="osx-x64",
                     archive_type="zip",
                     binary_name="terraform-ls",
-                    sha256="17c5c480f8eec7e528292565f1c05d5097a41edf7ef8ee2a9f3a18d288a1415a" if terraform_ls_version == "0.36.5" else None,
+                    sha256=_terraform_ls_sha(terraform_ls_version, "osx-x64"),
                     allowed_hosts=TERRAFORM_LS_ALLOWED_HOSTS,
                 ),
                 RuntimeDependency(
@@ -130,7 +158,7 @@ class TerraformLS(SolidLanguageServer):
                     platform_id="linux-arm64",
                     archive_type="zip",
                     binary_name="terraform-ls",
-                    sha256="724f45029f32d02d88b1952c7d1526c59fc8cd5dae49e31b9fed676a83f6cae7" if terraform_ls_version == "0.36.5" else None,
+                    sha256=_terraform_ls_sha(terraform_ls_version, "linux-arm64"),
                     allowed_hosts=TERRAFORM_LS_ALLOWED_HOSTS,
                 ),
                 RuntimeDependency(
@@ -140,7 +168,7 @@ class TerraformLS(SolidLanguageServer):
                     platform_id="linux-x64",
                     archive_type="zip",
                     binary_name="terraform-ls",
-                    sha256="37e645cc54fd03e863157e2a3e773e7a5ff1d6cb3d045e4c20860cac1f550a44" if terraform_ls_version == "0.36.5" else None,
+                    sha256=_terraform_ls_sha(terraform_ls_version, "linux-x64"),
                     allowed_hosts=TERRAFORM_LS_ALLOWED_HOSTS,
                 ),
                 RuntimeDependency(
@@ -150,17 +178,23 @@ class TerraformLS(SolidLanguageServer):
                     platform_id="win-x64",
                     archive_type="zip",
                     binary_name="terraform-ls.exe",
-                    sha256="a9223462cac9e1c0e6ba33043fbf9fb4483609b6970b5681a6306b04366698ec" if terraform_ls_version == "0.36.5" else None,
+                    sha256=_terraform_ls_sha(terraform_ls_version, "win-x64"),
                     allowed_hosts=TERRAFORM_LS_ALLOWED_HOSTS,
                 ),
             ]
         )
         dependency = deps.get_single_dep_for_current_platform()
 
-        terraform_ls_executable_path = deps.binary_path(cls.ls_resources_dir(solidlsp_settings))
+        # legacy unversioned dir reserved for INITIAL; every other version goes into a versioned subdir
+        install_dir = (
+            cls.ls_resources_dir(solidlsp_settings)
+            if terraform_ls_version == INITIAL_TERRAFORM_LS_VERSION
+            else os.path.join(cls.ls_resources_dir(solidlsp_settings), f"terraform-ls-{terraform_ls_version}")
+        )
+        terraform_ls_executable_path = deps.binary_path(install_dir)
         if not os.path.exists(terraform_ls_executable_path):
             log.info(f"Downloading terraform-ls from {dependency.url}")
-            deps.install(cls.ls_resources_dir(solidlsp_settings))
+            deps.install(install_dir)
 
         assert os.path.exists(terraform_ls_executable_path), f"terraform-ls executable not found at {terraform_ls_executable_path}"
 
