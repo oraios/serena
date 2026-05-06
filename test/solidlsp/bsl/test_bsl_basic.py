@@ -109,7 +109,7 @@ def test_bsl_dependency_provider_custom_version_no_sha():
     installed_deps = []
 
     def fake_install(self_inner, install_dir):
-        installed_deps.extend(self_inner._dependencies)
+        installed_deps.extend(self_inner.get_dependencies_for_current_platform())
         os.makedirs(install_dir, exist_ok=True)
         open(expected_jar_path, "w").close()
 

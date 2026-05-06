@@ -395,9 +395,9 @@ class Language(str, Enum):
             case self.ANSIBLE:
                 return FilenameMatcher(".yaml", ".yml")
             case self.MSL:
-                return FilenameMatcher("*.mrc")
+                return FilenameMatcher(".mrc")
             case self.BSL:
-                return FilenameMatcher("*.bsl", "*.os")
+                return FilenameMatcher(".bsl", ".os")
             case self.HTML:
                 return FilenameMatcher(".html", ".htm")
             case self.SCSS:
