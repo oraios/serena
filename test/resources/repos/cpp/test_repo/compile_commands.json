@@ -13,5 +13,40 @@
     "directory": ".",
     "command": "g++ -std=c++17 -I . -c diagnostics_sample.cpp",
     "file": "diagnostics_sample.cpp"
+  },
+  {
+    "directory": "C",
+    "command": "clang -std=gnu23 -c a.c",
+    "file": "a.c"
+  },
+  {
+    "directory": "CUDA",
+    "command": "nvcc -std=c++20 -c a.cu",
+    "file": "a.cu"
+  },
+  {
+    "directory": "CXX20",
+    "command": "clang++ -std=gnu++20 -fmodule-file=b=b.pcm -c a.cpp",
+    "file": "a.cpp"
+  },
+  {
+    "directory": "CXX20",
+    "command": "clang++ -std=gnu++20 -fmodule-file=b=b.pcm -c b.cpp",
+    "file": "b.cpp"
+  },
+  {
+    "directory": "CXX20",
+    "command": "clang++ -std=gnu++20 -c b.cppm",
+    "file": "b.cppm"
+  },
+  {
+    "directory": "OpenCL",
+    "command": "clang -std=cl3.0 -c a.cl",
+    "file": "a.cl"
+  },
+    {
+    "directory": "HIP",
+    "command": "hipcc -c a.hip",
+    "file": "a.hip"
   }
 ]
