@@ -67,8 +67,8 @@ def test_bsl_enum_registration():
 def test_bsl_dependency_provider_default_version():
     """DependencyProvider uses default version and includes SHA in deps."""
     from solidlsp.language_servers.bsl_language_server import (
-        BSLLanguageServer,
         DEFAULT_BSL_LS_VERSION,
+        BSLLanguageServer,
     )
 
     settings = SolidLSPSettings()
