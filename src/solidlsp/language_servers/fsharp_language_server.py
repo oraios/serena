@@ -22,7 +22,12 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
-FSAUTOCOMPLETE_VERSION = "0.83.0"
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+INITIAL_FSAUTOCOMPLETE_VERSION = "0.83.0"
+DEFAULT_FSAUTOCOMPLETE_VERSION = "0.83.0"
+FSAUTOCOMPLETE_VERSION = DEFAULT_FSAUTOCOMPLETE_VERSION
 
 
 class FSharpLanguageServer(SolidLanguageServer):
@@ -69,7 +74,7 @@ class FSharpLanguageServer(SolidLanguageServer):
         Setup runtime dependencies for F# Language Server and return the command to start the server.
         """
         fsharp_settings = solidlsp_settings.get_ls_specific_settings(Language.FSHARP)
-        fsautocomplete_version = fsharp_settings.get("fsautocomplete_version", FSAUTOCOMPLETE_VERSION)
+        fsautocomplete_version = fsharp_settings.get("fsautocomplete_version", DEFAULT_FSAUTOCOMPLETE_VERSION)
         dotnet_exe = DotNETUtil("8.0", allow_higher_version=True).get_dotnet_path_or_raise()
 
         RuntimeDependencyCollection(
@@ -84,7 +89,9 @@ class FSharpLanguageServer(SolidLanguageServer):
         )
 
         # Install FsAutoComplete if not already installed
-        fsharp_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "fsharp-lsp")
+        # legacy unversioned dir reserved for INITIAL; every other version goes into a versioned subdir
+        ls_dirname = "fsharp-lsp" if fsautocomplete_version == INITIAL_FSAUTOCOMPLETE_VERSION else f"fsharp-lsp-{fsautocomplete_version}"
+        fsharp_ls_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), ls_dirname)
         fsautocomplete_path = os.path.join(fsharp_ls_dir, "fsautocomplete")
 
         # Handle Windows executable extension

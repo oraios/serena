@@ -1,0 +1,5 @@
+// Some Sass flags references to undefined variables and missing semicolons.
+.broken {
+    color: $undefined-variable
+    background: $also-not-defined;
+}

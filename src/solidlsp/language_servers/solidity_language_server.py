@@ -24,6 +24,14 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+INITIAL_SOLIDITY_LANGUAGE_SERVER_VERSION = "0.8.4"
+DEFAULT_SOLIDITY_LANGUAGE_SERVER_VERSION = "0.8.4"
+INITIAL_FORGE_VERSION = "1.5.1"
+DEFAULT_FORGE_VERSION = "1.5.1"
+
 
 class SolidityLanguageServer(SolidLanguageServer):
     """
@@ -73,8 +81,10 @@ class SolidityLanguageServer(SolidLanguageServer):
             assert is_node_installed, "node is not installed or isn't in PATH. Please install Node.js and try again."
             is_npm_installed = shutil.which("npm") is not None
             assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
-            solidity_language_server_version = self._custom_settings.get("solidity_language_server_version", "0.8.4")
-            forge_version = self._custom_settings.get("forge_version", "1.5.1")
+            solidity_language_server_version = self._custom_settings.get(
+                "solidity_language_server_version", DEFAULT_SOLIDITY_LANGUAGE_SERVER_VERSION
+            )
+            forge_version = self._custom_settings.get("forge_version", DEFAULT_FORGE_VERSION)
             npm_registry = self._custom_settings.get("npm_registry")
 
             deps = RuntimeDependencyCollection(
@@ -101,7 +111,7 @@ class SolidityLanguageServer(SolidLanguageServer):
                 ]
             )
 
-            solidity_ls_dir = os.path.join(self._ls_resources_dir, "solidity-lsp")
+            solidity_ls_dir = self._resolve_solidity_ls_dir(solidity_language_server_version, forge_version)
             managed_bin_dir = os.path.join(solidity_ls_dir, "node_modules", ".bin")
             solidity_executable_path = os.path.join(managed_bin_dir, "nomicfoundation-solidity-language-server")
             forge_executable_path = os.path.join(managed_bin_dir, "forge")
@@ -146,9 +156,21 @@ class SolidityLanguageServer(SolidLanguageServer):
             return f"@foundry-rs/forge-linux-{arch}"
 
         def create_launch_command_env(self) -> dict[str, str]:
-            solidity_ls_dir = os.path.join(self._ls_resources_dir, "solidity-lsp")
+            solidity_language_server_version = self._custom_settings.get(
+                "solidity_language_server_version", DEFAULT_SOLIDITY_LANGUAGE_SERVER_VERSION
+            )
+            forge_version = self._custom_settings.get("forge_version", DEFAULT_FORGE_VERSION)
+            solidity_ls_dir = self._resolve_solidity_ls_dir(solidity_language_server_version, forge_version)
             managed_bin_dir = os.path.join(solidity_ls_dir, "node_modules", ".bin")
             return {"PATH": managed_bin_dir + os.pathsep + os.environ.get("PATH", "")}
+
+        def _resolve_solidity_ls_dir(self, solidity_language_server_version: str, forge_version: str) -> str:
+            # legacy unversioned dir reserved for INITIAL pair; any other combination goes into a versioned subdir
+            is_initial = (
+                solidity_language_server_version == INITIAL_SOLIDITY_LANGUAGE_SERVER_VERSION and forge_version == INITIAL_FORGE_VERSION
+            )
+            ls_dirname = "solidity-lsp" if is_initial else f"solidity-lsp-{solidity_language_server_version}-{forge_version}"
+            return os.path.join(self._ls_resources_dir, ls_dirname)
 
         def _create_launch_command(self, core_path: str) -> list[str]:
             return [core_path, "--stdio"]

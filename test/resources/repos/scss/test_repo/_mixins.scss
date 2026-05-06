@@ -1,0 +1,17 @@
+@use "variables" as vars;
+
+// Common card-style container used by buttons, panels, etc.
+@mixin card-surface($bg: vars.$color-bg) {
+    background-color: $bg;
+    border-radius: 4px;
+    padding: vars.$space-md;
+}
+
+@mixin focus-ring($color: vars.$color-primary) {
+    outline: 2px solid $color;
+    outline-offset: 2px;
+}
+
+@function rem($px) {
+    @return ($px / 16) * 1rem;
+}

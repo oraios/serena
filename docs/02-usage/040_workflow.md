@@ -18,20 +18,22 @@ setting up a project with Serena typically involves the following steps:
 Project creation is the process of defining fundamental project settings that are relevant to Serena's operation.
 
 You can create a project either  
+ * explicitly, using the project creation command (see below), or
  * implicitly, by just activating a directory as a project while already in a conversation; this will use default settings for your project (skip to the next section).
- * explicitly, using the project creation command, or
 
 ### Explicit Project Creation
 
 To explicitly create a project, use the following command while in the project directory:
 
-    serena project create [options]
+    serena project create [options] [project directory]
 
- * For an empty project, you will need to specify the programming language
-   (e.g., `--language python`). 
- * For an existing project, the main programming language will be detected automatically,
-   but you can choose to explicitly specify multiple languages by passing the `--language` parameter
-   multiple times (e.g. `--language python --language typescript`).
+ * The project directory defaults to the current directory if not specified.
+ * For an existing project, the programming languages will be detected based on
+   the source files present, and the main language will be activated automatically.
+   If multiple languages are detected, you will be prompted whether you want to enable them.  
+ * For an empty project, you can optionally specify one or more languages
+   to be activated explicitly via the `--language` parameter
+   (e.g. `--language python --language typescript`).
  * You can optionally specify a custom project name with `--name my-name`.
  * You can immediately index the project after creation with `--index`.
 
@@ -42,15 +44,17 @@ After creation, you can adjust the project settings in the generated `.serena/pr
 within the project directory.
 
 The file allows you to configure ...
+  * the name by which you want to refer to the project (relevant when telling the LLM to dynamically activate the project)
   * the set of programming languages for which language servers are spawned (not relevant when using the JetBrains plugin)
     Note that you can dynamically add/remove language servers while Serena is running via the [Dashboard](060_dashboard).
   * the [language backend](per-project-language-backend) to use for this project (overriding the global setting)
   * the encoding used in source files
   * ignore rules
   * write access
+  * [additional workspace folders](additional-workspace-folders) for cross-package reference support in monorepos
   * an initial prompt that shall be passed to the LLM whenever the project is activated
-  * the name by which you want to refer to the project (relevant when telling the LLM to dynamically activate the project)
-  * the set of tools and modes to use by default
+  * the set of tools and modes to use for the project
+  * and some other settings.
 
 For detailed information on the parameters and possible settings, see the 
 [template file](https://github.com/oraios/serena/blob/main/src/serena/resources/project.template.yml).
@@ -64,6 +68,33 @@ So use the project configuration specifically for aspects that apply only to the
 You can specify local overrides for the settings in a `project.local.yml` file in the same directory
 (which, by default, is ignored by git). 
 Any keys defined therein will override the respective key in `project.yml`.
+
+(additional-workspace-folders)=
+#### Additional Workspace Folders (Cross-Package References)
+
+In monorepos or multi-package setups, Serena's language server normally only sees symbols within the
+project root. To enable cross-package references (e.g. `find_referencing_symbols` discovering usages
+in sibling packages), configure `additional_workspace_folders` in your `project.yml`:
+
+```yaml
+additional_workspace_folders:
+  - ../shared-lib
+  - ../api-client
+  - /absolute/path/to/another-package
+```
+
+Paths can be absolute or relative to the project root. Each folder is registered as an LSP workspace
+folder, and the language server will discover symbols and references across all listed packages.
+
+**Currently supported for:** TypeScript. Other language servers will raise an error if this setting
+is used with them. Support for additional languages can be added by implementing the
+`_find_representative_source_file()` method in the respective language server class.
+
+:::{note}
+Each additional workspace folder adds startup time, as the language server needs to index the
+additional projects. For large monorepos, consider listing only the packages you actively need
+cross-references for.
+:::
 
 (indexing)=
 ### Indexing

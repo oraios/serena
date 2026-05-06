@@ -1,0 +1,13 @@
+/*
+ * Plain-CSS diagnostics sample. The vscode-css-languageservice engine inside
+ * some-sass reports parser errors here even with lint diagnostics off — the
+ * unterminated rule body and stray brace produce syntax-level diagnostics.
+ */
+.broken {
+    color: red;
+    background:
+}
+
+.also-broken } {
+    margin: 0;
+}

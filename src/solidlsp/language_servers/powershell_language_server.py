@@ -34,8 +34,30 @@ from solidlsp.settings import SolidLSPSettings
 log = logging.getLogger(__name__)
 
 # PowerShell Editor Services version to download
-PSES_VERSION = "4.4.0"
-PSES_SHA256 = "690b91092989a0f66e6f43986166aaef69d64b559a9fda51feed882e1103fbcc"
+# Version pinning convention (see eclipse_jdtls.py for the full spec):
+#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
+#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+INITIAL_PSES_VERSION = "4.4.0"
+INITIAL_PSES_SHA256 = "690b91092989a0f66e6f43986166aaef69d64b559a9fda51feed882e1103fbcc"
+DEFAULT_PSES_VERSION = "4.4.0"
+DEFAULT_PSES_SHA256 = "690b91092989a0f66e6f43986166aaef69d64b559a9fda51feed882e1103fbcc"
+
+
+def _pses_sha(version: str) -> str | None:
+    if version == INITIAL_PSES_VERSION:
+        return INITIAL_PSES_SHA256
+    if version == DEFAULT_PSES_VERSION:
+        return DEFAULT_PSES_SHA256
+    return None
+
+
+def _pses_install_dir(ls_resources_dir: str, version: str) -> Path:
+    # legacy unversioned dir reserved for INITIAL; every other version goes into a versioned subdir
+    if version == INITIAL_PSES_VERSION:
+        return Path(ls_resources_dir) / "powershell"
+    return Path(ls_resources_dir) / f"powershell-{version}"
+
+
 PSES_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
 PSSCRIPTANALYZER_VERSION = "1.25.0"
 
@@ -99,7 +121,9 @@ class PowerShellLanguageServer(SolidLanguageServer):
     @classmethod
     def _get_pses_path(cls, solidlsp_settings: SolidLSPSettings) -> str | None:
         """Get the path to PowerShell Editor Services installation."""
-        install_dir = Path(cls.ls_resources_dir(solidlsp_settings)) / "powershell"
+        ps_settings = solidlsp_settings.get_ls_specific_settings(Language.POWERSHELL)
+        pses_version = ps_settings.get("pses_version", DEFAULT_PSES_VERSION)
+        install_dir = _pses_install_dir(cls.ls_resources_dir(solidlsp_settings), pses_version)
         start_script = install_dir / "PowerShellEditorServices" / "Start-EditorServices.ps1"
 
         if start_script.exists():
@@ -111,13 +135,13 @@ class PowerShellLanguageServer(SolidLanguageServer):
     def _download_pses(cls, solidlsp_settings: SolidLSPSettings) -> str:
         """Download and install PowerShell Editor Services."""
         ps_settings = solidlsp_settings.get_ls_specific_settings(Language.POWERSHELL)
-        pses_version = ps_settings.get("pses_version", PSES_VERSION)
+        pses_version = ps_settings.get("pses_version", DEFAULT_PSES_VERSION)
         download_url = (
             f"https://github.com/PowerShell/PowerShellEditorServices/releases/download/v{pses_version}/PowerShellEditorServices.zip"
         )
 
-        # Create installation directory
-        install_dir = Path(cls.ls_resources_dir(solidlsp_settings)) / "powershell"
+        # Create installation directory; legacy unversioned dir reserved for INITIAL only
+        install_dir = _pses_install_dir(cls.ls_resources_dir(solidlsp_settings), pses_version)
         install_dir.mkdir(parents=True, exist_ok=True)
 
         log.info(f"Downloading PowerShell Editor Services from {download_url}...")
@@ -125,7 +149,7 @@ class PowerShellLanguageServer(SolidLanguageServer):
             download_url,
             str(install_dir),
             "zip",
-            expected_sha256=PSES_SHA256 if pses_version == PSES_VERSION else None,
+            expected_sha256=_pses_sha(pses_version),
             allowed_hosts=PSES_ALLOWED_HOSTS,
         )
 
