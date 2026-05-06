@@ -285,7 +285,7 @@ class Language(str, Enum):
             case self.RUBY_SOLARGRAPH:
                 return FilenameMatcher(".rb")
             case self.CPP | self.CPP_CCLS:
-                return FilenameMatcher(".cpp", ".h", ".hpp", ".c", ".hxx", ".cc", ".cxx")
+                return FilenameMatcher(".C", ".cc", ".cpp", ".cxx", ".c++", ".h", ".H", ".hh", ".hpp", ".hxx", ".h++", ".cppm", ".ixx")
             case self.KOTLIN:
                 return FilenameMatcher(".kt", ".kts")
             case self.DART:
