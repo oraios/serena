@@ -13,13 +13,17 @@ if TYPE_CHECKING:
 
 
 class FilenameMatcher:
-    def __init__(self, *file_extensions: str) -> None:
+    def __init__(self, *file_extensions: str, case_sensitive: bool = True) -> None:
         """
         :param file_extensions: file extensions, e.g., `.py, .yml`
+        :param case_sensitive: whether the file extensions are case-sensitive.
         """
-        self._file_extensions = file_extensions
+        self._file_extensions = list(set(file_extensions)) if case_sensitive else list(set(ext.lower() for ext in file_extensions))
+        self._case_sensitive = case_sensitive
 
     def is_relevant_filename(self, fn: str) -> bool:
+        if not self._case_sensitive:
+            fn = fn.lower()
         for ext in self._file_extensions:
             if fn.endswith(ext):
                 return True
@@ -30,6 +34,8 @@ class FilenameMatcher:
         a *complete* extension — i.e. the extension must either end the string or be followed
         by a non-extension-character (anything other than a letter, digit, or underscore).
         """
+        if self._case_sensitive:
+            string = string.lower()
         for ext in self._file_extensions:
             if re.search(rf"{re.escape(ext)}(?:\W|$)", string):
                 return True
@@ -288,61 +294,63 @@ class Language(str, Enum):
                 # From llvm-project/clang/lib/Driver/Types.cpp types::lookupTypeForExtension:
                 return FilenameMatcher(
                     # C
-                    "*.c",
-                    "*.h",
+                    ".c",
+                    ".h",
                     # C++
-                    "*.c++",
-                    "*.cc",
-                    "*.cp",
-                    "*.cpp",
-                    "*.cxx",
-                    "*.hh",
-                    "*.hpp",
-                    "*.hxx",
+                    ".c++",
+                    ".cc",
+                    ".cp",
+                    ".cpp",
+                    ".cxx",
+                    ".hh",
+                    ".hpp",
+                    ".hxx",
                     # C++ include files
-                    "*.inl",
-                    "*.ipp",
-                    "*.tpp",
-                    "*.txx",
+                    ".inl",
+                    ".ipp",
+                    ".tpp",
+                    ".txx",
                     # Objective-C
-                    "*.m",
-                    "*.mm",
+                    ".m",
+                    ".mm",
                     # C++20 module interface files
-                    "*.c++m",
-                    "*.cppm",
-                    "*.cxxm",
-                    "*.ixx",
+                    ".c++m",
+                    ".cppm",
+                    ".cxxm",
+                    ".ixx",
                     # CUDA
-                    "*.cu",
+                    ".cu",
                     # HIP
-                    "*.hip",
+                    ".hip",
                     # OpenCL
-                    "*.cl",
-                    "*.clcpp",
+                    ".cl",
+                    ".clcpp",
+                    case_sensitive=False,
                 )
             case self.CPP_CCLS:
                 # From llvm-project/clang/lib/Driver/Types.cpp types::lookupTypeForExtension:
                 return FilenameMatcher(
                     # C
-                    "*.c",
-                    "*.h",
+                    ".c",
+                    ".h",
                     # C++
-                    "*.c++",
-                    "*.cc",
-                    "*.cp",
-                    "*.cpp",
-                    "*.cxx",
-                    "*.hh",
-                    "*.hpp",
-                    "*.hxx",
+                    ".c++",
+                    ".cc",
+                    ".cp",
+                    ".cpp",
+                    ".cxx",
+                    ".hh",
+                    ".hpp",
+                    ".hxx",
                     # C++ include files
-                    "*.inl",
-                    "*.ipp",
-                    "*.tpp",
-                    "*.txx",
+                    ".inl",
+                    ".ipp",
+                    ".tpp",
+                    ".txx",
                     # Objective-C
-                    "*.m",
-                    "*.mm",
+                    ".m",
+                    ".mm",
+                    case_sensitive=False,
                 )
             case self.KOTLIN:
                 return FilenameMatcher(".kt", ".kts")
@@ -399,7 +407,7 @@ class Language(str, Enum):
             case self.JULIA:
                 return FilenameMatcher(".jl")
             case self.FORTRAN:
-                return FilenameMatcher("*.f90", "*.f95", "*.f03", "*.f08", "*.f", "*.for", "*.fpp", insensitive=True)
+                return FilenameMatcher(".f90", ".f95", ".f03", ".f08", ".f", ".for", ".fpp", case_sensitive=False)
             case self.HASKELL:
                 return FilenameMatcher(".hs", ".lhs")
             case self.HAXE:
