@@ -1,4 +1,5 @@
 import os
+import pathlib
 
 import pytest
 
@@ -41,3 +42,23 @@ class TestLanguageServerCommonFunctionality:
 
         finally:
             os.remove(file_path)
+
+    @pytest.mark.parametrize("language_server", [Language.PYTHON], indirect=True)
+    def test_open_file_persistently(self, language_server: SolidLanguageServer) -> None:
+        """
+        Tests that a persistently opened file remains available across normal open_file scopes.
+        """
+        file_path = os.path.join("test_repo", "nested.py")
+        uri = pathlib.Path(language_server.repository_root_path, file_path).as_uri()
+
+        file_buffer = language_server.open_file_persistently(file_path)
+        assert file_buffer.uri == uri
+        assert uri in language_server.open_file_buffers
+
+        with language_server.open_file(file_path) as scoped_buffer:
+            assert scoped_buffer.uri == uri
+
+        assert uri in language_server.open_file_buffers
+
+        language_server.close_file_persistently(file_path)
+        assert uri not in language_server.open_file_buffers
