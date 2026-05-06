@@ -12,9 +12,10 @@ pytestmark = [pytest.mark.bsl]
 TEST_REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "test_repo"))
 
 _java_available = shutil.which("java") is not None
+_is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
 _skip_no_java = pytest.mark.skipif(
-    not _java_available,
-    reason="BSL LSP integration tests require Java 11+",
+    not _java_available or _is_ci,
+    reason="BSL LSP integration tests require Java 11+ and are disabled in CI (JAR not pre-installed)",
 )
 
 
