@@ -1,71 +1,90 @@
 import os
-import shutil
+from pathlib import Path
 from unittest import mock
 
 import pytest
 
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp import SolidLanguageServer
+from solidlsp.ls_config import Language
+from solidlsp.ls_utils import SymbolUtils
 from solidlsp.settings import SolidLSPSettings
-
-pytestmark = [pytest.mark.bsl]
-
-TEST_REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "test_repo"))
-
-_java_available = shutil.which("java") is not None
-_is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
-_skip_no_java = pytest.mark.skipif(
-    not _java_available or _is_ci,
-    reason="BSL LSP integration tests require Java 11+ and are disabled in CI (JAR not pre-installed)",
-)
+from test.conftest import language_tests_enabled
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
-@pytest.fixture(scope="module")
-def bsl_ls():
-    config = LanguageServerConfig(code_language=Language.BSL)
-    settings = SolidLSPSettings()
-    ls_class = Language.BSL.get_ls_class()
-    server = ls_class(config, TEST_REPO, settings)
-    server.start()
-    yield server
-    server.stop()
+@pytest.mark.bsl
+class TestBSLLanguageServer:
+    @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
+    def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
+        symbols = language_server.request_full_symbol_tree()
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "ВывестиСообщение"), \
+            "ВывестиСообщение not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "ПолучитьПриветствие"), \
+            "ПолучитьПриветствие not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "Инициализировать"), \
+            "Инициализировать not found in symbol tree"
+
+    @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
+    def test_document_symbols(self, language_server: SolidLanguageServer) -> None:
+        doc_symbols = language_server.request_document_symbols("CommonModule.bsl")
+        all_symbols, _ = doc_symbols.get_all_symbols_and_roots()
+        names = [s.get("name") for s in all_symbols if s.get("name")]
+        assert "ВывестиСообщение" in names, \
+            f"ВывестиСообщение not found in CommonModule.bsl symbols. Found: {names}"
+        assert "ПолучитьПриветствие" in names, \
+            f"ПолучитьПриветствие not found in CommonModule.bsl symbols. Found: {names}"
+        assert "ВызватьПриветствие" in names, \
+            f"ВызватьПриветствие not found in CommonModule.bsl symbols. Found: {names}"
+
+    @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
+    def test_find_references_within_file(self, language_server: SolidLanguageServer) -> None:
+        # CommonModule.bsl (0-indexed):
+        # line 2: Процедура ВывестиСообщение(Текст) Экспорт
+        # line 13: ВывестиСообщение(Сообщение);  <- internal call
+        refs = language_server.request_references("CommonModule.bsl", line=2, column=10)
+        assert refs, "Expected at least one reference to ВывестиСообщение"
+        file_names = [ref.get("relativePath", "") for ref in refs]
+        assert any("CommonModule.bsl" in f for f in file_names), \
+            f"Expected self-reference in CommonModule.bsl, got: {file_names}"
+
+    @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
+    def test_find_references_across_files(self, language_server: SolidLanguageServer) -> None:
+        # ВывестиСообщение is defined in CommonModule.bsl (line 2)
+        # and called from ObjectModule.bsl (line 6)
+        refs = language_server.request_references("CommonModule.bsl", line=2, column=10)
+        assert refs, "Expected references to ВывестиСообщение"
+        file_names = [ref.get("relativePath", "") for ref in refs]
+        assert any("ObjectModule.bsl" in f for f in file_names), \
+            f"Expected cross-file reference in ObjectModule.bsl, got: {file_names}"
+
+    @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
+    def test_bare_symbol_names(self, language_server: SolidLanguageServer) -> None:
+        all_symbols = request_all_symbols(language_server)
+        malformed = [s for s in all_symbols if has_malformed_name(s)]
+        if malformed:
+            pytest.fail(
+                f"Found malformed symbols: {[format_symbol_for_assert(s) for s in malformed]}",
+                pytrace=False,
+            )
 
 
-@pytest.mark.slow
-@_skip_no_java
-def test_bsl_server_starts(bsl_ls):
-    assert bsl_ls.server_ready.is_set()
+# ---------------------------------------------------------------------------
+# Unit tests — no language server needed, always run regardless of Java
+# ---------------------------------------------------------------------------
 
-
-@pytest.mark.slow
-@_skip_no_java
-def test_bsl_document_symbols(bsl_ls):
-    symbols = bsl_ls.request_document_symbols("CommonModule.bsl")
-    names = [s.get("name") for s in symbols.iter_symbols()]
-    assert "ВывестиСообщение" in names
-    assert "ПолучитьПриветствие" in names
-    assert "ВызватьПриветствие" in names
-
-
-@pytest.mark.slow
-@_skip_no_java
-def test_bsl_find_references(bsl_ls):
-    refs = bsl_ls.request_references("CommonModule.bsl", line=6, column=10)
-    assert len(refs) >= 1
-
-
-def test_bsl_filename_matcher():
+def test_bsl_filename_matcher() -> None:
     matcher = Language.BSL.get_source_fn_matcher()
     assert matcher.is_relevant_filename("module.bsl")
     assert matcher.is_relevant_filename("script.os")
     assert not matcher.is_relevant_filename("module.py")
 
 
-def test_bsl_enum_registration():
+def test_bsl_enum_registration() -> None:
     assert Language.BSL.value == "bsl"
     assert Language.BSL.get_ls_class().__name__ == "BSLLanguageServer"
 
 
-def test_bsl_dependency_provider_default_version():
+def test_bsl_dependency_provider_default_version() -> None:
     """DependencyProvider uses default version and includes SHA in deps."""
     from solidlsp.language_servers.bsl_language_server import (
         DEFAULT_BSL_LS_VERSION,
@@ -91,8 +110,8 @@ def test_bsl_dependency_provider_default_version():
     assert jar_path == expected_jar_path
 
 
-def test_bsl_dependency_provider_custom_version_no_sha():
-    """When user overrides version, no SHA verification should happen (expected_sha256 is None)."""
+def test_bsl_dependency_provider_custom_version_no_sha() -> None:
+    """When user overrides version, no SHA verification should happen."""
     from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
     from solidlsp.language_servers.common import RuntimeDependencyCollection
 
@@ -130,7 +149,7 @@ def test_bsl_dependency_provider_custom_version_no_sha():
         os.rmdir(expected_jar_dir)
 
 
-def test_bsl_dependency_provider_custom_ls_path():
+def test_bsl_dependency_provider_custom_ls_path() -> None:
     """When ls_path is set, the custom path is returned directly without download."""
     from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
 
