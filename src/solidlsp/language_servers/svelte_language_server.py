@@ -258,15 +258,38 @@ class SvelteLanguageServer(SolidLanguageServer):
             }
         )
 
+    def _request_svelte_component_references(self, relative_file_path: str) -> list[ls_types.Location]:
+        """Fetch component-level references via Svelte-specific LSP extensions.
+
+        svelte-language-server tracks component usages through ``$/getFileReferences``
+        and ``$/getComponentReferences`` rather than the standard
+        ``textDocument/references`` protocol, so a plain references request returns
+        nothing for ``.svelte`` files used as components.
+        """
+        uri = PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))
+        refs: list[ls_types.Location] = []
+        refs.extend(self._request_uri_locations("$/getFileReferences", uri))
+        refs.extend(self._request_uri_locations("$/getComponentReferences", uri))
+        return refs
+
     @override
     def request_references(self, relative_file_path: str, line: int, column: int) -> list[ls_types.Location]:
+        """Return all references to the symbol at ``(line, column)``.
+
+        Overrides the base to handle two Svelte quirks:
+
+        1. **Component references** — for ``.svelte`` files the server exposes
+           component usages through non-standard extensions; these are queried as a
+           fallback when the standard request returns nothing.
+        2. **Definition inclusion** — ``request_definition`` is appended to ensure
+           the declaration is always present; deduplication by
+           ``(uri, start_line, start_char)`` removes any resulting duplicates.
+        """
         symbol_refs = super().request_references(relative_file_path, line, column)
         refs = list(symbol_refs)
 
         if not symbol_refs and relative_file_path.endswith(".svelte"):
-            uri = PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))
-            refs.extend(self._request_uri_locations("$/getFileReferences", uri))
-            refs.extend(self._request_uri_locations("$/getComponentReferences", uri))
+            refs.extend(self._request_svelte_component_references(relative_file_path))
 
         refs.extend(self.request_definition(relative_file_path, line, column))
 
