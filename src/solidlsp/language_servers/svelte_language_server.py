@@ -194,29 +194,6 @@ class SvelteLanguageServer(SolidLanguageServer):
         }
         return initialize_params  # type: ignore[return-value]
 
-    @staticmethod
-    def _handle_workspace_configuration(params: dict) -> list[dict]:
-        items = params.get("items", []) if isinstance(params, dict) else []
-        result: list[dict] = []
-
-        for item in items:
-            section = (item or {}).get("section") if isinstance(item, dict) else None
-            if section == "svelte":
-                result.append(
-                    {
-                        "plugin": {
-                            "svelte": {"documentHighlight": {"enable": True}},
-                            "typescript": {"enable": True},
-                            "html": {"enable": True},
-                            "css": {"enable": True},
-                        }
-                    }
-                )
-            else:
-                result.append({})
-
-        return result or [{}]
-
     def _start_server(self) -> None:
         def do_nothing(_params: dict) -> None:
             return
@@ -228,7 +205,6 @@ class SvelteLanguageServer(SolidLanguageServer):
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_request("client/registerCapability", lambda _params: None)
-        self.server.on_request("workspace/configuration", self._handle_workspace_configuration)
         self.server.on_request("workspace/applyEdit", lambda _params: {"applied": True})
 
         log.info("Starting svelte-language-server")
