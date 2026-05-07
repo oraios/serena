@@ -318,6 +318,29 @@ Supported settings:
 |---|---|---|
 | `ls_path` | managed download | Override the `clojure-lsp` executable path. |
 | `clojure_lsp_version` | `2026.02.20-16.08.58` | Override the `clojure-lsp` release version Serena downloads when `ls_path` is not set. |
+| `source_paths` | scanned from project descriptors (or unset if a project-local `.lsp/config.edn` is found) | Explicit list of repo-root-relative source paths to inject into clojure-lsp's `initializationOptions`. Use this when the auto-discovery picks up too few or too many paths. |
+| `config_edn_path` | unset | Path to a `config.edn` file whose `:source-paths` entry should be parsed and injected. Useful when the project's clojure-lsp config lives outside the standard `.lsp/config.edn` location. |
+
+**Why this exists**: clojure-lsp discovers source paths only from the project descriptor at the workspace root (root `deps.edn` / `project.clj` / `shadow-cljs.edn` / `bb.edn`) and does not recurse for sub-module descriptors. In multi-module monorepos (e.g. `common/` + `frontend/` + `backend/` layouts), this means references in sibling modules are silently missed by `find_referencing_symbols` until a tool call happens to open one of their files. Serena works around this by walking the repo for project descriptors at startup and passing the union of their declared source paths to clojure-lsp via `initializationOptions["source-paths"]`.
+
+**Resolution order** (first match wins):
+
+1. `source_paths` setting — explicit override.
+2. `config_edn_path` setting — Serena parses `:source-paths` from the supplied file.
+3. `<repo>/.lsp/config.edn` exists — Serena injects nothing; clojure-lsp reads the file natively, so hand-tuned project configs are never clobbered.
+4. Walk the repo for project descriptors and synthesise a source-paths list from their declared `:paths` / `:extra-paths` / `:source-paths` (skipping `.git`, `.clj-kondo`, `.lsp`, `.cpcache`, `node_modules`, `target`, `out`, `dist`).
+
+Example — a monorepo without a `.lsp/config.edn`, where you want to override what Serena scanned:
+
+```yaml
+ls_specific_settings:
+  clojure:
+    source_paths:
+      - "common/src"
+      - "common/test"
+      - "frontend/src"
+      - "backend/src"
+```
 
 #### C/C++ (`clangd`)
 
