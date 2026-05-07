@@ -334,8 +334,8 @@ def _determine_disabled_languages() -> list[Language]:
     if not al_tests_enabled:
         result.append(Language.AL)
 
-    # Disable BSL tests in CI or when Java is not available
-    if is_ci or _sh.which("java") is None:
+    # Disable BSL tests only when Java is not available (Java IS present in CI via actions/setup-java)
+    if _sh.which("java") is None:
         result.append(Language.BSL)
 
     return result
