@@ -1,1 +1,0 @@
-Added support for BSL (1C:Enterprise / OneScript) language via 1c-syntax/bsl-language-server.
