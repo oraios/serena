@@ -1,5 +1,4 @@
 import os
-from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -8,7 +7,6 @@ from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
 from solidlsp.settings import SolidLSPSettings
-from test.conftest import language_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
@@ -17,24 +15,18 @@ class TestBSLLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
         symbols = language_server.request_full_symbol_tree()
-        assert SymbolUtils.symbol_tree_contains_name(symbols, "ВывестиСообщение"), \
-            "ВывестиСообщение not found in symbol tree"
-        assert SymbolUtils.symbol_tree_contains_name(symbols, "ПолучитьПриветствие"), \
-            "ПолучитьПриветствие not found in symbol tree"
-        assert SymbolUtils.symbol_tree_contains_name(symbols, "Инициализировать"), \
-            "Инициализировать not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "ВывестиСообщение"), "ВывестиСообщение not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "ПолучитьПриветствие"), "ПолучитьПриветствие not found in symbol tree"
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "Инициализировать"), "Инициализировать not found in symbol tree"
 
     @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
     def test_document_symbols(self, language_server: SolidLanguageServer) -> None:
         doc_symbols = language_server.request_document_symbols("CommonModule.bsl")
         all_symbols, _ = doc_symbols.get_all_symbols_and_roots()
         names = [s.get("name") for s in all_symbols if s.get("name")]
-        assert "ВывестиСообщение" in names, \
-            f"ВывестиСообщение not found in CommonModule.bsl symbols. Found: {names}"
-        assert "ПолучитьПриветствие" in names, \
-            f"ПолучитьПриветствие not found in CommonModule.bsl symbols. Found: {names}"
-        assert "ВызватьПриветствие" in names, \
-            f"ВызватьПриветствие not found in CommonModule.bsl symbols. Found: {names}"
+        assert "ВывестиСообщение" in names, f"ВывестиСообщение not found in CommonModule.bsl symbols. Found: {names}"
+        assert "ПолучитьПриветствие" in names, f"ПолучитьПриветствие not found in CommonModule.bsl symbols. Found: {names}"
+        assert "ВызватьПриветствие" in names, f"ВызватьПриветствие not found in CommonModule.bsl symbols. Found: {names}"
 
     @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
     def test_find_references_within_file(self, language_server: SolidLanguageServer) -> None:
@@ -44,8 +36,7 @@ class TestBSLLanguageServer:
         refs = language_server.request_references("CommonModule.bsl", line=2, column=10)
         assert refs, "Expected at least one reference to ВывестиСообщение"
         file_names = [ref.get("relativePath", "") for ref in refs]
-        assert any("CommonModule.bsl" in f for f in file_names), \
-            f"Expected self-reference in CommonModule.bsl, got: {file_names}"
+        assert any("CommonModule.bsl" in f for f in file_names), f"Expected self-reference in CommonModule.bsl, got: {file_names}"
 
     @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
     def test_find_references_across_files(self, language_server: SolidLanguageServer) -> None:
@@ -54,8 +45,7 @@ class TestBSLLanguageServer:
         refs = language_server.request_references("CommonModule.bsl", line=2, column=10)
         assert refs, "Expected references to ВывестиСообщение"
         file_names = [ref.get("relativePath", "") for ref in refs]
-        assert any("ObjectModule.bsl" in f for f in file_names), \
-            f"Expected cross-file reference in ObjectModule.bsl, got: {file_names}"
+        assert any("ObjectModule.bsl" in f for f in file_names), f"Expected cross-file reference in ObjectModule.bsl, got: {file_names}"
 
     @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
     def test_bare_symbol_names(self, language_server: SolidLanguageServer) -> None:
@@ -71,6 +61,7 @@ class TestBSLLanguageServer:
 # ---------------------------------------------------------------------------
 # Unit tests — no language server needed, always run regardless of Java
 # ---------------------------------------------------------------------------
+
 
 def test_bsl_filename_matcher() -> None:
     matcher = Language.BSL.get_source_fn_matcher()
