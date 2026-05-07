@@ -5,20 +5,32 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
-from test.conftest import find_identifier_position, get_repo_path, language_has_verified_implementation_support
+from test.conftest import (
+    find_identifier_position,
+    get_repo_path,
+    is_ci,
+    language_has_verified_implementation_support,
+    language_tests_enabled,
+)
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
+
+_typescript_servers: list[Language] = [Language.TYPESCRIPT]
+
+# tsgo is always tested in CI; locally only if the language is enabled
+if is_ci or language_tests_enabled(Language.TYPESCRIPT_TSGO):
+    _typescript_servers.append(Language.TYPESCRIPT_TSGO)
 
 
 @pytest.mark.typescript
 class TestTypescriptLanguageServer:
-    @pytest.mark.parametrize("language_server", [Language.TYPESCRIPT], indirect=True)
+    @pytest.mark.parametrize("language_server", _typescript_servers, indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
         symbols = language_server.request_full_symbol_tree()
         assert SymbolUtils.symbol_tree_contains_name(symbols, "DemoClass"), "DemoClass not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "helperFunction"), "helperFunction not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "printValue"), "printValue method not found in symbol tree"
 
-    @pytest.mark.parametrize("language_server", [Language.TYPESCRIPT], indirect=True)
+    @pytest.mark.parametrize("language_server", _typescript_servers, indirect=True)
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("index.ts")
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
@@ -92,7 +104,7 @@ class TestTypescriptLanguageServer:
             "trailingHelper missing from jsx_component.tsx root symbols; tsserver likely stopped parsing at the first JSX expression."
         )
 
-    @pytest.mark.parametrize("language_server", [Language.TYPESCRIPT], indirect=True)
+    @pytest.mark.parametrize("language_server", _typescript_servers, indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

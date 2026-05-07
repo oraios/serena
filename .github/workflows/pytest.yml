@@ -399,6 +399,10 @@ jobs:
         uses: krdlab/setup-haxe@v2
         with:
           haxe-version: 4.3.7
+      - name: Install tsgo (TypeScript native LSP)
+        shell: bash
+        run: npm install -g @typescript/native-preview
+
       - name: Install Elm
         shell: bash
         run: npm install -g elm@0.19.1-6

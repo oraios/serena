@@ -352,6 +352,7 @@ markers = [
   "html: language server running for HTML (vscode-html-language-server, used as companion by Angular)",
   "scss: language server running for SCSS / Sass / CSS (some-sass-language-server)",
   "angular: language server running for Angular (uses @angular/language-server + @angular/language-service tsserver plugin)",
+  "typescript_tsgo: language server running for TypeScript via tsgo (native Go-based TS7 compiler)",
 ]
 
 [tool.codespell]
