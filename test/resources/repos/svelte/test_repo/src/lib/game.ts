@@ -1,6 +1,8 @@
 import { allowed } from "../routes/(sverdle)/words.server.ts";
 import { words } from "$lib/components/Words.svelte";
 
+export const GAME_VERSION = "1.0";
+
 export class Game {
   index: number;
   guesses: string[];

@@ -1,5 +1,7 @@
 import { fail } from "@sveltejs/kit";
-import { Game } from "$lib/game.js";
+import { Game, GAME_VERSION } from "$lib/game.js";
+
+console.log(GAME_VERSION);
 import { count } from "$lib/components/Counter.svelte";
 
 export const load = ({ cookies }) => {
