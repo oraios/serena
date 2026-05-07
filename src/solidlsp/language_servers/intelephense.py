@@ -102,7 +102,7 @@ class Intelephense(SolidLanguageServer):
             return [core_path, "--stdio"]
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        super().__init__(config, repository_root_path, None, "php", solidlsp_settings)
+        super().__init__(config, repository_root_path, None, "php", solidlsp_settings, cache_version_raw_document_symbols=2)
         self.request_id = 0
 
         # For PHP projects, we should ignore:
