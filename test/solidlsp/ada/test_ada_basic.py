@@ -53,20 +53,17 @@ class TestAdaLanguageServer:
         # main.adb LSP line 4 / column 40 sits on the `G` of `Helper.Greet`:
         #   `   Greeting : constant String := Helper.Greet ("Ada");`
         #                                            ^ col 40
+        # ALS resolves cross-file `Helper.Greet` to its spec declaration in helper.ads
+        # (LSP line 4, column 12 — the `G` of `Greet` after `   function `).
         main_path = str(repo_path / "src" / "main.adb")
         definitions = language_server.request_definition(main_path, 4, 40)
 
         assert definitions, f"Expected non-empty definition list but got {definitions=}"
-        # ALS may return the spec only, or both spec and body.
-        target_uris = [loc["uri"] for loc in definitions]
-        assert any(uri.endswith(("helper.ads", "helper.adb")) for uri in target_uris), (
-            f"Expected definition in helper.ads or helper.adb, got {target_uris}"
-        )
-        # The spec declaration of `Greet` lives on LSP line 4 of helper.ads
-        # (function Greet (Name : String) return String;).
-        spec_match = next((loc for loc in definitions if loc["uri"].endswith("helper.ads")), None)
-        if spec_match is not None:
-            assert spec_match["range"]["start"]["line"] == 4
+        assert len(definitions) == 1
+        loc = definitions[0]
+        assert loc["uri"].endswith("helper.ads")
+        assert loc["range"]["start"]["line"] == 4
+        assert loc["range"]["start"]["character"] == 12
 
     @pytest.mark.parametrize("language_server", [Language.ADA], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.ADA], indirect=True)

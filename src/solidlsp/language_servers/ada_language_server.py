@@ -24,24 +24,18 @@ from .common import RuntimeDependency, RuntimeDependencyCollection
 
 log = logging.getLogger(__name__)
 
-# Version pinning convention (see eclipse_jdtls.py for the full spec):
-#   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
-#   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
-INITIAL_ALS_VERSION = "2026.2.202604091"
-INITIAL_ALS_SHA256_BY_PLATFORM = {
+# Bumped on upgrades; install dir is namespaced by version so old caches stay valid.
+DEFAULT_ALS_VERSION = "2026.2.202604091"
+DEFAULT_ALS_SHA256_BY_PLATFORM = {
     "osx-arm64": "1d25ded29b6beafcb34c9d0084d52809d84577356e467bf92e8fef32fc4216c4",
     "osx-x64": "18d3277a25a6e08ce3ee7230c3e5ac20419d573cb8d8c883e7983f387a67d223",
     "linux-arm64": "65c57df715df90f7581ecd6a1d1884663376baaf38cedbab80d10060ff91b03d",
     "linux-x64": "2eb436a7c0e3740128cceaa15da9ff856fa75ef3fbb3e2e9d3a1bd17e15cb949",
     "win-x64": "bca024dc3643b2d91aebbb747398e2e6f183ad8cb2f149e24fe7a38cdb16ed8d",
 }
-DEFAULT_ALS_VERSION = "2026.2.202604091"
-DEFAULT_ALS_SHA256_BY_PLATFORM = INITIAL_ALS_SHA256_BY_PLATFORM
 
 
 def _als_sha(version: str, platform_key: str) -> str | None:
-    if version == INITIAL_ALS_VERSION:
-        return INITIAL_ALS_SHA256_BY_PLATFORM[platform_key]
     if version == DEFAULT_ALS_VERSION:
         return DEFAULT_ALS_SHA256_BY_PLATFORM[platform_key]
     return None
@@ -126,10 +120,7 @@ class AdaLanguageServer(SolidLanguageServer):
             deps = AdaLanguageServer._runtime_dependencies(als_version)
             dependency = deps.get_single_dep_for_current_platform()
 
-            # legacy unversioned dir reserved for INITIAL; every other version goes into a versioned subdir
-            install_dir = (
-                self._ls_resources_dir if als_version == INITIAL_ALS_VERSION else os.path.join(self._ls_resources_dir, f"als-{als_version}")
-            )
+            install_dir = os.path.join(self._ls_resources_dir, f"als-{als_version}")
             als_executable_path = deps.binary_path(install_dir)
             if not os.path.exists(als_executable_path):
                 log.info(
