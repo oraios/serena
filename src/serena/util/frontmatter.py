@@ -69,6 +69,20 @@ class FrontmatterParser:
         body = "\n".join(lines[closing_index + 1 :])
         return FrontmatterParseResult(frontmatter=frontmatter, body=body)
 
+    @staticmethod
+    def render(frontmatter: dict[str, str], body: str) -> str:
+        if not frontmatter:
+            return body
+
+        lines = ["---"]
+        for key, value in frontmatter.items():
+            lines.append(f"{key}: {value}")
+        lines.append("---")
+        lines.append("")
+        lines.append(body)
+
+        return "\n".join(lines)
+
 
 def parse_frontmatter(content: str) -> tuple[dict[str, str], str]:
     """
@@ -78,3 +92,12 @@ def parse_frontmatter(content: str) -> tuple[dict[str, str], str]:
     """
     result = FrontmatterParser.parse(content)
     return result.frontmatter, result.body
+
+
+def render_frontmatter(frontmatter: dict[str, str], body: str) -> str:
+    """
+    Backwards-compatible functional wrapper.
+
+    :return: memory content with frontmatter
+    """
+    return FrontmatterParser.render(frontmatter, body)

@@ -1,7 +1,7 @@
 from typing import Literal
 
 from serena.tools import Tool, ToolMarkerCanEdit, ToolMarkerOptional
-from serena.util.frontmatter import parse_frontmatter
+from serena.util.frontmatter import parse_frontmatter, render_frontmatter
 
 
 class WriteMemoryTool(Tool, ToolMarkerCanEdit):
@@ -91,6 +91,45 @@ class MemoryGetFrontmatterTool(Tool, ToolMarkerOptional):
 
         frontmatter, _ = parse_frontmatter(raw)
         return self._to_json(frontmatter)
+
+
+class MemoryAddFrontmatterTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
+    """
+    OPTIONAL. Adds or updates a frontmatter key/value pair in a memory file.
+
+    Frontmatter is a YAML-like metadata block at the top of a memory file.
+
+    Use this tool only for short metadata that can improve memory organization
+    or retrieval.
+    """
+
+    def apply(self, memory_name: str, key: str, value: str) -> str:
+        """
+        Adds or updates a frontmatter field in a memory.
+
+        :param memory_name: memory name (may include "/")
+        :param key: frontmatter field name
+        :param value: frontmatter field value
+        """
+        memory_file_path = self.memories_manager.get_memory_file_path(memory_name)
+
+        if not memory_file_path.exists():
+            return self._to_json({"error": f"Memory {memory_name} not found"})
+
+        with open(memory_file_path, encoding=self.memories_manager._encoding) as f:
+            raw = f.read()
+
+        frontmatter, body = parse_frontmatter(raw)
+
+        frontmatter[key] = value
+
+        updated_content = render_frontmatter(frontmatter, body)
+
+        return self.memories_manager.save_memory(
+            memory_name,
+            updated_content,
+            is_tool_context=True,
+        )
 
 
 class DeleteMemoryTool(Tool, ToolMarkerCanEdit):
