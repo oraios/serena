@@ -55,8 +55,33 @@ class ListMemoriesTool(Tool):
     def apply(self, topic: str = "") -> str:
         """
         Lists available memories, optionally filtered by topic.
+        If the optional memory_get_frontmatter tool is active, frontmatter metadata
+        is included for each listed memory.
         """
-        return self._to_json(self.memories_manager.list_memories(topic).to_dict())
+        memories_list = self.memories_manager.list_memories(topic)
+        memories = memories_list.to_dict()
+
+        if "memory_get_frontmatter" not in self.agent.get_active_tool_names():
+            return self._to_json(memories)
+
+        memory_frontmatter = {}
+        for memory_name in memories_list.get_full_list():
+            memory_file_path = self.memories_manager.get_memory_file_path(memory_name)
+
+            if not memory_file_path.exists():
+                continue
+
+            with open(memory_file_path, encoding=self.memories_manager._encoding) as f:
+                raw = f.read()
+
+            frontmatter, _ = parse_frontmatter(raw)
+            if frontmatter:
+                memory_frontmatter[memory_name] = frontmatter
+
+        if memory_frontmatter:
+            memories["frontmatter"] = memory_frontmatter
+
+        return self._to_json(memories)
 
 
 class MemoryGetFrontmatterTool(Tool, ToolMarkerOptional):
