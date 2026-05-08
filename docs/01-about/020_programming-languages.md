@@ -28,6 +28,13 @@ or at least freely available for use.
 We currently provide direct, out-of-the-box support for the programming languages listed below.
 Some languages require additional installations or setup steps, as noted.
 
+* **Ada / SPARK**  
+  (uses AdaCore's [Ada Language Server (ALS)](https://github.com/AdaCore/ada_language_server),
+  automatically downloaded; supports `.ads`, `.adb`, and `.ada` files;
+  works best with a `.gpr` GNAT project file at the repository root;
+  SPARK is handled by the same server transparently — set language `ada` for both.
+  To use a pre-installed ALS (e.g. from Alire, GNAT Studio, or the VS Code Ada extension),
+  set `ls_specific_settings.ada.ls_path`.)
 * **AL**
 * **Angular**  
   (experimental; requires Node.js + npm, plus `npm install` having been run in the project root so that `@angular/core`
