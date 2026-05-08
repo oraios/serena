@@ -293,16 +293,11 @@ class SvelteLanguageServer(SolidLanguageServer):
 
         refs.extend(self.request_definition(relative_file_path, line, column))
 
-        seen = set()
-        deduped_refs: list[ls_types.Location] = []
+        dedup: dict[tuple, ls_types.Location] = {}
         for ref in refs:
             key = (ref["uri"], ref["range"]["start"]["line"], ref["range"]["start"]["character"])
-            if key in seen:
-                continue
-            seen.add(key)
-            deduped_refs.append(ref)
-
-        return deduped_refs
+            dedup.setdefault(key, ref)
+        return list(dedup.values())
 
     @override
     def _get_published_diagnostics_wait_timeout(self, pull_diagnostics_failed: bool) -> float:
