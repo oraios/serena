@@ -244,3 +244,51 @@ class TestSerenaConfigIgnoredPaths:
             ignored_paths=["node_modules", "*.log", "build"],
         )
         assert config.ignored_paths == ["node_modules", "*.log", "build"]
+
+
+class TestIsIgnoredPathIsDirHint:
+    """The is_dir hint on Project.is_ignored_path must produce the same result as the syscall
+    fallback and must not require the path to exist on disk.
+    """
+
+    def setup_method(self) -> None:
+        self.test_dir = tempfile.mkdtemp()
+        self.project_path = Path(self.test_dir)
+        (self.project_path / "main.py").write_text("print('hi')")
+        os.makedirs(self.project_path / "node_modules", exist_ok=True)
+        (self.project_path / "node_modules" / "pkg.js").write_text("x")
+
+    def teardown_method(self) -> None:
+        shutil.rmtree(self.test_dir)
+
+    def test_hint_matches_syscall_path_for_existing_file(self) -> None:
+        project = _create_test_project(self.project_path, global_ignored_paths=["node_modules"])
+        abs_file = str(self.project_path / "node_modules" / "pkg.js")
+
+        # syscall path (no hint): ignored
+        assert project.is_ignored_path(abs_file) is True
+        # hint path: same result
+        assert project.is_ignored_path(abs_file, is_dir=False) is True
+
+    def test_hint_matches_syscall_path_for_directory(self) -> None:
+        project = _create_test_project(self.project_path, global_ignored_paths=["node_modules"])
+        abs_dir = str(self.project_path / "node_modules")
+
+        assert project.is_ignored_path(abs_dir) is True
+        assert project.is_ignored_path(abs_dir, is_dir=True) is True
+
+    def test_hint_does_not_require_path_to_exist(self) -> None:
+        """Without the hint, _is_ignored_relative_path raises FileNotFoundError on missing paths.
+        With the hint we trust the caller and just match against the ignore spec.
+        """
+        project = _create_test_project(self.project_path, global_ignored_paths=["node_modules"])
+        abs_missing = str(self.project_path / "node_modules" / "deep" / "does_not_exist.js")
+
+        # hint path: returns True without stat-ing
+        assert project.is_ignored_path(abs_missing, is_dir=False) is True
+
+        # syscall path: still raises FileNotFoundError, contract preserved
+        import pytest
+
+        with pytest.raises(FileNotFoundError):
+            project.is_ignored_path(abs_missing)

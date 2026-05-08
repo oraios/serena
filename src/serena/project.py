@@ -427,14 +427,23 @@ class Project(ToStringMixin):
             )
         return self.__ignored_patterns
 
-    def _is_ignored_relative_path(self, relative_path: str | Path, ignore_non_source_files: bool = True) -> bool:
+    def _is_ignored_relative_path(
+        self,
+        relative_path: str | Path,
+        ignore_non_source_files: bool = True,
+        is_dir: bool | None = None,
+    ) -> bool:
         """
         Determine whether an existing path should be ignored based on file type and ignore patterns.
-        Raises `FileNotFoundError` if the path does not exist.
+        Raises `FileNotFoundError` if the path does not exist *and* ``is_dir`` was not supplied.
 
         :param relative_path: Relative path to check
         :param ignore_non_source_files: whether files that are not source files (according to the file masks
             determined by the project's programming language) shall be ignored
+        :param is_dir: whether ``relative_path`` refers to a directory; if the caller already knows
+            (typically from ``os.scandir(...).is_dir()``), passing it here avoids ``os.path.exists``
+            and ``os.path.isfile`` syscalls per call. ``None`` falls back to the syscall path
+            (and to the existing FileNotFoundError contract).
 
         :return: whether the path should be ignored
         """
@@ -445,11 +454,16 @@ class Project(ToStringMixin):
             return False
 
         abs_path = os.path.join(self.project_root, relative_path)
-        if not os.path.exists(abs_path):
-            raise FileNotFoundError(f"File {abs_path} not found, the ignore check cannot be performed")
+
+        # determine kind: prefer the caller's hint, fall back to syscalls
+        if is_dir is None:
+            if not os.path.exists(abs_path):
+                raise FileNotFoundError(f"File {abs_path} not found, the ignore check cannot be performed")
+            is_file = os.path.isfile(abs_path)
+        else:
+            is_file = not is_dir
 
         # Check file extension if it's a file
-        is_file = os.path.isfile(abs_path)
         if is_file and ignore_non_source_files:
             is_file_in_supported_language = False
             for language in self.project_config.languages:
@@ -467,15 +481,25 @@ class Project(ToStringMixin):
         if len(rel_path.parts) > 0 and ".git" in rel_path.parts:
             return True
 
-        return match_path(str(relative_path), self._ignore_spec, root_path=self.project_root)
+        # forward the kind to match_path so it skips its own os.path.isdir syscall
+        return match_path(str(relative_path), self._ignore_spec, root_path=self.project_root, is_dir=not is_file)
 
-    def is_ignored_path(self, path: str | Path, ignore_non_source_files: bool = False) -> bool:
+    def is_ignored_path(
+        self,
+        path: str | Path,
+        ignore_non_source_files: bool = False,
+        is_dir: bool | None = None,
+    ) -> bool:
         """
         Checks whether the given path is ignored
 
         :param path: the path to check, can be absolute or relative
         :param ignore_non_source_files: whether to ignore files that are not source files
             (according to the file masks determined by the project's programming language)
+        :param is_dir: whether ``path`` refers to a directory; forwarded to the underlying
+            check to skip per-call ``os.path.exists`` / ``os.path.isfile`` syscalls when known.
+            Particularly worth threading through from ``scan_directory``, which has the kind
+            from ``os.scandir(...).is_dir()`` already.
         """
         path = Path(path)
         if path.is_absolute():
@@ -489,7 +513,7 @@ class Project(ToStringMixin):
         else:
             relative_path = path
 
-        return self._is_ignored_relative_path(str(relative_path), ignore_non_source_files=ignore_non_source_files)
+        return self._is_ignored_relative_path(str(relative_path), ignore_non_source_files=ignore_non_source_files, is_dir=is_dir)
 
     def is_path_in_project(self, path: str | Path) -> bool:
         """

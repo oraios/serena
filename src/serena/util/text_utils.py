@@ -182,14 +182,25 @@ def search_text(
     if allow_multiline_match:
         # For multiline matches, we need to use the DOTALL flag to make '.' match newlines
         compiled_pattern = re.compile(pattern, re.DOTALL)
+        # The previous implementation computed start_line_num via content[:start_pos].count("\n")
+        # for every match — O(n) per match, so O(n*m) total. Since finditer yields matches in
+        # increasing start-position order, we can instead count newlines incrementally over the
+        # *new* region only. Each str.count call is C-level and total C work is O(n); Python-level
+        # iteration is O(m). No upfront index build, no bisect.
+        cursor = 0  # content position up to which we've already counted newlines
+        cursor_line = 0  # line number at `cursor`
+
         # Search across the entire content as a single string
         for match in compiled_pattern.finditer(content):
             start_pos = match.start()
             end_pos = match.end()
 
-            # Find the line numbers for the start and end positions
-            start_line_num = content[:start_pos].count("\n")
-            end_line_num = content[:end_pos].count("\n")
+            # advance cursor → match start, accumulating any newlines crossed
+            start_line_num = cursor_line + content.count("\n", cursor, start_pos)
+            # then advance through the match itself for the end line
+            end_line_num = start_line_num + content.count("\n", start_pos, end_pos)
+            cursor = end_pos
+            cursor_line = end_line_num
 
             # Calculate the range of lines to include in the context
             context_start = max(0, start_line_num - context_lines_before)
@@ -265,6 +276,27 @@ def expand_braces(pattern: str) -> list[str]:
     return patterns
 
 
+# cache of compiled glob regexes, keyed by the normalised (forward-slash) pattern.
+# fnmatch.translate + re.compile is the dominant cost when glob_match is invoked in a
+# tight loop over many files; caching turns a per-call regex compile into a single dict
+# lookup. The cache is unbounded in principle but capped in practice by the small set
+# of glob patterns any given workload uses (typically O(10)).
+_GLOB_CACHE: dict[str, list[re.Pattern[str]]] = {}
+
+
+def _compile_glob_pattern(normalised_pattern: str) -> list[re.Pattern[str]]:
+    """Compile a normalised glob pattern into the 1-3 regexes ``glob_match`` needs for ``**`` semantics."""
+    regexes = [re.compile(fnmatch.translate(normalised_pattern))]
+    if "**" in normalised_pattern:
+        # zero-directory case: "src/**/test.py" should also match "src/test.py"
+        if "/**/" in normalised_pattern:
+            regexes.append(re.compile(fnmatch.translate(normalised_pattern.replace("/**/", "/"))))
+        # leading ** zero-directory case: "**/test.py" should also match "test.py"
+        if normalised_pattern.startswith("**/"):
+            regexes.append(re.compile(fnmatch.translate(normalised_pattern[3:])))
+    return regexes
+
+
 def glob_match(pattern: str, path: str) -> bool:
     """
     Match a file path against a glob pattern.
@@ -286,36 +318,19 @@ def glob_match(pattern: str, path: str) -> bool:
     :param path: File path to match against
     :return: True if path matches pattern
     """
-    pattern = pattern.replace("\\", "/")  # Normalize backslashes to forward slashes
-    path = path.replace("\\", "/")  # Normalize path backslashes to forward slashes
+    # normalise backslashes (Windows) to forward slashes before matching
+    pattern = pattern.replace("\\", "/")
+    path = path.replace("\\", "/")
 
-    # Handle ** patterns that should match zero or more directories
-    if "**" in pattern:
-        # Method 1: Standard fnmatch (matches one or more directories)
-        regex1 = fnmatch.translate(pattern)
-        if re.match(regex1, path):
+    regexes = _GLOB_CACHE.get(pattern)
+    if regexes is None:
+        regexes = _compile_glob_pattern(pattern)
+        _GLOB_CACHE[pattern] = regexes
+
+    for rx in regexes:
+        if rx.match(path):
             return True
-
-        # Method 2: Handle zero-directory case by removing /** entirely
-        # Convert "src/**/test.py" to "src/test.py"
-        if "/**/" in pattern:
-            zero_dir_pattern = pattern.replace("/**/", "/")
-            regex2 = fnmatch.translate(zero_dir_pattern)
-            if re.match(regex2, path):
-                return True
-
-        # Method 3: Handle leading ** case by removing **/
-        # Convert "**/test.py" to "test.py"
-        if pattern.startswith("**/"):
-            zero_dir_pattern = pattern[3:]  # Remove "**/"
-            regex3 = fnmatch.translate(zero_dir_pattern)
-            if re.match(regex3, path):
-                return True
-
-        return False
-    else:
-        # Simple pattern without **, use fnmatch directly
-        return fnmatch.fnmatch(path, pattern)
+    return False
 
 
 def search_files(
