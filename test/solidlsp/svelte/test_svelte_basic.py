@@ -1,10 +1,13 @@
 import os
+import re
 
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
+from serena.util.text_utils import find_text_coordinates
+from test.solidlsp.conftest import read_repo_file
 
 pytestmark = pytest.mark.svelte
 
@@ -30,7 +33,10 @@ class TestSvelteLanguageServer:
 
     @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
     def test_definition_from_component_import_to_svelte_file(self, language_server: SolidLanguageServer) -> None:
-        definitions = language_server.request_definition(os.path.join("src", "lib", "components", "Header.svelte"), 5, 10)
+        file_path = os.path.join("src", "lib", "components", "Header.svelte")
+        line, col = find_text_coordinates(read_repo_file(language_server, file_path), r"(count)")
+
+        definitions = language_server.request_definition(file_path, line, col)
 
         assert len(definitions) == 1, definitions
         assert definitions[0]["relativePath"].replace("\\", "/") == "src/lib/components/Counter.svelte"
