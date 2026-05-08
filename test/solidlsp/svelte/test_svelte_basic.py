@@ -8,6 +8,7 @@ from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
 from serena.util.text_utils import find_text_coordinates
 from test.solidlsp.conftest import read_repo_file
+from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
 pytestmark = pytest.mark.svelte
 
@@ -40,3 +41,21 @@ class TestSvelteLanguageServer:
 
         assert len(definitions) == 1, definitions
         assert definitions[0]["relativePath"].replace("\\", "/") == "src/lib/components/Counter.svelte"
+
+    @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
+    def test_diagnostics_in_typescript_file(self, language_server: SolidLanguageServer) -> None:
+        assert_file_diagnostics(
+            language_server,
+            os.path.join("src", "lib", "diagnostics_sample.ts"),
+            ("missingGreeting", "missingConsumerValue"),
+            min_count=2,
+        )
+
+    @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
+    def test_diagnostics_in_svelte_file(self, language_server: SolidLanguageServer) -> None:
+        assert_file_diagnostics(
+            language_server,
+            os.path.join("src", "lib", "diagnostics_sample.svelte"),
+            ("number", "string"),
+            min_count=1,
+        )
