@@ -32,6 +32,8 @@ class ClangdLanguageServer(SolidLanguageServer):
           ``compile_commands.json`` if needed.
         - clangd_version: Override the pinned Clangd version downloaded by Serena
           (default: the bundled Serena version).
+        - prime_files: Translation units to keep open after startup in order to
+          provide clangd with stable TU context for header queries.
     """
 
     @staticmethod
@@ -401,3 +403,32 @@ class ClangdLanguageServer(SolidLanguageServer):
 
         # wait for server to be ready
         self.server_ready.wait()
+        self._prime_translation_units()
+
+    def _prime_translation_units(self) -> None:
+        prime_files = self._custom_settings.get("prime_files", [])
+        if not prime_files:
+            return
+        if not isinstance(prime_files, list):
+            raise TypeError("ls_specific_settings['cpp']['prime_files'] must be a list of relative file paths")
+
+        for relative_path in prime_files:
+            if not isinstance(relative_path, str):
+                raise TypeError("Each entry in ls_specific_settings['cpp']['prime_files'] must be a string")
+
+            absolute_path = pathlib.Path(self.repository_root_path, relative_path)
+            if not absolute_path.is_file():
+                log.warning("Skipping clangd prime file %s because it does not exist", relative_path)
+                continue
+            if self.is_ignored_path(relative_path):
+                log.warning("Skipping clangd prime file %s because it is ignored", relative_path)
+                continue
+
+            file_buffer = self.open_file_persistently(relative_path)
+            log.info("Opened clangd prime file %s persistently", relative_path)
+
+            try:
+                self.request_document_symbols(relative_path, file_buffer=file_buffer)
+                log.info("Warmed clangd prime file %s via document symbols request", relative_path)
+            except Exception as e:
+                log.warning("Failed to warm clangd prime file %s: %s", relative_path, e)
