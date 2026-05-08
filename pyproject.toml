@@ -360,4 +360,4 @@ markers = [
 skip = '.git*,*.svg,*.lock,*.min.*'
 check-hidden = true
 ignore-regex = '\.\w+'
-ignore-words-list = 'paket,EDN'
+ignore-words-list = 'paket,EDN,als'
