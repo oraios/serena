@@ -115,6 +115,14 @@ class Language(str, Enum):
     Uses bsl-language-server by 1c-syntax. Automatically downloads the JAR.
     Supports .bsl and .os files. Requires Java 11+ on PATH.
     """
+    ADA = "ada"
+    """Ada / SPARK language server using AdaCore's Ada Language Server (ALS).
+    Supports .ads (specs), .adb (bodies), and .ada files. Auto-downloads the
+    ALS binary from AdaCore's GitHub releases. Works best with a .gpr GNAT
+    project file at the repository root. SPARK files are handled transparently
+    by the same server, since SPARK is distinguished by pragmas/aspects in
+    source rather than by file extension.
+    """
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -462,6 +470,8 @@ class Language(str, Enum):
                 return FilenameMatcher(".mrc")
             case self.BSL:
                 return FilenameMatcher(".bsl", ".os")
+            case self.ADA:
+                return FilenameMatcher(".ads", ".adb", ".ada", case_sensitive=False)
             case self.HTML:
                 return FilenameMatcher(".html", ".htm")
             case self.SCSS:
@@ -713,6 +723,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
 
                 return BSLLanguageServer
+            case self.ADA:
+                from solidlsp.language_servers.ada_language_server import AdaLanguageServer
+
+                return AdaLanguageServer
             case self.HTML:
                 from solidlsp.language_servers.vscode_html_language_server import VsCodeHtmlLanguageServer
 

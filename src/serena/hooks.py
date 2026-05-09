@@ -47,6 +47,22 @@ class Hook(ABC):
 
 
 class PreToolUseHook(Hook, ABC):
+    _NON_SYMBOLIC_SERENA_TOOL_NAME_SUBSTRINGS = frozenset(
+        (
+            "pattern",
+            "read",
+            "diagnostics",
+            "memory",
+            "onboarding",
+            "config",
+            "list_file",
+            "find_file",
+            "shell",
+            "dashboard",
+            "restart_language_server",
+        )
+    )
+
     def __init__(self, client: HookClient):
         super().__init__(client)
         _tool_name = self._input_data.get("tool_name") or self._input_data.get("toolName", "") or ""
@@ -78,11 +94,13 @@ class PreToolUseHook(Hook, ABC):
                 hook_output["hookSpecificOutput"]["additionalContext"] = self.additional_context
             return json.dumps(hook_output)
 
-    def is_serena_tool(self) -> bool:
-        return "serena" in self._tool_name
+    def is_serena_symbolic_tool(self) -> bool:
+        return "serena" in self._tool_name and not any(
+            substring in self._tool_name for substring in self._NON_SYMBOLIC_SERENA_TOOL_NAME_SUBSTRINGS
+        )
 
 
-class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
+class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
     """Pre-tool-use hook that nudges the agent toward Serena's symbolic tools.
 
     Tracks consecutive uses of grep and read-file tools via a persisted
@@ -185,8 +203,8 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
             except Exception:
                 pass
 
-        def update(self, hook: "PreToolUseRemindAboutSerenaHook") -> None:
-            if hook.is_serena_tool():
+        def update(self, hook: "PreToolUseRemindAboutSymbolicToolsHook") -> None:
+            if hook.is_serena_symbolic_tool():
                 self.reset()
                 return
 
@@ -246,7 +264,7 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
 
     #: Shell commands that perform grep-like search; used to classify Codex
     #: shell-command tool calls whose ``cmd`` or ``command`` field starts with one of these.
-    _GREP_SHELL_COMMANDS: frozenset[str] = frozenset(("grep", "rg", "ag", "ack", "fgrep", "egrep"))
+    _GREP_SHELL_COMMANDS: frozenset[str] = frozenset(("grep", "rg", "ag", "ack", "fgrep", "egrep", "search_for_pattern"))
 
     #: Shell commands that perform file-read operations; used to classify Codex
     #: shell-command tool calls whose ``cmd`` or ``command`` field starts with one of these.
@@ -330,7 +348,7 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
 
     def is_grep_call(self) -> bool:
         if self._client == HookClient.CLAUDE_CODE:
-            return self._tool_name == "grep"
+            return self._tool_name == "grep" or "search_for_pattern" in self._tool_name
         if self._client == HookClient.CODEX and self._is_shell_command_call():
             return self._command_name in self._GREP_SHELL_COMMANDS
         # heuristic for other clients
@@ -338,7 +356,7 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
 
     def is_read_call(self) -> bool:
         if self._client == HookClient.CLAUDE_CODE:
-            return self._tool_name == "read"
+            return self._tool_name == "read" or "read_file" in self._tool_name
         if self._client == HookClient.CODEX and self._is_shell_command_call():
             return self._command_name in self._READ_SHELL_COMMANDS
         # heuristic for other clients
@@ -516,7 +534,7 @@ class PreToolUseAutoApproveSerenaHook(PreToolUseHook):
 
     def execute(self) -> None:
         # only emit a decision when both the tool and the mode match; stay silent otherwise
-        if not self.is_serena_tool() or not self.is_auto_approve_mode():
+        if not self.is_serena_symbolic_tool() or not self.is_auto_approve_mode():
             return
 
         # name the actual mode in the reason so logs/debug output are unambiguous
@@ -563,7 +581,7 @@ class HookCommands(AutoRegisteringGroup):
     )
     @_client_option
     def remind(client: str) -> None:
-        PreToolUseRemindAboutSerenaHook(HookClient(client)).execute()
+        PreToolUseRemindAboutSymbolicToolsHook(HookClient(client)).execute()
 
     @staticmethod
     @click.command(

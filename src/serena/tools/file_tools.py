@@ -387,6 +387,10 @@ class SearchForPatternTool(Tool):
             which is why it is the default.
         :return: A mapping from file paths to matched consecutive lines (0-based line numbers).
         """
+        relative_path = relative_path.strip()
+        if relative_path:
+            self.project.validate_relative_path(relative_path, require_not_ignored=True)
+
         abs_path = os.path.join(self.get_project_root(), relative_path)
         if not os.path.exists(abs_path):
             raise FileNotFoundError(f"Relative path {relative_path} does not exist.")

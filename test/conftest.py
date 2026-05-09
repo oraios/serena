@@ -255,6 +255,7 @@ is_windows = platform.system() == "Windows"
 
 
 _LANGUAGE_PYTEST_MARKERS: dict[Language, list[MarkDecorator | Mark]] = {
+    Language.ADA: [pytest.mark.ada],
     Language.CLOJURE: [
         pytest.mark.clojure,
         pytest.mark.skipif(not is_clojure_cli_available(), reason="clojure CLI is not installed"),

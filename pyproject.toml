@@ -48,7 +48,7 @@ dependencies = [
   "urllib3==2.6.3",
   "werkzeug==3.1.7",
   "starlette==1.0.0",
-  "python-multipart==0.0.26",
+  "python-multipart==0.0.27",
   "filelock==3.25.2",
   "cryptography==46.0.7",
   "regex==2026.2.28",
@@ -353,6 +353,7 @@ markers = [
   "html: language server running for HTML (vscode-html-language-server, used as companion by Angular)",
   "scss: language server running for SCSS / Sass / CSS (some-sass-language-server)",
   "angular: language server running for Angular (uses @angular/language-server + @angular/language-service tsserver plugin)",
+  "ada: language server running for Ada / SPARK (uses AdaCore Ada Language Server)",
 ]
 
 [tool.codespell]
@@ -360,4 +361,4 @@ markers = [
 skip = '.git*,*.svg,*.lock,*.min.*'
 check-hidden = true
 ignore-regex = '\.\w+'
-ignore-words-list = 'paket'
+ignore-words-list = 'paket,EDN,als'
