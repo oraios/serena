@@ -227,7 +227,7 @@ ls_specific_settings:
 
 This is supported by all language servers deriving their dependency provider from `LanguageServerDependencyProviderSinglePath`,
 and by some additional wrappers that explicitly expose `ls_path`.
-Common examples include: `ansible`, `bash`, `clojure`, `cpp`, `cpp_ccls`, `hlsl`, `html`, `kotlin`, `lean4`, `luau`, `markdown`, `php`,
+Common examples include: `ansible`, `bash`, `bsl`, `clojure`, `cpp`, `cpp_ccls`, `hlsl`, `html`, `kotlin`, `lean4`, `luau`, `markdown`, `php`,
 `php_phpactor`, `python`, `rust`, `scss`, `solidity`, `systemverilog`, `toml`, `typescript`, and `yaml`.
 
 Note: `angular` does **not** support `ls_path` — the Angular language server is part of a multi-process orchestration
@@ -307,6 +307,28 @@ Supported settings:
 | `ls_path` | managed install | Override the `bash-language-server` executable path. |
 | `bash_language_server_version` | `5.6.0` | Override the npm package version Serena installs when `ls_path` is not set. |
 | `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
+
+#### BSL (1C:Enterprise / OneScript)
+
+Serena uses [bsl-language-server](https://github.com/1c-syntax/bsl-language-server) by 1c-syntax
+for BSL support. The JAR is downloaded automatically on first use and SHA-256-verified for the
+bundled default version. **Requires Java 11+ on `PATH`.**
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed download | Override the path to an existing `bsl-language-server-*-exec.jar`. When set, Serena does not download anything; the JAR is launched directly via `java -jar`. |
+| `bsl_ls_version` | `0.29.0` | Override the bsl-language-server release version Serena downloads when `ls_path` is not set. SHA-256 verification is performed only for the default version; user-overridden versions install without SHA verification. |
+
+Example:
+
+```yaml
+ls_specific_settings:
+  bsl:
+    bsl_ls_version: "0.29.0"
+    # ls_path: "/opt/bsl/bsl-language-server-0.29.0-exec.jar"  # optional
+```
 
 #### Clojure
 

@@ -35,6 +35,15 @@ BSL_LS_JAR_SHA256_BY_VERSION = {
 }
 
 
+def _verify_java_available() -> None:
+    """Ensures the ``java`` executable can be located on ``PATH``.
+
+    :raises RuntimeError: if ``java`` is not found
+    """
+    if shutil.which("java") is None:
+        raise RuntimeError("Java 11+ is required for BSL Language Server but was not found on PATH.")
+
+
 class BSLLanguageServer(SolidLanguageServer):
     """
     BSL (1C:Enterprise / OneScript) language server integration for Serena.
@@ -60,30 +69,19 @@ class BSLLanguageServer(SolidLanguageServer):
 
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
         def _get_or_install_core_dependency(self) -> str:
-            if shutil.which("java") is None:
-                raise RuntimeError("Java 11+ is required for BSL Language Server but was not found on PATH.")
-
-            # Check if user provided a custom path
-            custom_path = self._custom_settings.get("ls_path")
-            if custom_path:
-                if not os.path.exists(custom_path):
-                    raise FileNotFoundError(f"Custom BSL Language Server JAR not found at {custom_path}")
-                log.info(f"Using custom BSL Language Server JAR at {custom_path}")
-                return custom_path
-
-            # Determine version (user can override, no SHA check in that case)
+            # resolve target version; custom versions intentionally skip SHA verification below
             bsl_version = self._custom_settings.get("bsl_ls_version", DEFAULT_BSL_LS_VERSION)
             user_overrode_version = bsl_version != DEFAULT_BSL_LS_VERSION
 
             jar_dir = os.path.join(self._ls_resources_dir, f"bsl-ls-{bsl_version}")
             jar_path = os.path.join(jar_dir, f"bsl-language-server-{bsl_version}-exec.jar")
 
+            # download only when the versioned JAR is missing
             if not os.path.exists(jar_path):
                 jar_url = (
                     f"https://github.com/1c-syntax/bsl-language-server/releases/download/"
                     f"v{bsl_version}/bsl-language-server-{bsl_version}-exec.jar"
                 )
-                # Only verify SHA256 for the default (known) version
                 expected_sha256 = None if user_overrode_version else BSL_LS_JAR_SHA256_BY_VERSION.get(bsl_version)
 
                 deps = RuntimeDependencyCollection(
@@ -108,6 +106,8 @@ class BSLLanguageServer(SolidLanguageServer):
             return jar_path
 
         def _create_launch_command(self, core_path: str) -> list[str]:
+            # Java availability is required for both managed installs and user-provided jars (ls_path)
+            _verify_java_available()
             return ["java", "-jar", core_path]
 
     @staticmethod

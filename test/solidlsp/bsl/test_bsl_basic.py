@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -12,6 +13,13 @@ from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name,
 
 @pytest.mark.bsl
 class TestBSLLanguageServer:
+    @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
+    @pytest.mark.parametrize("repo_path", [Language.BSL], indirect=True)
+    def test_ls_is_running(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
+        """Language server starts and attaches to the test repository."""
+        assert language_server.is_running()
+        assert Path(language_server.language_server.repository_root_path).resolve() == repo_path.resolve()
+
     @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
         symbols = language_server.request_full_symbol_tree()
@@ -29,23 +37,41 @@ class TestBSLLanguageServer:
         assert "ВызватьПриветствие" in names, f"ВызватьПриветствие not found in CommonModule.bsl symbols. Found: {names}"
 
     @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
+    def test_full_symbol_tree_within_file(self, language_server: SolidLanguageServer) -> None:
+        """Scoping the full-tree request to a single file returns that file's symbols."""
+        symbols = language_server.request_full_symbol_tree(within_relative_path="ObjectModule.bsl")
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "Инициализировать"), (
+            "Инициализировать not found in ObjectModule.bsl symbol tree"
+        )
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "ПолучитьСостояние"), (
+            "ПолучитьСостояние not found in ObjectModule.bsl symbol tree"
+        )
+
+    @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
     def test_find_references_within_file(self, language_server: SolidLanguageServer) -> None:
         # CommonModule.bsl (0-indexed):
-        # line 2: Процедура ВывестиСообщение(Текст) Экспорт
-        # line 13: ВывестиСообщение(Сообщение);  <- internal call
+        # line 2: Процедура ВывестиСообщение(Текст) Экспорт  <- declaration (name starts at col 10)
+        # line 13: ВывестиСообщение(Сообщение);              <- internal call
+        # bsl-language-server resolves references within the same module file; cross-module
+        # resolution requires a 1C Configuration.xml / metadata context that this minimal
+        # fixture deliberately does not provide.
         refs = language_server.request_references("CommonModule.bsl", line=2, column=10)
         assert refs, "Expected at least one reference to ВывестиСообщение"
         file_names = [ref.get("relativePath", "") for ref in refs]
         assert any("CommonModule.bsl" in f for f in file_names), f"Expected self-reference in CommonModule.bsl, got: {file_names}"
+        # the internal call is on line 13
+        matching_lines = [ref["range"]["start"]["line"] for ref in refs if "CommonModule.bsl" in ref.get("relativePath", "")]
+        assert 12 in matching_lines, f"Expected a reference on line 12 (0-indexed), got lines: {matching_lines}"
 
     @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
-    def test_find_references_across_files(self, language_server: SolidLanguageServer) -> None:
-        # ВывестиСообщение is defined in CommonModule.bsl (line 2)
-        # and called from ObjectModule.bsl (line 6)
-        refs = language_server.request_references("CommonModule.bsl", line=2, column=10)
-        assert refs, "Expected references to ВывестиСообщение"
-        file_names = [ref.get("relativePath", "") for ref in refs]
-        assert any("ObjectModule.bsl" in f for f in file_names), f"Expected cross-file reference in ObjectModule.bsl, got: {file_names}"
+    def test_find_references_to_function_within_file(self, language_server: SolidLanguageServer) -> None:
+        # CommonModule.bsl (0-indexed):
+        # line 6: Функция ПолучитьПриветствие(Имя) Экспорт  <- declaration (name starts at col 8)
+        # line 12: Сообщение = ПолучитьПриветствие("Мир");  <- internal call at col 16
+        refs = language_server.request_references("CommonModule.bsl", line=6, column=8)
+        assert refs, "Expected at least one reference to ПолучитьПриветствие"
+        matching_lines = [ref["range"]["start"]["line"] for ref in refs if "CommonModule.bsl" in ref.get("relativePath", "")]
+        assert 11 in matching_lines, f"Expected a reference on line 11 (0-indexed), got lines: {matching_lines}"
 
     @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
     def test_bare_symbol_names(self, language_server: SolidLanguageServer) -> None:
@@ -76,7 +102,7 @@ def test_bsl_enum_registration() -> None:
 
 
 def test_bsl_dependency_provider_default_version() -> None:
-    """DependencyProvider uses default version and includes SHA in deps."""
+    """DependencyProvider resolves the default version to the expected versioned JAR path."""
     from solidlsp.language_servers.bsl_language_server import (
         DEFAULT_BSL_LS_VERSION,
         BSLLanguageServer,
@@ -92,17 +118,15 @@ def test_bsl_dependency_provider_default_version() -> None:
     expected_jar_dir = os.path.join("/tmp/ls_resources", f"bsl-ls-{expected_version}")
     expected_jar_path = os.path.join(expected_jar_dir, f"bsl-language-server-{expected_version}-exec.jar")
 
-    with (
-        mock.patch("shutil.which", return_value="/usr/bin/java"),
-        mock.patch("os.path.exists", return_value=True),
-    ):
+    # pretend JAR is already on disk so no download is attempted
+    with mock.patch("os.path.exists", return_value=True):
         jar_path = provider._get_or_install_core_dependency()
 
     assert jar_path == expected_jar_path
 
 
 def test_bsl_dependency_provider_custom_version_no_sha() -> None:
-    """When user overrides version, no SHA verification should happen."""
+    """User-overridden versions must install without SHA256 verification."""
     from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
     from solidlsp.language_servers.common import RuntimeDependencyCollection
 
@@ -124,10 +148,7 @@ def test_bsl_dependency_provider_custom_version_no_sha() -> None:
         os.makedirs(install_dir, exist_ok=True)
         open(expected_jar_path, "w").close()
 
-    with (
-        mock.patch("shutil.which", return_value="/usr/bin/java"),
-        mock.patch.object(RuntimeDependencyCollection, "install", fake_install),
-    ):
+    with mock.patch.object(RuntimeDependencyCollection, "install", fake_install):
         jar_path = provider._get_or_install_core_dependency()
 
     assert jar_path == expected_jar_path
@@ -140,8 +161,12 @@ def test_bsl_dependency_provider_custom_version_no_sha() -> None:
         os.rmdir(expected_jar_dir)
 
 
-def test_bsl_dependency_provider_custom_ls_path() -> None:
-    """When ls_path is set, the custom path is returned directly without download."""
+def test_bsl_launch_command_uses_ls_path_without_download() -> None:
+    """
+    When ``ls_path`` is set, the public launch-command flow must return the user's JAR
+    unchanged and must NOT invoke the download / install path. This covers the real
+    code path used at runtime (``create_launch_command``), not just private helpers.
+    """
     from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
 
     settings = SolidLSPSettings()
@@ -153,8 +178,29 @@ def test_bsl_dependency_provider_custom_ls_path() -> None:
 
     with (
         mock.patch("shutil.which", return_value="/usr/bin/java"),
-        mock.patch("os.path.exists", return_value=True),
+        mock.patch.object(
+            BSLLanguageServer.DependencyProvider,
+            "_get_or_install_core_dependency",
+            side_effect=AssertionError("must not be called when ls_path is provided"),
+        ) as install_mock,
     ):
-        jar_path = provider._get_or_install_core_dependency()
+        cmd = provider.create_launch_command()
 
-    assert jar_path == "/custom/path/bsl-language-server.jar"
+    assert cmd == ["java", "-jar", "/custom/path/bsl-language-server.jar"]
+    install_mock.assert_not_called()
+
+
+def test_bsl_launch_command_requires_java() -> None:
+    """Launch command construction must fail fast with a clear error when Java is missing."""
+    from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
+
+    settings = SolidLSPSettings()
+    settings.ls_specific_settings[Language.BSL] = {"ls_path": "/custom/path/bsl-language-server.jar"}
+    provider = BSLLanguageServer.DependencyProvider(
+        settings.get_ls_specific_settings(Language.BSL),
+        "/tmp/ls_resources",
+    )
+
+    with mock.patch("shutil.which", return_value=None):
+        with pytest.raises(RuntimeError, match="Java"):
+            provider.create_launch_command()
