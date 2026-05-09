@@ -312,7 +312,8 @@ Supported settings:
 
 Serena uses [bsl-language-server](https://github.com/1c-syntax/bsl-language-server) by 1c-syntax
 for BSL support. The JAR is downloaded automatically on first use and SHA-256-verified for the
-bundled default version. **Requires Java 11+ on `PATH`.**
+bundled default version. **Requires Java 21+ on `PATH`** — bsl-language-server v0.29.0 is built
+with `targetCompatibility = JavaVersion.VERSION_21` and fails to launch under older JDKs.
 
 Supported settings:
 

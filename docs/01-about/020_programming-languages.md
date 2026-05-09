@@ -48,7 +48,7 @@ Some languages require additional installations or setup steps, as noted.
   are not supported by this version)
 * **Bash**
 * **BSL** (1C:Enterprise / OneScript)  
-  (requires Java 11+ on PATH; uses [bsl-language-server](https://github.com/1c-syntax/bsl-language-server) by 1c-syntax; the JAR is auto-downloaded and SHA-256-verified for the bundled default version; supports `.bsl` and `.os` files; configure optional `ls_path` or `bsl_ls_version` under `ls_specific_settings.bsl`)
+  (requires Java 21+ on PATH; uses [bsl-language-server](https://github.com/1c-syntax/bsl-language-server) by 1c-syntax; the JAR is auto-downloaded and SHA-256-verified for the bundled default version; supports `.bsl` and `.os` files; configure optional `ls_path` or `bsl_ls_version` under `ls_specific_settings.bsl`)
 * **C#**  
   (by default, uses the Roslyn language server (language `csharp`), requiring [.NET v10+](https://dotnet.microsoft.com/en-us/download/dotnet) and, on Windows, `pwsh` ([PowerShell 7+](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows?view=powershell-7.5));
   set language to `csharp_omnisharp` to use OmiSharp instead)

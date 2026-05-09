@@ -368,7 +368,7 @@ FIND_DEFINING_SYMBOL_CASES = [
         expected_definition_file="Calculator.fs",
     ).to_pytest_param(
         pytest.mark.bsl,
-        pytest.mark.skipif(shutil.which("java") is None, reason="Java 11+ is required for BSL LSP"),
+        pytest.mark.skipif(shutil.which("java") is None, reason="Java 21+ is required for BSL LSP"),
         pytest.mark.xfail(reason="F# language server cannot reliably resolve defining symbols"),
     ),
 ]
@@ -734,7 +734,7 @@ SAFE_DELETE_BLOCKED_CASES = [
         relative_path="CommonModule.bsl",
     ).to_pytest_param(
         pytest.mark.bsl,
-        pytest.mark.skipif(shutil.which("java") is None, reason="Java 11+ is required for BSL LSP"),
+        pytest.mark.skipif(shutil.which("java") is None, reason="Java 21+ is required for BSL LSP"),
     ),
 ]
 
@@ -772,7 +772,7 @@ SAFE_DELETE_SUCCEEDS_CASES = [
         relative_path="CommonModule.bsl",
     ).to_pytest_param(
         pytest.mark.bsl,
-        pytest.mark.skipif(shutil.which("java") is None, reason="Java 11+ is required for BSL LSP"),
+        pytest.mark.skipif(shutil.which("java") is None, reason="Java 21+ is required for BSL LSP"),
     ),
 ]
 
@@ -951,7 +951,7 @@ class TestSerenaAgent:
                 "ВывестиСообщение",
                 "Method",
                 "CommonModule.bsl",
-                marks=[pytest.mark.bsl, pytest.mark.skipif(shutil.which("java") is None, reason="Java 11+ is required for BSL LSP")],
+                marks=[pytest.mark.bsl, pytest.mark.skipif(shutil.which("java") is None, reason="Java 21+ is required for BSL LSP")],
             ),
         ],
         indirect=["serena_agent"],

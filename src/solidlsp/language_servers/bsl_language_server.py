@@ -1,7 +1,8 @@
 """
 Provides BSL (1C:Enterprise) specific instantiation of the LanguageServer class
 using bsl-language-server by 1c-syntax. Supports .bsl and .os files.
-Requires Java 11+ on PATH.
+Requires Java 21+ on PATH (bsl-language-server v0.29.0 is built with
+``targetCompatibility = JavaVersion.VERSION_21``).
 
 You can configure the following options in ls_specific_settings (in serena_config.yml):
 
@@ -14,7 +15,9 @@ You can configure the following options in ls_specific_settings (in serena_confi
 import logging
 import os
 import pathlib
+import re
 import shutil
+import subprocess
 import threading
 
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
@@ -33,15 +36,68 @@ DEFAULT_BSL_LS_VERSION = "0.29.0"
 BSL_LS_JAR_SHA256_BY_VERSION = {
     "0.29.0": "d6fa9ad638ba51855e260b88ad1f8ce4e602385845a4ee43600d148f779bcf0b",
 }
+BSL_LS_MIN_JAVA_VERSION = 21
+"""Minimum Java major version required to run the bundled bsl-language-server JAR.
+
+bsl-language-server v0.29.0 is compiled with ``targetCompatibility = VERSION_21`` and
+therefore fails at class-load time on older JDKs (``UnsupportedClassVersionError``),
+which manifests as ``LanguageServerTerminatedException`` in Serena. We enforce the
+check up front so the user gets an actionable error instead of a dead LSP process.
+"""
+
+
+def _get_java_major_version(java_exe: str) -> int | None:
+    """Returns the detected Java major version (e.g. 21) or ``None`` if detection fails.
+
+    :param java_exe: path to the ``java`` executable.
+    """
+    try:
+        result = subprocess.run(
+            [java_exe, "-version"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        log.warning("Failed to invoke '%s -version': %s", java_exe, exc)
+        return None
+
+    output = (result.stderr or "") + "\n" + (result.stdout or "")
+    # modern JDKs print: openjdk version "21.0.2" 2024-01-16
+    # legacy JDKs print: java version "1.8.0_402" (major = 8)
+    m = re.search(r'version "(\d+)(?:\.(\d+))?', output)
+    if not m:
+        log.warning("Could not parse Java version from output of '%s -version': %s", java_exe, output.strip()[:200])
+        return None
+
+    first = int(m.group(1))
+    if first == 1 and m.group(2):
+        return int(m.group(2))  # 1.8 -> 8
+    return first
 
 
 def _verify_java_available() -> None:
-    """Ensures the ``java`` executable can be located on ``PATH``.
+    """Ensures a suitable ``java`` (>= :data:`BSL_LS_MIN_JAVA_VERSION`) is on ``PATH``.
 
-    :raises RuntimeError: if ``java`` is not found
+    :raises RuntimeError: if ``java`` is missing or its major version is too low.
     """
-    if shutil.which("java") is None:
-        raise RuntimeError("Java 11+ is required for BSL Language Server but was not found on PATH.")
+    java_exe = shutil.which("java")
+    if java_exe is None:
+        raise RuntimeError(f"Java {BSL_LS_MIN_JAVA_VERSION}+ is required for BSL Language Server but 'java' was not found on PATH.")
+
+    major = _get_java_major_version(java_exe)
+    if major is None:
+        # detection failed; log a warning but let the LSP attempt to start
+        log.warning("Could not determine Java version for '%s'; BSL LSP requires Java %d+.", java_exe, BSL_LS_MIN_JAVA_VERSION)
+        return
+
+    if major < BSL_LS_MIN_JAVA_VERSION:
+        raise RuntimeError(
+            f"Java {BSL_LS_MIN_JAVA_VERSION}+ is required for BSL Language Server, but '{java_exe}' is Java {major}. "
+            f"Install a newer JDK (e.g. Temurin {BSL_LS_MIN_JAVA_VERSION}) and ensure it appears first on PATH "
+            f"or point JAVA_HOME to it."
+        )
 
 
 class BSLLanguageServer(SolidLanguageServer):
@@ -106,7 +162,7 @@ class BSLLanguageServer(SolidLanguageServer):
             return jar_path
 
         def _create_launch_command(self, core_path: str) -> list[str]:
-            # Java availability is required for both managed installs and user-provided jars (ls_path)
+            # Java availability+version is required for both managed installs and user-provided jars (ls_path)
             _verify_java_available()
             return ["java", "-jar", core_path]
 

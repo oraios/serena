@@ -167,6 +167,7 @@ def test_bsl_launch_command_uses_ls_path_without_download() -> None:
     unchanged and must NOT invoke the download / install path. This covers the real
     code path used at runtime (``create_launch_command``), not just private helpers.
     """
+    from solidlsp.language_servers import bsl_language_server
     from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
 
     settings = SolidLSPSettings()
@@ -177,7 +178,8 @@ def test_bsl_launch_command_uses_ls_path_without_download() -> None:
     )
 
     with (
-        mock.patch("shutil.which", return_value="/usr/bin/java"),
+        mock.patch.object(bsl_language_server.shutil, "which", return_value="/usr/bin/java"),
+        mock.patch.object(bsl_language_server, "_get_java_major_version", return_value=21),
         mock.patch.object(
             BSLLanguageServer.DependencyProvider,
             "_get_or_install_core_dependency",
@@ -191,7 +193,8 @@ def test_bsl_launch_command_uses_ls_path_without_download() -> None:
 
 
 def test_bsl_launch_command_requires_java() -> None:
-    """Launch command construction must fail fast with a clear error when Java is missing."""
+    """Launch command construction must fail fast when Java is missing."""
+    from solidlsp.language_servers import bsl_language_server
     from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
 
     settings = SolidLSPSettings()
@@ -201,6 +204,26 @@ def test_bsl_launch_command_requires_java() -> None:
         "/tmp/ls_resources",
     )
 
-    with mock.patch("shutil.which", return_value=None):
-        with pytest.raises(RuntimeError, match="Java"):
+    with mock.patch.object(bsl_language_server.shutil, "which", return_value=None):
+        with pytest.raises(RuntimeError, match="not found on PATH"):
+            provider.create_launch_command()
+
+
+def test_bsl_launch_command_rejects_old_java() -> None:
+    """Java older than the minimum supported major version must be rejected up front."""
+    from solidlsp.language_servers import bsl_language_server
+    from solidlsp.language_servers.bsl_language_server import BSL_LS_MIN_JAVA_VERSION, BSLLanguageServer
+
+    settings = SolidLSPSettings()
+    settings.ls_specific_settings[Language.BSL] = {"ls_path": "/custom/path/bsl-language-server.jar"}
+    provider = BSLLanguageServer.DependencyProvider(
+        settings.get_ls_specific_settings(Language.BSL),
+        "/tmp/ls_resources",
+    )
+
+    with (
+        mock.patch.object(bsl_language_server.shutil, "which", return_value="/usr/bin/java"),
+        mock.patch.object(bsl_language_server, "_get_java_major_version", return_value=BSL_LS_MIN_JAVA_VERSION - 1),
+    ):
+        with pytest.raises(RuntimeError, match=f"Java {BSL_LS_MIN_JAVA_VERSION}\\+"):
             provider.create_launch_command()

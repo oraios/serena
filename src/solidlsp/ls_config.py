@@ -113,7 +113,7 @@ class Language(str, Enum):
     BSL = "bsl"
     """BSL Language Server for 1C:Enterprise and OneScript languages.
     Uses bsl-language-server by 1c-syntax. Automatically downloads the JAR.
-    Supports .bsl and .os files. Requires Java 11+ on PATH.
+    Supports .bsl and .os files. Requires Java 21+ on PATH.
     """
     ADA = "ada"
     """Ada / SPARK language server using AdaCore's Ada Language Server (ALS).
