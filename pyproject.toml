@@ -294,6 +294,9 @@ max-complexity = 20
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D103"]
 "scripts/**" = ["D103"]
+# BSL integration tests deliberately contain Cyrillic identifiers (1C:Enterprise metadata
+# object names and procedure names). ruff's ambiguous-unicode rules flag every such char.
+"test/solidlsp/bsl/**" = ["RUF001", "RUF002", "RUF003"]
 
 [tool.pytest.ini_options]
 addopts = "--snapshot-patch-pycharm-diff"

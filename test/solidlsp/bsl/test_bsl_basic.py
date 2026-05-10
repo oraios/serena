@@ -82,12 +82,8 @@ class TestBSLLanguageServer:
     # tests below request references and the go-to-definition from the cross-module
     # call site ``ОбщийМодуль1.ВывестиСообщение(...)`` in ``ОбщийМодуль2``.
 
-    _CROSS_REF_MODULE1 = os.path.join(
-        "src", "CommonModules", "ОбщийМодуль1", "Ext", "Module.bsl"
-    )
-    _CROSS_REF_MODULE2 = os.path.join(
-        "src", "CommonModules", "ОбщийМодуль2", "Ext", "Module.bsl"
-    )
+    _CROSS_REF_MODULE1 = os.path.join("src", "CommonModules", "ОбщийМодуль1", "Ext", "Module.bsl")
+    _CROSS_REF_MODULE2 = os.path.join("src", "CommonModules", "ОбщийМодуль2", "Ext", "Module.bsl")
 
     @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
     def test_find_references_across_files(self, language_server: SolidLanguageServer) -> None:
@@ -100,17 +96,10 @@ class TestBSLLanguageServer:
         assert refs, "Expected at least one reference to ВывестиСообщение across modules"
         call_site_paths = [ref.get("relativePath", "") for ref in refs if "ОбщийМодуль2" in ref.get("relativePath", "")]
         assert call_site_paths, (
-            f"Expected a cross-module reference from ОбщийМодуль2, got relativePaths: "
-            f"{[ref.get('relativePath', '') for ref in refs]}"
+            f"Expected a cross-module reference from ОбщийМодуль2, got relativePaths: {[ref.get('relativePath', '') for ref in refs]}"
         )
-        call_site_lines = [
-            ref["range"]["start"]["line"]
-            for ref in refs
-            if "ОбщийМодуль2" in ref.get("relativePath", "")
-        ]
-        assert 3 in call_site_lines, (
-            f"Expected a reference at ОбщийМодуль2/Module.bsl line 3, got lines: {call_site_lines}"
-        )
+        call_site_lines = [ref["range"]["start"]["line"] for ref in refs if "ОбщийМодуль2" in ref.get("relativePath", "")]
+        assert 3 in call_site_lines, f"Expected a reference at ОбщийМодуль2/Module.bsl line 3, got lines: {call_site_lines}"
 
     @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
     def test_find_definition_across_files(self, language_server: SolidLanguageServer) -> None:
@@ -120,17 +109,9 @@ class TestBSLLanguageServer:
         definitions = language_server.request_definition(self._CROSS_REF_MODULE2, line=3, column=17)
         assert definitions, "Expected a cross-module definition for ВывестиСообщение"
         target_paths = [d.get("relativePath", "") for d in definitions]
-        assert any("ОбщийМодуль1" in p for p in target_paths), (
-            f"Expected definition to resolve to ОбщийМодуль1, got: {target_paths}"
-        )
-        target_lines = [
-            d["range"]["start"]["line"]
-            for d in definitions
-            if "ОбщийМодуль1" in d.get("relativePath", "")
-        ]
-        assert 2 in target_lines, (
-            f"Expected the definition to point at ОбщийМодуль1/Module.bsl line 2, got: {target_lines}"
-        )
+        assert any("ОбщийМодуль1" in p for p in target_paths), f"Expected definition to resolve to ОбщийМодуль1, got: {target_paths}"
+        target_lines = [d["range"]["start"]["line"] for d in definitions if "ОбщийМодуль1" in d.get("relativePath", "")]
+        assert 2 in target_lines, f"Expected the definition to point at ОбщийМодуль1/Module.bsl line 2, got: {target_lines}"
 
     @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
     def test_bare_symbol_names(self, language_server: SolidLanguageServer) -> None:
