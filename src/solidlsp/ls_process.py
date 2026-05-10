@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import subprocess
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -84,12 +83,10 @@ class LanguageServerProcess:
         self,
         transport: LSPTransport,
         language: Language,
-        determine_log_level: Callable[[str], int],
         logger: Callable[[str, str, StringDict | str], None] | None = None,
         request_timeout: float | None = None,
     ) -> None:
         self.language = language
-        self._determine_log_level = determine_log_level
         self.send = LanguageServerRequest(self)
         self.notify = LspNotification(self.send_notification)
 
@@ -111,10 +108,8 @@ class LanguageServerProcess:
         self._response_handlers_lock = threading.Lock()
         self._tasks_lock = threading.Lock()
 
-    @property
-    def process(self) -> "subprocess.Popen[bytes] | None":
-        """Access to the underlying subprocess, if the transport is StdioTransport. Returns None otherwise."""
-        return getattr(self._transport, "process", None)
+    def get_transport(self) -> LSPTransport:
+        return self._transport
 
     def set_request_timeout(self, timeout: float | None) -> None:
         """
@@ -130,17 +125,13 @@ class LanguageServerProcess:
 
     def start(self) -> None:
         """
-        Starts the transport and spawns reader threads for stdout and stderr.
+        Starts the transport and spawns the stdout reader thread.
+        Stderr reading (if any) is the transport's responsibility.
         """
         self._transport.start()
         threading.Thread(
             target=self._read_ls_process_stdout,
             name=f"LSP-stdout-reader:{self.language.value}",
-            daemon=True,
-        ).start()
-        threading.Thread(
-            target=self._read_ls_process_stderr,
-            name=f"LSP-stderr-reader:{self.language.value}",
             daemon=True,
         ).start()
 
@@ -178,18 +169,15 @@ class LanguageServerProcess:
         try:
             while self._transport.is_alive():
                 line = self._transport.read_line()
-                if not line:
-                    continue
                 try:
                     num_bytes = content_length(line)
                 except ValueError:
                     continue
                 if num_bytes is None:
                     continue
-                while line and line.strip():
+                # Read remaining header lines until the blank separator line.
+                while line.strip():
                     line = self._transport.read_line()
-                if not line:
-                    continue
                 body = self._transport.read_bytes(num_bytes)
                 self._handle_body(body)
         except LanguageServerTerminatedException as e:
@@ -206,25 +194,6 @@ class LanguageServerProcess:
                 exception = LanguageServerTerminatedException("Language server stdout read process terminated unexpectedly", self.language)
             log.error(str(exception))
             self._cancel_pending_requests(exception)
-
-    def _read_ls_process_stderr(self) -> None:
-        """
-        Continuously read from the language server stderr and log the messages.
-        """
-        try:
-            while self._transport.is_alive():
-                line = self._transport.read_stderr_line()
-                if not line:
-                    continue
-                line_str = line.decode(ENCODING, errors="replace")
-                level = self._determine_log_level(line_str)
-                log.log(level, line_str)
-        except Exception as e:
-            log.error("Error while reading stderr from language server: %s", e, exc_info=e)
-        if not self._is_shutting_down:
-            log.error("Language server stderr reader thread terminated unexpectedly")
-        else:
-            log.info("Language server stderr reader thread has terminated")
 
     def _handle_body(self, body: bytes) -> None:
         """
@@ -315,11 +284,14 @@ class LanguageServerProcess:
     def _send_payload(self, payload: StringDict) -> None:
         """
         Send the payload to the language server via the transport.
+        Swallows transport-termination errors during shutdown; otherwise propagates.
         """
-        if not self._transport.is_alive():
-            return
         self._trace("solidlsp", "ls", payload)
-        self._transport.write(create_message(payload))
+        try:
+            self._transport.write(create_message(payload))
+        except LanguageServerTerminatedException:
+            if not self._is_shutting_down:
+                raise
 
     def on_request(self, method: str, cb: Callable[[Any], Any]) -> None:
         """

@@ -5,7 +5,6 @@ import logging
 import os
 import pathlib
 import shutil
-import subprocess
 import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -41,6 +40,7 @@ from solidlsp.lsp_protocol_handler.lsp_types import (
     SymbolInformation,
 )
 from solidlsp.lsp_protocol_handler.server import (
+    ENCODING,
     LSPError,
     ProcessLaunchInfo,
     StringDict,
@@ -552,15 +552,20 @@ class SolidLanguageServer(ABC):
             self._dependency_provider = self._create_dependency_provider()
             process_launch_info = self._create_process_launch_info()
         log.debug(f"Creating language server instance with {language_id=} and process launch info: {process_launch_info}")
+
+        def on_lsp_stderr_line(line: bytes) -> None:
+            line_str = line.decode(ENCODING, errors="replace")
+            log.log(self._determine_log_level(line_str), line_str)
+
         transport = StdioTransport(
             process_launch_info,
             language=self.language,
             start_independent_lsp_process=config.start_independent_lsp_process,
+            stderr_handler=on_lsp_stderr_line,
         )
         self.server = LanguageServerProcess(
             transport,
             language=self.language,
-            determine_log_level=self._determine_log_level,
             logger=logging_fn,
         )
         self.server.on_any_notification(self._observe_server_notification)
@@ -1194,62 +1199,32 @@ class SolidLanguageServer(ABC):
 
     def _shutdown(self, timeout: float = 5.0) -> None:
         """
-        A robust shutdown process designed to terminate cleanly on all platforms, including Windows,
-        by explicitly closing all I/O pipes.
+        Robust shutdown: ask the server to shut down via LSP protocol with a bounded
+        wait, then delegate to the transport for graceful close + escalation.
         """
         if not self.server.is_running():
             log.debug("Server process not running, skipping shutdown.")
             return
 
-        log.info(f"Initiating final robust shutdown with a {timeout}s timeout...")
-        process = self.server.process
-        if process is None:
-            log.debug("Server process is None, cannot shutdown.")
-            return
-
-        # --- Main Shutdown Logic ---
-        # Stage 1: Graceful Termination Request
-        # Send LSP shutdown and close stdin to signal no more input.
+        log.info(f"Initiating shutdown with a {timeout}s timeout...")
+        # Stage 1: ask the LS to shut down via the LSP protocol, but don't let it block forever.
         try:
-            log.debug("Sending LSP shutdown request...")
-            # Use a thread to timeout the LSP shutdown call since it can hang
-            shutdown_thread = threading.Thread(target=self.server.shutdown)
-            shutdown_thread.daemon = True
+            shutdown_thread = threading.Thread(target=self.server.shutdown, daemon=True)
             shutdown_thread.start()
-            shutdown_thread.join(timeout=2.0)  # 2 second timeout for LSP shutdown
-
+            shutdown_thread.join(timeout=2.0)
             if shutdown_thread.is_alive():
-                log.debug("LSP shutdown request timed out, proceeding to terminate...")
+                log.debug("LSP shutdown request timed out, proceeding to terminate")
             else:
-                log.debug("LSP shutdown request completed.")
-
-            if process.stdin and not process.stdin.closed:
-                process.stdin.close()
-            log.debug("Stage 1 shutdown complete.")
+                log.debug("LSP shutdown request completed")
         except Exception as e:
-            log.debug(f"Exception during graceful shutdown: {e}")
-            # Ignore errors here, we are proceeding to terminate anyway.
+            log.debug(f"Exception during LSP shutdown request: {e}")
 
-        # Stage 2: Terminate and Wait for Process to Exit
-        log.debug(f"Terminating process {process.pid}, current status: {process.poll()}")
-        process.terminate()
-
-        # Stage 3: Wait for process termination with timeout
+        # Stage 2: transport-level shutdown — closes write side, waits, escalates to terminate/kill the
+        # full process tree. Subprocess specifics live in StdioTransport, not here.
         try:
-            log.debug(f"Waiting for process {process.pid} to terminate...")
-            exit_code = process.wait(timeout=timeout)
-            log.info(f"Language server process terminated successfully with exit code {exit_code}.")
-        except subprocess.TimeoutExpired:
-            # If termination failed, forcefully kill the process
-            log.warning(f"Process {process.pid} termination timed out, killing process forcefully...")
-            process.kill()
-            try:
-                exit_code = process.wait(timeout=2.0)
-                log.info(f"Language server process killed successfully with exit code {exit_code}.")
-            except subprocess.TimeoutExpired:
-                log.error(f"Process {process.pid} could not be killed within timeout.")
+            self.server.get_transport().shutdown(timeout=timeout)
         except Exception as e:
-            log.error(f"Error during process shutdown: {e}")
+            log.error(f"Error during transport shutdown: {e}")
 
     @contextmanager
     def start_server(self) -> Iterator["SolidLanguageServer"]:

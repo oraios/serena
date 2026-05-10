@@ -113,12 +113,11 @@ def start_ls_context(
             ls.stop(shutdown_timeout=5)
         except Exception as e:
             log.warning(f"Warning: Error stopping language server: {e}")
-            # try to force cleanup
-            if hasattr(ls, "server") and hasattr(ls.server, "process"):
-                try:
-                    ls.server.process.terminate()
-                except:
-                    pass
+            # force cleanup via the transport
+            try:
+                ls.server.get_transport().stop()
+            except Exception:
+                pass
 
 
 @contextmanager
