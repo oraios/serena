@@ -52,9 +52,9 @@ class TestBSLLanguageServer:
         # CommonModule.bsl (0-indexed):
         # line 2: Процедура ВывестиСообщение(Текст) Экспорт  <- declaration (name starts at col 10)
         # line 13: ВывестиСообщение(Сообщение);              <- internal call
-        # bsl-language-server resolves references within the same module file; cross-module
-        # resolution requires a 1C Configuration.xml / metadata context that this minimal
-        # fixture deliberately does not provide.
+        # This test asserts within-file resolution on a bare ``.bsl`` file (no surrounding
+        # 1C project metadata). Cross-module resolution is exercised separately via the
+        # dedicated ``src/`` fixture in ``test_find_references_across_files`` below.
         refs = language_server.request_references("CommonModule.bsl", line=2, column=10)
         assert refs, "Expected at least one reference to ВывестиСообщение"
         file_names = [ref.get("relativePath", "") for ref in refs]
@@ -72,6 +72,65 @@ class TestBSLLanguageServer:
         assert refs, "Expected at least one reference to ПолучитьПриветствие"
         matching_lines = [ref["range"]["start"]["line"] for ref in refs if "CommonModule.bsl" in ref.get("relativePath", "")]
         assert 11 in matching_lines, f"Expected a reference on line 11 (0-indexed), got lines: {matching_lines}"
+
+    # --- Cross-file reference resolution ---
+    #
+    # bsl-language-server links common modules across files only when the fixture ships
+    # proper 1C Configuration metadata (``Configuration.xml`` + per-module ``.mdo`` /
+    # ``Ext/Module.bsl`` layout). The ``src/`` subtree under the BSL test repo provides
+    # a minimal-but-complete Designer-format dump for exactly this purpose. The two
+    # tests below request references and the go-to-definition from the cross-module
+    # call site ``ОбщийМодуль1.ВывестиСообщение(...)`` in ``ОбщийМодуль2``.
+
+    _CROSS_REF_MODULE1 = os.path.join(
+        "src", "CommonModules", "ОбщийМодуль1", "Ext", "Module.bsl"
+    )
+    _CROSS_REF_MODULE2 = os.path.join(
+        "src", "CommonModules", "ОбщийМодуль2", "Ext", "Module.bsl"
+    )
+
+    @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
+    def test_find_references_across_files(self, language_server: SolidLanguageServer) -> None:
+        """``request_references`` from the declaration must include the cross-module call-site."""
+        # ОбщийМодуль1 / Ext / Module.bsl (0-indexed):
+        # line 2: Процедура ВывестиСообщение(Текст) Экспорт   <- declaration (name at col 10)
+        # ОбщийМодуль2 / Ext / Module.bsl (0-indexed):
+        # line 3: ОбщийМодуль1.ВывестиСообщение("Hello from CommonModule2");  <- cross-module call (col 17)
+        refs = language_server.request_references(self._CROSS_REF_MODULE1, line=2, column=10)
+        assert refs, "Expected at least one reference to ВывестиСообщение across modules"
+        call_site_paths = [ref.get("relativePath", "") for ref in refs if "ОбщийМодуль2" in ref.get("relativePath", "")]
+        assert call_site_paths, (
+            f"Expected a cross-module reference from ОбщийМодуль2, got relativePaths: "
+            f"{[ref.get('relativePath', '') for ref in refs]}"
+        )
+        call_site_lines = [
+            ref["range"]["start"]["line"]
+            for ref in refs
+            if "ОбщийМодуль2" in ref.get("relativePath", "")
+        ]
+        assert 3 in call_site_lines, (
+            f"Expected a reference at ОбщийМодуль2/Module.bsl line 3, got lines: {call_site_lines}"
+        )
+
+    @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
+    def test_find_definition_across_files(self, language_server: SolidLanguageServer) -> None:
+        """``request_definition`` from a cross-module call-site must resolve to the other module."""
+        # cursor on "ВывестиСообщение" inside
+        # ОбщийМодуль1.ВывестиСообщение("Hello from CommonModule2"); (line 3, col 17 — 0-indexed)
+        definitions = language_server.request_definition(self._CROSS_REF_MODULE2, line=3, column=17)
+        assert definitions, "Expected a cross-module definition for ВывестиСообщение"
+        target_paths = [d.get("relativePath", "") for d in definitions]
+        assert any("ОбщийМодуль1" in p for p in target_paths), (
+            f"Expected definition to resolve to ОбщийМодуль1, got: {target_paths}"
+        )
+        target_lines = [
+            d["range"]["start"]["line"]
+            for d in definitions
+            if "ОбщийМодуль1" in d.get("relativePath", "")
+        ]
+        assert 2 in target_lines, (
+            f"Expected the definition to point at ОбщийМодуль1/Module.bsl line 2, got: {target_lines}"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
     def test_bare_symbol_names(self, language_server: SolidLanguageServer) -> None:
