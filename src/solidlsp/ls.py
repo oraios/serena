@@ -384,7 +384,7 @@ class SolidLanguageServer(ABC):
         """
         if dirname in self._ALWAYS_IGNORED_DIRS:
             return True
-        if self._ignore_all_dot_files and dirname.startswith("."):
+        if self._ignore_all_dot_files and dirname.startswith(".") and dirname not in (".", ".."):
             return True
         return False
 
