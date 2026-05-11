@@ -68,6 +68,13 @@ class Language(str, Enum):
     SWIFT = "swift"
     BASH = "bash"
     CRYSTAL = "crystal"
+    CUE = "cue"
+    """CUE configuration language using the LSP mode of the official `cue` CLI (`cue lsp`).
+    Auto-downloads the `cue` binary from GitHub releases for the current platform
+    (linux-x64/arm64, darwin-x64/arm64, win-x64/arm64). Supports `.cue` files and works
+    best rooted at a directory containing a `cue.mod/` module. Users can override the
+    binary by setting `ls_specific_settings.cue.ls_path` to a pre-installed `cue` executable.
+    """
     ZIG = "zig"
     LUA = "lua"
     LUAU = "luau"
@@ -400,6 +407,8 @@ class Language(str, Enum):
                 return FilenameMatcher(".sh", ".bash")
             case self.CRYSTAL:
                 return FilenameMatcher(".cr")
+            case self.CUE:
+                return FilenameMatcher(".cue")
             case self.YAML:
                 return FilenameMatcher(".yaml", ".yml")
             case self.JSON:
@@ -624,6 +633,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.crystal_language_server import CrystalLanguageServer
 
                 return CrystalLanguageServer
+            case self.CUE:
+                from solidlsp.language_servers.cue_language_server import CueLanguageServer
+
+                return CueLanguageServer
             case self.YAML:
                 from solidlsp.language_servers.yaml_language_server import YamlLanguageServer
 

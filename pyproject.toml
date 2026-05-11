@@ -303,6 +303,7 @@ addopts = "--snapshot-patch-pycharm-diff"
 markers = [
   "clojure: language server running for Clojure",
   "crystal: language server running for Crystal",
+  "cue: language server running for CUE",
   "python: language server running for Python",
   "go: language server running for Go",
   "java: language server running for Java",

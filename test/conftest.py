@@ -248,6 +248,7 @@ _LANGUAGE_PYTEST_MARKERS: dict[Language, list[MarkDecorator | Mark]] = {
     ],
     Language.CPP: [pytest.mark.cpp],
     Language.CPP_CCLS: [pytest.mark.cpp],
+    Language.CUE: [pytest.mark.cue],
     Language.CSHARP: [pytest.mark.csharp],
     Language.FSHARP: [pytest.mark.fsharp],
     Language.GO: [pytest.mark.go],
