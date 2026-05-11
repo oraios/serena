@@ -2,6 +2,9 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Language Servers:
+  - Add **CUE** support via the LSP mode of the official [`cue` CLI](https://github.com/cue-lang/cue) (`cue lsp`). Auto-downloads and SHA-256-verifies the `cue` release binary for linux-x64/arm64, darwin-x64/arm64, and win-x64/arm64. Handles `.cue` files; works best rooted at a directory containing a `cue.mod/` module. Users can override the binary by setting `ls_specific_settings.cue.ls_path` to a pre-installed `cue` executable (e.g. from Homebrew or `go install`). Default pinned version: `v0.16.1`; override via `ls_specific_settings.cue.cue_version`.
+
 # v1.3.0 (2026-05-11)
 
 * General:
