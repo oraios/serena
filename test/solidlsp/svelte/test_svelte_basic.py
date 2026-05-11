@@ -1,5 +1,4 @@
 import os
-import re
 
 import pytest
 
@@ -35,9 +34,9 @@ class TestSvelteLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
     def test_definition_from_component_import_to_svelte_file(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "lib", "components", "Header.svelte")
-        line, col = find_text_coordinates(read_repo_file(language_server, file_path), r"(count)")
+        coords = find_text_coordinates(read_repo_file(language_server, file_path), r"(count)")
 
-        definitions = language_server.request_definition(file_path, line, col)
+        definitions = language_server.request_definition(file_path, coords.line, coords.col)
 
         assert len(definitions) == 1, definitions
         assert definitions[0]["relativePath"].replace("\\", "/") == "src/lib/components/Counter.svelte"

@@ -4,6 +4,7 @@
 	import { confetti } from '@neoconfetti/svelte';
 	import { MediaQuery } from 'svelte/reactivity';
 	import { words } from '$lib/components/Words.svelte';
+	import { GAME_VERSION } from '$lib/game';
 
 	let { data } = $props();
 
@@ -62,7 +63,7 @@
 			?.dispatchEvent(new MouseEvent('click', { cancelable: true, bubbles: true }));
 	}
 
-	console.log(words);
+	console.log(GAME_VERSION, words);
 </script>
 
 <svelte:window onkeydown={keydown} />

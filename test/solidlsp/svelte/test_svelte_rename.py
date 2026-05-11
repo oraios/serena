@@ -7,7 +7,8 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import TextEdit, WorkspaceEdit
-from test.conftest import get_repo_path
+from serena.util.text_utils import find_text_coordinates
+from test.solidlsp.conftest import read_repo_file
 
 pytestmark = pytest.mark.svelte
 
@@ -50,21 +51,13 @@ def _assert_rename_edit(
         assert edit["range"]["start"]["character"] >= 0
 
 
-def _position_of_text(relative_file_path: str, text: str) -> tuple[int, int]:
-    file_path = get_repo_path(Language.SVELTE) / relative_file_path
-    for line_number, line in enumerate(file_path.read_text().splitlines()):
-        if text in line:
-            return line_number, line.index(text)
-    raise AssertionError(f"Could not find {text!r} in {relative_file_path}")
-
-
 class TestSvelteRename:
     @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
     def test_rename_svelte_export_updates_svelte_importers(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "lib", "components", "Counter.svelte")
-        line, col = _position_of_text(file_path, "count")
+        coords = find_text_coordinates(read_repo_file(language_server, file_path), r"(count)")
 
-        workspace_edit = language_server.request_rename_symbol_edit(file_path, line, col, "score")
+        workspace_edit = language_server.request_rename_symbol_edit(file_path, coords.line, coords.col, "score")
 
         _assert_rename_edit(
             workspace_edit,
@@ -75,9 +68,9 @@ class TestSvelteRename:
     @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
     def test_rename_svelte_export_updates_ts_and_svelte_files(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "lib", "components", "Words.svelte")
-        line, col = _position_of_text(file_path, "words")
+        coords = find_text_coordinates(read_repo_file(language_server, file_path), r"(words)")
 
-        workspace_edit = language_server.request_rename_symbol_edit(file_path, line, col, "vocabulary")
+        workspace_edit = language_server.request_rename_symbol_edit(file_path, coords.line, coords.col, "vocabulary")
 
         _assert_rename_edit(
             workspace_edit,
@@ -93,9 +86,9 @@ class TestSvelteRename:
     @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
     def test_rename_ts_export_updates_ts_importers(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "routes", "(sverdle)", "words.server.ts")
-        line, col = _position_of_text(file_path, "allowed")
+        coords = find_text_coordinates(read_repo_file(language_server, file_path), r"(allowed)")
 
-        workspace_edit = language_server.request_rename_symbol_edit(file_path, line, col, "allowedWords")
+        workspace_edit = language_server.request_rename_symbol_edit(file_path, coords.line, coords.col, "allowedWords")
 
         _assert_rename_edit(
             workspace_edit,
@@ -109,9 +102,9 @@ class TestSvelteRename:
     @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
     def test_rename_ts_class_updates_ts_and_svelte_files(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "lib", "game.ts")
-        line, col = _position_of_text(file_path, "Game")
+        coords = find_text_coordinates(read_repo_file(language_server, file_path), r"(Game)")
 
-        workspace_edit = language_server.request_rename_symbol_edit(file_path, line, col, "SverdleGame")
+        workspace_edit = language_server.request_rename_symbol_edit(file_path, coords.line, coords.col, "SverdleGame")
 
         _assert_rename_edit(
             workspace_edit,
