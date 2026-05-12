@@ -5,17 +5,33 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 
 import pytest
 from filelock import FileLock
 
+from solidlsp.ls_types import WorkspaceEdit
+
 log = logging.getLogger(__name__)
 
-REPO_ROOT = Path(__file__).resolve().parents[2] / "resources" / "repos" / "svelte" / "test_repo"
-NODE_MODULES = REPO_ROOT / "node_modules"
+repo_path = Path(__file__).resolve().parents[2] / "resources" / "repos" / "svelte" / "test_repo"
+NODE_MODULES = repo_path / "node_modules"
 SVELTE_MARKER = NODE_MODULES / "svelte" / "package.json"
 SVELTE_KIT_ADAPTER_MARKER = NODE_MODULES / "@sveltejs" / "adapter-auto" / "package.json"
-INSTALL_LOCK = REPO_ROOT / ".svelte-install.lock"
+INSTALL_LOCK = repo_path / ".svelte-install.lock"
+
+
+@runtime_checkable
+class SupportsWorkspaceEditForFileRename(Protocol):
+    """Structural type for language servers that expose hypothetical file-rename workspace edits."""
+
+    def request_workspace_edit_for_file_rename(
+        self,
+        old_relative: str,
+        new_relative: str,
+        *,
+        typescript_plugin_enabled: bool = True,
+    ) -> WorkspaceEdit | None: ...
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -34,10 +50,10 @@ def _install_svelte_test_repo_node_modules() -> None:
             log.info("Svelte test repo node_modules populated by another worker; skipping npm install")
             return
 
-        log.warning("Installing npm dependencies into the Svelte test repo at %s.", REPO_ROOT)
+        log.warning("Installing npm dependencies into the Svelte test repo at %s.", repo_path)
         proc = subprocess.run(
             [npm_executable, "install"],
-            cwd=str(REPO_ROOT),
+            cwd=str(repo_path),
             capture_output=True,
             text=True,
             check=False,
@@ -45,7 +61,7 @@ def _install_svelte_test_repo_node_modules() -> None:
         )
         if proc.returncode != 0:
             log.error("npm install failed (rc=%s).\nstdout:\n%s\nstderr:\n%s", proc.returncode, proc.stdout, proc.stderr)
-            pytest.skip(f"npm install failed in {REPO_ROOT} (rc={proc.returncode}); see logs for details")
+            pytest.skip(f"npm install failed in {repo_path} (rc={proc.returncode}); see logs for details")
 
         if not SVELTE_MARKER.exists() or not SVELTE_KIT_ADAPTER_MARKER.exists():
             pytest.skip("npm install completed but required Svelte fixture packages are missing")
