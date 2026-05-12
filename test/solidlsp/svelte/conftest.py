@@ -21,19 +21,6 @@ SVELTE_KIT_ADAPTER_MARKER = NODE_MODULES / "@sveltejs" / "adapter-auto" / "packa
 INSTALL_LOCK = repo_path / ".svelte-install.lock"
 
 
-@runtime_checkable
-class SupportsWorkspaceEditForFileRename(Protocol):
-    """Structural type for language servers that expose hypothetical file-rename workspace edits."""
-
-    def request_workspace_edit_for_file_rename(
-        self,
-        old_relative: str,
-        new_relative: str,
-        *,
-        typescript_plugin_enabled: bool = True,
-    ) -> WorkspaceEdit | None: ...
-
-
 @pytest.fixture(scope="session", autouse=True)
 def _install_svelte_test_repo_node_modules() -> None:
     """Populate the Svelte fixture's project dependencies via npm."""
