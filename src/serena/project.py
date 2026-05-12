@@ -33,6 +33,7 @@ log = logging.getLogger(__name__)
 class MemoriesManager:
     GLOBAL_TOPIC = "global"
     _global_memory_dir = SerenaPaths().global_memories_path
+    _MEMORY_REF_PREFIX = "mem:"
 
     def __init__(
         self,
@@ -77,9 +78,48 @@ class MemoriesManager:
     def _is_global(self, name: str) -> bool:
         return name == self.GLOBAL_TOPIC or name.startswith(self.GLOBAL_TOPIC + "/")
 
+    @classmethod
+    def _prepare_name(cls, name: str) -> str:
+        """Corrects the name for common mistakes made by LLMs (``mem:`` prefix, ``.md`` suffix, OS-specific separators)."""
+        name = name.removeprefix(cls._MEMORY_REF_PREFIX)
+        if name.endswith(".md"):
+            name = name[:-3]
+        return name.replace(os.sep, "/")
+
+    @classmethod
+    def _add_reference_prefix(cls, name: str) -> str:
+        name = cls._prepare_name(name)
+        return cls._MEMORY_REF_PREFIX + name
+
+    def rename_references_to_memory(self, content: str, old_name: str, new_name: str) -> tuple[str, int]:
+        r"""
+        Replaces all occurrences of a memory reference (e.g. ``mem:foo``) in ``content`` with
+        the reference to ``new_name``.
+
+        Matches only references whose name is exactly ``old_name``: the match must not be
+        embedded in a longer memory name. A memory name consists of the character class
+        ``[A-Za-z0-9_\\-/]`` (alphanumerics, underscore, hyphen, slash for topic separation),
+        which determines the boundary of the match. The surrounding delimiters (backticks,
+        quotes, parentheses, whitespace, etc.) are intentionally unconstrained.
+
+        :param content: the text to search through
+        :param old_name: the memory name being renamed away from (without the ``mem:`` prefix)
+        :param new_name: the memory name being renamed to (without the ``mem:`` prefix)
+        :return: a tuple of (updated content, number of replacements made)
+        """
+        # define the character class that constitutes a memory name; matches inside such a run are not real references
+        name_char = r"[A-Za-z0-9_\-/]"
+        ref_old = self._add_reference_prefix(old_name)
+        ref_new = self._add_reference_prefix(new_name)
+
+        # build a pattern that anchors the reference on both sides so it cannot be embedded inside a longer name
+        pattern = rf"(?<!{name_char}){re.escape(ref_old)}(?!{name_char})"
+
+        # use a callable replacement to avoid backreference interpretation of characters in ref_new
+        return re.subn(pattern, lambda _m: ref_new, content)
+
     def get_memory_file_path(self, name: str) -> Path:
-        # Strip .md extension if present
-        name = name.replace(".md", "").replace(os.sep, "/")
+        name = self._prepare_name(name)
         parts = name.split("/")
         if ".." in parts:
             raise ValueError(f"Memory name cannot contain '..' segments for security reasons. Got: {name}")
@@ -118,6 +158,7 @@ class MemoriesManager:
             raise PermissionError(f"Attempted to write to read_only memory: '{name}')")
 
     def load_memory(self, name: str) -> str:
+        name = self._prepare_name(name)
         self._check_not_ignored(name)
         memory_file_path = self.get_memory_file_path(name)
         if not memory_file_path.exists():
@@ -126,6 +167,7 @@ class MemoriesManager:
             return f.read()
 
     def save_memory(self, name: str, content: str, is_tool_context: bool) -> str:
+        name = self._prepare_name(name)
         self._check_not_ignored(name)
         self._check_write_access(name, is_tool_context)
         memory_file_path = self.get_memory_file_path(name)
@@ -208,6 +250,7 @@ class MemoriesManager:
         return memories
 
     def delete_memory(self, name: str, is_tool_context: bool) -> str:
+        name = self._prepare_name(name)
         self._check_not_ignored(name)
         self._check_write_access(name, is_tool_context)
         memory_file_path = self.get_memory_file_path(name)
@@ -221,6 +264,8 @@ class MemoriesManager:
         Rename or move a memory file.
         Moving between global and project scope (e.g. "global/foo" -> "bar") is supported.
         """
+        old_name = self._prepare_name(old_name)
+        new_name = self._prepare_name(new_name)
         self._check_not_ignored(old_name)
         self._check_not_ignored(new_name)
         self._check_write_access(new_name, is_tool_context)
@@ -250,6 +295,7 @@ class MemoriesManager:
         :param mode: "literal" or "regex"
         :param allow_multiple_occurrences:
         """
+        name = self._prepare_name(name)
         self._check_not_ignored(name)
         self._check_write_access(name, is_tool_context)
         memory_file_path = self.get_memory_file_path(name)

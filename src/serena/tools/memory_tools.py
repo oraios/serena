@@ -1,6 +1,9 @@
+import logging
 from typing import Literal
 
 from serena.tools import Tool, ToolMarkerCanEdit
+
+log = logging.getLogger(__name__)
 
 
 class WriteMemoryTool(Tool, ToolMarkerCanEdit):
@@ -11,13 +14,15 @@ class WriteMemoryTool(Tool, ToolMarkerCanEdit):
 
     def apply(self, memory_name: str, content: str, max_chars: int = -1) -> str:
         """
-        Write information (utf-8-encoded) about this project that can be useful for future tasks to a memory in md format.
-        The memory name should be meaningful and can include "/" to organize into topics (e.g., "auth/login/logic").
-        If explicitly instructed, use the "global/" prefix for writing a memory that is shared across projects
-        (e.g., "global/java/style_guide")
+        Write information about this project that can be useful for future tasks in md format.
+        The name should be meaningful and can include "/" to organize into topics.
+        If explicitly instructed, use the "global/" prefix for writing a memory that is shared across projects.
+        References to other memories should be inside backticks and prefixed with mem:,
+        e.g., `mem:auth`.
 
-        :param max_chars: the maximum number of characters to write. By default, determined by the config,
-            change only if instructed to do so.
+        :param memory_name: memory name
+        :param content: memory content, utf8-encoded
+        :param max_chars: see other tools
         """
         # NOTE: utf-8 encoding is configured in the MemoriesManager
         if max_chars == -1:
@@ -32,23 +37,19 @@ class WriteMemoryTool(Tool, ToolMarkerCanEdit):
 
 class ReadMemoryTool(Tool):
     """
-    Read the content of a memory file. This tool should only be used if the information
-    is relevant to the current task. You can infer whether the information
-    is relevant from the memory file name.
-    You should not read the same memory file multiple times in the same conversation.
+    Reads the content of a memory file.
     """
 
     def apply(self, memory_name: str) -> str:
         """
-        Reads the contents of a memory. Should only be used if the information
-        is likely to be relevant to the current task, inferring relevance from the memory name.
+        Use to read a memory that is likely to be relevant to the current task, inferring relevance e.g. from the name.
         """
         return self.memories_manager.load_memory(memory_name)
 
 
 class ListMemoriesTool(Tool):
     """
-    List available memories. Any memory can be read using the `read_memory` tool.
+    Lists available memories.
     """
 
     def apply(self, topic: str = "") -> str:
@@ -60,9 +61,7 @@ class ListMemoriesTool(Tool):
 
 class DeleteMemoryTool(Tool, ToolMarkerCanEdit):
     """
-    Delete a memory file. Should only happen if a user asks for it explicitly,
-    for example by saying that the information retrieved from a memory file is no longer correct
-    or no longer relevant for the project.
+    Delete a memory file.
     """
 
     def apply(self, memory_name: str) -> str:
@@ -74,16 +73,23 @@ class DeleteMemoryTool(Tool, ToolMarkerCanEdit):
 
 class RenameMemoryTool(Tool, ToolMarkerCanEdit):
     """
-    Renames or moves a memory. Moving between project and global scope is supported
-    (e.g., renaming "global/foo" to "bar" moves it from global to project scope).
+    Renames or moves a memory, updating references that are marked with the `mem:` prefix.
     """
 
     def apply(self, old_name: str, new_name: str) -> str:
         """
         Rename or move a memory, use "/" in the name to organize into topics.
         The "global" topic should only be used if explicitly instructed.
+        References to other memories that are marked with the `mem:` prefix will be updated accordingly.
         """
-        return self.memories_manager.move_memory(old_name, new_name, is_tool_context=True)
+        renaming_message = self.memories_manager.move_memory(old_name, new_name, is_tool_context=True)
+        for memory in self.memories_manager.list_memories().get_full_list():
+            memory_content = self.memories_manager.load_memory(memory)
+            updated_content, n_replacements = self.memories_manager.rename_references_to_memory(memory_content, old_name, new_name)
+            if n_replacements > 0:
+                log.info(f"Updated {n_replacements} references to memory {old_name} to {new_name}")
+                self.memories_manager.save_memory(memory, updated_content, is_tool_context=True)
+        return renaming_message
 
 
 class EditMemoryTool(Tool, ToolMarkerCanEdit):
@@ -100,10 +106,10 @@ class EditMemoryTool(Tool, ToolMarkerCanEdit):
         allow_multiple_occurrences: bool = False,
     ) -> str:
         r"""
-        Replaces content matching a regular expression in a memory.
+        Replace content matching a regular expression in a memory.
 
         :param memory_name: the name of the memory
-        :param needle: the string or regex pattern to search for.
+        :param needle: the string or regex pattern to search for. In regex mode, be careful to not replace too much!
             If `mode` is "literal", this string will be matched exactly.
             If `mode` is "regex", this string will be treated as a regular expression (syntax of Python's `re` module,
             with flags DOTALL and MULTILINE enabled).
