@@ -14,8 +14,84 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  detect-changes:
+    name: Detect changed files
+    runs-on: ubuntu-latest
+    outputs:
+      src: ${{ steps.changes.outputs.src_any_changed }}
+      tests: ${{ steps.changes.outputs.tests_any_changed }}
+      deps: ${{ steps.changes.outputs.deps_any_changed }}
+      lint-relevant: ${{ steps.changes.outputs.lint_any_changed }}
+      language-ids: ${{ steps.ls.outputs.language-ids }}
+      test-paths: ${{ steps.ls.outputs.test-paths }}
+      any-ls-changed: ${{ steps.ls.outputs.any-ls-changed }}
+      core-changed: ${{ steps.ls.outputs.core-changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Get changed files
+        id: changes
+        uses: tj-actions/changed-files@v46
+        with:
+          files_yaml: |
+            src:
+              - 'src/**/*.py'
+            tests:
+              - 'test/**/*.py'
+            deps:
+              - 'pyproject.toml'
+              - 'uv.lock'
+            lint:
+              - 'src/**/*.py'
+              - 'test/**/*.py'
+              - 'pyproject.toml'
+      - name: Detect language server changes
+        id: ls
+        uses: ./.github/actions/detect-ls-changes
+
+  lint:
+    name: Lint & type-check
+    needs: detect-changes
+    if: needs.detect-changes.outputs.lint-relevant == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Install uv
+        shell: bash
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Cache uv virtualenv
+        uses: actions/cache@v3
+        with:
+          path: .venv
+          key: uv-venv-ubuntu-latest-3.11-lock-${{ hashFiles('uv.lock') }}
+      - name: Create virtual environment
+        shell: bash
+        run: |
+          if [ ! -d ".venv" ]; then
+            uv venv
+          fi
+      - name: Install Python environment
+        shell: bash
+        run: uv sync --extra dev --locked
+      - name: Check formatting
+        shell: bash
+        run: uv run poe lint
+      - name: Type-checking with mypy
+        shell: bash
+        run: uv run poe type-check
+
   cpu:
     name: Tests on ${{ matrix.os }}
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.src == 'true' ||
+      needs.detect-changes.outputs.tests == 'true' ||
+      needs.detect-changes.outputs.deps == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -74,9 +150,6 @@ jobs:
       - name: List Python dependencies
         shell: bash
         run: uv pip list
-      - name: Check formatting
-        shell: bash
-        run: uv run poe lint
       # Add Go bin directory to PATH for this workflow
       # GITHUB_PATH is a special file that GitHub Actions uses to modify PATH
       # Writing to this file adds the directory to the PATH for subsequent steps
@@ -93,7 +166,12 @@ jobs:
         shell: bash
         run: go install golang.org/x/tools/gopls@latest
       - name: Set up Elixir
-        if: runner.os != 'Windows'
+        if: |
+          runner.os != 'Windows' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'elixir') ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'erlang')
+          )
         uses: erlef/setup-beam@v1
         with:
           elixir-version: "1.19.3"
@@ -113,10 +191,16 @@ jobs:
 #          # Ensure erlang_ls is in PATH
 #          echo "$HOME/.local/bin" >> $GITHUB_PATH
       - name: Install clojure tools
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'clojure')
         uses: DeLaGuardo/setup-clojure@13.4
         with:
           cli: latest
       - name: Install ccls (C/C++ Language Server)
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'cpp')
         shell: bash
         run: |
           if [[ "${{ runner.os }}" == "Linux" ]]; then
@@ -135,74 +219,124 @@ jobs:
             exit 1
           fi
       - name: Setup Java (for JVM based languages)
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'java') ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'kotlin') ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'groovy') ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'scala')
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '21'
       - name: Setup .NET SDK (for F# and C# languages)
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'csharp') ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'fsharp')
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
       - name: List .NET runtimes
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'csharp') ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'fsharp')
         shell: bash
         run: dotnet --list-runtimes
       - name: Install Terraform
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'terraform')
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.5.0"
           terraform_wrapper: false
-      # - name: Install swift
-      #   if: runner.os != 'Windows'
-      #   uses: swift-actions/setup-swift@v2
+      - name: Cache Swift toolchain (macOS)
+        id: cache-swift-macos
+        if: |
+          runner.os == 'macOS' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'swift')
+          )
+        uses: actions/cache@v3
+        with:
+          path: ~/.swiftly
+          key: swiftly-macos-6.1.2
       # Installation of swift with the action screws with installation of ruby on macOS for some reason
       # We can try again when version 3 of the action is released, where they will also use swiftly
       # Until then, we use custom code to install swift. Sourcekit-lsp is installed automatically with swift
       - name: Install Swift with swiftly (macOS)
-        if: runner.os == 'macOS'
+        if: |
+          runner.os == 'macOS' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'swift')
+          )
         run: |
-          echo "=== Installing swiftly on macOS ==="
-          curl -O https://download.swift.org/swiftly/darwin/swiftly.pkg && \
-          installer -pkg swiftly.pkg -target CurrentUserHomeDirectory && \
-          ~/.swiftly/bin/swiftly init --quiet-shell-followup && \
-          . "${SWIFTLY_HOME_DIR:-$HOME/.swiftly}/env.sh" && \
-          hash -r
-          swiftly install --use 6.1.2
-          swiftly use 6.1.2
+          if [[ "${{ steps.cache-swift-macos.outputs.cache-hit }}" != "true" ]]; then
+            echo "=== Installing swiftly on macOS ==="
+            curl -O https://download.swift.org/swiftly/darwin/swiftly.pkg && \
+            installer -pkg swiftly.pkg -target CurrentUserHomeDirectory && \
+            ~/.swiftly/bin/swiftly init --quiet-shell-followup && \
+            . "${SWIFTLY_HOME_DIR:-$HOME/.swiftly}/env.sh" && \
+            hash -r
+            swiftly install --use 6.1.2
+            swiftly use 6.1.2
+          fi
           echo "~/.swiftly/bin" >> $GITHUB_PATH
-          echo "Swiftly installed successfully"
-          # Verify sourcekit-lsp is working before proceeding
-          echo "=== Verifying sourcekit-lsp installation ==="
           which sourcekit-lsp || echo "Warning: sourcekit-lsp not found in PATH"
           sourcekit-lsp --help || echo "Warning: sourcekit-lsp not responding"
+      - name: Cache Swift toolchain (Linux)
+        id: cache-swift-linux
+        if: |
+          runner.os == 'Linux' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'swift')
+          )
+        uses: actions/cache@v3
+        with:
+          path: ~/.local/share/swiftly
+          key: swiftly-linux-6.1.2
       - name: Install Swift with swiftly (Ubuntu)
-        if: runner.os == 'Linux'
+        if: |
+          runner.os == 'Linux' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'swift')
+          )
         run: |
-          echo "=== Installing swiftly on Ubuntu ==="
-          # Install dependencies BEFORE Swift to avoid exit code 1
-          sudo apt-get update
-          sudo apt-get -y install libcurl4-openssl-dev
-          curl -O https://download.swift.org/swiftly/linux/swiftly-$(uname -m).tar.gz && \
-          tar zxf swiftly-$(uname -m).tar.gz && \
-          ./swiftly init --quiet-shell-followup && \
-          . "${SWIFTLY_HOME_DIR:-$HOME/.local/share/swiftly}/env.sh" && \
-          hash -r
-          swiftly install --use 6.1.2
-          swiftly use 6.1.2
-          echo "=== Adding Swift toolchain to PATH ==="
+          if [[ "${{ steps.cache-swift-linux.outputs.cache-hit }}" != "true" ]]; then
+            echo "=== Installing swiftly on Ubuntu ==="
+            # Install dependencies BEFORE Swift to avoid exit code 1
+            sudo apt-get update
+            sudo apt-get -y install libcurl4-openssl-dev
+            curl -O https://download.swift.org/swiftly/linux/swiftly-$(uname -m).tar.gz && \
+            tar zxf swiftly-$(uname -m).tar.gz && \
+            ./swiftly init --quiet-shell-followup && \
+            . "${SWIFTLY_HOME_DIR:-$HOME/.local/share/swiftly}/env.sh" && \
+            hash -r
+            swiftly install --use 6.1.2
+            swiftly use 6.1.2
+          fi
           echo "$HOME/.local/share/swiftly/bin" >> $GITHUB_PATH
-          echo "Swiftly installed successfully!"
-          # Verify sourcekit-lsp is working before proceeding
-          echo "=== Verifying sourcekit-lsp installation ==="
           which sourcekit-lsp || echo "Warning: sourcekit-lsp not found in PATH"
           sourcekit-lsp --help || echo "Warning: sourcekit-lsp not responding"
       - name: Install Ruby
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'ruby')
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
       - name: Install Ruby language server
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'ruby')
         shell: bash
         run: gem install ruby-lsp
       - name: Install OCaml and opam
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'ocaml')
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ runner.os == 'Windows' && '4.14' || '5.3.x' }}
@@ -211,6 +345,9 @@ jobs:
             ${{ runner.os == 'Windows' && 'opam-repository-mingw: https://github.com/ocaml-opam/opam-repository-mingw.git#sunset' || '' }}
             default: https://github.com/ocaml/opam-repository.git
       - name: Install OCaml packages
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'ocaml')
         shell: bash
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then
@@ -220,34 +357,80 @@ jobs:
             opam install -y dune 'ocaml-lsp-server>=1.23.0'
           fi
       - name: Install R
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'r')
         uses: r-lib/actions/setup-r@v2
         with:
           r-version: '4.4.2'
           use-public-rspm: true
       - name: Install R sysdeps (libuv for fs package)
-        if: runner.os == 'Linux'
+        if: |
+          runner.os == 'Linux' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'r')
+          )
         shell: bash
         run: sudo apt-get update && sudo apt-get install -y libuv1-dev
+      - name: Cache R packages
+        id: cache-r-packages
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'r')
+        uses: actions/cache@v3
+        with:
+          path: ~/R
+          key: r-packages-${{ runner.os }}-4.4.2-languageserver-v1
       - name: Install R language server
+        if: |
+          steps.cache-r-packages.outputs.cache-hit != 'true' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'r')
+          )
         shell: bash
         run: |
           Rscript -e "install.packages('languageserver', repos='https://cloud.r-project.org')"
       - name: Set up Julia
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'julia')
         uses: julia-actions/setup-julia@v2
         with:
           version: '1.12.6'
+      - name: Cache Julia packages
+        id: cache-julia
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'julia')
+        uses: actions/cache@v3
+        with:
+          path: ~/.julia
+          key: julia-${{ runner.os }}-1.12.6-LanguageServer-5.0.0
       - name: Install Julia LanguageServer
+        if: |
+          steps.cache-julia.outputs.cache-hit != 'true' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'julia')
+          )
         shell: bash
         run: julia -e 'using Pkg; Pkg.add(Pkg.PackageSpec(name="LanguageServer", version="5.0.0"))'
       - name: Setup Haskell toolchain
-        if: runner.os != 'Windows'
+        if: |
+          runner.os != 'Windows' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'haskell')
+          )
         uses: haskell/ghcup-setup@v1
         with:
           ghc: '9.12.2'
           cabal: '3.10.3.0'
           hls: '2.11.0.0'
       - name: Verify Haskell tools
-        if: runner.os != 'Windows'
+        if: |
+          runner.os != 'Windows' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'haskell')
+          )
         run: |
           echo "Verifying installed Haskell tools:"
           which ghc && ghc --version
@@ -264,8 +447,28 @@ jobs:
             echo "This is not a critical error - tests will use HLS if available at runtime"
           fi
         shell: bash
+      - name: Cache Cabal store
+        id: cache-cabal
+        if: |
+          runner.os != 'Windows' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'haskell')
+          )
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cabal/packages
+            ~/.cabal/store
+            test/resources/repos/haskell/test_repo/dist-newstyle
+          key: cabal-${{ runner.os }}-${{ hashFiles('test/resources/repos/haskell/test_repo/**/*.cabal') }}
+          restore-keys: |
+            cabal-${{ runner.os }}-
       - name: Pre-build Haskell test project for HLS
-        if: runner.os != 'Windows'
+        if: |
+          runner.os != 'Windows' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'haskell')
+          )
         run: |
           cd test/resources/repos/haskell/test_repo
           cabal update
@@ -274,10 +477,16 @@ jobs:
           echo "Haskell test project built successfully"
         shell: bash
       - name: Install Zig
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'zig')
         uses: mlugg/setup-zig@v2
         with:
           version: 0.14.1
       - name: Install ZLS (Zig Language Server)
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'zig')
         shell: bash
         run: |
           if [[ "${{ runner.os }}" == "Linux" ]]; then
@@ -299,6 +508,9 @@ jobs:
             rm zls.zip
           fi
       - name: Install verible-verilog-ls (SystemVerilog Language Server)
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'systemverilog')
         shell: bash
         run: |
           VERIBLE_VERSION="v0.0-4051-g9fdb4057"
@@ -329,12 +541,16 @@ jobs:
             echo "WARNING: verible-verilog-ls not found in PATH"
           fi
       - name: Install Lua Language Server
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'lua') ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'luau')
         shell: bash
         run: |
           LUA_LS_VERSION="3.15.0"
           LUA_LS_DIR="$HOME/.serena/language_servers/lua"
           mkdir -p "$LUA_LS_DIR"
-          
+
           if [[ "${{ runner.os }}" == "Linux" ]]; then
             if [[ "$(uname -m)" == "x86_64" ]]; then
               wget https://github.com/LuaLS/lua-language-server/releases/download/${LUA_LS_VERSION}/lua-language-server-${LUA_LS_VERSION}-linux-x64.tar.gz
@@ -373,8 +589,24 @@ jobs:
             echo "$LUA_LS_DIR/bin" >> $GITHUB_PATH
             rm lua-ls.zip
           fi
+      - name: Cache Perl modules
+        id: cache-perl
+        if: |
+          runner.os != 'Windows' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'perl')
+          )
+        uses: actions/cache@v3
+        with:
+          path: ~/perl5
+          key: perl-${{ runner.os }}-languageserver-v1
       - name: Install Perl::LanguageServer
-        if: runner.os != 'Windows'
+        if: |
+          runner.os != 'Windows' &&
+          steps.cache-perl.outputs.cache-hit != 'true' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'perl')
+          )
         shell: bash
         run: |
           if [[ "${{ runner.os }}" == "Linux" ]]; then
@@ -384,31 +616,76 @@ jobs:
             brew install cpanminus
           fi
           PERL_MM_USE_DEFAULT=1 cpanm --notest --force Perl::LanguageServer
-          # Set up Perl local::lib environment for subsequent steps
+      - name: Set up Perl local::lib environment
+        if: |
+          runner.os != 'Windows' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'perl')
+          )
+        shell: bash
+        run: |
           echo "PERL5LIB=$HOME/perl5/lib/perl5${PERL5LIB:+:${PERL5LIB}}" >> $GITHUB_ENV
           echo "PERL_LOCAL_LIB_ROOT=$HOME/perl5${PERL_LOCAL_LIB_ROOT:+:${PERL_LOCAL_LIB_ROOT}}" >> $GITHUB_ENV
           echo "PERL_MB_OPT=--install_base \"$HOME/perl5\"" >> $GITHUB_ENV
           echo "PERL_MM_OPT=INSTALL_BASE=$HOME/perl5" >> $GITHUB_ENV
           echo "$HOME/perl5/bin" >> $GITHUB_PATH
       - name: Install ansible-core and ansible-lint (for Ansible language server tests)
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'ansible')
         shell: bash
         run: uv run pip install ansible-core ansible-lint
       - name: Install Haxe
         # The Haxe LS binary (server.js) is auto-downloaded and runs on Node.js,
         # but it delegates to the Haxe compiler for code analysis at runtime.
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'haxe')
         uses: krdlab/setup-haxe@v2
         with:
           haxe-version: 4.3.7
       - name: Install Elm
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'elm')
         shell: bash
         run: npm install -g elm@0.19.1-6
       - name: Install Nix
-        if: runner.os != 'Windows'  # Nix doesn't support Windows natively
+        if: |
+          runner.os != 'Windows' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'nix')
+          )
         uses: cachix/install-nix-action@v30
         with:
           nix_path: nixpkgs=channel:nixos-unstable
+      - name: Get week for Nix cache key
+        if: |
+          runner.os != 'Windows' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'nix')
+          )
+        id: nix-week
+        shell: bash
+        run: echo "week=$(date +%Y-%V)" >> $GITHUB_OUTPUT
+      - name: Cache Nix store
+        if: |
+          runner.os != 'Windows' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'nix')
+          )
+        uses: nix-community/cache-nix-action@v6
+        with:
+          primary-key: nix-${{ runner.os }}-${{ steps.nix-week.outputs.week }}
+          restore-prefixes-first-match: nix-${{ runner.os }}-
+          gc-max-store-size-linux: 2G
+          gc-max-store-size-macos: 2G
       - name: Install nixd (Nix Language Server)
-        if: runner.os != 'Windows'  # Skip on Windows since Nix isn't available
+        if: |
+          runner.os != 'Windows' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'nix')
+          )
         shell: bash
         run: |
           # Install nixd using nix
@@ -422,12 +699,19 @@ jobs:
 
           echo "$HOME/.nix-profile/bin" >> $GITHUB_PATH
       - name: Verify Nix package build
-        if: runner.os != 'Windows'  # Nix only supported on Linux/macOS
+        if: |
+          runner.os != 'Windows' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'nix')
+          )
         shell: bash
         run: |
           # Verify the flake builds successfully
           nix build --no-link
       - name: Install Regal (Rego Language Server)
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'rego')
         shell: bash
         run: |
           REGAL_VERSION="0.39.0"
@@ -454,7 +738,34 @@ jobs:
             mv regal.exe "$HOME/bin/"
             echo "$HOME/bin" >> $GITHUB_PATH
           fi
+      - name: Cache FPC (macOS)
+        id: cache-fpc-macos
+        if: |
+          runner.os == 'macOS' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'pascal')
+          )
+        uses: actions/cache@v3
+        with:
+          path: ~/fpcsrc
+          key: fpc-macos-3.2.2
+      - name: Cache FPC (Windows)
+        id: cache-fpc-windows
+        if: |
+          runner.os == 'Windows' && (
+            needs.detect-changes.outputs.core-changed == 'true' ||
+            contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'pascal')
+          )
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/fpc
+            ~/fpcsrc
+          key: fpc-windows-3.2.2
       - name: Install Free Pascal Compiler
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'pascal')
         shell: bash
         run: |
           if [[ "${{ runner.os }}" == "Linux" ]]; then
@@ -473,16 +784,16 @@ jobs:
             ls -la "$FPCDIR/rtl" 2>/dev/null || echo "rtl subdirectory not found"
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
             brew install fpc
-            # Download FPC source from SourceForge (fpc-src-laz cask is incompatible with ARM64)
+            if [[ "${{ steps.cache-fpc-macos.outputs.cache-hit }}" != "true" ]]; then
+              FPC_VERSION="3.2.2"
+              curl -L -o fpc-source.tar.gz "https://sourceforge.net/projects/freepascal/files/Source/${FPC_VERSION}/fpc-${FPC_VERSION}.source.tar.gz/download"
+              mkdir -p "$HOME/fpcsrc"
+              tar -xzf fpc-source.tar.gz -C "$HOME/fpcsrc"
+              rm fpc-source.tar.gz
+            fi
             FPC_VERSION="3.2.2"
-            curl -L -o fpc-source.tar.gz "https://sourceforge.net/projects/freepascal/files/Source/${FPC_VERSION}/fpc-${FPC_VERSION}.source.tar.gz/download"
-            mkdir -p "$HOME/fpcsrc"
-            tar -xzf fpc-source.tar.gz -C "$HOME/fpcsrc"
-            rm fpc-source.tar.gz
-            # Check extracted directory structure (might be nested)
             echo "=== Extracted FPC source structure ==="
             ls -la "$HOME/fpcsrc"
-            # Find the actual FPC source root (contains rtl, packages, etc.)
             if [[ -d "$HOME/fpcsrc/fpc-${FPC_VERSION}/rtl" ]]; then
               FPCDIR="$HOME/fpcsrc/fpc-${FPC_VERSION}"
             elif [[ -d "$HOME/fpcsrc/fpc-${FPC_VERSION}/fpc-${FPC_VERSION}/rtl" ]]; then
@@ -496,16 +807,18 @@ jobs:
             ls -la "$FPCDIR" || echo "FPCDIR not found"
           elif [[ "${{ runner.os }}" == "Windows" ]]; then
             FPC_VERSION="3.2.2"
-            # Download freepascal-ootb (includes FPC compiler)
-            curl -L -o fpc-ootb.zip https://github.com/fredvs/freepascal-ootb/releases/download/${FPC_VERSION}/fpc-ootb-322-x86_64-win64.zip
-            mkdir -p "$HOME/fpc"
-            unzip -q fpc-ootb.zip -d "$HOME/fpc"
-            rm fpc-ootb.zip
-            # Download FPC source from SourceForge (fpc-ootb only has compiled units, not source)
-            curl -L -o fpc-source.zip "https://sourceforge.net/projects/freepascal/files/Source/${FPC_VERSION}/fpc-${FPC_VERSION}.source.zip/download"
-            mkdir -p "$HOME/fpcsrc"
-            unzip -q fpc-source.zip -d "$HOME/fpcsrc"
-            rm fpc-source.zip
+            if [[ "${{ steps.cache-fpc-windows.outputs.cache-hit }}" != "true" ]]; then
+              # Download freepascal-ootb (includes FPC compiler)
+              curl -L -o fpc-ootb.zip https://github.com/fredvs/freepascal-ootb/releases/download/${FPC_VERSION}/fpc-ootb-322-x86_64-win64.zip
+              mkdir -p "$HOME/fpc"
+              unzip -q fpc-ootb.zip -d "$HOME/fpc"
+              rm fpc-ootb.zip
+              # Download FPC source from SourceForge (fpc-ootb only has compiled units, not source)
+              curl -L -o fpc-source.zip "https://sourceforge.net/projects/freepascal/files/Source/${FPC_VERSION}/fpc-${FPC_VERSION}.source.zip/download"
+              mkdir -p "$HOME/fpcsrc"
+              unzip -q fpc-source.zip -d "$HOME/fpcsrc"
+              rm fpc-source.zip
+            fi
             # Find fpc executable (fpc-ootb uses fpc-ootb.exe as the compiler)
             echo "=== FPC directory structure ==="
             find "$HOME/fpc" -name "*.exe" -type f 2>/dev/null | head -10
@@ -520,6 +833,9 @@ jobs:
             echo "$FPC_BIN_DIR" >> $GITHUB_PATH
           fi
       - name: Verify FPC installation
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'pascal')
         shell: bash
         run: |
           echo "=== Environment variables ==="
@@ -561,10 +877,17 @@ jobs:
             exit 1
           fi
       - name: Build Lean 4 test project
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'lean4')
         uses: leanprover/lean-action@v1
         with:
           lake-package-directory: test/resources/repos/lean4/test_repo
       - name: Install npm deps for Angular test repo
+        if: |
+          needs.detect-changes.outputs.core-changed == 'true' ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'angular') ||
+          contains(fromJSON(needs.detect-changes.outputs.language-ids || '[]'), 'typescript')
         shell: bash
         run: |
           if [ -d test/resources/repos/angular/test_repo ]; then
@@ -586,7 +909,14 @@ jobs:
           df -h
       - name: Test with pytest
         shell: bash
-        run: uv run poe test -q --tb=short
-      - name: Type-checking with mypy
-        shell: bash
-        run: uv run poe type-check
+        run: |
+          CORE_CHANGED="${{ needs.detect-changes.outputs.core-changed }}"
+          TEST_PATHS="${{ needs.detect-changes.outputs.test-paths }}"
+
+          if [[ "$CORE_CHANGED" == "true" ]] || [[ -z "$TEST_PATHS" ]]; then
+            # core changed or no specific paths: run full suite
+            uv run pytest test -q --tb=short
+          else
+            # targeted run: only changed language test directories
+            uv run pytest $TEST_PATHS -q --tb=short
+          fi
