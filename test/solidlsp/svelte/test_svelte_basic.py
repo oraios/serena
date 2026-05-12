@@ -3,10 +3,10 @@ from pathlib import Path
 
 import pytest
 
+from serena.util.text_utils import find_text_coordinates
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
-from serena.util.text_utils import find_text_coordinates
 from test.solidlsp.conftest import read_repo_file
 from test.solidlsp.svelte import conftest as svelte_test_conftest
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
