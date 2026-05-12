@@ -71,6 +71,10 @@ Some languages require additional installations or setup steps, as noted.
   (requires [.NET v8.0+](https://dotnet.microsoft.com/en-us/download/dotnet); uses FsAutoComplete/Ionide, which is auto-installed; for Homebrew .NET on macOS, set DOTNET_ROOT in your environment)
 * **Fortran**   
   (requires installation of fortls: `pip install fortls`)
+* **GDScript** (Godot Engine)  
+  (requires the Godot editor to be running with its built-in LSP enabled — default on port 6008;
+  Serena connects over TCP and does not launch Godot itself;
+  see the [GDScript Setup Guide](../03-special-guides/godot_gdscript_setup_guide_for_serena) for details)
 * **Go**  
   (requires installation of `gopls`)
 * **Groovy**  
