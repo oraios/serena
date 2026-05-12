@@ -129,7 +129,7 @@ Some languages require additional installations or setup steps, as noted.
   (experimental; requires Node.js and npm; automatically installs `@nomicfoundation/solidity-language-server`;
   works best with a `foundry.toml` or `hardhat.config.js` in the project root)
 * **Svelte**
-  (requires Node.js v18+ and npm; supports `.svelte` Single File Components plus TypeScript/JavaScript files via `svelte-language-server`; use language `svelte` for Svelte projects instead of also enabling `typescript`)
+  (requires Node.js v18+ and npm; supports `.svelte` Single File Components plus TypeScript/JavaScript files via `svelte-language-server`; a companion `typescript-language-server` + `typescript-svelte-plugin` is spawned automatically for cross-file rename, go-to-definition, and references across `.ts`/`.js` and `.svelte` files; use language `svelte` for Svelte projects instead of also enabling `typescript`)
 * **Swift**
 * **TypeScript**
 * **Vue**    

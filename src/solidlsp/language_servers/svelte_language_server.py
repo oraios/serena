@@ -156,14 +156,26 @@ class SvelteLanguageServer(SolidLanguageServer):
     """
 
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
+        def __init__(
+            self,
+            custom_settings: SolidLSPSettings.CustomLSSettings,
+            ls_resources_dir: str,
+            ts_settings: SolidLSPSettings.CustomLSSettings,
+        ) -> None:
+            super().__init__(custom_settings, ls_resources_dir)
+            self._ts_settings = ts_settings
+
         def _get_or_install_core_dependency(self) -> str:
             assert shutil.which("node") is not None, "node is not installed or isn't in PATH. Please install NodeJS and try again."
             assert shutil.which("npm") is not None, "npm is not installed or isn't in PATH. Please install npm and try again."
 
             package_version = self._custom_settings.get("svelte_language_server_version", "0.18.0")
-            npm_registry = self._custom_settings.get("npm_registry")
-            typescript_version = self._custom_settings.get("typescript_version", "6.0.3")
-            typescript_language_server_version = self._custom_settings.get("typescript_language_server_version", "5.1.3")
+            npm_registry = self._custom_settings.get("npm_registry", self._ts_settings.get("npm_registry"))
+            typescript_version = self._custom_settings.get("typescript_version", self._ts_settings.get("typescript_version", "6.0.3"))
+            typescript_language_server_version = self._custom_settings.get(
+                "typescript_language_server_version",
+                self._ts_settings.get("typescript_language_server_version", "5.1.3"),
+            )
             typescript_svelte_plugin_version = self._custom_settings.get("typescript_svelte_plugin_version", "0.3.52")
 
             # versioned install dir avoids silently reusing stale language-server binaries
@@ -238,7 +250,8 @@ class SvelteLanguageServer(SolidLanguageServer):
 
     @override
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
-        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
+        ts_settings = self._solidlsp_settings.get_ls_specific_settings(Language.TYPESCRIPT)
+        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir, ts_settings)
 
     def __init__(self, config: LanguageServerConfig, repo_path: str, solidlsp_settings: SolidLSPSettings):
         resolved_root = os.path.abspath(repo_path)
@@ -509,7 +522,7 @@ class SvelteLanguageServer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params
+        return cast(InitializeParams, initialize_params)
 
     def _start_server(self) -> None:
         def window_log_message(msg: dict) -> None:
