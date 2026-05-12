@@ -1,3 +1,4 @@
+# ci: trigger full run
 [build-system]
 build-backend = "hatchling.build"
 requires = ["hatchling"]
