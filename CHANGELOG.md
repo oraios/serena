@@ -4,6 +4,12 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Language Servers:
   - Add **CUE** support via the LSP mode of the official [`cue` CLI](https://github.com/cue-lang/cue) (`cue lsp`). Auto-downloads and SHA-256-verifies the `cue` release binary for linux-x64/arm64, darwin-x64/arm64, and win-x64/arm64. Handles `.cue` files; works best rooted at a directory containing a `cue.mod/` module. Users can override the binary by setting `ls_specific_settings.cue.ls_path` to a pre-installed `cue` executable (e.g. from Homebrew or `go install`). Default pinned version: `v0.16.1`; override via `ls_specific_settings.cue.cue_version`.
+  - No longer store temporary files (e.g. downloads) in `~/solidlsp_tmp`; instead, use OS-specific temporary directories
+
+* Dashboard:
+  - UI polish: switch UI font to Inter (with system fallbacks) and use JetBrains Mono only for code/logs/paths/identifiers; refine the light/dark palette with softer borders, clearer text hierarchy, and a more nuanced shadow/elevation system; introduce a consistent spacing scale; keep the orange accent.
+  - Modal markup cleanup: extract shared CSS classes (`.modal-info`, `.modal-hint`, `.modal-prompt`, `.modal-field`, `.modal-input`, `.modal-select`, `.modal-textarea`, `.modal-actions`, `.btn-secondary`) and remove duplicated inline styles from all seven modals. Inputs and textareas get an accent-colored focus ring; the modal backdrop has a subtle blur.
+  - Add Language: replace the native `<select>` with a filterable combobox — type to filter, keyboard navigation (Up/Down/Enter/Esc), substring highlight, click-outside to close. The typed value is validated against the available languages list before submission.
 
 # v1.3.0 (2026-05-11)
 
