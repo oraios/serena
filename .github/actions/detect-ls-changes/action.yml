@@ -1,0 +1,56 @@
+name: Detect changed language servers
+description: >
+  Identifies which language server source files changed, extracts their language IDs,
+  and maps them to test paths. Also detects if core solidlsp/serena files changed,
+  which requires a full test run regardless of per-language filtering.
+
+outputs:
+  language-ids:
+    description: JSON array of changed language IDs, e.g. ["elixir","bash"]
+    value: ${{ steps.extract.outputs.language_ids }}
+  test-paths:
+    description: Space-separated test/solidlsp/* paths for changed languages
+    value: ${{ steps.extract.outputs.test_paths }}
+  any-ls-changed:
+    description: true if any language server source file changed
+    value: ${{ steps.extract.outputs.any_changed }}
+  core-changed:
+    description: >
+      true if core solidlsp/serena files changed — callers should run all tests
+      and install all toolchains when this is true
+    value: ${{ steps.core.outputs.any_changed }}
+
+runs:
+  using: composite
+  steps:
+    - name: Detect core file changes
+      id: core
+      uses: tj-actions/changed-files@v46
+      with:
+        files: |
+          src/solidlsp/*.py
+          src/serena/**
+          test/conftest.py
+          test/solidlsp/conftest.py
+          pyproject.toml
+          uv.lock
+
+    - name: Detect language server file changes
+      id: ls-files
+      uses: tj-actions/changed-files@v46
+      with:
+        files: src/solidlsp/language_servers/**/*.py
+
+    - name: Extract language IDs and test paths
+      id: extract
+      shell: bash
+      run: |
+        if [[ "${{ steps.ls-files.outputs.any_changed }}" != "true" ]]; then
+          echo "language_ids=[]" >> $GITHUB_OUTPUT
+          echo "test_paths=" >> $GITHUB_OUTPUT
+          echo "any_changed=false" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        python3 "${{ github.action_path }}/extract_ls_language_ids.py" \
+          --format github \
+          ${{ steps.ls-files.outputs.all_changed_files }}
