@@ -8,28 +8,29 @@ from __future__ import annotations
 import logging
 import os
 import pathlib
-import re
 import shutil
-import threading
 from typing import Any, cast
 
 from overrides import override
 
 from solidlsp import ls_types
-from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
-from solidlsp.language_servers.typescript_language_server import prefer_non_node_modules_definition
-from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
+from solidlsp.language_servers.common import (
+    RuntimeDependency,
+    RuntimeDependencyCollection,
+    build_npm_install_command,
+)
+from solidlsp.ls import (
+    LanguageServerDependencyProvider,
+    LanguageServerDependencyProviderSinglePath,
+    SolidLanguageServer,
+)
 from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_utils import PathUtils
-from solidlsp.lsp_protocol_handler import lsp_types
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams, RenameFilesParams
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
-
-DEFAULT_SVELTE_LANGUAGE_SERVER_VERSION = "0.18.0"
-LS_BIN_NAME = "svelteserver"
-IDENTIFIER_PATTERN = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]*")
 
 
 class SvelteLanguageServer(SolidLanguageServer):
@@ -40,89 +41,263 @@ class SvelteLanguageServer(SolidLanguageServer):
         * ``svelte_language_server_version``: version of ``svelte-language-server``
           to install (default: ``0.18.0``).
         * ``npm_registry``: optional alternative npm-compatible registry URL.
+        * ``initialization_options_configuration``: optional dict merged into
+          ``initializeParams.initializationOptions.configuration`` (same top-level keys as in
+          Svelte Language Tools: ``svelte``, ``prettier``, ``typescript``, …).
     """
 
-    @classmethod
-    def supports_implementation_request(cls) -> bool:
-        return True
+    _TS_EXT = frozenset({".ts", ".tsx", ".mts", ".cts"})
+    _JS_EXT = frozenset({".js", ".jsx", ".mjs", ".cjs"})
+    _SVELTE_EXT = frozenset({".svelte"})
 
-    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        super().__init__(
-            config,
-            repository_root_path,
-            None,
-            "svelte",
-            solidlsp_settings,
+    @staticmethod
+    def _is_ts_file(uri: str) -> bool:
+        return uri.lower().endswith(tuple(SvelteLanguageServer._TS_EXT | SvelteLanguageServer._JS_EXT))
+
+    @staticmethod
+    def _is_svelte_file(uri: str) -> bool:
+        return uri.lower().endswith(tuple(SvelteLanguageServer._SVELTE_EXT))
+
+    @staticmethod
+    def _edit_new_text_is_svelte_path(edit: Any) -> bool:
+        """True if this LSP ``TextEdit``'s replacement text ends with ``.svelte`` (import path update)."""
+        if not isinstance(edit, dict):
+            return False
+        new_text = edit.get("newText")
+        return isinstance(new_text, str) and new_text.endswith(".svelte")
+
+    @staticmethod
+    def _filter_file_rename_workspace_edit(
+        workspace_edit: ls_types.WorkspaceEdit,
+        typescript_plugin_enabled: bool,
+    ) -> ls_types.WorkspaceEdit:
+        """Drop TS/JS-only import updates when the Svelte TS plugin handles them; keep ``.svelte`` path edits."""
+        raw_changes = workspace_edit.get("documentChanges")
+        if not isinstance(raw_changes, list) or not raw_changes:
+            return workspace_edit
+
+        filtered: list[dict[str, Any]] = []
+        for change in raw_changes:
+            if not isinstance(change, dict):
+                continue
+
+            text_document = change.get("textDocument")
+            edits_in = change.get("edits")
+            if not isinstance(text_document, dict) or not isinstance(edits_in, list):
+                continue
+
+            doc_uri = text_document.get("uri")
+            if not isinstance(doc_uri, str):
+                continue
+
+            is_ts_js = SvelteLanguageServer._is_ts_file(doc_uri)
+            if is_ts_js and not any(SvelteLanguageServer._edit_new_text_is_svelte_path(e) for e in edits_in):
+                continue
+
+            ts_without_plugin_filters_edits = is_ts_js and not typescript_plugin_enabled
+            kept_edits = [
+                edit
+                for edit in edits_in
+                if isinstance(edit, dict)
+                and (not ts_without_plugin_filters_edits or SvelteLanguageServer._edit_new_text_is_svelte_path(edit))
+            ]
+
+            if kept_edits:
+                ch = dict(change)
+                ch["edits"] = kept_edits
+                filtered.append(ch)
+
+        out = dict(workspace_edit)
+        out["documentChanges"] = filtered
+        return cast(ls_types.WorkspaceEdit, out)
+
+    @staticmethod
+    def _patch_rename_provider_export_let_regex_line(text: str) -> str:
+        if "_solidlspEscapedVar" in text:
+            return text
+        prefix = r"        const regex = new RegExp(`export\\s+let\\s+${this.getVariableAtPosition(tsDoc, lang, position)"
+        new_lines: list[str] = []
+        patched = False
+        for line in text.splitlines(keepends=True):
+            if line.startswith(prefix):
+                new_lines.append(
+                    "        const _solidlspEscapedVar = this.getVariableAtPosition(tsDoc, lang, position)"
+                    ".replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\n"
+                )
+                new_lines.append(
+                    r"        const regex = new RegExp(`export\\s+let\\s+${_solidlspEscapedVar}($|\\s|;|:|\\/\\*|\\/\\/)`);" + "\n"
+                )
+                patched = True
+            else:
+                new_lines.append(line)
+        if not patched:
+            log.warning("RenameProvider.js: export-let regex line not found; skipping that patch")
+        return "".join(new_lines)
+
+    @staticmethod
+    def _patch_rename_provider_match_generated_export_let(text: str) -> str:
+        if "_solidlspLetFrag" in text:
+            return text
+        start_sig = "    matchGeneratedExportLet(snapshot, updatePropLocation) {"
+        end_sig = "    findLocationWhichWantsToUpdatePropName"
+        try:
+            start = text.index(start_sig)
+            end = text.index(end_sig, start)
+        except ValueError:
+            log.warning("RenameProvider.js: matchGeneratedExportLet block not found; skipping that patch")
+            return text
+        new_block = (
+            "    matchGeneratedExportLet(snapshot, updatePropLocation) {\n"
+            "        const _solidlspLetFrag = snapshot\n"
+            "            .getFullText()\n"
+            "            .substring(updatePropLocation.textSpan.start, updatePropLocation.textSpan.start + updatePropLocation.textSpan.length)\n"
+            "            .replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\n"
+            "        const regex = new RegExp(\n"
+            "        // no 'export let', only 'let', because that's what it's translated to in svelte2tsx\n"
+            "        // '//' and '/*' for comments (`let bla/*Ωignore_startΩ*/`)\n"
+            r"        `\\s+let\\s+(${_solidlspLetFrag})($|\\s|;|:|\\/\\*|\\/\\/)`);"
+            "\n"
+            "        const match = snapshot.getFullText().match(regex);\n"
+            "        return match;\n"
+            "    }\n"
         )
-        self.server_ready = threading.Event()
-        self._published_diagnostics_timeout = 5.0
+        return text[:start] + new_block + text[end:]
 
-    @override
-    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
-        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
+    @staticmethod
+    def _patch_svelte_rename_provider_interpolated_regex(install_dir: str) -> None:
+        """Patch RenameProvider.js bundled with ``svelte-language-server`` 0.18.0.
 
-    @override
-    def _get_language_id_for_file(self, relative_file_path: str) -> str:
-        ext = os.path.splitext(relative_file_path)[1].lower()
-        if ext == ".svelte":
-            return "svelte"
-        return "typescript"
-
-    @override
-    def is_ignored_dirname(self, dirname: str) -> bool:
-        return super().is_ignored_dirname(dirname) or dirname in [
+        Unescaped text interpolated into ``RegExp`` breaks ``textDocument/rename`` for some TS symbols.
+        SolidLSP applies local fixes until npm ships an upstream release with proper escaping.
+        """
+        rename_js = os.path.join(
+            install_dir,
             "node_modules",
+            "svelte-language-server",
             "dist",
-            "build",
-            "coverage",
-            ".svelte-kit",
-            ".vercel",
-        ]
+            "src",
+            "plugins",
+            "typescript",
+            "features",
+            "RenameProvider.js",
+        )
+        if not os.path.isfile(rename_js):
+            return
+        path = pathlib.Path(rename_js)
+        original = path.read_text(encoding="utf-8")
+        patched = SvelteLanguageServer._patch_rename_provider_match_generated_export_let(
+            SvelteLanguageServer._patch_rename_provider_export_let_regex_line(original)
+        )
+        if patched != original:
+            path.write_text(patched, encoding="utf-8")
+            log.info("Applied SolidLSP RenameProvider.js patches under %s", install_dir)
 
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
         def _get_or_install_core_dependency(self) -> str:
             assert shutil.which("node") is not None, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-            assert shutil.which("npm") is not None, (
-                "npm is not installed or isn't in PATH. Please install npm and try again."
-            )
+            assert shutil.which("npm") is not None, "npm is not installed or isn't in PATH. Please install npm and try again."
 
-            package_version = self._custom_settings.get("svelte_language_server_version", DEFAULT_SVELTE_LANGUAGE_SERVER_VERSION)
+            package_version = self._custom_settings.get("svelte_language_server_version", "0.18.0")
             npm_registry = self._custom_settings.get("npm_registry")
+            typescript_version = self._custom_settings.get("typescript_version", "6.0.3")
 
             # versioned install dir avoids silently reusing stale language-server binaries
             install_dir = os.path.join(self._ls_resources_dir, f"svelte-lsp-{package_version}")
-            executable_path = os.path.join(install_dir, "node_modules", ".bin", LS_BIN_NAME)
+            executable_path = os.path.join(install_dir, "node_modules", ".bin", "svelteserver")
             if os.name == "nt":
                 executable_path += ".cmd"
 
             if not os.path.exists(executable_path):
                 expected_version = f"svelte-language-server@{package_version}"
-                log.info("Installing %s with npm...", expected_version)
-                deps = RuntimeDependencyCollection(
-                    [
-                        RuntimeDependency(
-                            id="svelte-language-server",
-                            description="Svelte language server",
-                            command=build_npm_install_command("svelte-language-server", package_version, npm_registry),
-                            platform_id="any",
-                        ),
-                    ]
-                )
+                log.info("Installing %s (and typescript) with npm...", expected_version)
+                runtime_deps = [
+                    RuntimeDependency(
+                        id="svelte-language-server",
+                        description="Svelte language server",
+                        command=build_npm_install_command("svelte-language-server", package_version, npm_registry),
+                        platform_id="any",
+                    ),
+                    RuntimeDependency(
+                        id="typescript",
+                        description="TypeScript language service",
+                        command=build_npm_install_command("typescript", typescript_version, npm_registry),
+                        platform_id="any",
+                    ),
+                ]
+                deps = RuntimeDependencyCollection(runtime_deps)
                 deps.install(install_dir)
 
             if not os.path.exists(executable_path):
                 raise FileNotFoundError(
-                    f"{LS_BIN_NAME} executable not found at {executable_path}; "
-                    f"npm install of svelte-language-server@{package_version} did not produce the expected binary."
+                    f"executable not found at {executable_path}; "
+                    f"npm install of svelte-language-server@{package_version} (and typescript) did not produce the expected binary."
                 )
+            SvelteLanguageServer._patch_svelte_rename_provider_interpolated_regex(install_dir)
             return executable_path
 
         def _create_launch_command(self, core_path: str) -> list[str]:
+            # stdio suits SolidLSP's subprocess RPC; other hosts may use a different transport.
             return [core_path, "--stdio"]
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+    @override
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
+
+    def __init__(self, config: LanguageServerConfig, repo_path: str, solidlsp_settings: SolidLSPSettings):
+        resolved_root = os.path.abspath(repo_path)
+        super().__init__(
+            config,
+            resolved_root,
+            None,
+            "svelte",
+            solidlsp_settings,
+        )
+        self.repo_path: str = resolved_root
+        # Define the tsdk property for TypeScript SDK path for Svelte LS
+        self.tsdk_path = self._get_tsdk_path()
+
+    def _get_tsdk_path(self) -> str:
+        """
+        Compute the local typescript/lib path for the Svelte language server.
+        Asserts if not found, since DependencyProvider guarantees install.
+        """
+        package_version = self._custom_settings.get("svelte_language_server_version", "0.18.0")
+        install_dir = os.path.join(self._ls_resources_dir, f"svelte-lsp-{package_version}")
+        tsdk_candidate = os.path.join(install_dir, "node_modules", "typescript", "lib")
+        assert os.path.isdir(tsdk_candidate), (
+            f"TypeScript SDK not found at expected path: {tsdk_candidate}. Installation via DependencyProvider failed or version mismatch."
+        )
+        return tsdk_candidate
+
+    def _wrap_notify_send_for_ts_js_mirror(self) -> None:
+        """Mirror TS/JS didChange via ``$/onDidChangeTsOrJsFile`` so the server updates TS snapshots."""
+        _orig_notify_send = self.server.notify.send_notification
+
+        def send_notification_wrapped(method: str, params: dict | None = None) -> None:
+            _orig_notify_send(method, params)
+            if method != "textDocument/didChange" or not params:
+                return
+            text_document = params.get("textDocument")
+            if not text_document:
+                return
+            uri = text_document.get("uri")
+            if not uri:
+                return
+            fb = self.open_file_buffers.get(uri)
+            if fb is None or fb.language_id not in ("typescript", "javascript"):
+                return
+            changes = params.get("contentChanges")
+            if changes is None:
+                return
+            _orig_notify_send("$/onDidChangeTsOrJsFile", {"uri": uri, "changes": changes})
+
+        self.server.notify.send_notification = send_notification_wrapped  # type: ignore[method-assign]
+
+    def _get_initialize_params(self) -> InitializeParams:
+        """
+        Returns the initialize params for the Svelte Language Server.
+        """
+        root_uri = pathlib.Path(self.repo_path).as_uri()
         initialize_params: dict = {
             "locale": "en",
             "capabilities": {
@@ -138,21 +313,7 @@ class SvelteLanguageServer(SolidLanguageServer):
                     },
                     "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
                     "signatureHelp": {"dynamicRegistration": True},
-                    "codeAction": {
-                        "dynamicRegistration": True,
-                        "codeActionLiteralSupport": {
-                            "codeActionKind": {
-                                "valueSet": [
-                                    "quickfix",
-                                    "refactor",
-                                    "source.organizeImports",
-                                    "source.addMissingImports.ts",
-                                    "source.removeUnused.ts",
-                                    "source.sortImports.ts",
-                                ]
-                            }
-                        },
-                    },
+                    "codeAction": {"dynamicRegistration": True},
                     "rename": {"dynamicRegistration": True, "prepareSupport": True},
                     "implementation": {"dynamicRegistration": True},
                     "typeDefinition": {"dynamicRegistration": True},
@@ -161,279 +322,228 @@ class SvelteLanguageServer(SolidLanguageServer):
                 },
                 "workspace": {
                     "applyEdit": True,
+                    "configuration": True,
                     "workspaceFolders": True,
                     "didChangeConfiguration": {"dynamicRegistration": True},
                     "didChangeWatchedFiles": {"dynamicRegistration": True, "relativePatternSupport": True},
                     "symbol": {"dynamicRegistration": True},
-                    "configuration": True,
                     "diagnostics": {"refreshSupport": True},
+                    "fileOperations": {"didRename": True},
                 },
             },
             "initializationOptions": {
                 "isTrusted": True,
+                "dontFilterIncompleteCompletions": True,
                 "configuration": {
-                    "svelte": {
-                        "plugin": {
-                            "svelte": {"documentHighlight": {"enable": True}},
-                            "typescript": {"enable": True},
-                            "html": {"enable": True},
-                            "css": {"enable": True},
-                        }
-                    }
+                    "svelte": {},
+                    "javascript": {"tsdk": self.tsdk_path},
+                    "typescript": {"tsdk": self.tsdk_path},
                 },
             },
             "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
+            "rootPath": self.repo_path,
             "rootUri": root_uri,
             "workspaceFolders": [
                 {
                     "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
+                    "name": os.path.basename(self.repo_path),
                 }
             ],
         }
-        return initialize_params  # type: ignore[return-value]
-
+        return initialize_params
+ 
     def _start_server(self) -> None:
-        def do_nothing(_params: dict) -> None:
-            return
-
         def window_log_message(msg: dict) -> None:
             log.info("LSP: window/logMessage: %s", msg)
 
-        self.server.on_notification("window/logMessage", window_log_message)
-        self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
-        self.server.on_notification("$/progress", do_nothing)
-        self.server.on_request("client/registerCapability", lambda _params: None)
-        self.server.on_request("workspace/applyEdit", lambda _params: {"applied": True})
+        def register_capability_handler(params: dict) -> None:
+            assert "registrations" in params
 
-        log.info("Starting svelte-language-server")
+        def configuration_handler(params: dict) -> list:
+            items = params.get("items", [])
+            return [{} for _ in items]
+
+        def workspace_apply_edit_handler(_params: dict) -> dict[str, Any]:
+            return {"applied": False}
+
+        def work_done_progress_create(_params: dict) -> dict:
+            return {}
+
+        def do_nothing(_params: dict) -> None:
+            pass
+
+        self.server.on_notification("$/progress", do_nothing)
+        self.server.on_notification("window/logMessage", window_log_message)
+        self.server.on_request("client/registerCapability", register_capability_handler)
+        self.server.on_request("window/workDoneProgress/create", work_done_progress_create)
+        self.server.on_request("workspace/applyEdit", workspace_apply_edit_handler)
+        self.server.on_request("workspace/configuration", configuration_handler)
+        self.server.on_request("workspace/diagnostic/refresh", do_nothing)
+        self.server.on_request("workspace/inlayHints/refresh", do_nothing)
+        self.server.on_request("workspace/semanticTokens/refresh", do_nothing)
+        self._wrap_notify_send_for_ts_js_mirror()
         self.server.start()
-        init_params = self._get_initialize_params(self.repository_root_path)
+
+        init_params = self._get_initialize_params()
         init_response = self.server.send.initialize(init_params)
-        log.debug("Svelte LS initialize response: %s", init_response)
+
         assert "documentSymbolProvider" in init_response["capabilities"], "Svelte LSP did not advertise documentSymbolProvider"
         assert "definitionProvider" in init_response["capabilities"], "Svelte LSP did not advertise definitionProvider"
+
         self.server.notify.initialized({})
-        self.server_ready.set()
 
-    def _request_uri_locations(self, method: str, uri: str) -> list[ls_types.Location]:
-        try:
-            response = self.server.send_request(method, cast(Any, uri))
-        except Exception as e:
-            log.debug("Svelte custom reference request %s failed for %s: %s", method, uri, e)
-            return []
-
-        if not isinstance(response, list):
-            return []
-
-        result: list[ls_types.Location] = []
-        for item in response:
-            if not isinstance(item, dict) or "uri" not in item:
-                continue
-
-            abs_path = PathUtils.uri_to_path(item["uri"])
-            if not pathlib.Path(abs_path).is_relative_to(self.repository_root_path):
-                continue
-
-            rel_path = pathlib.Path(abs_path).relative_to(self.repository_root_path)
-            if self.is_ignored_path(str(rel_path)):
-                continue
-
-            new_item: dict = {}
-            new_item.update(item)
-            new_item["absolutePath"] = str(abs_path)
-            new_item["relativePath"] = str(rel_path)
-            result.append(cast(ls_types.Location, new_item))
-
-        return result
-
-    @override
-    def _send_references_request(self, relative_file_path: str, line: int, column: int) -> list[lsp_types.Location] | None:
-        return self.server.send.references(
-            {
-                "textDocument": {"uri": self._resolve_file_uri(relative_file_path)},
-                "position": {"line": line, "character": column},
-                "context": {"includeDeclaration": True},
-            }
-        )
-
-    def _request_svelte_component_references(self, relative_file_path: str) -> list[ls_types.Location]:
-        """Fetch component-level references via Svelte-specific LSP extensions.
-
-        svelte-language-server tracks component usages through ``$/getFileReferences``
-        and ``$/getComponentReferences`` rather than the standard
-        ``textDocument/references`` protocol, so a plain references request returns
-        nothing for ``.svelte`` files used as components.
-        """
-        uri = PathUtils.path_to_uri(os.path.join(self.repository_root_path, relative_file_path))
-        refs: list[ls_types.Location] = []
-        refs.extend(self._request_uri_locations("$/getFileReferences", uri))
-        refs.extend(self._request_uri_locations("$/getComponentReferences", uri))
-        return refs
+    @staticmethod
+    def _merge_reference_locations(a: list[ls_types.Location], b: list[ls_types.Location]) -> list[ls_types.Location]:
+        seen = {(loc["uri"], loc["range"]["start"]["line"], loc["range"]["start"]["character"]) for loc in a}
+        out = list(a)
+        for loc in b:
+            key = (loc["uri"], loc["range"]["start"]["line"], loc["range"]["start"]["character"])
+            if key not in seen:
+                seen.add(key)
+                out.append(loc)
+        return out
 
     @override
     def request_references(self, relative_file_path: str, line: int, column: int) -> list[ls_types.Location]:
-        """Return all references to the symbol at ``(line, column)``.
-
-        Overrides the base to handle two Svelte quirks:
-
-        1. **Component references** — for ``.svelte`` files the server exposes
-           component usages through non-standard extensions; these are queried as a
-           fallback when the standard request returns nothing.
-        2. **Definition inclusion** — ``request_definition`` is appended to ensure
-           the declaration is always present; deduplication by
-           ``(uri, start_line, start_char)`` removes any resulting duplicates.
+        """
+        Combine standard ``textDocument/references`` with Svelte LS ``$/getFileReferences``
+        / ``$/getComponentReferences`` (see ``docs/svelte-language-tools-cross-file.md``)
+        so TS/JS and Svelte modules get full cross-file reference coverage.
         """
         symbol_refs = super().request_references(relative_file_path, line, column)
-        refs = list(symbol_refs)
+        normalize_helper = self.ReferencesLocationRequest(self, relative_file_path, line, column)
 
-        if not symbol_refs and relative_file_path.endswith(".svelte"):
-            refs.extend(self._request_svelte_component_references(relative_file_path))
+        if self._is_ts_file(relative_file_path):
+            raw = self.server.send_request("$/getFileReferences", cast(Any, self._resolve_file_uri(relative_file_path)))
+            file_refs = normalize_helper.normalize_response(raw if isinstance(raw, list) else [])
+            symbol_refs = self._merge_reference_locations(symbol_refs, file_refs)
+        elif self._is_svelte_file(relative_file_path):
+            raw = self.server.send_request("$/getComponentReferences", cast(Any, self._resolve_file_uri(relative_file_path)))
+            comp_refs = normalize_helper.normalize_response(raw if isinstance(raw, list) else [])
+            symbol_refs = self._merge_reference_locations(symbol_refs, comp_refs)
 
-        refs.extend(self.request_definition(relative_file_path, line, column))
+        return symbol_refs
 
-        dedup: dict[tuple, ls_types.Location] = {}
-        for ref in refs:
-            key = (ref["uri"], ref["range"]["start"]["line"], ref["range"]["start"]["character"])
-            dedup.setdefault(key, ref)
-        return list(dedup.values())
+    def notify_did_rename_files(self, old_relative: str, new_relative: str) -> None:
+        """Send ``workspace/didRenameFiles`` after an on-disk rename (before import-fix edits)."""
+        if not self.server_started:
+            log.error("notify_did_rename_files called before Language Server started")
+            raise SolidLSPException("Language Server not started")
+        params: RenameFilesParams = {
+            "files": [
+                {"oldUri": self._resolve_file_uri(old_relative), "newUri": self._resolve_file_uri(new_relative)},
+            ]
+        }
+        self.server.notify.did_rename_files(params)
 
-    @override
-    def _get_published_diagnostics_wait_timeout(self, pull_diagnostics_failed: bool) -> float:
-        return self._published_diagnostics_timeout
+    def _relative_path_from_document_uri(self, uri: str) -> str:
+        return os.path.relpath(PathUtils.uri_to_path(uri), self.repo_path)
 
-    @override
-    def _get_preferred_definition(self, definitions: list[ls_types.Location]) -> ls_types.Location:
-        return prefer_non_node_modules_definition(definitions)
+    def _apply_workspace_edit_text_changes(self, workspace_edit: ls_types.WorkspaceEdit) -> int:
+        """Apply ``changes`` / ``TextDocumentEdit`` entries using :meth:`apply_text_edits_to_file`."""
+        count = 0
+        if "changes" in workspace_edit:
+            for uri, edits in workspace_edit["changes"].items():
+                rel = self._relative_path_from_document_uri(uri)
+                self.apply_text_edits_to_file(rel, edits)
+                count += 1
+        for change in workspace_edit.get("documentChanges") or []:
+            if "textDocument" in change and "edits" in change:
+                uri = change["textDocument"]["uri"]
+                rel = self._relative_path_from_document_uri(uri)
+                self.apply_text_edits_to_file(rel, change["edits"])
+                count += 1
+            elif "kind" in change:
+                raise ValueError(f"Unsupported workspace documentChange kind in import rename edit: {change}")
+        return count
 
-    def _get_identifier_at_position(self, relative_file_path: str, line: int, column: int) -> str | None:
-        absolute_path = pathlib.Path(self.repository_root_path) / relative_file_path
-        lines = absolute_path.read_text(encoding="utf-8").splitlines()
-        if line < 0 or line >= len(lines):
+    def rename_file_and_fix_imports(
+        self,
+        old_relative: str,
+        new_relative: str,
+        *,
+        typescript_plugin_enabled: bool = True,
+    ) -> str:
+        """
+        Rename a project file on disk, notify the Svelte LS, then apply filtered ``$/getEditsForFileRename`` edits.
+
+        The old path must not be open in :attr:`open_file_buffers`.
+        """
+        root = pathlib.Path(self.repo_path).resolve()
+        old_path = (root / old_relative).resolve()
+        new_path = (root / new_relative).resolve()
+        try:
+            old_path.relative_to(root)
+            new_path.relative_to(root)
+        except ValueError as e:
+            raise ValueError(f"Rename paths must stay within the project root {root}") from e
+
+        if not old_path.is_file():
+            raise ValueError(f"Not an existing file: {old_relative}")
+        if new_path.exists():
+            raise ValueError(f"Target already exists: {new_relative}")
+
+        old_uri = self._resolve_file_uri(old_relative)
+        if old_uri in self.open_file_buffers:
+            raise ValueError(
+                f"Cannot rename '{old_relative}': file is open in the language server; "
+                "finish or close active edits first."
+            )
+
+        os.rename(old_path, new_path)
+        self.notify_did_rename_files(old_relative, new_relative)
+
+        workspace_edit = self.request_workspace_edit_for_file_rename(
+            old_relative,
+            new_relative,
+            typescript_plugin_enabled=typescript_plugin_enabled,
+        )
+        num_ops = self._apply_workspace_edit_text_changes(workspace_edit) if workspace_edit else 0
+
+        return (
+            f"Renamed '{old_relative}' → '{new_relative}' "
+            f"({num_ops} workspace edit operation(s) applied for import updates)"
+        )
+
+    def request_workspace_edit_for_file_rename(
+        self,
+        old_relative: str,
+        new_relative: str,
+        typescript_plugin_enabled: bool = True,
+    ) -> ls_types.WorkspaceEdit | None:
+        """Import-fix workspace edit after a rename/move.
+
+        Sends ``$/getEditsForFileRename`` with ``{ oldUri, newUri }``, then post-filters ``documentChanges``
+        so TS/JS-only import edits may be omitted when the Svelte TS plugin delegates those updates
+        to the TypeScript language service.
+
+        Call after the file exists at ``new_relative`` on disk (after ``workspace/didRenameFiles``).
+        """
+        old_uri = self._resolve_file_uri(old_relative)
+        if any(ext.lower() in old_uri for ext in self._TS_EXT | self._JS_EXT | self._SVELTE_EXT):
             return None
 
-        for match in IDENTIFIER_PATTERN.finditer(lines[line]):
-            if match.start() <= column < match.end():
-                return match.group(0)
-        return None
+        params = {"oldUri": self._resolve_file_uri(old_relative), "newUri": self._resolve_file_uri(new_relative)}
+        raw = self.server.send_request("$/getEditsForFileRename", params)
 
-    def _create_textual_rename_changes(self, original_name: str, new_name: str) -> dict[str, list[ls_types.TextEdit]]:
-        pattern = re.compile(rf"(?<![A-Za-z0-9_$]){re.escape(original_name)}(?![A-Za-z0-9_$])")
-        repo_path = pathlib.Path(self.repository_root_path)
-        changes: dict[str, list[ls_types.TextEdit]] = {}
+        if raw is None:
+            return None
 
-        for source_path in repo_path.rglob("*"):
-            if not source_path.is_file():
-                continue
-
-            relative_path = str(source_path.relative_to(repo_path))
-            if self.is_ignored_path(relative_path):
-                continue
-
-            try:
-                lines = source_path.read_text(encoding="utf-8").splitlines()
-            except UnicodeDecodeError:
-                continue
-
-            uri = PathUtils.path_to_uri(str(source_path))
-            for line_number, text in enumerate(lines):
-                for match in pattern.finditer(text):
-                    changes.setdefault(uri, []).append(
-                        {
-                            "range": {
-                                "start": {"line": line_number, "character": match.start()},
-                                "end": {"line": line_number, "character": match.end()},
-                            },
-                            "newText": new_name,
-                        }
-                    )
-
-        return changes
-
-    @staticmethod
-    def _workspace_edit_keys(workspace_edit: ls_types.WorkspaceEdit) -> set[tuple[str, int, int, int, int]]:
-        keys: set[tuple[str, int, int, int, int]] = set()
-
-        for uri, edits in (workspace_edit.get("changes") or {}).items():
-            for edit in edits:
-                edit_range = edit["range"]
-                keys.add(
-                    (
-                        uri,
-                        edit_range["start"]["line"],
-                        edit_range["start"]["character"],
-                        edit_range["end"]["line"],
-                        edit_range["end"]["character"],
-                    )
-                )
-
-        for change in workspace_edit.get("documentChanges") or []:
-            if "textDocument" not in change or "edits" not in change:
-                continue
-            uri = change["textDocument"]["uri"]
-            for edit in change["edits"]:
-                edit_range = edit["range"]
-                keys.add(
-                    (
-                        uri,
-                        edit_range["start"]["line"],
-                        edit_range["start"]["character"],
-                        edit_range["end"]["line"],
-                        edit_range["end"]["character"],
-                    )
-                )
-
-        return keys
-
-    def _merge_textual_rename_changes(
-        self,
-        workspace_edit: ls_types.WorkspaceEdit | None,
-        textual_changes: dict[str, list[ls_types.TextEdit]],
-    ) -> ls_types.WorkspaceEdit | None:
-        if workspace_edit is None:
-            if not textual_changes:
-                return None
-            return {"changes": textual_changes}
-
-        merged_edit = dict(workspace_edit)
-        merged_changes: dict[str, list[ls_types.TextEdit]] = {
-            uri: list(edits) for uri, edits in (workspace_edit.get("changes") or {}).items()
-        }
-        existing_keys = self._workspace_edit_keys(workspace_edit)
-
-        for uri, edits in textual_changes.items():
-            for edit in edits:
-                edit_range = edit["range"]
-                key = (
-                    uri,
-                    edit_range["start"]["line"],
-                    edit_range["start"]["character"],
-                    edit_range["end"]["line"],
-                    edit_range["end"]["character"],
-                )
-                if key in existing_keys:
-                    continue
-                merged_changes.setdefault(uri, []).append(edit)
-                existing_keys.add(key)
-
-        if merged_changes:
-            merged_edit["changes"] = merged_changes
-
-        return cast(ls_types.WorkspaceEdit, merged_edit)
+        workspace_edit = cast(ls_types.WorkspaceEdit, raw)
+        return self._filter_file_rename_workspace_edit(
+            workspace_edit,
+            typescript_plugin_enabled,
+        )
 
     @override
-    def request_rename_symbol_edit(
-        self,
-        relative_file_path: str,
-        line: int,
-        column: int,
-        new_name: str,
-    ) -> ls_types.WorkspaceEdit | None:
-        workspace_edit = super().request_rename_symbol_edit(relative_file_path, line, column, new_name)
-        original_name = self._get_identifier_at_position(relative_file_path, line, column)
-        if original_name is None:
-            return workspace_edit
+    def _get_language_id_for_file(self, relative_file_path: str) -> str:
+        ext = os.path.splitext(relative_file_path)[1].lower()
+        if ext in self._TS_EXT:
+            return "typescript"
+        if ext in self._JS_EXT:
+            return "javascript"
+        return self.language_id
 
-        textual_changes = self._create_textual_rename_changes(original_name, new_name)
-        return self._merge_textual_rename_changes(workspace_edit, textual_changes)
+    @override
+    def is_ignored_dirname(self, dirname: str) -> bool:
+        return super().is_ignored_dirname(dirname) or dirname in ["dist", "build", "coverage"]
