@@ -442,8 +442,8 @@ class Language(str, Enum):
             case self.SVELTE:
                 path_patterns = [".svelte"]
                 for prefix in ["c", "m", ""]:
-                        for base_pattern in ["ts", "js"]:
-                            path_patterns.append(f".{prefix}{base_pattern}")
+                    for base_pattern in ["ts", "js"]:
+                        path_patterns.append(f".{prefix}{base_pattern}")
                 return FilenameMatcher(*path_patterns)
             case self.POWERSHELL:
                 return FilenameMatcher(".ps1", ".psm1", ".psd1")

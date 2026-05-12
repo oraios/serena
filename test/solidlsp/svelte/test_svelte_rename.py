@@ -13,6 +13,7 @@ from test.solidlsp.svelte.conftest import SupportsWorkspaceEditForFileRename
 
 pytestmark = pytest.mark.svelte
 
+
 def _iter_workspace_edit_entries(workspace_edit: WorkspaceEdit) -> Iterable[tuple[str, TextEdit]]:
     if workspace_edit.get("changes"):
         for uri, edits in workspace_edit["changes"].items():

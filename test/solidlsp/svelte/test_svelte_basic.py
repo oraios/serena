@@ -17,9 +17,7 @@ pytestmark = pytest.mark.svelte
 class TestSvelteLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.SVELTE], indirect=True)
-    def test_svelte_language_server_root_matches_repo_path(
-        self, language_server: SolidLanguageServer, repo_path: Path
-    ) -> None:
+    def test_svelte_language_server_root_matches_repo_path(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         assert language_server.is_running()
         assert repo_path.resolve() == svelte_test_conftest.repo_path.resolve()
         assert Path(language_server.language_server.repo_path).resolve() == repo_path.resolve()

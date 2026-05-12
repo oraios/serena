@@ -351,7 +351,7 @@ class SvelteLanguageServer(SolidLanguageServer):
             ],
         }
         return initialize_params
- 
+
     def _start_server(self) -> None:
         def window_log_message(msg: dict) -> None:
             log.info("LSP: window/logMessage: %s", msg)
@@ -485,10 +485,7 @@ class SvelteLanguageServer(SolidLanguageServer):
 
         old_uri = self._resolve_file_uri(old_relative)
         if old_uri in self.open_file_buffers:
-            raise ValueError(
-                f"Cannot rename '{old_relative}': file is open in the language server; "
-                "finish or close active edits first."
-            )
+            raise ValueError(f"Cannot rename '{old_relative}': file is open in the language server; finish or close active edits first.")
 
         os.rename(old_path, new_path)
         self.notify_did_rename_files(old_relative, new_relative)
@@ -500,10 +497,7 @@ class SvelteLanguageServer(SolidLanguageServer):
         )
         num_ops = self._apply_workspace_edit_text_changes(workspace_edit) if workspace_edit else 0
 
-        return (
-            f"Renamed '{old_relative}' → '{new_relative}' "
-            f"({num_ops} workspace edit operation(s) applied for import updates)"
-        )
+        return f"Renamed '{old_relative}' → '{new_relative}' ({num_ops} workspace edit operation(s) applied for import updates)"
 
     def request_workspace_edit_for_file_rename(
         self,
