@@ -9,7 +9,6 @@ import logging
 import os
 import pathlib
 import shutil
-import threading
 from typing import Any, cast
 
 from overrides import override
@@ -27,9 +26,7 @@ from solidlsp.ls import (
     SolidLanguageServer,
 )
 from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
-from solidlsp.ls_exceptions import SolidLSPException
-from solidlsp.ls_utils import PathUtils
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams, RenameFilesParams
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -323,8 +320,6 @@ class SvelteLanguageServer(SolidLanguageServer):
 
         for svelte_file in svelte_files:
             try:
-                from solidlsp.ls import LSPFileBuffer  # local import avoids circular at module level
-
                 with self._ts_server.open_file(svelte_file) as file_buffer:
                     file_buffer.ref_count += 1
                     self._indexed_svelte_file_uris.append(file_buffer.uri)

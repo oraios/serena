@@ -5,12 +5,9 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Protocol, runtime_checkable
 
 import pytest
 from filelock import FileLock
-
-from solidlsp.ls_types import WorkspaceEdit
 
 log = logging.getLogger(__name__)
 
