@@ -81,6 +81,7 @@ class RenameMemoryTool(Tool, ToolMarkerCanEdit):
         Rename or move a memory, use "/" in the name to organize into topics.
         The "global" topic should only be used if explicitly instructed.
         References to other memories that are marked with the `mem:` prefix will be updated accordingly.
+        References in read-only memories are not affected.
         """
         renaming_message, n_references_updated = self.memories_manager.rename_memory_and_propagate_references(
             old_name, new_name, is_tool_context=True
