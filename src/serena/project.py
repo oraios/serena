@@ -93,6 +93,43 @@ class MemoriesManager:
         name = cls._prepare_name(name)
         return cls._MEMORY_REF_PREFIX + name
 
+    MEMORY_MAINTENANCE_NAME: str = "memory_maintenance"
+    _MEMORY_MAINTENANCE_TEMPLATE_PATH: Path = Path(__file__).parent / "resources" / "memory_maintenance.md"
+
+    def ensure_memory_maintenance_memory(self) -> str:
+        """
+        Ensures a memory describing how memories should be maintained exists for this project,
+        and returns the name to reference it by.
+
+        Precedence:
+
+        1. If a global copy exists at ``global/memory_maintenance``, return that name; no
+           project copy is created (the global version takes precedence).
+        2. Else if a project copy already exists, return its name unchanged.
+        3. Else seed a project copy from the package-shipped template and return that name.
+
+        Existing memory files are never overwritten; users may have customized them. To
+        refresh from the shipped template, delete the existing memory first.
+
+        :return: the bare name to reference the maintenance memory by (without the ``mem:``
+            prefix); either ``"global/memory_maintenance"`` or ``"memory_maintenance"``.
+        :raises FileNotFoundError: if the shipped template is missing on disk.
+        :raises AssertionError: if this manager has no associated project directory.
+        """
+        global_name = f"{self.GLOBAL_TOPIC}/{self.MEMORY_MAINTENANCE_NAME}"
+        if self.get_memory_file_path(global_name).exists():
+            return global_name
+        if self.get_memory_file_path(self.MEMORY_MAINTENANCE_NAME).exists():
+            return self.MEMORY_MAINTENANCE_NAME
+
+        # seed a project copy from the shipped template
+        template_path = self._MEMORY_MAINTENANCE_TEMPLATE_PATH
+        if not template_path.exists():
+            raise FileNotFoundError(f"Memory maintenance template not found at {template_path}")
+        content = template_path.read_text(encoding=self._encoding)
+        self.save_memory(self.MEMORY_MAINTENANCE_NAME, content, is_tool_context=False)
+        return self.MEMORY_MAINTENANCE_NAME
+
     def rename_references_to_memory(self, content: str, old_name: str, new_name: str) -> tuple[str, int]:
         r"""
         Replaces all occurrences of a memory reference (e.g. ``mem:foo``) in ``content`` with
