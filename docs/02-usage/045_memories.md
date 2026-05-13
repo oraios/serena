@@ -4,6 +4,7 @@ Serena provides the functionality of a fully featured agent, and a useful aspect
 Despite its simplicity, we received positive feedback from many users who tend to combine it with their
 agent's internal memory management (e.g., `AGENTS.md` files).
 
+(memories)=
 ## Memories
 
 Memories are simple, human-readable Markdown files that both you and
@@ -45,10 +46,10 @@ criteria:
    prefix for references to memories, which does not prevent using the memory files outside
    of Serena.
 7. **Configurable and composable.** Two orthogonal memory scopes -
-   [per-project](#memories) (committed alongside the code) and [global](global-memories)
+   [per-project](memories) (committed alongside the code) and [global](global-memories)
    (shared across all your projects) - can be combined freely. Within either scope,
    regex patterns in the global or project configuration can mark subsets as read-only
-   or [hide them entirely](#ignoring-memories) from the agent. This lets a project mix
+   or [hide them entirely](ignoring-memories) from the agent. This lets a project mix
    personal cross-project knowledge with checked-in project conventions, and selectively
    freeze either set, without custom plumbing.
 
@@ -103,6 +104,7 @@ Since global memories are not versioned alongside your project files,
 it can be helpful to track global memories with git (i.e. to make `~/.serena/memories/` a git repository)
 in order to have a history of changes and the possibility to revert them if needed.
 
+(ignoring-memories)=
 ### Ignoring Memories
 
 Projects that accumulate large numbers of archived memory files can use `ignored_memory_patterns`

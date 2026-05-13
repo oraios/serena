@@ -13,16 +13,15 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Memories:
   - Memories can now reference each other using the `` `mem:NAME` `` convention. Renames
     propagate to all references automatically. See the [reference convention](https://oraios.github.io/serena/02-usage/045_memories.html#referencing-memories-from-other-memories).
-  - New `serena memories` CLI command group: `list`, `read`, `write`, `check` (referential
-    integrity report) and `auto-prefix-references` (heuristic rewrite of bare occurrences).
-    See the [CLI subcommands](https://oraios.github.io/serena/02-usage/045_memories.html#cli-subcommands).
   - Onboarding now seeds a `memory_maintenance` memory describing the memory-style and
     routing conventions, and the agent is instructed to read it before writing any other
     memories. A `global/memory_maintenance` memory takes precedence over the per-project
     seed. See the [memory maintenance section](https://oraios.github.io/serena/02-usage/045_memories.html#the-memory-maintenance-memory).
-  - Onboarding prompt rewritten to target a layout of `mem:core` (routing entry point),
-    `mem:suggested_commands`, `mem:tech_stack`, `mem:conventions`, `mem:task_completion`,
-    and optional per-module `mem:<module>/core` memories, using dense agent-notes style.
+
+* CLI:
+  - Add `serena memories` CLI command group: `list`, `read`, `write`, `check` (referential
+    integrity report) and `auto-prefix-references` (heuristic rewrite of bare occurrences).
+    See the [CLI subcommands](https://oraios.github.io/serena/02-usage/045_memories.html#cli-subcommands).
 
 * Tools:
   - `edit_memory`: New `dotall` parameter (default `False`) controlling whether ``.`` matches
@@ -31,6 +30,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     avoids accidentally consuming large spans of content. Pass `dotall=True` for multi-line edits.
   - `search_for_pattern`: New `dotall` parameter (default `True`, preserving existing behavior)
     exposing the DOTALL flag, and the docstring was tightened.
+  - Delete `check_onboarding_performed` tool (instead extend project activation message),
 
 # v1.3.0 (2026-05-11)
 
