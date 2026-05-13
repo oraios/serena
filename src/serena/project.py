@@ -165,7 +165,17 @@ class MemoriesManager:
     # tokenized name parts. Containment / SequenceMatcher signals alone over-match — e.g. a
     # generic prose word like "repository" is a substring of "serena_repository_structure"
     # but their token Jaccard is only 1/3, so we reject it at this floor.
-    _FUZZY_BARE_TOKEN_JACCARD_FLOOR: float = 0.5
+    _FUZZY_BARE_TOKEN_JACCARD_FLOOR: float = 0.6
+    # In :meth:`compute_name_similarity` case 2 (basenames differ), when the two names also
+    # carry *differing* topic prefixes, demand at least one strong basename signal: token
+    # Jaccard >= this floor, basename containment, or typo-level seq ratio. Without this
+    # gate, names like ``frontend/x-subtleties`` and ``backend/y-subtleties`` get matched
+    # purely on the shared trailing token via the SequenceMatcher signal.
+    _BASENAME_JACCARD_FLOOR: float = 0.34
+    _BASENAME_TYPO_SEQ_FLOOR: float = 0.75
+    # Hard cap on candidates proposed per stale reference. Beyond a small number the list
+    # stops aiding disambiguation and becomes noise.
+    MAX_STALE_REFERENCE_CANDIDATES: int = 3
 
     _WORDS_TO_IGNORE_AS_MEMORY_NAME_CANDIDATES: frozenset[str] = frozenset({"core"})
     """Names that we specifically mention in our instructions and that coincide with common words"""
@@ -204,6 +214,8 @@ class MemoriesManager:
             auth/login        ~  security/login      -> 0.50   (basename only; disjoint topics)
             auth              ~  authentication      -> 0.64   (substring containment)
             foo               ~  for                 -> 0.00   (short-name floor)
+            frontend/x-subtleties ~ backend/y-subtleties -> 0.00 (different topics + only a
+                                                                 shared generic trailing token)
 
         :param a: first memory name
         :param b: second memory name
@@ -234,22 +246,34 @@ class MemoriesManager:
             )
             return 0.5 + 0.5 * prefix_jaccard
 
-        # case 2: basenames differ -- combine generic similarity signals via max
-        tokens_a, tokens_b = cls._tokenize_name(norm_a), cls._tokenize_name(norm_b)
-        jaccard = len(tokens_a & tokens_b) / len(tokens_a | tokens_b) if (tokens_a | tokens_b) else 0.0
-        seq = SequenceMatcher(None, norm_a, norm_b).ratio()
+        # case 2: basenames differ -- score the *basenames* only, so that a shared topic prefix
+        # plus a generic trailing token (e.g. "frontend/X-subtleties" vs "frontend/Y-subtleties")
+        # does not inflate the SequenceMatcher signal into a false positive.
+        basename_tokens_a, basename_tokens_b = cls._tokenize_name(basename_a), cls._tokenize_name(basename_b)
+        union_basename = basename_tokens_a | basename_tokens_b
+        basename_jaccard = (len(basename_tokens_a & basename_tokens_b) / len(union_basename)) if union_basename else 0.0
+        basename_contained = bool(basename_a) and bool(basename_b) and (basename_a in basename_b or basename_b in basename_a)
+        seq = SequenceMatcher(None, basename_a, basename_b).ratio()
+
+        # when both names carry *differing* topic prefixes, demand at least one strong basename
+        # signal — otherwise a single coincidental shared token at the end of long basenames
+        # under different topic roots slips through purely on the seq-ratio
+        if prefix_a and prefix_b and prefix_a != prefix_b:
+            if basename_jaccard < cls._BASENAME_JACCARD_FLOOR and not basename_contained and seq < cls._BASENAME_TYPO_SEQ_FLOOR:
+                return 0.0
+
         # containment is a meaningful rename signal on its own (e.g. auth -> authentication),
-        # so we lift it above the threshold floor when one name fully contains the other,
+        # so we lift it above the threshold floor when one basename fully contains the other,
         # with the length-ratio gating how confident we are
         contained = 0.0
-        if norm_a and norm_b and (norm_a in norm_b or norm_b in norm_a):
-            length_ratio = min(len(norm_a), len(norm_b)) / max(len(norm_a), len(norm_b))
+        if basename_contained:
+            length_ratio = min(len(basename_a), len(basename_b)) / max(len(basename_a), len(basename_b))
             contained = 0.5 + 0.5 * length_ratio
 
-        # short-name floor: for very short names, only accept candidates with a strong token signal
-        if min(len(norm_a), len(norm_b)) <= cls._SHORT_NAME_FLOOR and jaccard < 1.0:
+        # short-name floor: for very short basenames, only accept candidates with a strong token signal
+        if min(len(basename_a), len(basename_b)) <= cls._SHORT_NAME_FLOOR and basename_jaccard < 1.0:
             return 0.0
-        return max(jaccard, seq, contained)
+        return max(basename_jaccard, seq, contained)
 
     @classmethod
     def _find_stale_reference_candidates(cls, missing_name: str, existing_names: list[str], threshold: float | None = None) -> list[str]:
@@ -259,7 +283,9 @@ class MemoriesManager:
         :param threshold: optional override for the minimum similarity required; defaults to
             :attr:`NAME_SIMILARITY_THRESHOLD`.
         :return: existing memory names whose similarity to ``missing_name`` meets or exceeds
-            ``threshold``, sorted in descending order of similarity (ties broken alphabetically).
+            ``threshold``, sorted in descending order of similarity (ties broken alphabetically)
+            and capped at :attr:`MAX_STALE_REFERENCE_CANDIDATES` entries to keep the output
+            focused on the most plausible matches.
         """
         cutoff = cls.NAME_SIMILARITY_THRESHOLD if threshold is None else threshold
         scored: list[tuple[float, str]] = []
@@ -268,7 +294,7 @@ class MemoriesManager:
             if score >= cutoff:
                 scored.append((score, existing))
         scored.sort(key=lambda pair: (-pair[0], pair[1]))
-        return [name for _, name in scored]
+        return [name for _, name in scored[: cls.MAX_STALE_REFERENCE_CANDIDATES]]
 
     # character class delimiting a memory name; used to anchor regex matches so we never
     # consume a partial name (kept in sync with the boundary rule in rename_references_to_memory)
@@ -544,28 +570,41 @@ class MemoriesManager:
                         tb.with_line("    candidates: (none above similarity threshold)")
                 tb.with_line("")
 
-            # unmarked-reference warnings, split by confidence
-            for label, warnings in (
-                ("High-confidence unmarked references", self.high_confidence_unmarked_memories),
-                ("Low-confidence unmarked references", self.low_confidence_unmarked_memories),
-            ):
-                if not warnings:
-                    continue
-                tb.with_line(f"{label} ({len(warnings)}):")
-                for w in warnings:
-                    ro_tag = " [read-only source]" if w.source_is_read_only else ""
-                    occ = "occurrence" if w.occurrences == 1 else "occurrences"
-                    if w.is_exact_match:
+            # unmarked-reference warnings — split exact vs fuzzy near-miss, then by confidence
+            exact_high = [w for w in self.high_confidence_unmarked_memories if w.is_exact_match]
+            exact_low = [w for w in self.low_confidence_unmarked_memories if w.is_exact_match]
+            fuzzy = [w for w in self.high_confidence_unmarked_memories if not w.is_exact_match] + [
+                w for w in self.low_confidence_unmarked_memories if not w.is_exact_match
+            ]
+
+            # the "may be intentional" caveat is meaningful only for exact matches (where the bare
+            # text equals a real memory name and may simply be ordinary prose); print it once,
+            # before the first exact-match section
+            if exact_high or exact_low:
+                tb.with_line("Possibly unmarked references — exact matches:")
+                tb.with_line("  (note: bare matches in prose may be intentional and not actual references)")
+                for label, warnings in (("high confidence", exact_high), ("low confidence", exact_low)):
+                    if not warnings:
+                        continue
+                    tb.with_line(f"  {label} ({len(warnings)}):")
+                    for w in warnings:
+                        ro_tag = " [read-only source]" if w.source_is_read_only else ""
+                        occ = "occurrence" if w.occurrences == 1 else "occurrences"
                         tb.with_line(
-                            f"  - {w.occurrences} {occ} of `{w.suspected_name}` in `{w.source_memory}`{ro_tag}"
+                            f"    - {w.occurrences} {occ} of `{w.suspected_name}` in `{w.source_memory}`{ro_tag}"
                             f" (suggested: `mem:{w.suspected_name}`)"
                         )
-                    else:
-                        # fuzzy near-miss: the bare text differs from the proposed target
-                        tb.with_line(
-                            f"  - {w.occurrences} {occ} of `{w.actual_token}` in `{w.source_memory}`{ro_tag}"
-                            f" — near-miss (suggested: `mem:{w.suspected_name}`)"
-                        )
+                tb.with_line("")
+
+            if fuzzy:
+                tb.with_line(f"Possibly unmarked references — fuzzy near-misses ({len(fuzzy)}):")
+                for w in fuzzy:
+                    ro_tag = " [read-only source]" if w.source_is_read_only else ""
+                    occ = "occurrence" if w.occurrences == 1 else "occurrences"
+                    tb.with_line(
+                        f"  - {w.occurrences} {occ} of `{w.actual_token}` in `{w.source_memory}`{ro_tag}"
+                        f" — near-miss (suggested: `mem:{w.suspected_name}`)"
+                    )
                 tb.with_line("")
             return tb.build()
 
@@ -788,36 +827,42 @@ class MemoriesManager:
         source_basename = source_memory.rsplit("/", 1)[-1]
         return suspected_name == source_basename
 
-    def validate_referential_integrity(self, include_unmarked: bool = True) -> "MemoriesManager.ReferentialIntegrityReport":
+    def validate_referential_integrity(
+        self, include_unmarked: bool = True, include_fuzzy_matching: bool = True
+    ) -> "MemoriesManager.ReferentialIntegrityReport":
         """
         Scans every (non-ignored) memory's content for referential integrity issues.
 
         The scan covers both project-local and global memories. Three kinds of finding are
-        produced:
+        produced, each independently gated:
 
         * **stale references** — occurrences of ``mem:NAME`` where ``NAME`` does not resolve
           to an existing memory. For each, a list of similarly-named existing memories is
-          proposed as candidate intended targets (see :meth:`compute_name_similarity`).
+          proposed as candidate intended targets (see :meth:`compute_name_similarity`),
+          capped at :attr:`MAX_STALE_REFERENCE_CANDIDATES`. Always reported.
         * **exact unmarked-reference warnings** — bare occurrences of an existing memory
           name that appear without the ``mem:`` prefix. Split into high-confidence (the
           suspected name contains a ``/`` or exceeds :attr:`_HIGH_CONFIDENCE_NAME_LENGTH`)
-          and low-confidence groups. Candidate names whose basename matches
-          :attr:`WORDS_TO_IGNORE_AS_MEMORY_NAME_CANDIDATES` are skipped.
+          and low-confidence groups. Candidate names whose basename is in
+          :attr:`_WORDS_TO_IGNORE_AS_MEMORY_NAME_CANDIDATES` are skipped. Gated by
+          ``include_unmarked``.
         * **fuzzy near-miss warnings** — long, distinctive bare tokens in a memory body
           that *do not* match an existing name exactly but similarity-match a
-          high-confidence existing name AND share at least :attr:`_FUZZY_BARE_TOKEN_JACCARD_FLOOR`
-          of their tokenized name parts (e.g. ``adding_new_language_support`` in prose when
-          the memory is named ``adding_new_language_support_guide``). Always reported as
-          high-confidence; the actual bare text is preserved on
-          :attr:`UnmarkedReferenceWarning.actual_token`.
+          high-confidence existing name AND share at least
+          :attr:`_FUZZY_BARE_TOKEN_JACCARD_FLOOR` of their tokenized name parts. Always
+          reported as high-confidence; the actual bare text is preserved on
+          :attr:`UnmarkedReferenceWarning.actual_token`. Gated by ``include_unmarked
+          and include_fuzzy_matching`` — fuzzy matches are noisy and only meaningful when
+          unmarked-reference checking is enabled.
 
         Self-references (a memory's content mentioning its own name or basename) and empty
-        memories are skipped silently.
+        memories are skipped silently. This method has no side effects.
 
-        This method has no side effects.
-
-        :param include_unmarked: if False, skip the two unmarked-reference scans (exact and
-            fuzzy near-miss) entirely; only stale references are reported.
+        :param include_unmarked: if False, skip both the exact unmarked scan and the fuzzy
+            near-miss scan; only stale references are reported.
+        :param include_fuzzy_matching: if False, skip the fuzzy near-miss scan even when
+            unmarked-reference checking is otherwise enabled. Has no effect when
+            ``include_unmarked`` is False.
         :return: a :class:`ReferentialIntegrityReport` summarizing all findings.
         """
         report = MemoriesManager.ReferentialIntegrityReport()
@@ -885,10 +930,18 @@ class MemoriesManager:
                 else:
                     report.low_confidence_unmarked_memories.append(warning)
 
+            if not include_fuzzy_matching:
+                continue
+
             # fuzzy near-misses: long bare tokens that similarity-match a high-confidence existing name
             for token, n in self._iter_long_bare_tokens(content):
                 if token in existing_set:
                     # exact-match path already handled this token (or self-referenced and was skipped)
+                    continue
+                # filter bare tokens that coincide with common English words; the same filter is
+                # applied to candidate names in the exact-match loop, this is the symmetric side
+                token_norm = self._normalize_for_similarity(token)
+                if token_norm in self._WORDS_TO_IGNORE_AS_MEMORY_NAME_CANDIDATES:
                     continue
                 token_tokens = self._tokenize_name(token)
                 best_name: str | None = None
@@ -897,6 +950,13 @@ class MemoriesManager:
                     if self._is_self_reference(source_name, existing):
                         continue
                     if existing.rsplit("/", 1)[-1] in self._WORDS_TO_IGNORE_AS_MEMORY_NAME_CANDIDATES:
+                        continue
+                    # require substring containment between bare token and existing name: fuzzy
+                    # matches without a containment relationship are rarely useful as rewrite
+                    # suggestions (auto_prefix_bare_references can't fix them anyway) and dominate
+                    # the false-positive rate, e.g. "grid-layout" vs "layout-grid-subtleties".
+                    existing_norm = self._normalize_for_similarity(existing)
+                    if token_norm not in existing_norm and existing_norm not in token_norm:
                         continue
                     score = self.compute_name_similarity(token, existing)
                     if score < self.NAME_SIMILARITY_THRESHOLD:

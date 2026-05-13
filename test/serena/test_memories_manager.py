@@ -134,17 +134,12 @@ class TestRenameReferencesToMemory:
     @pytest.mark.parametrize(
         "delimiter_pair",
         [
+            # one case per structural class of surrounding character (asymmetric pair, whitespace,
+            # punctuation, none); the boundary regex only distinguishes "name char" vs "non-name char",
+            # so further variants exercise the same code path.
             ("`", "`"),
-            ('"', '"'),
-            ("'", "'"),
             ("(", ")"),
-            ("[", "]"),
-            ("{", "}"),
             (" ", " "),
-            ("\n", "\n"),
-            ("\t", "\t"),
-            (",", ","),
-            (";", ";"),
             ("", ""),  # raw, no delimiters
         ],
     )
@@ -216,6 +211,27 @@ class TestNameSimilarity:
         assert manager.compute_name_similarity("auth/login", "security/login") == manager.compute_name_similarity(
             "security/login", "auth/login"
         )
+
+    def test_cross_topic_suffix_coincidence_is_rejected(self, manager: MemoriesManager) -> None:
+        """
+        Regression: when two long names live under *different* topic prefixes and share
+        only a single trailing token (e.g. ``-subtleties``), the score must collapse to
+        zero. Without the cross-topic gate, SequenceMatcher returns ~0.55+ on these
+        purely on shared characters, flooding stale-reference candidate lists with
+        unrelated memories from neighbouring subsystems.
+        """
+        target = "frontend/plugin-api-runtime-subtleties"
+        # different topic prefix + only the generic "subtleties" trailing token shared -> 0
+        for other in (
+            "backend/rpc-db-worker-subtleties",
+            "render-wasm/ffi-rendering-subtleties",
+            "common/grid-layout-subtleties",
+        ):
+            assert manager.compute_name_similarity(target, other) == 0.0, f"cross-topic suffix coincidence with {other} must be rejected"
+        # contrast: *same* prefix is treated leniently — the gate must not apply, so the
+        # score is non-zero even if it still falls under the similarity threshold
+        same_prefix_score = manager.compute_name_similarity(target, "frontend/routing-app-shell-subtleties")
+        assert same_prefix_score > 0.0
 
     def test_find_candidates_ranks_by_descending_similarity(self, manager: MemoriesManager) -> None:
         existing = ["auth/login", "security/login", "database", "authentication"]
@@ -358,6 +374,168 @@ class TestValidateReferentialIntegrity:
         warning = report.high_confidence_unmarked_memories[0]
         assert warning.suspected_name == existing
         assert warning.source_memory == "docs"
+
+    def test_fuzzy_accepts_bare_token_when_jaccard_just_above_floor(self, fs_manager: MemoriesManager) -> None:
+        """
+        Edge case: bare token is a clean substring of the existing memory name AND
+        their tokenized Jaccard sits just above ``_FUZZY_BARE_TOKEN_JACCARD_FLOOR``
+        (with floor = 0.6, this means 2/3 ≈ 0.667).
+        """
+        # existing has 3 name-tokens; bare has 2 of them -> jaccard = 2/3 = 0.667
+        existing = "data-model-extra"
+        bare = "data-model"
+        assert len(bare) >= MemoriesManager._HIGH_CONFIDENCE_NAME_LENGTH
+        _write(fs_manager, existing, "# extra notes")
+        _write(fs_manager, "docs", f"see {bare} for naming")
+        report = fs_manager.validate_referential_integrity()
+        fuzzy = [w for w in report.high_confidence_unmarked_memories if not w.is_exact_match]
+        assert len(fuzzy) == 1
+        assert fuzzy[0].suspected_name == existing
+        assert fuzzy[0].actual_token == bare
+
+    def test_fuzzy_rejects_bare_token_when_jaccard_just_below_floor(self, fs_manager: MemoriesManager) -> None:
+        """
+        Edge case: bare token is still a clean substring of the existing memory name,
+        but their tokenized Jaccard is just below ``_FUZZY_BARE_TOKEN_JACCARD_FLOOR``
+        (2/4 = 0.5 with the floor at 0.6). Must be rejected — without this gate,
+        long candidate names would attract many borderline matches.
+        """
+        existing = "data-model-extra-stuff"  # 4 tokens
+        bare = "data-model"  # 2 tokens; jaccard = 2/4 = 0.5
+        assert len(bare) >= MemoriesManager._HIGH_CONFIDENCE_NAME_LENGTH
+        _write(fs_manager, existing, "# notes")
+        _write(fs_manager, "docs", f"see {bare} for naming")
+        report = fs_manager.validate_referential_integrity()
+        assert report.high_confidence_unmarked_memories == []
+        assert report.low_confidence_unmarked_memories == []
+
+    def test_fuzzy_requires_substring_containment(self, fs_manager: MemoriesManager) -> None:
+        """
+        Edge case: bare token and existing name share several tokens (and even a topic
+        prefix) but neither is a substring of the other. Without the containment
+        requirement, sequence-ratio alone would mis-rank long names like
+        ``frontend/X-subtleties`` vs ``frontend/Y-subtleties`` as near-misses.
+        """
+        existing = "frontend/text-editor-workflow"
+        bare = "frontend/text-editor-features"  # shares "frontend", "text", "editor"; not a substring
+        assert len(bare) >= MemoriesManager._HIGH_CONFIDENCE_NAME_LENGTH
+        _write(fs_manager, existing, "# workflow notes")
+        _write(fs_manager, "docs", f"see {bare} for layout")
+        report = fs_manager.validate_referential_integrity()
+        assert report.high_confidence_unmarked_memories == []
+        assert report.low_confidence_unmarked_memories == []
+
+    def test_fuzzy_accepts_reverse_containment(self, fs_manager: MemoriesManager) -> None:
+        """
+        Edge case: the *existing* memory name is a substring of the longer bare token
+        (rather than the other way around). The containment gate must hold in both
+        directions, so this is still flagged.
+        """
+        existing = "playwright-gestures"
+        bare = "playwright-gestures-guide"  # existing ⊂ bare
+        assert len(bare) >= MemoriesManager._HIGH_CONFIDENCE_NAME_LENGTH
+        _write(fs_manager, existing, "# notes")
+        _write(fs_manager, "docs", f"see {bare} for details")
+        report = fs_manager.validate_referential_integrity()
+        fuzzy = [w for w in report.high_confidence_unmarked_memories if not w.is_exact_match]
+        assert len(fuzzy) == 1
+        assert fuzzy[0].suspected_name == existing
+        assert fuzzy[0].actual_token == bare
+
+    def test_unmarked_exact_match_suppressed_for_ignored_word(self, fs_manager: MemoriesManager) -> None:
+        """
+        Names in ``_WORDS_TO_IGNORE_AS_MEMORY_NAME_CANDIDATES`` (e.g. ``core``) are
+        common-word collisions and must not produce bare-occurrence warnings even
+        when an exact memory of that name exists.
+        """
+        _write(fs_manager, "core", "# project core notes")
+        _write(fs_manager, "docs", "this is the core of the system")
+        report = fs_manager.validate_referential_integrity()
+        # bare "core" matches the candidate name `core` literally but is filtered out
+        assert all(w.suspected_name != "core" for w in report.high_confidence_unmarked_memories)
+        assert all(w.suspected_name != "core" for w in report.low_confidence_unmarked_memories)
+
+    def test_unmarked_exact_match_suppressed_for_topic_with_ignored_basename(self, fs_manager: MemoriesManager) -> None:
+        """
+        The ignore filter applies to the *basename* of a candidate name, so a memory
+        named ``frontend/core`` is also exempt from bare-occurrence warnings (the
+        bare text ``frontend/core`` is more likely a directory reference than a
+        forgotten memory link).
+        """
+        _write(fs_manager, "frontend/core", "# notes")
+        _write(fs_manager, "docs", "the frontend/core module is documented here")
+        report = fs_manager.validate_referential_integrity()
+        assert all(w.suspected_name != "frontend/core" for w in report.high_confidence_unmarked_memories)
+        assert all(w.suspected_name != "frontend/core" for w in report.low_confidence_unmarked_memories)
+
+    def test_unmarked_exact_match_not_suppressed_for_non_ignored_basename(self, fs_manager: MemoriesManager) -> None:
+        """
+        Sanity: the ignore filter must not over-apply to names whose basename happens
+        to share a prefix with an ignored word.
+        """
+        _write(fs_manager, "frontend/core-utils", "# notes")
+        _write(fs_manager, "docs", "the frontend/core-utils module is documented here")
+        report = fs_manager.validate_referential_integrity()
+        assert any(w.suspected_name == "frontend/core-utils" for w in report.high_confidence_unmarked_memories)
+
+    def test_stale_reference_candidates_are_capped(self, fs_manager: MemoriesManager) -> None:
+        """
+        The candidate list proposed for an unresolved ``mem:`` reference is capped at
+        :attr:`MAX_STALE_REFERENCE_CANDIDATES`. Beyond a small number the list stops
+        aiding disambiguation and becomes noise.
+        """
+        cap = MemoriesManager.MAX_STALE_REFERENCE_CANDIDATES
+        # five memories all sharing basename `login` -> all tie at compute_name_similarity == 1.0
+        candidate_names = ["admin/login", "api/login", "auth/login", "security/login", "users/login"]
+        for name in candidate_names:
+            _write(fs_manager, name, "# notes")
+        _write(fs_manager, "docs", "old reference: `mem:login`")
+        report = fs_manager.validate_referential_integrity()
+        assert len(report.stale_references) == 1
+        candidates = report.stale_references[0].candidates
+        # cap enforced; alphabetical tiebreak among equally-scored candidates
+        assert len(candidates) == cap
+        assert candidates == candidate_names[:cap]
+
+    def test_include_unmarked_false_skips_both_scans(self, fs_manager: MemoriesManager) -> None:
+        """
+        With ``include_unmarked=False`` only stale references are reported; both the
+        exact unmarked scan and the fuzzy near-miss scan are entirely skipped.
+        """
+        _write(fs_manager, "auth/login", "# notes")
+        _write(fs_manager, "playwright-gestures", "# notes")
+        _write(
+            fs_manager,
+            "docs",
+            "bare auth/login mention and a playwright-gestures-guide near-miss; also `mem:nope`",
+        )
+        report = fs_manager.validate_referential_integrity(include_unmarked=False)
+        assert report.high_confidence_unmarked_memories == []
+        assert report.low_confidence_unmarked_memories == []
+        # stale reference is still reported regardless of the flag
+        assert len(report.stale_references) == 1
+        assert report.stale_references[0].referenced_name == "nope"
+
+    def test_include_fuzzy_matching_false_keeps_exact_only(self, fs_manager: MemoriesManager) -> None:
+        """
+        With ``include_unmarked=True`` but ``include_fuzzy_matching=False``, exact
+        bare-occurrence warnings still fire but fuzzy near-misses are suppressed.
+        """
+        _write(fs_manager, "auth/login", "# notes")
+        _write(fs_manager, "playwright-gestures", "# notes")
+        _write(
+            fs_manager,
+            "docs",
+            "bare auth/login mention and a playwright-gestures-guide near-miss",
+        )
+        report = fs_manager.validate_referential_integrity(include_unmarked=True, include_fuzzy_matching=False)
+        # exact match for auth/login is kept
+        exact = [w for w in report.high_confidence_unmarked_memories if w.is_exact_match]
+        fuzzy = [w for w in report.high_confidence_unmarked_memories if not w.is_exact_match]
+        assert len(exact) == 1
+        assert exact[0].suspected_name == "auth/login"
+        # fuzzy near-miss for `playwright-gestures-guide` is suppressed
+        assert fuzzy == []
 
     def test_self_reference_is_ignored(self, fs_manager: MemoriesManager) -> None:
         # the basename `login` appears in `auth/login`'s own content -> must not be flagged

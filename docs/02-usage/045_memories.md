@@ -189,9 +189,9 @@ Serena also offers memory-related CLI commands.
 
 The following commands have **no MCP tool counterpart** and are intended for human execution:
 
-- `serena memories check` — referential-integrity report. By default reports only stale
-  `` `mem:NAME` `` references whose target does not resolve. Pass `--include-unmarked` to
-  also report bare occurrences of existing memory names found through a heuristic.
+- `serena memories check` — referential-integrity report. By default reports stale
+  `` `mem:NAME` `` references; additional scans (bare occurrences and fuzzy near-misses)
+  are opt-in via flags. Run `serena memories check --help` for the full flag list.
 - `serena memories auto-prefix-references` — heuristic rewrite of bare occurrences to add
   the `mem:` prefix; supports `--dry-run`.
 - `serena memories initialize` will seed the `memory_maintenance` memory for the project.

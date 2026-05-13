@@ -1308,9 +1308,10 @@ class MemoryCommands(AutoRegisteringGroup):
         "check",
         help=(
             "Check referential integrity across all memories of the project (and global memories). "
-            "Reports stale `mem:` references. With --include-unmarked, also reports bare occurrences "
-            "of existing memory names that lack the `mem:` prefix (split into high- and low-confidence). "
-            "Read-only and never writes. Always exits 0."
+            "By default reports only stale `mem:` references. Pass --include-unmarked to also report "
+            "bare occurrences of existing memory names (exact matches) and --fuzzy-matching (only "
+            "meaningful in combination with --include-unmarked) to additionally report fuzzy "
+            "near-misses. Read-only and never writes. Always exits 0."
         ),
         context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
     )
@@ -1319,11 +1320,28 @@ class MemoryCommands(AutoRegisteringGroup):
         "--include-unmarked",
         is_flag=True,
         default=False,
-        help="Also report potentially unmarked references (bare occurrences of memory names without the `mem:` prefix).",
+        help="Also report bare exact occurrences of existing memory names (i.e. without the `mem:` prefix).",
     )
-    def check(project: str, include_unmarked: bool) -> None:
+    @click.option(
+        "--fuzzy-matching",
+        is_flag=True,
+        default=False,
+        help=(
+            "Additionally report fuzzy near-misses (long bare tokens that similarity-match an existing "
+            "memory name). Only meaningful together with --include-unmarked; ignored otherwise."
+        ),
+    )
+    def check(project: str, include_unmarked: bool, fuzzy_matching: bool) -> None:
+        if fuzzy_matching and not include_unmarked:
+            click.echo(
+                "Warning: --fuzzy-matching has no effect without --include-unmarked; ignoring it.",
+                err=True,
+            )
         manager = MemoryCommands._load_memories_manager(project)
-        report = manager.validate_referential_integrity(include_unmarked=include_unmarked)
+        report = manager.validate_referential_integrity(
+            include_unmarked=include_unmarked,
+            include_fuzzy_matching=fuzzy_matching,
+        )
         click.echo(report.format())
 
     @staticmethod
