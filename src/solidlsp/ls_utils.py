@@ -161,7 +161,7 @@ class PathUtils:
             urlparse = urlparse_py2
         parsed = urlparse(uri)
         host = f"{os.path.sep}{os.path.sep}{parsed.netloc}{os.path.sep}"
-        path = os.path.normpath(os.path.join(host, url2pathname(unquote(parsed.path))))
+        path = os.path.abspath(os.path.join(host, url2pathname(unquote(parsed.path))))
         return path
 
     @staticmethod
@@ -182,7 +182,7 @@ class PathUtils:
         Gets relative path if it's possible (paths should be on the same drive),
         returns `None` otherwise.
         """
-        if PurePath(path).drive == PurePath(base_path).drive:
+        if os.path.normcase(PurePath(path).drive) == os.path.normcase(PurePath(base_path).drive):
             rel_path = str(PurePath(os.path.relpath(path, base_path)))
             return rel_path
         return None
