@@ -14,8 +14,8 @@ prompts:
 
     Target memory layout — use the `write_memory` tool, one call per memory:
 
-    * `mem:core` — top-level routing/source map: a terse index pointing at the focused memories
-      below, plus only those project-wide invariants that don't belong in a focused memory.
+    * `mem:core` — top-level source map and project-wide invariants that don't belong in a
+      focused memory.
     * `mem:tech_stack` — language(s), framework(s), build tools, package manager, version
       pins where they matter.
     * `mem:suggested_commands` — project commands the user will actually run (dev, test, lint,
@@ -33,12 +33,6 @@ prompts:
 
     Acquire information using the available tools. Read only the files needed; do not load
     entire directory trees. If essential information is missing, ask the user.
-
-    Memory body style (full rules in `mem:{{ memory_maintenance_name }}`): dense agent notes —
-    terse bullets, invariants, paths, commands. No self-referential cues ("Use when…",
-    "Start here…", "Read before…"); routing belongs in `mem:core` upstream, not inside the
-    body it points to. References to other memories use `` `mem:NAME` `` (backticked, with
-    the `mem:` prefix).
 
     When all memories are written, sanity-check the references by mentioning that the user can run
     `serena memories check` from the project root.

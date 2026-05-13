@@ -11,6 +11,8 @@
 - Routing can live outside core memories when needed, but core memories own most module-level routing because they are read before focused memories in that subfolder.
 - Top-level/startup memory is `mem:core`; top-level memory in each memory subfolder is `<folder>/core` (for example `mem:frontend/core`).
 - Memory references must use a mem: prefix inside backticks, e.g. `mem:frontend/core`.
+- Do not add an index that simply re-lists the focused-memory names, the memory name list is already visible. 
+  Only add routing pointers when a target memory's name is not self-explanatory or when a some aspect should be routed to multiple memories.
 
 ## Style
 
