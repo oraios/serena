@@ -8,6 +8,13 @@ import os
 
 import pytest
 
+from serena.memory_reference_analysis import (
+    HIGH_CONFIDENCE_NAME_LENGTH,
+    MAX_STALE_REFERENCE_CANDIDATES,
+    NAME_SIMILARITY_THRESHOLD,
+    compute_name_similarity,
+    find_stale_reference_candidates,
+)
 from serena.project import MemoriesManager
 
 
@@ -170,7 +177,7 @@ class TestNameSimilarity:
         ],
     )
     def test_high_similarity_cases(self, manager: MemoriesManager, a: str, b: str, expected: float) -> None:
-        assert manager.compute_name_similarity(a, b) == pytest.approx(expected)
+        assert compute_name_similarity(a, b) == pytest.approx(expected)
 
     @pytest.mark.parametrize(
         ("a", "b"),
@@ -189,7 +196,7 @@ class TestNameSimilarity:
         ],
     )
     def test_below_threshold_cases(self, manager: MemoriesManager, a: str, b: str) -> None:
-        assert manager.compute_name_similarity(a, b) < MemoriesManager.NAME_SIMILARITY_THRESHOLD
+        assert compute_name_similarity(a, b) < NAME_SIMILARITY_THRESHOLD
 
     @pytest.mark.parametrize(
         ("a", "b"),
@@ -204,13 +211,11 @@ class TestNameSimilarity:
         ],
     )
     def test_above_threshold_cases(self, manager: MemoriesManager, a: str, b: str) -> None:
-        assert manager.compute_name_similarity(a, b) >= MemoriesManager.NAME_SIMILARITY_THRESHOLD
+        assert compute_name_similarity(a, b) >= NAME_SIMILARITY_THRESHOLD
 
     def test_symmetry(self, manager: MemoriesManager) -> None:
         # similarity is order-independent
-        assert manager.compute_name_similarity("auth/login", "security/login") == manager.compute_name_similarity(
-            "security/login", "auth/login"
-        )
+        assert compute_name_similarity("auth/login", "security/login") == compute_name_similarity("security/login", "auth/login")
 
     def test_cross_topic_suffix_coincidence_is_rejected(self, manager: MemoriesManager) -> None:
         """
@@ -227,15 +232,15 @@ class TestNameSimilarity:
             "render-wasm/ffi-rendering-subtleties",
             "common/grid-layout-subtleties",
         ):
-            assert manager.compute_name_similarity(target, other) == 0.0, f"cross-topic suffix coincidence with {other} must be rejected"
+            assert compute_name_similarity(target, other) == 0.0, f"cross-topic suffix coincidence with {other} must be rejected"
         # contrast: *same* prefix is treated leniently — the gate must not apply, so the
         # score is non-zero even if it still falls under the similarity threshold
-        same_prefix_score = manager.compute_name_similarity(target, "frontend/routing-app-shell-subtleties")
+        same_prefix_score = compute_name_similarity(target, "frontend/routing-app-shell-subtleties")
         assert same_prefix_score > 0.0
 
     def test_find_candidates_ranks_by_descending_similarity(self, manager: MemoriesManager) -> None:
         existing = ["auth/login", "security/login", "database", "authentication"]
-        candidates = manager._find_stale_reference_candidates("login", existing)
+        candidates = find_stale_reference_candidates("login", existing)
         # both auth/login and security/login share basename `login` -> tied at 1.0; expect them first, alphabetical tiebreak
         assert candidates[:2] == ["auth/login", "security/login"]
         # `database` is unrelated and must not appear
@@ -243,13 +248,13 @@ class TestNameSimilarity:
 
     def test_find_candidates_returns_empty_below_threshold(self, manager: MemoriesManager) -> None:
         existing = ["completely_unrelated", "another_thing"]
-        assert manager._find_stale_reference_candidates("foo", existing) == []
+        assert find_stale_reference_candidates("foo", existing) == []
 
     def test_find_candidates_custom_threshold(self, manager: MemoriesManager) -> None:
         # raising the threshold filters out borderline matches
         existing = ["authentication"]
-        loose = manager._find_stale_reference_candidates("auth", existing, threshold=0.2)
-        strict = manager._find_stale_reference_candidates("auth", existing, threshold=0.95)
+        loose = find_stale_reference_candidates("auth", existing, threshold=0.2)
+        strict = find_stale_reference_candidates("auth", existing, threshold=0.95)
         assert loose == ["authentication"]
         assert strict == []
 
@@ -313,7 +318,7 @@ class TestValidateReferentialIntegrity:
     def test_long_flat_name_is_high_confidence(self, fs_manager: MemoriesManager) -> None:
         # a flat name >= _HIGH_CONFIDENCE_NAME_LENGTH chars is unlikely to be coincidental prose
         long_name = "authentication_flow"
-        assert len(long_name) >= MemoriesManager._HIGH_CONFIDENCE_NAME_LENGTH
+        assert len(long_name) >= HIGH_CONFIDENCE_NAME_LENGTH
         _write(fs_manager, long_name, "# notes")
         _write(fs_manager, "docs", f"the {long_name} is documented here")
         report = fs_manager.validate_referential_integrity()
@@ -361,7 +366,7 @@ class TestValidateReferentialIntegrity:
         """
         existing = "adding_new_language_support_guide"
         bare = "adding_new_language_support"  # prefix of `existing`; clearly the same concept
-        assert len(bare) >= MemoriesManager._HIGH_CONFIDENCE_NAME_LENGTH
+        assert len(bare) >= HIGH_CONFIDENCE_NAME_LENGTH
         _write(fs_manager, existing, "# guide content")
         _write(fs_manager, "docs", f"See {bare} for details")
 
@@ -384,7 +389,7 @@ class TestValidateReferentialIntegrity:
         # existing has 3 name-tokens; bare has 2 of them -> jaccard = 2/3 = 0.667
         existing = "data-model-extra"
         bare = "data-model"
-        assert len(bare) >= MemoriesManager._HIGH_CONFIDENCE_NAME_LENGTH
+        assert len(bare) >= HIGH_CONFIDENCE_NAME_LENGTH
         _write(fs_manager, existing, "# extra notes")
         _write(fs_manager, "docs", f"see {bare} for naming")
         report = fs_manager.validate_referential_integrity()
@@ -402,7 +407,7 @@ class TestValidateReferentialIntegrity:
         """
         existing = "data-model-extra-stuff"  # 4 tokens
         bare = "data-model"  # 2 tokens; jaccard = 2/4 = 0.5
-        assert len(bare) >= MemoriesManager._HIGH_CONFIDENCE_NAME_LENGTH
+        assert len(bare) >= HIGH_CONFIDENCE_NAME_LENGTH
         _write(fs_manager, existing, "# notes")
         _write(fs_manager, "docs", f"see {bare} for naming")
         report = fs_manager.validate_referential_integrity()
@@ -418,7 +423,7 @@ class TestValidateReferentialIntegrity:
         """
         existing = "frontend/text-editor-workflow"
         bare = "frontend/text-editor-features"  # shares "frontend", "text", "editor"; not a substring
-        assert len(bare) >= MemoriesManager._HIGH_CONFIDENCE_NAME_LENGTH
+        assert len(bare) >= HIGH_CONFIDENCE_NAME_LENGTH
         _write(fs_manager, existing, "# workflow notes")
         _write(fs_manager, "docs", f"see {bare} for layout")
         report = fs_manager.validate_referential_integrity()
@@ -433,7 +438,7 @@ class TestValidateReferentialIntegrity:
         """
         existing = "playwright-gestures"
         bare = "playwright-gestures-guide"  # existing ⊂ bare
-        assert len(bare) >= MemoriesManager._HIGH_CONFIDENCE_NAME_LENGTH
+        assert len(bare) >= HIGH_CONFIDENCE_NAME_LENGTH
         _write(fs_manager, existing, "# notes")
         _write(fs_manager, "docs", f"see {bare} for details")
         report = fs_manager.validate_referential_integrity()
@@ -484,7 +489,7 @@ class TestValidateReferentialIntegrity:
         :attr:`MAX_STALE_REFERENCE_CANDIDATES`. Beyond a small number the list stops
         aiding disambiguation and becomes noise.
         """
-        cap = MemoriesManager.MAX_STALE_REFERENCE_CANDIDATES
+        cap = MAX_STALE_REFERENCE_CANDIDATES
         # five memories all sharing basename `login` -> all tie at compute_name_similarity == 1.0
         candidate_names = ["admin/login", "api/login", "auth/login", "security/login", "users/login"]
         for name in candidate_names:
