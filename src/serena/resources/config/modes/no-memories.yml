@@ -9,4 +9,3 @@ excluded_tools:
   - rename_memory
   - list_memories
   - onboarding
-  - check_onboarding_performed

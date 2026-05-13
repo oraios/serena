@@ -47,6 +47,7 @@ from serena.task_executor import TaskExecutor
 from serena.tools import (
     ActivateProjectTool,
     GetCurrentConfigTool,
+    OnboardingTool,
     OpenDashboardTool,
     ReadMemoryTool,
     ReplaceContentTool,
@@ -981,6 +982,8 @@ class SerenaAgent:
                     f"\n{json.dumps(project_memories.to_dict())}\n"
                     + "Use the `read_memory` tool to read these memories later if they are relevant to the task."
                 )
+            elif self._active_tools.contains_tool_class(OnboardingTool):
+                msg += "Onboarding has not been performed yet, you should call Serena's `onboarding` tool now to set up project memories."
 
         # add prompts for modes that were dynamically activated by the project
         modes_with_prompts = self._project_prompt_status.get_modes_with_prompts_to_be_provided_for_project_activation(session_id)

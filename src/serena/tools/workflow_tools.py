@@ -4,38 +4,7 @@ Tools supporting the general workflow of the agent
 
 import platform
 
-from serena.tools import ReadMemoryTool, Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional, WriteMemoryTool
-
-
-class CheckOnboardingPerformedTool(Tool):
-    """
-    Checks whether project onboarding was already performed.
-    """
-
-    def apply(self) -> str:
-        """
-        Checks whether project onboarding was already performed.
-        You should always call this tool before beginning to actually work on the project/after activating a project.
-        """
-        read_memory_tool_available = self.agent.tool_is_exposed(ReadMemoryTool.get_name_from_cls())
-        perform_onboarding_tool_available = self.agent.tool_is_exposed(OnboardingTool.get_name_from_cls())
-
-        if not read_memory_tool_available:
-            return "Memory reading tool not activated, skipping onboarding check."
-        project_memories = self.memories_manager.list_project_memories()
-        if len(project_memories) == 0:
-            msg = "Onboarding not performed yet (no memories available). "
-            if perform_onboarding_tool_available:
-                msg += "You should perform onboarding by calling the `onboarding` tool before proceeding with the task. "
-        else:
-            # Not reporting the list of memories here, as they were already reported at project activation
-            # (with the system prompt if the project was activated at startup)
-            msg = (
-                f"Onboarding was already performed: {len(project_memories)} project memories are available. "
-                "Consider reading memories if they appear relevant to the task at hand."
-            )
-        msg += " If you have not read the 'Serena Instructions Manual', do so now."
-        return msg
+from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional, WriteMemoryTool
 
 
 class OnboardingTool(Tool):
