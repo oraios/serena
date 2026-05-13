@@ -19,8 +19,10 @@ When a Godot project is open in the editor, the editor listens for LSP connectio
 
 Serena automatically detects which major version of Godot your project targets by reading the `config_version` field from `project.godot`:
 
-- `config_version` ≥ 5 → Godot 4
+- `config_version` = 5 → Godot 4
 - `config_version` = 4 → Godot 3
+
+If `config_version` is not recognized (e.g. from a future Godot release), Serena logs a warning and still connects — both Godot 3 and Godot 4 use the same port.
 
 No additional configuration is needed for version detection.
 
@@ -70,6 +72,20 @@ To mitigate this:
 | No `workspace/symbol` support | Godot's LSP does not implement this request. All symbol lookups fall back to per-file `documentSymbol` requests, making the first full-project scan slow. |
 | Editor must stay open | Serena requires the Godot editor to be running throughout the session. Closing the editor breaks the TCP connection; restart Serena after reopening the editor. |
 | Slower workspace operations | `find_symbol` and `find_references` across the whole workspace are slower than for languages whose LSP servers support native workspace-wide queries. |
+
+---
+## Advanced Configuration
+
+You can customize Serena's GDScript connection via `ls_specific_settings` in your `serena_config.yml` or `project.yml`:
+
+```yaml
+ls_specific_settings:
+  gdscript:
+    port: 6008         # TCP port the Godot editor listens on (default: 6008)
+    request_timeout: 30.0  # seconds to wait for an LSP response (default: 30.0)
+```
+
+These override the defaults only if explicitly set.
 
 ---
 ## Reference

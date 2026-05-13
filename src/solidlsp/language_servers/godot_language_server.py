@@ -20,10 +20,11 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
-# config_version in project.godot: 5 → Godot 4, 4 → Godot 3
-_GODOT4_CONFIG_VERSION = 5
+# Maps config_version in project.godot to the Godot major version
+_CONFIG_VERSION_TO_GODOT_MAJOR: dict[int, int] = {4: 3, 5: 4}
 
-LSP_PORT = 6008
+DEFAULT_GODOT_LS_PORT = 6008
+DEFAULT_GODOT_REQUEST_TIMEOUT = 30.0
 
 
 class GodotLanguageServer(SolidLanguageServer):
@@ -32,42 +33,55 @@ class GodotLanguageServer(SolidLanguageServer):
     Both Godot 3 and Godot 4 expose an LSP server on TCP port 6008.
     The Godot editor must already be running — this class connects to it
     rather than launching it.
+
+    ls_specific_settings for ``gdscript``:
+        - ``port`` (int): TCP port the Godot editor's LSP listens on (default: 6008).
+        - ``request_timeout`` (float): seconds to wait for an LSP response (default: 30.0).
     """
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings) -> None:
         self._godot_version = self._detect_godot_version(repository_root_path)
-        log.info("Detected Godot version %d for project at %s", self._godot_version, repository_root_path)
-        self._conn_info = TCPConnectionInfo(host="127.0.0.1", port=LSP_PORT)
+        if self._godot_version is not None:
+            log.info("Detected Godot version %d for project at %s", self._godot_version, repository_root_path)
+        else:
+            log.warning("Could not detect Godot version for project at %s", repository_root_path)
 
         # Dummy ProcessLaunchInfo — _create_language_server_interface() ignores it
         super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=""), "gdscript", solidlsp_settings)
 
     @staticmethod
-    def _detect_godot_version(repo_path: str) -> int:
-        """Read project.godot to determine the major Godot version. Defaults to 4."""
+    def _detect_godot_version(repo_path: str) -> int | None:
+        """Read project.godot to determine the major Godot version.
+
+        Returns None if detection fails or the config_version is unrecognized.
+        """
         project_file = os.path.join(repo_path, "project.godot")
         try:
             with open(project_file, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line.startswith("config_version="):
-                        version = int(line.split("=", 1)[1])
-                        return 4 if version >= _GODOT4_CONFIG_VERSION else 3
+                        config_version = int(line.split("=", 1)[1])
+                        return _CONFIG_VERSION_TO_GODOT_MAJOR.get(config_version)
         except (FileNotFoundError, ValueError, OSError):
             pass
-        return 4
+        return None
 
     def _create_language_server_interface(
         self,
         process_launch_info: ProcessLaunchInfo,
         logging_fn: Callable[[str, str, StringDict | str], None] | None,
     ) -> LanguageServerInterface:
+        settings: dict = self._custom_settings or {}
+        port = settings.get("port", DEFAULT_GODOT_LS_PORT)
+        request_timeout = settings.get("request_timeout", DEFAULT_GODOT_REQUEST_TIMEOUT)
+        self._conn_info = TCPConnectionInfo(host="127.0.0.1", port=port)
         return TCPLanguageServer(
             connection_info=self._conn_info,
             language=self.language,
             determine_log_level=self._determine_log_level,
             logger=logging_fn,
-            request_timeout=30.0,
+            request_timeout=request_timeout,
         )
 
     @staticmethod
