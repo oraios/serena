@@ -1267,19 +1267,13 @@ class MemoryCommands(AutoRegisteringGroup):
         type=click.Choice(["literal", "regex"]),
         default="literal",
         show_default=True,
-        help="Treat --needle as literal text or as a Python regex (MULTILINE flag is always on; DOTALL via --dotall).",
+        help="Treat --needle as literal text or as a Python regex (MULTILINE and DOTALL flags enabled).",
     )
     @click.option(
         "--allow-multiple-occurrences",
         is_flag=True,
         default=False,
         help="Permit and apply multiple matches; without this, multiple matches raise an error.",
-    )
-    @click.option(
-        "--dotall",
-        is_flag=True,
-        default=False,
-        help="Regex mode only: make `.` match newlines as well, enabling multi-line patterns. Use with care.",
     )
     def edit(
         memory_name: str,
@@ -1288,7 +1282,6 @@ class MemoryCommands(AutoRegisteringGroup):
         repl: str,
         mode: Literal["literal", "regex"],
         allow_multiple_occurrences: bool,
-        dotall: bool,
     ) -> None:
         manager = MemoryCommands._load_memories_manager(project)
         click.echo(
@@ -1299,7 +1292,6 @@ class MemoryCommands(AutoRegisteringGroup):
                 mode,
                 allow_multiple_occurrences,
                 is_tool_context=False,
-                dotall=dotall,
             )
         )
 

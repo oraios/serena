@@ -24,13 +24,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     See the [CLI subcommands](https://oraios.github.io/serena/02-usage/045_memories.html#cli-subcommands).
 
 * Tools:
-  - `edit_memory`: New `dotall` parameter (default `False`) controlling whether ``.`` matches
-    newlines in regex mode. **Behavior change**: previously DOTALL was forced on; the new default
-    restricts ``.`` to a single line, which is safer for typical line-bounded memory edits and
-    avoids accidentally consuming large spans of content. Pass `dotall=True` for multi-line edits.
-  - `search_for_pattern`: New `dotall` parameter (default `True`, preserving existing behavior)
-    exposing the DOTALL flag, and the docstring was tightened.
-  - Delete `check_onboarding_performed` tool (instead extend project activation message),
+  - `search_for_pattern`: Add parameter `multiline`
+  - Delete `check_onboarding_performed` tool (instead extend project activation message)
 
 # v1.3.0 (2026-05-11)
 

@@ -358,7 +358,7 @@ class MemoriesManager:
         mode: Literal["literal", "regex"],
         allow_multiple_occurrences: bool,
         is_tool_context: bool,
-        dotall: bool = True,
+        regex_multiline: bool = True,
     ) -> str:
         """
         Edit a memory by replacing content matching a pattern.
@@ -369,7 +369,7 @@ class MemoriesManager:
         :param mode: "literal" or "regex"
         :param allow_multiple_occurrences:
         :param is_tool_context: whether the call originates from a tool invocation (affects write-access checks)
-        :param dotall: whether to compile the regex with the DOTALL flag (``.`` matches newlines). Only relevant in regex mode.
+        :param regex_multiline: whether to apply multi-line regex matching, enabling the flags re.DOTALL and re.MULTILINE
         """
         name = self._prepare_name(name)
         self._check_not_ignored(name)
@@ -379,7 +379,7 @@ class MemoriesManager:
             raise FileNotFoundError(f"Memory {name} not found.")
         with open(memory_file_path, encoding=self._encoding) as f:
             original_content = f.read()
-        replacer = ContentReplacer(mode=mode, allow_multiple_occurrences=allow_multiple_occurrences, dotall=dotall)
+        replacer = ContentReplacer(mode=mode, allow_multiple_occurrences=allow_multiple_occurrences, regex_multiline=regex_multiline)
         updated_content = replacer.replace(original_content, needle, repl)
         with open(memory_file_path, "w", encoding=self._encoding) as f:
             f.write(updated_content)
@@ -738,7 +738,7 @@ class Project(ToStringMixin):
         context_lines_after: int = 0,
         paths_include_glob: str | None = None,
         paths_exclude_glob: str | None = None,
-        dotall: bool = True,
+        multiline: bool = True,
     ) -> list[MatchedConsecutiveLines]:
         """
         Search for a pattern across all (non-ignored) source files
@@ -749,7 +749,7 @@ class Project(ToStringMixin):
         :param context_lines_after: Number of lines of context to include after each match
         :param paths_include_glob: Glob pattern to filter which files to include in the search
         :param paths_exclude_glob: Glob pattern to filter which files to exclude from the search. Takes precedence over paths_include_glob.
-        :param dotall: Whether to compile the regex with the DOTALL flag (``.`` matches newlines).
+        :param multiline: Whether to compile the regex with the DOTALL flag (``.`` matches newlines).
         :return: List of matched consecutive lines with context
         """
         relative_file_paths = self.gather_source_files(relative_path=relative_path)
@@ -762,7 +762,7 @@ class Project(ToStringMixin):
             context_lines_after=context_lines_after,
             paths_include_glob=paths_include_glob,
             paths_exclude_glob=paths_exclude_glob,
-            dotall=dotall,
+            multiline=multiline,
         )
 
     def retrieve_content_around_line(

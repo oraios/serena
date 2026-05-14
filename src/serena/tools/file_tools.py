@@ -332,7 +332,7 @@ class SearchForPatternTool(Tool):
         paths_exclude_glob: str = "",
         relative_path: str = "",
         restrict_search_to_code_files: bool = False,
-        dotall: bool = True,
+        multiline: bool = True,
         max_answer_chars: int = -1,
     ) -> str:
         """
@@ -347,7 +347,7 @@ class SearchForPatternTool(Tool):
         :param relative_path: restricts the search to this file or subdirectory of the project root. Must exist.
         :param restrict_search_to_code_files: whether to search only files containing analyzable code symbols
             (useful when looking for class/method definitions); otherwise also search non-code files.
-        :param dotall: whether to compile the regex with the DOTALL flag (``.`` matches newlines, enabling multi-line matches).
+        :param multiline: whether to apply multi-line matching, enabling the flags re.DOTALL and re.MULTILINE
         :param max_answer_chars: if the output exceeds this many characters, a progressively shortened summary is returned instead.
             ``-1`` uses the configured default.
         :return: A mapping from file paths to matched consecutive lines (0-based line numbers).
@@ -368,7 +368,7 @@ class SearchForPatternTool(Tool):
                 context_lines_after=context_lines_after,
                 paths_include_glob=paths_include_glob.strip(),
                 paths_exclude_glob=paths_exclude_glob.strip(),
-                dotall=dotall,
+                multiline=multiline,
             )
         else:
             if os.path.isfile(abs_path):
@@ -392,7 +392,7 @@ class SearchForPatternTool(Tool):
                 root_path=self.get_project_root(),
                 paths_include_glob=paths_include_glob,
                 paths_exclude_glob=paths_exclude_glob,
-                dotall=dotall,
+                multiline=multiline,
             )
 
         # group matches by file
