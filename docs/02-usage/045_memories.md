@@ -30,15 +30,15 @@ criteria:
 2. **Versionable with the project.** Project memories live alongside the code and can
    be committed, reviewed in PRs, and reverted like any other repository artifact.
 3. **Progressive disclosure.** Agents receive the full memory *name list* up
-   front as part of their initial instructions; any further routing is described inside
+   front as part of their initial instructions; any further references are described inside
    the memory content itself - typically a `mem:core` entry point pointing at focused
-   memories. The agent decides what to read based on names plus the routing it has
+   memories. The agent decides what to read based on names plus the references it has
    already seen.
-4. **Prefer routing to search.** Given an intelligent agent and well-structured routing, search is
+4. **Prefer references to search.** Given an intelligent agent and well-structured references, search is
    unnecessary - and it adds noise: any retrieval method (lexical or semantic)
-   produces both false positives and false negatives. Explicit, name-based routing
-   decided by the agent is deterministic and avoids both error modes. Basic search via regex/grep
-   is sufficient to complement the routing when needed and is available to any agent.
+   produces both false positives and false negatives. Explicit, name-based references
+   decided by the agent are deterministic and avoid both error modes. Basic search via regex/grep
+   is sufficient to complement the references when needed and is available to any agent.
 5. **Prefer deliberate reads to triggers.** The agent decides what to read and when. The harness does
    not inject memory content on the agent's behalf.
 6. **Framework-agnostic.** The storage format is plain Markdown files in
@@ -85,7 +85,7 @@ This convention has two practical consequences:
   not resolve to an existing memory, and propose similarly-named candidates as likely intended
   targets.
 
-The full convention - including style, add/update thresholds, and how to structure routing across
+The full convention - including style, add/update thresholds, and how to structure references across
 `core` memories - is shipped to every onboarded project as the `memory_maintenance` memory; see the
 [Onboarding section](onboarding) below.
 
@@ -158,7 +158,7 @@ process if memories are found.
 To make memory conventions discoverable to both the LLM and the user, Serena seeds
 a `memory_maintenance` memory on first onboarding. The seed is copied from a template
 shipped with the Serena package and contains the dense agent-notes style, the
-`mem:` reference convention, the routing model around `core` memories, the
+`mem:` reference convention, the reference model around `core` memories, the
 add/update threshold, and the maintenance actions (rename / delete / split).
 
 The seeding follows a strict precedence:

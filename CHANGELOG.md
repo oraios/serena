@@ -11,13 +11,13 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add Language: replace the native `<select>` with a filterable combobox — type to filter, keyboard navigation (Up/Down/Enter/Esc), substring highlight, click-outside to close. The typed value is validated against the available languages list before submission.
 
 * Memories:
-  - Memories can now reference each other using the `` `mem:NAME` `` convention. Renames
+  - Memories can now reference each other using the `mem:<name>` convention. Renames
     propagate to all references automatically. See the [reference convention](https://oraios.github.io/serena/02-usage/045_memories.html#referencing-memories-from-other-memories).
-  - Onboarding now seeds a `memory_maintenance` memory describing the memory-style and
-    routing conventions, and the agent is instructed to read it before writing any other
-    memories. A `global/memory_maintenance` memory takes precedence over the per-project
-    seed. See the [memory maintenance section](https://oraios.github.io/serena/02-usage/045_memories.html#the-memory-maintenance-memory).
-
+  - Onboarding now seeds a `memory_maintenance` memory describing the memory-style and conventions, 
+    and the agent is instructed to read it before writing any other memories. 
+    A `global/memory_maintenance` memory takes precedence over the per-project seed. 
+    See the [memory maintenance section](https://oraios.github.io/serena/02-usage/045_memories.html#the-memory-maintenance-memory).
+   
 * CLI:
   - Add `serena memories` CLI command group: `list`, `read`, `write`, `check` (referential
     integrity report) and `auto-prefix-references` (heuristic rewrite of bare occurrences).

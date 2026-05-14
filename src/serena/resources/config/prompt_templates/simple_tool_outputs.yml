@@ -28,8 +28,8 @@ prompts:
       (linter, formatter, test runner, type checker, etc.).
 
     If the project has clearly distinct modules (e.g. frontend/backend), create per-module
-    `mem:<module>/core` memories for module-specific routing instead of pushing everything
-    into `mem:core`.
+    `mem:<module>/core` memories with module-specific references to further memories instead 
+    of pushing everything into `mem:core`.
 
     Acquire information using the available tools. Read only the files needed; do not load
     entire directory trees. If essential information is missing, ask the user.

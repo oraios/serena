@@ -148,7 +148,7 @@ are kept in sync across renames, and a `serena memories check` command is availa
 to report stale references.
 
 During the first onboarding, Serena seeds a `memory_maintenance` memory describing the
-conventions (style, references, routing) that subsequent memories should follow, and the
+conventions (style, references) that subsequent memories should follow, and the
 agent is instructed to read it before writing any project-specific memories.
 
 For more information on this, including the target memory layout, the `mem:` reference
