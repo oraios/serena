@@ -10,6 +10,14 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Modal markup cleanup: extract shared CSS classes (`.modal-info`, `.modal-hint`, `.modal-prompt`, `.modal-field`, `.modal-input`, `.modal-select`, `.modal-textarea`, `.modal-actions`, `.btn-secondary`) and remove duplicated inline styles from all seven modals. Inputs and textareas get an accent-colored focus ring; the modal backdrop has a subtle blur.
   - Add Language: replace the native `<select>` with a filterable combobox — type to filter, keyboard navigation (Up/Down/Enter/Esc), substring highlight, click-outside to close. The typed value is validated against the available languages list before submission.
 
+* Tools:
+  - `edit_memory`: New `dotall` parameter (default `False`) controlling whether ``.`` matches
+    newlines in regex mode. **Behavior change**: previously DOTALL was forced on; the new default
+    restricts ``.`` to a single line, which is safer for typical line-bounded memory edits and
+    avoids accidentally consuming large spans of content. Pass `dotall=True` for multi-line edits.
+  - `search_for_pattern`: New `dotall` parameter (default `True`, preserving existing behavior)
+    exposing the DOTALL flag, and the docstring was tightened.
+
 # v1.3.0 (2026-05-11)
 
 * General:
