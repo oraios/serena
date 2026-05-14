@@ -197,7 +197,7 @@ Claude Code settings file (`.claude/settings.json` in your project directory, or
                 ]
             }
         ],
-        "Stop": [
+        "SessionEnd": [
             {
                 "matcher": "",
                 "hooks": [
