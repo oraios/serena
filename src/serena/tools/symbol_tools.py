@@ -570,16 +570,16 @@ class ReplaceSymbolBodyTool(EditingToolWithDiagnostics):
         body: str,
     ) -> str:
         r"""
-        Replaces the body of the symbol with the given `name_path`.
+        Replaces the body of the given symbol.
 
-        The tool shall be used to replace symbol bodies that have been previously retrieved explicitly!
-        IMPORTANT: Do not use this tool if you do not know what exactly constitutes the body of the symbol.
+        IMPORTANT: Only replace symbol bodies if you have previously made a retrieval with include_body=True and thus know what
+        constitutes the body!
 
         :param name_path: name path of the symbol whose body to replace
         :param relative_path: the relative path to the file containing the symbol
         :param body: the new symbol body. The symbol body is the definition of a symbol
             in the programming language, including e.g. the signature line for functions.
-            IMPORTANT: The body does NOT include any preceding docstrings/comments or imports, in particular.
+            Depending on the language, it may or may not include a preceding docstring or other preceding annotations.
         """
         with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
             code_editor = self.create_code_editor()
