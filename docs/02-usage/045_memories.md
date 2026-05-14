@@ -7,7 +7,7 @@ agent's internal memory management (e.g., `AGENTS.md` files).
 ## Memories
 
 Memories are simple, human-readable Markdown files that both you and
-your agent can create, read, and edit. 
+your agent can create, read, reference, and edit. 
 
 Serena differentiates between 
   * **project-specific memories**, which are stored in the `.serena/memories/` directory within your project folder, and
@@ -18,11 +18,75 @@ inferring appropriateness from the file name.
 When the agent starts working on a project, it receives the list of available memories. 
 The agent should be instructed to update memories by the user when appropriate.
 
+### Design Rationale
+
+Serena's memory system is intentionally minimal. It was designed to satisfy the following
+criteria:
+
+1. **Human-readable and editable.** Memories must remain directly readable and editable
+   in any text editor. The agent is typically the day-to-day consumer, but a human author
+   or reviewer must always be able to step in without going through the agent.
+2. **Versionable with the project.** Project memories live alongside the code and can
+   be committed, reviewed in PRs, and reverted like any other repository artifact.
+3. **Progressive disclosure.** Agents receive the full memory *name list* up
+   front as part of their initial instructions; any further routing is described inside
+   the memory content itself - typically a `mem:core` entry point pointing at focused
+   memories. The agent decides what to read based on names plus the routing it has
+   already seen.
+4. **Prefer routing to search.** Given an intelligent agent and well-structured routing, search is
+   unnecessary - and it adds noise: any retrieval method (lexical or semantic)
+   produces both false positives and false negatives. Explicit, name-based routing
+   decided by the agent is deterministic and avoids both error modes. Basic search via regex/grep
+   is sufficient to complement the routing when needed and is available to any agent.
+5. **Prefer deliberate reads to triggers.** The agent decides what to read and when. The harness does
+   not inject memory content on the agent's behalf.
+6. **Framework-agnostic.** The storage format is plain Markdown files in
+   a simple directory layout. The only Serena-specific convention is the `mem:` 
+   prefix for references to memories, which does not prevent using the memory files outside
+   of Serena.
+7. **Configurable and composable.** Two orthogonal memory scopes -
+   [per-project](#memories) (committed alongside the code) and [global](global-memories)
+   (shared across all your projects) - can be combined freely. Within either scope,
+   regex patterns in the global or project configuration can mark subsets as read-only
+   or [hide them entirely](#ignoring-memories) from the agent. This lets a project mix
+   personal cross-project knowledge with checked-in project conventions, and selectively
+   freeze either set, without custom plumbing.
+
+Taken together, these criteria rule out several common alternatives:
+
+- **Database-backed memory** (SQLite, graph databases, vector stores) is excluded by
+  criteria 1, 4, and 6.
+- **`AGENTS.md` and similar single-file conventions** are excluded by criteria 3 and 5.
+- **Hooks and harness-internal memory systems** are excluded by criteria 5 and 6.
+
+To our knowledge, no existing system satisfies our design goal, which is
+why Serena ships its own memory layer rather than reusing one.
+The closest existing approaches are in the family of Markdown-based personal knowledge
+management tools - **Obsidian**, **Logseq**, **Foam**.
+
 ### Organizing Memories
 
 Memories can be organized into **topics** by using `/` in the memory name (e.g. `modules/frontend`).
 The structure is mapped to the file system, where topics correspond to subdirectories.
 The `list_memories` tool can filter by topic, allowing the agent to explore even large numbers of memories in a structured way.
+
+(memory-references)=
+### Referencing Memories from Other Memories
+
+Memories may reference each other. Serena recognizes a reference as a memory name prefixed with
+`mem:` and wrapped in backticks, for example `` `mem:auth/login` `` or `` `mem:suggested_commands` ``.
+This convention has two practical consequences:
+
+- **Renames keep references intact.** When you rename or move a memory with the `rename_memory`
+  tool, Serena rewrites every `` `mem:OLD_NAME` `` occurrence across all memories to point to
+  the new name. References that do not use the `mem:` prefix will not be updated automatically.
+- **Integrity checks** (see [below](memory-cli)) report any `` `mem:NAME` `` whose target does
+  not resolve to an existing memory, and propose similarly-named candidates as likely intended
+  targets.
+
+The full convention - including style, add/update thresholds, and how to structure routing across
+`core` memories - is shipped to every onboarded project as the `memory_maintenance` memory; see the
+[Onboarding section](onboarding) below.
 
 (global-memories)=
 ### Global Memories
@@ -49,7 +113,7 @@ global or project-level [configuration](050_configuration):
 ignored_memory_patterns: ["_archive/.*", "_episodes/.*"]
 ```
 
-Ignored memories are completely excluded — they cannot be accessed via `read_memory`, `write_memory`,
+Ignored memories are completely excluded - they cannot be accessed via `read_memory`, `write_memory`,
 or any other memory tool. To read an ignored memory file, use the `read_file` tool on the raw file path
 (e.g., `.serena/memories/_archive/2026-03/some-topic.md`).
 
@@ -66,8 +130,8 @@ viewing, creating, editing, and deleting memories while Serena is running.
 
 By default, Serena performs an **onboarding process** when it encounters a project
 for the first time (i.e., when no project memories exist yet).
-The goal of the onboarding is for Serena to get familiar with the project —
-its structure, build system, testing setup, and other essential aspects —
+The goal of the onboarding is for Serena to get familiar with the project -
+its structure, build system, testing setup, and other essential aspects -
 and to store this knowledge as memories for future interactions.
 
 In further project activations, Serena will check whether onboarding was already
@@ -80,7 +144,32 @@ process if memories are found.
    performed (by checking if any memories exist).
 2. If no memories are found, Serena triggers the onboarding process, which
    reads key files and directories to understand the project.
-3. The gathered information is written into project-specific memory files (see above).
+3. Before any project memory is written, Serena materializes a project-local
+   `memory_maintenance` memory (see below). The agent is then instructed to read it
+   first and follow the conventions it describes.
+4. The gathered information is written into project-specific memory files following
+   the onboarding prompt instructions and the conventions outlined in `memory_maintenance`.
+
+(memory-maintenance-memory)=
+### The `memory_maintenance` Memory
+
+To make memory conventions discoverable to both the LLM and the user, Serena seeds
+a `memory_maintenance` memory on first onboarding. The seed is copied from a template
+shipped with the Serena package and contains the dense agent-notes style, the
+`mem:` reference convention, the routing model around `core` memories, the
+add/update threshold, and the maintenance actions (rename / delete / split).
+
+The seeding follows a strict precedence:
+
+1. If you already maintain a `global/memory_maintenance` memory, Serena uses that
+   and **does not** create a project-local copy. This is the recommended approach
+   for teams that want one shared convention document across all projects.
+2. Otherwise, if the project already has a `memory_maintenance` memory, it is left
+   untouched.
+3. Otherwise, the shipped template is written to `.serena/memories/memory_maintenance.md`.
+
+Existing files are never overwritten - you can freely customize the project copy.
+To refresh from the shipped template, delete the existing memory first.
 
 ### Tips for Onboarding
 
@@ -91,6 +180,29 @@ process if memories are found.
   write the respective memories to disk, you may need to ask it to do so explicitly.
 - **Review the results**: After onboarding, we recommend having a quick look at the
   generated memories and editing them or adding new ones as needed.
+
+(memory-cli)=
+### CLI Subcommands
+
+While the recommended way to manage memories is through the **MCP integration**, 
+Serena also offers memory-related CLI commands.
+
+The following commands have **no MCP tool counterpart** and are intended for human execution:
+
+- `serena memories check` — referential-integrity report. By default reports only stale
+  `` `mem:NAME` `` references whose target does not resolve. Pass `--include-unmarked` to
+  also report bare occurrences of existing memory names found through a heuristic.
+- `serena memories auto-prefix-references` — heuristic rewrite of bare occurrences to add
+  the `mem:` prefix; supports `--dry-run`.
+- `serena memories initialize` will seed the `memory_maintenance` memory for the project.
+
+The remaining commands mirror the MCP tools, you can thus instruct your agent to manage memories with
+serena without having a running MCP server. Discover the full surface and per-command flags via:
+
+```shell
+serena memories --help
+serena memories <subcommand> --help
+```
 
 ## Disabling Memories and Onboarding
 

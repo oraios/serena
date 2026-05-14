@@ -82,13 +82,11 @@ class RenameMemoryTool(Tool, ToolMarkerCanEdit):
         The "global" topic should only be used if explicitly instructed.
         References to other memories that are marked with the `mem:` prefix will be updated accordingly.
         """
-        renaming_message = self.memories_manager.move_memory(old_name, new_name, is_tool_context=True)
-        for memory in self.memories_manager.list_memories().get_full_list():
-            memory_content = self.memories_manager.load_memory(memory)
-            updated_content, n_replacements = self.memories_manager.rename_references_to_memory(memory_content, old_name, new_name)
-            if n_replacements > 0:
-                log.info(f"Updated {n_replacements} references to memory {old_name} to {new_name}")
-                self.memories_manager.save_memory(memory, updated_content, is_tool_context=True)
+        renaming_message, n_references_updated = self.memories_manager.rename_memory_and_propagate_references(
+            old_name, new_name, is_tool_context=True
+        )
+        if n_references_updated > 0:
+            log.info(f"Updated {n_references_updated} references to memory {old_name} to {new_name}")
         return renaming_message
 
 

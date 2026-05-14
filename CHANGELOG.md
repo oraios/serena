@@ -10,6 +10,20 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Modal markup cleanup: extract shared CSS classes (`.modal-info`, `.modal-hint`, `.modal-prompt`, `.modal-field`, `.modal-input`, `.modal-select`, `.modal-textarea`, `.modal-actions`, `.btn-secondary`) and remove duplicated inline styles from all seven modals. Inputs and textareas get an accent-colored focus ring; the modal backdrop has a subtle blur.
   - Add Language: replace the native `<select>` with a filterable combobox — type to filter, keyboard navigation (Up/Down/Enter/Esc), substring highlight, click-outside to close. The typed value is validated against the available languages list before submission.
 
+* Memories:
+  - Memories can now reference each other using the `` `mem:NAME` `` convention. Renames
+    propagate to all references automatically. See the [reference convention](https://oraios.github.io/serena/02-usage/045_memories.html#referencing-memories-from-other-memories).
+  - New `serena memories` CLI command group: `list`, `read`, `write`, `check` (referential
+    integrity report) and `auto-prefix-references` (heuristic rewrite of bare occurrences).
+    See the [CLI subcommands](https://oraios.github.io/serena/02-usage/045_memories.html#cli-subcommands).
+  - Onboarding now seeds a `memory_maintenance` memory describing the memory-style and
+    routing conventions, and the agent is instructed to read it before writing any other
+    memories. A `global/memory_maintenance` memory takes precedence over the per-project
+    seed. See the [memory maintenance section](https://oraios.github.io/serena/02-usage/045_memories.html#the-memory-maintenance-memory).
+  - Onboarding prompt rewritten to target a layout of `mem:core` (routing entry point),
+    `mem:suggested_commands`, `mem:tech_stack`, `mem:conventions`, `mem:task_completion`,
+    and optional per-module `mem:<module>/core` memories, using dense agent-notes style.
+
 * Tools:
   - `edit_memory`: New `dotall` parameter (default `False`) controlling whether ``.`` matches
     newlines in regex mode. **Behavior change**: previously DOTALL was forced on; the new default

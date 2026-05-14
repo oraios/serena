@@ -166,6 +166,9 @@ class MemoriesManager:
     # generic prose word like "repository" is a substring of "serena_repository_structure"
     # but their token Jaccard is only 1/3, so we reject it at this floor.
     _FUZZY_BARE_TOKEN_JACCARD_FLOOR: float = 0.5
+
+    _WORDS_TO_IGNORE_AS_MEMORY_NAME_CANDIDATES: frozenset[str] = frozenset({"core"})
+    """Names that we specifically mention in our instructions and that coincide with common words"""
     _VERSION_SUFFIX_PATTERN = re.compile(r"_(?:v\d+|old|new|legacy|bak)$", re.IGNORECASE)
 
     @classmethod
@@ -507,19 +510,19 @@ class MemoriesManager:
         Outcome of :meth:`MemoriesManager.validate_referential_integrity`.
 
         :ivar stale_references: ``mem:NAME`` references whose target memory does not exist.
-        :ivar high_confidence_warnings: bare references whose suspected target name is unlikely
+        :ivar high_confidence_unmarked_memories: bare references whose suspected target name is unlikely
             to be coincidental prose (topic-path or sufficiently long).
-        :ivar low_confidence_warnings: bare references whose suspected target name could plausibly
+        :ivar low_confidence_unmarked_memories: bare references whose suspected target name could plausibly
             appear in ordinary prose (short, flat names).
         """
 
         stale_references: list["MemoriesManager.StaleReference"] = field(default_factory=list)
-        high_confidence_warnings: list["MemoriesManager.UnmarkedReferenceWarning"] = field(default_factory=list)
-        low_confidence_warnings: list["MemoriesManager.UnmarkedReferenceWarning"] = field(default_factory=list)
+        high_confidence_unmarked_memories: list["MemoriesManager.UnmarkedReferenceWarning"] = field(default_factory=list)
+        low_confidence_unmarked_memories: list["MemoriesManager.UnmarkedReferenceWarning"] = field(default_factory=list)
 
         def is_clean(self) -> bool:
             """:return: True iff no stale references and no warnings of any confidence level were found."""
-            return not (self.stale_references or self.high_confidence_warnings or self.low_confidence_warnings)
+            return not (self.stale_references or self.high_confidence_unmarked_memories or self.low_confidence_unmarked_memories)
 
         def format(self) -> str:
             """:return: a human-readable rendering suitable for CLI display."""
@@ -543,8 +546,8 @@ class MemoriesManager:
 
             # unmarked-reference warnings, split by confidence
             for label, warnings in (
-                ("High-confidence unmarked references", self.high_confidence_warnings),
-                ("Low-confidence unmarked references", self.low_confidence_warnings),
+                ("High-confidence unmarked references", self.high_confidence_unmarked_memories),
+                ("Low-confidence unmarked references", self.low_confidence_unmarked_memories),
             ):
                 if not warnings:
                     continue
@@ -714,6 +717,31 @@ class MemoriesManager:
 
         return f"Memory renamed from {old_name} to {new_name}."
 
+    def rename_memory_and_propagate_references(self, old_name: str, new_name: str, is_tool_context: bool) -> tuple[str, int]:
+        """
+        Renames a memory and updates every ``mem:OLD_NAME`` reference across all memories.
+
+        Memories whose content does not contain a reference to ``old_name`` are left
+        untouched (no spurious mtime changes). Memories that do are rewritten via
+        :meth:`save_memory`.
+
+        :param old_name: the current memory name (the source of the rename)
+        :param new_name: the target memory name
+        :param is_tool_context: forwarded to :meth:`save_memory` for read-only enforcement
+        :return: a tuple of (rename message returned by :meth:`move_memory`, total number of
+            ``mem:`` reference occurrences rewritten across all memories).
+        """
+        renaming_message = self.move_memory(old_name, new_name, is_tool_context=is_tool_context)
+
+        total_updates = 0
+        for memory_name in self.list_memories().get_full_list():
+            content = self.load_memory(memory_name)
+            updated_content, n_replacements = self.rename_references_to_memory(content, old_name, new_name)
+            if n_replacements > 0:
+                self.save_memory(memory_name, updated_content, is_tool_context=is_tool_context)
+                total_updates += n_replacements
+        return renaming_message, total_updates
+
     def edit_memory(
         self,
         name: str,
@@ -760,7 +788,7 @@ class MemoriesManager:
         source_basename = source_memory.rsplit("/", 1)[-1]
         return suspected_name == source_basename
 
-    def validate_referential_integrity(self) -> "MemoriesManager.ReferentialIntegrityReport":
+    def validate_referential_integrity(self, include_unmarked: bool = True) -> "MemoriesManager.ReferentialIntegrityReport":
         """
         Scans every (non-ignored) memory's content for referential integrity issues.
 
@@ -773,7 +801,8 @@ class MemoriesManager:
         * **exact unmarked-reference warnings** — bare occurrences of an existing memory
           name that appear without the ``mem:`` prefix. Split into high-confidence (the
           suspected name contains a ``/`` or exceeds :attr:`_HIGH_CONFIDENCE_NAME_LENGTH`)
-          and low-confidence groups.
+          and low-confidence groups. Candidate names whose basename matches
+          :attr:`WORDS_TO_IGNORE_AS_MEMORY_NAME_CANDIDATES` are skipped.
         * **fuzzy near-miss warnings** — long, distinctive bare tokens in a memory body
           that *do not* match an existing name exactly but similarity-match a
           high-confidence existing name AND share at least :attr:`_FUZZY_BARE_TOKEN_JACCARD_FLOOR`
@@ -787,6 +816,8 @@ class MemoriesManager:
 
         This method has no side effects.
 
+        :param include_unmarked: if False, skip the two unmarked-reference scans (exact and
+            fuzzy near-miss) entirely; only stale references are reported.
         :return: a :class:`ReferentialIntegrityReport` summarizing all findings.
         """
         report = MemoriesManager.ReferentialIntegrityReport()
@@ -801,6 +832,10 @@ class MemoriesManager:
         high_confidence_names = [n for n in all_names if "/" in n or len(n) >= self._HIGH_CONFIDENCE_NAME_LENGTH]
 
         for source_name in all_names:
+            # content of this memory should not be analyzed regarding stale references
+            if source_name == self.MEMORY_MAINTENANCE_NAME:
+                continue
+
             content = self.load_memory(source_name)
             if not content:
                 # skip empty memories silently — no references can exist in empty content
@@ -823,9 +858,15 @@ class MemoriesManager:
                     )
                 )
 
+            if not include_unmarked:
+                continue
+
             # exact unmarked references: bare occurrences of any existing memory name (except self)
             for candidate_name in all_names:
                 if self._is_self_reference(source_name, candidate_name):
+                    continue
+                # skip candidate names whose basename is an ambiguous common word
+                if candidate_name.rsplit("/", 1)[-1] in self._WORDS_TO_IGNORE_AS_MEMORY_NAME_CANDIDATES:
                     continue
                 n = self._find_bare_occurrences(content, candidate_name)
                 if n == 0:
@@ -840,9 +881,9 @@ class MemoriesManager:
                     actual_token=candidate_name,
                 )
                 if is_high_conf:
-                    report.high_confidence_warnings.append(warning)
+                    report.high_confidence_unmarked_memories.append(warning)
                 else:
-                    report.low_confidence_warnings.append(warning)
+                    report.low_confidence_unmarked_memories.append(warning)
 
             # fuzzy near-misses: long bare tokens that similarity-match a high-confidence existing name
             for token, n in self._iter_long_bare_tokens(content):
@@ -854,6 +895,8 @@ class MemoriesManager:
                 best_score = 0.0
                 for existing in high_confidence_names:
                     if self._is_self_reference(source_name, existing):
+                        continue
+                    if existing.rsplit("/", 1)[-1] in self._WORDS_TO_IGNORE_AS_MEMORY_NAME_CANDIDATES:
                         continue
                     score = self.compute_name_similarity(token, existing)
                     if score < self.NAME_SIMILARITY_THRESHOLD:
@@ -873,7 +916,7 @@ class MemoriesManager:
                         best_name = existing
                 if best_name is None:
                     continue
-                report.high_confidence_warnings.append(
+                report.high_confidence_unmarked_memories.append(
                     MemoriesManager.UnmarkedReferenceWarning(
                         source_memory=source_name,
                         suspected_name=best_name,
@@ -933,11 +976,11 @@ class MemoriesManager:
         validation = self.validate_referential_integrity()
 
         # combine the warning groups according to the include_flat_names policy
-        warnings: list[MemoriesManager.UnmarkedReferenceWarning] = list(validation.high_confidence_warnings)
+        warnings: list[MemoriesManager.UnmarkedReferenceWarning] = list(validation.high_confidence_unmarked_memories)
         if include_flat_names:
-            warnings.extend(validation.low_confidence_warnings)
+            warnings.extend(validation.low_confidence_unmarked_memories)
         else:
-            report.skipped_flat.extend(validation.low_confidence_warnings)
+            report.skipped_flat.extend(validation.low_confidence_unmarked_memories)
 
         # apply replacements per source memory, grouping warnings to avoid re-reading content
         warnings_by_source: dict[str, list[MemoriesManager.UnmarkedReferenceWarning]] = {}

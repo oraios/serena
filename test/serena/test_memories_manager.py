@@ -278,21 +278,21 @@ class TestValidateReferentialIntegrity:
         _write(fs_manager, "auth/login", "# notes")
         _write(fs_manager, "docs", "the auth/login process is documented elsewhere")
         report = fs_manager.validate_referential_integrity()
-        assert len(report.high_confidence_warnings) == 1
-        warning = report.high_confidence_warnings[0]
+        assert len(report.high_confidence_unmarked_memories) == 1
+        warning = report.high_confidence_unmarked_memories[0]
         assert warning.suspected_name == "auth/login"
         assert warning.is_high_confidence is True
         assert warning.occurrences == 1
-        assert report.low_confidence_warnings == []
+        assert report.low_confidence_unmarked_memories == []
 
     def test_low_confidence_unmarked_warning_for_short_flat_name(self, fs_manager: MemoriesManager) -> None:
         _write(fs_manager, "auth", "# notes")
         _write(fs_manager, "docs", "you must use auth here")
         report = fs_manager.validate_referential_integrity()
-        assert report.high_confidence_warnings == []
-        assert len(report.low_confidence_warnings) == 1
-        assert report.low_confidence_warnings[0].suspected_name == "auth"
-        assert report.low_confidence_warnings[0].is_high_confidence is False
+        assert report.high_confidence_unmarked_memories == []
+        assert len(report.low_confidence_unmarked_memories) == 1
+        assert report.low_confidence_unmarked_memories[0].suspected_name == "auth"
+        assert report.low_confidence_unmarked_memories[0].is_high_confidence is False
 
     def test_long_flat_name_is_high_confidence(self, fs_manager: MemoriesManager) -> None:
         # a flat name >= _HIGH_CONFIDENCE_NAME_LENGTH chars is unlikely to be coincidental prose
@@ -301,7 +301,7 @@ class TestValidateReferentialIntegrity:
         _write(fs_manager, long_name, "# notes")
         _write(fs_manager, "docs", f"the {long_name} is documented here")
         report = fs_manager.validate_referential_integrity()
-        assert len(report.high_confidence_warnings) == 1
+        assert len(report.high_confidence_unmarked_memories) == 1
 
     def test_fuzzy_near_miss_rejects_substring_only_matches(self, fs_manager: MemoriesManager) -> None:
         """
@@ -328,8 +328,8 @@ class TestValidateReferentialIntegrity:
         )
         report = fs_manager.validate_referential_integrity()
         assert report.is_clean(), (
-            f"Expected no findings; got high={report.high_confidence_warnings}, "
-            f"low={report.low_confidence_warnings}, stale={report.stale_references}"
+            f"Expected no findings; got high={report.high_confidence_unmarked_memories}, "
+            f"low={report.low_confidence_unmarked_memories}, stale={report.stale_references}"
         )
 
     def test_long_flat_name_near_miss_is_high_confidence(self, fs_manager: MemoriesManager) -> None:
@@ -350,12 +350,12 @@ class TestValidateReferentialIntegrity:
         _write(fs_manager, "docs", f"See {bare} for details")
 
         report = fs_manager.validate_referential_integrity()
-        assert len(report.high_confidence_warnings) == 1, (
+        assert len(report.high_confidence_unmarked_memories) == 1, (
             f"expected one high-confidence warning for the near-miss reference, "
-            f"got {len(report.high_confidence_warnings)} "
-            f"(high={report.high_confidence_warnings}, low={report.low_confidence_warnings})"
+            f"got {len(report.high_confidence_unmarked_memories)} "
+            f"(high={report.high_confidence_unmarked_memories}, low={report.low_confidence_unmarked_memories})"
         )
-        warning = report.high_confidence_warnings[0]
+        warning = report.high_confidence_unmarked_memories[0]
         assert warning.suspected_name == existing
         assert warning.source_memory == "docs"
 
@@ -367,7 +367,7 @@ class TestValidateReferentialIntegrity:
         # `auth/login` mentioning its own basename `login` should not produce a warning;
         # `auth` mentioned in `auth/login` content also shouldn't (it's the prefix), and only
         # actual matches matter — assert no warning concerns the source itself
-        for w in report.high_confidence_warnings + report.low_confidence_warnings:
+        for w in report.high_confidence_unmarked_memories + report.low_confidence_unmarked_memories:
             assert not (w.source_memory == "auth/login" and w.suspected_name in ("login", "auth/login"))
 
     def test_marked_reference_does_not_produce_unmarked_warning(self, fs_manager: MemoriesManager) -> None:
@@ -382,8 +382,8 @@ class TestValidateReferentialIntegrity:
         _write(fs_manager, "docs", "we have `mem:auth/login` plus a bare auth/login mention")
         report = fs_manager.validate_referential_integrity()
         # only the bare occurrence should be counted
-        assert len(report.high_confidence_warnings) == 1
-        assert report.high_confidence_warnings[0].occurrences == 1
+        assert len(report.high_confidence_unmarked_memories) == 1
+        assert report.high_confidence_unmarked_memories[0].occurrences == 1
 
     def test_empty_memory_skipped(self, fs_manager: MemoriesManager) -> None:
         _write(fs_manager, "auth/login", "")
@@ -397,7 +397,7 @@ class TestValidateReferentialIntegrity:
         _write(manager, "frozen/notes", "see bare auth/login mention")
         _write(manager, "auth/login", "# notes")
         report = manager.validate_referential_integrity()
-        warnings = report.high_confidence_warnings
+        warnings = report.high_confidence_unmarked_memories
         assert len(warnings) == 1
         assert warnings[0].source_memory == "frozen/notes"
         assert warnings[0].source_is_read_only is True

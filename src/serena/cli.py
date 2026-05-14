@@ -9,7 +9,7 @@ import time
 from collections.abc import Iterator, Sequence
 from logging import Logger
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import click
 from sensai.util import logging
@@ -42,6 +42,9 @@ from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
 from solidlsp.util.subprocess_util import subprocess_kwargs
+
+if TYPE_CHECKING:
+    from serena.project import MemoriesManager
 
 log = logging.getLogger(__name__)
 
@@ -1124,13 +1127,42 @@ class MemoryCommands(AutoRegisteringGroup):
         )
 
     @staticmethod
-    def _load_memories_manager(project: str):
-        """Load the active project and return its memories manager."""
+    def _load_memories_manager(project: str) -> "MemoriesManager":
+        """
+        Load the project at ``project`` and return its memories manager.
+
+        Requires the project to already be a Serena project (``.serena/project.yml`` must
+        exist at the configured location). Never auto-creates the ``.serena`` directory —
+        if no project configuration is found, the user is directed at ``serena project create``.
+        """
         from serena.project import Project
 
         serena_config = SerenaConfig.from_config_file()
-        proj = Project.load(os.path.abspath(project), serena_config=serena_config)
+        project_path = os.path.abspath(project)
+        try:
+            proj = Project.load(project_path, serena_config=serena_config, autogenerate=False)
+        except FileNotFoundError as e:
+            raise click.UsageError(
+                f"{e}\nNo Serena project found at {project_path}. Create one first with:\n  serena project create {project_path}"
+            ) from e
         return proj.memories_manager
+
+    @staticmethod
+    @click.command(
+        "initialize",
+        help=(
+            "Initialize this project's memory layout by seeding the `memory_maintenance` memory. "
+            "Requires the project to already exist as a Serena project (run `serena project create` first); "
+            "this command does not create a `.serena` directory on its own. "
+            "If a `global/memory_maintenance` memory exists, it takes precedence and no project copy is created."
+        ),
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
+    def initialize(project: str) -> None:
+        manager = MemoryCommands._load_memories_manager(project)
+        name = manager.ensure_memory_maintenance_memory()
+        click.echo(f"Memory maintenance memory ready: `mem:{name}`.")
 
     @staticmethod
     @click.command(
@@ -1186,18 +1218,112 @@ class MemoryCommands(AutoRegisteringGroup):
 
     @staticmethod
     @click.command(
+        "delete",
+        help="Delete a memory file. Use the `global/` prefix to address a global memory (e.g. `global/style_guide`).",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument("memory_name", type=str)
+    @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
+    def delete(memory_name: str, project: str) -> None:
+        manager = MemoryCommands._load_memories_manager(project)
+        click.echo(manager.delete_memory(memory_name, is_tool_context=False))
+
+    @staticmethod
+    @click.command(
+        "rename",
+        help=(
+            "Rename or move a memory and update every `mem:OLD_NAME` reference across all memories. "
+            "Use `/` in the name to organize into topics; use the `global/` prefix to address a "
+            "global memory. Moving between project and global scope is supported."
+        ),
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument("old_name", type=str)
+    @click.argument("new_name", type=str)
+    @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
+    def rename(old_name: str, new_name: str, project: str) -> None:
+        manager = MemoryCommands._load_memories_manager(project)
+        message, n_refs = manager.rename_memory_and_propagate_references(old_name, new_name, is_tool_context=False)
+        click.echo(message)
+        if n_refs > 0:
+            click.echo(f"Updated {n_refs} `mem:` reference occurrence(s) across the memory graph.")
+
+    @staticmethod
+    @click.command(
+        "edit",
+        help=(
+            "Replace content matching a pattern in a memory. By default operates in literal "
+            "(non-regex) mode and refuses to replace more than one occurrence; pass --mode regex "
+            "to enable regex matching and --allow-multiple-occurrences to permit multiple hits."
+        ),
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument("memory_name", type=str)
+    @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
+    @click.option("--needle", type=str, required=True, help="The text to search for (literal by default; regex if --mode=regex).")
+    @click.option("--repl", type=str, required=True, help="The replacement text (verbatim).")
+    @click.option(
+        "--mode",
+        type=click.Choice(["literal", "regex"]),
+        default="literal",
+        show_default=True,
+        help="Treat --needle as literal text or as a Python regex (MULTILINE flag is always on; DOTALL via --dotall).",
+    )
+    @click.option(
+        "--allow-multiple-occurrences",
+        is_flag=True,
+        default=False,
+        help="Permit and apply multiple matches; without this, multiple matches raise an error.",
+    )
+    @click.option(
+        "--dotall",
+        is_flag=True,
+        default=False,
+        help="Regex mode only: make `.` match newlines as well, enabling multi-line patterns. Use with care.",
+    )
+    def edit(
+        memory_name: str,
+        project: str,
+        needle: str,
+        repl: str,
+        mode: Literal["literal", "regex"],
+        allow_multiple_occurrences: bool,
+        dotall: bool,
+    ) -> None:
+        manager = MemoryCommands._load_memories_manager(project)
+        click.echo(
+            manager.edit_memory(
+                memory_name,
+                needle,
+                repl,
+                mode,
+                allow_multiple_occurrences,
+                is_tool_context=False,
+                dotall=dotall,
+            )
+        )
+
+    @staticmethod
+    @click.command(
         "check",
         help=(
             "Check referential integrity across all memories of the project (and global memories). "
-            "Reports stale `mem:` references and unmarked-reference warnings split into high- and "
-            "low-confidence groups. Read-only and never writes. Always exits 0."
+            "Reports stale `mem:` references. With --include-unmarked, also reports bare occurrences "
+            "of existing memory names that lack the `mem:` prefix (split into high- and low-confidence). "
+            "Read-only and never writes. Always exits 0."
         ),
         context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
     )
     @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
-    def check(project: str) -> None:
+    @click.option(
+        "--include-unmarked",
+        is_flag=True,
+        default=False,
+        help="Also report potentially unmarked references (bare occurrences of memory names without the `mem:` prefix).",
+    )
+    def check(project: str, include_unmarked: bool) -> None:
         manager = MemoryCommands._load_memories_manager(project)
-        report = manager.validate_referential_integrity()
+        report = manager.validate_referential_integrity(include_unmarked=include_unmarked)
         click.echo(report.format())
 
     @staticmethod
