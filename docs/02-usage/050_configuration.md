@@ -487,6 +487,27 @@ Supported settings:
 | `fsautocomplete_version` | `0.83.0` | Override the FsAutoComplete version Serena installs as a .NET tool. |
 
 
+#### GDScript (Godot Engine)
+
+Serena connects to the Godot editor's built-in LSP server over TCP. No separate process is launched.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `port` | `6008` | TCP port the running Godot editor listens on for LSP connections. |
+| `request_timeout` | `30.0` | Seconds to wait for a response from the Godot LSP server. |
+
+Example:
+
+```yaml
+ls_specific_settings:
+  gdscript:
+    port: 6008
+    request_timeout: 60.0
+```
+
+
 #### Go (`gopls`)
 
 Serena forwards `ls_specific_settings.go.gopls_settings` to `gopls` as LSP `initializationOptions` when the Go language server is started.
