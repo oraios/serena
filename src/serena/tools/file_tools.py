@@ -24,8 +24,7 @@ class ReadFileTool(Tool):
 
     def apply(self, relative_path: str, start_line: int = 0, end_line: int | None = None, max_answer_chars: int = -1) -> str:
         """
-        Reads the given file or a chunk of it. Generally, symbolic operations
-        like find_symbol or find_referencing_symbols should be preferred if you know which symbols you are looking for.
+        Reads the given file or a chunk of it.
 
         :param relative_path: the relative path to the file to read
         :param start_line: the 0-based index of the first line to be retrieved.
@@ -337,8 +336,7 @@ class SearchForPatternTool(Tool):
         """
         Offers a flexible search for arbitrary patterns in the codebase, including the
         possibility to search in non-code files.
-        Generally, symbolic operations like find_symbol or find_referencing_symbols
-        should be preferred if you know which symbols you are looking for.
+        Prefer symbolic operations if you know which symbols you are looking for!
 
         Pattern Matching Logic:
             For each match, the returned result will contain the full lines where the
@@ -349,16 +347,6 @@ class SearchForPatternTool(Tool):
             If a pattern matches multiple lines, all those lines will be part of the match.
             Be careful to not use greedy quantifiers unnecessarily, it is usually better to use non-greedy quantifiers like .*? to avoid
             matching too much content.
-
-        File Selection Logic:
-            The files in which the search is performed can be restricted very flexibly.
-            Using `restrict_search_to_code_files` is useful if you are only interested in code symbols (i.e., those
-            symbols that can be manipulated with symbolic tools like find_symbol).
-            You can also restrict the search to a specific file or directory,
-            and provide glob patterns to include or exclude certain files on top of that.
-            The globs are matched against relative file paths from the project root (not to the `relative_path` parameter that
-            is used to further restrict the search).
-            Smartly combining the various restrictions allows you to perform very targeted searches.
 
         :param substring_pattern: Regular expression for a substring pattern to search for
         :param context_lines_before: Number of lines of context to include before each match
@@ -379,12 +367,8 @@ class SearchForPatternTool(Tool):
             Don't adjust unless there is really no other way to get the content
             required for the task. Instead, if the output is too long, you should
             make a stricter query.
-        :param restrict_search_to_code_files: whether to restrict the search to only those files where
-            analyzed code symbols can be found. Otherwise, will search all non-ignored files.
-            Set this to True if your search is only meant to discover code that can be manipulated with symbolic tools.
-            For example, for finding classes or methods from a name pattern.
-            Setting to False is a better choice if you also want to search in non-code files, like in html or yaml files,
-            which is why it is the default.
+        :param restrict_search_to_code_files: whether to restrict the search to source files.
+            Otherwise, will search all non-ignored files (default).
         :return: A mapping from file paths to matched consecutive lines (0-based line numbers).
         """
         relative_path = relative_path.strip()
