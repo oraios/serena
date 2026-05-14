@@ -128,6 +128,12 @@ class Language(str, Enum):
     by the same server, since SPARK is distinguished by pragmas/aspects in
     source rather than by file extension.
     """
+    GDSCRIPT = "gdscript"
+    """GDScript language server for Godot Engine projects (Godot 3 and 4).
+    Connects to the Godot editor's built-in LSP server over TCP (port 6008).
+    The editor must already be running with its built-in LSP enabled (default).
+    Supports .gd and .gdscript files.
+    """
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -483,6 +489,8 @@ class Language(str, Enum):
                 return FilenameMatcher(".bsl", ".os")
             case self.ADA:
                 return FilenameMatcher(".ads", ".adb", ".ada", case_sensitive=False)
+            case self.GDSCRIPT:
+                return FilenameMatcher(".gd", ".gdscript")
             case self.HTML:
                 return FilenameMatcher(".html", ".htm")
             case self.SCSS:
@@ -742,6 +750,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.ada_language_server import AdaLanguageServer
 
                 return AdaLanguageServer
+            case self.GDSCRIPT:
+                from solidlsp.language_servers.godot_language_server import GodotLanguageServer
+
+                return GodotLanguageServer
             case self.HTML:
                 from solidlsp.language_servers.vscode_html_language_server import VsCodeHtmlLanguageServer
 

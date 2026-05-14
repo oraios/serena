@@ -2,6 +2,15 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Language Servers:
+  - No longer store temporary files (e.g. downloads) in `~/solidlsp_tmp`; instead, use OS-specific temporary directories
+  - Add **GDScript** (Godot Engine) support. Serena connects over TCP to the Godot editor's built-in LSP server (port 6008, same for Godot 3 and 4) — no separate language server process to install. Godot major version is auto-detected from `config_version` in `project.godot`. Note: Godot's LSP does not implement `workspace/symbol`; first workspace-wide scans fall back to per-file requests and can be slow for large projects (results are cached to disk). See the [GDScript Setup Guide](https://oraios.github.io/serena/03-special-guides/godot_gdscript_setup_guide_for_serena.html) for details. Closes #1446.
+
+* Dashboard:
+  - UI polish: switch UI font to Inter (with system fallbacks) and use JetBrains Mono only for code/logs/paths/identifiers; refine the light/dark palette with softer borders, clearer text hierarchy, and a more nuanced shadow/elevation system; introduce a consistent spacing scale; keep the orange accent.
+  - Modal markup cleanup: extract shared CSS classes (`.modal-info`, `.modal-hint`, `.modal-prompt`, `.modal-field`, `.modal-input`, `.modal-select`, `.modal-textarea`, `.modal-actions`, `.btn-secondary`) and remove duplicated inline styles from all seven modals. Inputs and textareas get an accent-colored focus ring; the modal backdrop has a subtle blur.
+  - Add Language: replace the native `<select>` with a filterable combobox — type to filter, keyboard navigation (Up/Down/Enter/Esc), substring highlight, click-outside to close. The typed value is validated against the available languages list before submission.
+
 # v1.3.0 (2026-05-11)
 
 * General:
