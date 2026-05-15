@@ -35,7 +35,7 @@ def test_ruby_lsp_can_keep_vendor_engines_indexed(tmp_path: Path) -> None:
     assert "vendor/bundle/**" in patterns
     assert "vendor/cache/**" in patterns
     assert "vendor/engines/**" not in patterns
-    assert "vendor/engines/blog/vendor/**" in patterns
+    assert "vendor/engines/**/vendor/**" in patterns
 
 
 def test_ruby_lsp_ignores_non_allowlisted_vendor_paths(tmp_path: Path) -> None:
