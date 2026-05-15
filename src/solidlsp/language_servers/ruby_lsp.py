@@ -6,6 +6,11 @@ You can pass the following entries in ``ls_specific_settings["ruby"]``:
     - ruby_lsp_version: Override the pinned ruby-lsp gem version installed by
       Serena when no project-local or global ruby-lsp is already available
       (default: the bundled Serena version).
+    - vendor_include_paths: List of repository-relative paths under ``vendor/``
+      that should remain indexed by ruby-lsp. Example:
+      ``["vendor/engines"]``. When set, Serena replaces the blanket
+      ``**/vendor/**`` exclusion with exclusions for the other top-level
+      ``vendor`` subdirectories it finds in the repository.
 """
 
 import json
@@ -55,7 +60,6 @@ class RubyLsp(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         """Override to ignore Ruby-specific directories that cause performance issues."""
         ruby_ignored_dirs = [
-            "vendor",  # Ruby vendor directory
             ".bundle",  # Bundler cache
             "tmp",  # Temporary files
             "log",  # Log files
@@ -70,6 +74,15 @@ class RubyLsp(SolidLanguageServer):
             ".ruby-lsp",
         ]
         return super().is_ignored_dirname(dirname) or dirname in ruby_ignored_dirs
+
+    def is_ignored_path(self, relative_path: str, ignore_unsupported_files: bool = True) -> bool:
+        """Override to keep only configured vendor subtrees visible to Serena."""
+        normalized_path = pathlib.PurePosixPath(pathlib.Path(relative_path).as_posix())
+        if self._path_contains_vendor_directory(normalized_path):
+            if not self._is_included_vendor_path(normalized_path):
+                return True
+
+        return super().is_ignored_path(relative_path, ignore_unsupported_files)
 
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
@@ -298,13 +311,88 @@ class RubyLsp(SolidLanguageServer):
 
         return False
 
+    def _get_vendor_include_roots(self) -> set[str]:
+        """Return top-level vendor directory names that should remain indexed."""
+        vendor_include_paths = self._solidlsp_settings.get_ls_specific_settings(Language.RUBY).get("vendor_include_paths", [])
+        vendor_include_roots: set[str] = set()
+        if isinstance(vendor_include_paths, list):
+            for path in vendor_include_paths:
+                normalized_path = pathlib.PurePosixPath(str(path).strip("/"))
+                if len(normalized_path.parts) >= 2 and normalized_path.parts[0] == "vendor":
+                    vendor_include_roots.add(normalized_path.parts[1])
+                else:
+                    log.warning("Ignoring invalid ruby.vendor_include_paths entry %r; expected a path under vendor/.", path)
+        elif vendor_include_paths:
+            log.warning("Ignoring ruby.vendor_include_paths because it is not a list: %r", vendor_include_paths)
+        return vendor_include_roots
+
     @staticmethod
-    def _get_ruby_exclude_patterns(repository_root_path: str) -> list[str]:
+    def _path_contains_vendor_directory(relative_path: pathlib.PurePosixPath) -> bool:
+        """Return whether the path traverses through any vendor directory."""
+        return "vendor" in relative_path.parts
+
+    def _is_included_vendor_path(self, relative_path: pathlib.PurePosixPath) -> bool:
+        """Return whether the path belongs to an allowlisted vendor subtree only."""
+        vendor_include_roots = self._get_vendor_include_roots()
+        if not vendor_include_roots:
+            return False
+
+        found_included_vendor_root = False
+        for index, part in enumerate(relative_path.parts):
+            if part != "vendor":
+                continue
+
+            if index != 0:
+                return False
+
+            if index + 1 >= len(relative_path.parts):
+                return False
+
+            if relative_path.parts[index + 1] not in vendor_include_roots:
+                return False
+
+            found_included_vendor_root = True
+
+        return found_included_vendor_root
+
+    def _get_vendor_exclude_patterns(self, repository_root_path: str) -> list[str]:
+        """Return vendor-specific exclude patterns honoring allowlisted subtrees."""
+        vendor_include_roots = self._get_vendor_include_roots()
+        if not vendor_include_roots:
+            return ["**/vendor/**"]
+
+        vendor_patterns: set[str] = set()
+        repository_root = pathlib.Path(repository_root_path)
+        root_vendor_dir = repository_root / "vendor"
+
+        if root_vendor_dir.is_dir():
+            for child in root_vendor_dir.iterdir():
+                if child.name not in vendor_include_roots:
+                    vendor_patterns.add(f"vendor/{child.name}/**")
+
+        for current_root, dirnames, _filenames in os.walk(repository_root_path):
+            current_root_path = pathlib.Path(current_root)
+            relative_root = current_root_path.relative_to(repository_root).as_posix()
+
+            if relative_root == ".":
+                continue
+
+            if current_root_path.name == "vendor":
+                relative_vendor_path = pathlib.PurePosixPath(relative_root)
+                if relative_vendor_path.parts == ("vendor",):
+                    continue
+
+                if not self._is_included_vendor_path(relative_vendor_path):
+                    vendor_patterns.add(f"{relative_vendor_path.as_posix()}/**")
+                    dirnames[:] = []
+
+        return sorted(vendor_patterns)
+
+    def _get_ruby_exclude_patterns(self, repository_root_path: str) -> list[str]:
         """
         Get Ruby and Rails-specific exclude patterns for better performance.
         """
         base_patterns = [
-            "**/vendor/**",  # Ruby vendor directory
             "**/.bundle/**",  # Bundler cache
             "**/tmp/**",  # Temporary files
             "**/log/**",  # Log files
@@ -315,6 +403,9 @@ class RubyLsp(SolidLanguageServer):
             "**/node_modules/**",  # Node modules (for Rails with JS)
             "**/public/assets/**",  # Rails compiled assets
         ]
+
+        # keeping vendor/engines while excluding every other vendored subtree
+        base_patterns.extend(self._get_vendor_exclude_patterns(repository_root_path))
 
         # Add Rails-specific patterns if this is a Rails project
         if RubyLsp._detect_rails_project(repository_root_path):
