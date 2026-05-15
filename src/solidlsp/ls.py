@@ -1169,7 +1169,9 @@ class SolidLanguageServer(ABC):
         """
         abs_path = os.path.join(self.repository_root_path, relative_path)
         if not os.path.exists(abs_path):
-            raise FileNotFoundError(f"File {abs_path} not found, the ignore check cannot be performed")
+            # Non-existent paths (e.g. broken symlinks) are treated as ignored
+            log.debug("Path %s does not exist (possibly a broken symlink), treating as ignored", abs_path)
+            return True
 
         # Check file extension if it's a file
         is_file = os.path.isfile(abs_path)
@@ -2089,6 +2091,11 @@ class SolidLanguageServer(ABC):
 
             for contained_dir_or_file_name in contained_dir_or_file_names:
                 contained_dir_or_file_abs_path = os.path.join(abs_dir_path, contained_dir_or_file_name)
+
+                # Skip broken symlinks early — os.listdir returns them but they have no valid target
+                if os.path.islink(contained_dir_or_file_abs_path) and not os.path.exists(contained_dir_or_file_abs_path):
+                    log.debug("Skipping broken symlink: %s", contained_dir_or_file_abs_path)
+                    continue
 
                 # obtain relative path
                 try:
