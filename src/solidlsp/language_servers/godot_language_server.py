@@ -46,8 +46,16 @@ class GodotLanguageServer(SolidLanguageServer):
         else:
             log.warning("Could not detect Godot version for project at %s", repository_root_path)
 
+        self._configured_request_timeout: float | None = None
+
         # Dummy ProcessLaunchInfo — _create_language_server_interface() ignores it
         super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=""), "gdscript", solidlsp_settings)
+
+    def set_request_timeout(self, timeout: float | None) -> None:
+        """Cap the timeout at the value configured in ls_specific_settings, if set."""
+        if timeout is not None and self._configured_request_timeout is not None:
+            timeout = min(timeout, self._configured_request_timeout)
+        super().set_request_timeout(timeout)
 
     @staticmethod
     def _detect_godot_version(repo_path: str) -> int | None:
@@ -75,6 +83,7 @@ class GodotLanguageServer(SolidLanguageServer):
         settings: dict = self._custom_settings or {}
         port = settings.get("port", DEFAULT_GODOT_LS_PORT)
         request_timeout = settings.get("request_timeout", DEFAULT_GODOT_REQUEST_TIMEOUT)
+        self._configured_request_timeout = settings.get("request_timeout")
         self._conn_info = TCPConnectionInfo(host="127.0.0.1", port=port)
         return TCPLanguageServer(
             connection_info=self._conn_info,
