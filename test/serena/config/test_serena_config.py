@@ -523,6 +523,20 @@ class TestSerenaConfigFromConfigFileRobustness:
             body_lines.append(f"  - {p}")
         self.master_config_path.write_text("\n".join(body_lines) + "\n")
 
+    def test_empty_projects_key_is_treated_as_empty_list(self, monkeypatch):
+        """A bare ``projects:`` key should not abort config loading."""
+        self.master_config_path.write_text("projects:\n")
+
+        monkeypatch.setattr(
+            SerenaConfig,
+            "_determine_config_file_path",
+            classmethod(lambda cls: str(self.master_config_path)),
+        )
+
+        config = SerenaConfig.from_config_file(generate_if_missing=False)
+
+        assert config.projects == []
+
     def test_malformed_project_is_skipped_with_warning(self, caplog, monkeypatch):
         """A malformed project.yml must not abort loading of the others."""
         good_project = self._make_project_dir(

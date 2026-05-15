@@ -871,7 +871,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         if "projects" not in loaded_commented_yaml:
             raise SerenaConfigError("`projects` key not found in Serena configuration. Please update your `serena_config.yml` file.")
         instance.projects = []
-        for path in loaded_commented_yaml["projects"]:
+        for path in loaded_commented_yaml["projects"] or []:
             path = Path(path).resolve()
             try:
                 path_exists = path.exists()
