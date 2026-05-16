@@ -8,7 +8,7 @@ import os
 
 import pytest
 
-from serena.memory_reference_analysis import (
+from serena.memories.memory_reference_analysis import (
     HIGH_CONFIDENCE_NAME_LENGTH,
     MAX_STALE_REFERENCE_CANDIDATES,
     NAME_SIMILARITY_THRESHOLD,

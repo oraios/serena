@@ -41,7 +41,8 @@ from serena.config.serena_config import (
 )
 from serena.dashboard import SerenaDashboardAPI, SerenaDashboardTrayManager, SerenaDashboardViewer, open_url_in_browser
 from serena.ls_manager import LanguageServerManager
-from serena.project import MemoriesManager, Project
+from serena.memories.memory_manager import MemoriesManager
+from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.task_executor import TaskExecutor
 from serena.tools import (
