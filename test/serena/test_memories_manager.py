@@ -15,13 +15,13 @@ from serena.memories.memory_reference_analysis import (
     compute_name_similarity,
     find_stale_reference_candidates,
 )
-from serena.project import MemoriesManager
+from serena.project import MemoryManager
 
 
 @pytest.fixture
-def manager() -> MemoriesManager:
+def manager() -> MemoryManager:
     # serena_data_folder=None: the tested helpers do not access the filesystem
-    return MemoriesManager(serena_data_folder=None)
+    return MemoryManager(serena_data_folder=None)
 
 
 class TestPrepareName:
@@ -40,9 +40,9 @@ class TestPrepareName:
             ":colon_prefixed_unlikely",
         ],
     )
-    def test_does_not_strip_partial_prefix_chars_from_real_names(self, manager: MemoriesManager, name: str) -> None:
+    def test_does_not_strip_partial_prefix_chars_from_real_names(self, manager: MemoryManager, name: str) -> None:
         """A regression guard: previously used ``str.lstrip("mem:")`` which strips any leading m/e/:."""
-        assert manager._prepare_name(name) == name
+        assert manager._sanitize_name(name) == name
 
     @pytest.mark.parametrize(
         ("input_name", "expected"),
@@ -53,8 +53,8 @@ class TestPrepareName:
             ("mem:", ""),
         ],
     )
-    def test_strips_mem_prefix_only_when_actually_a_prefix(self, manager: MemoriesManager, input_name: str, expected: str) -> None:
-        assert manager._prepare_name(input_name) == expected
+    def test_strips_mem_prefix_only_when_actually_a_prefix(self, manager: MemoryManager, input_name: str, expected: str) -> None:
+        assert manager._sanitize_name(input_name) == expected
 
     @pytest.mark.parametrize(
         ("input_name", "expected"),
@@ -66,14 +66,14 @@ class TestPrepareName:
             (".md", ""),
         ],
     )
-    def test_strips_md_only_as_suffix(self, manager: MemoriesManager, input_name: str, expected: str) -> None:
-        assert manager._prepare_name(input_name) == expected
+    def test_strips_md_only_as_suffix(self, manager: MemoryManager, input_name: str, expected: str) -> None:
+        assert manager._sanitize_name(input_name) == expected
 
-    def test_normalizes_os_separator(self, manager: MemoriesManager) -> None:
-        assert manager._prepare_name(f"topic{os.sep}sub{os.sep}name") == "topic/sub/name"
+    def test_normalizes_os_separator(self, manager: MemoryManager) -> None:
+        assert manager._sanitize_name(f"topic{os.sep}sub{os.sep}name") == "topic/sub/name"
 
-    def test_combined_normalizations(self, manager: MemoriesManager) -> None:
-        assert manager._prepare_name(f"mem:topic{os.sep}foo.md") == "topic/foo"
+    def test_combined_normalizations(self, manager: MemoryManager) -> None:
+        assert manager._sanitize_name(f"mem:topic{os.sep}foo.md") == "topic/foo"
 
 
 class TestRenameReferencesToMemory:
@@ -127,7 +127,7 @@ class TestRenameReferencesToMemory:
     )
     def test_rename(
         self,
-        manager: MemoriesManager,
+        manager: MemoryManager,
         content: str,
         old_name: str,
         new_name: str,
@@ -150,7 +150,7 @@ class TestRenameReferencesToMemory:
             ("", ""),  # raw, no delimiters
         ],
     )
-    def test_replacement_inside_various_delimiters(self, manager: MemoriesManager, delimiter_pair: tuple[str, str]) -> None:
+    def test_replacement_inside_various_delimiters(self, manager: MemoryManager, delimiter_pair: tuple[str, str]) -> None:
         left, right = delimiter_pair
         content = f"{left}mem:foo{right}"
         result, n = manager.rename_references_to_memory(content, "foo", "bar")
@@ -176,7 +176,7 @@ class TestNameSimilarity:
             pytest.param("auth/login", "auth/v2/login", 0.75, id="basename_match_shared_prefix"),
         ],
     )
-    def test_high_similarity_cases(self, manager: MemoriesManager, a: str, b: str, expected: float) -> None:
+    def test_high_similarity_cases(self, manager: MemoryManager, a: str, b: str, expected: float) -> None:
         assert compute_name_similarity(a, b) == pytest.approx(expected)
 
     @pytest.mark.parametrize(
@@ -195,7 +195,7 @@ class TestNameSimilarity:
             pytest.param("topic1/topic2/core", "topic3/topic5/core", id="same_basename_disjoint_prefix_tokens"),
         ],
     )
-    def test_below_threshold_cases(self, manager: MemoriesManager, a: str, b: str) -> None:
+    def test_below_threshold_cases(self, manager: MemoryManager, a: str, b: str) -> None:
         assert compute_name_similarity(a, b) < NAME_SIMILARITY_THRESHOLD
 
     @pytest.mark.parametrize(
@@ -210,14 +210,14 @@ class TestNameSimilarity:
             pytest.param("user_login_flow", "login_flow", id="partial_token_overlap"),
         ],
     )
-    def test_above_threshold_cases(self, manager: MemoriesManager, a: str, b: str) -> None:
+    def test_above_threshold_cases(self, manager: MemoryManager, a: str, b: str) -> None:
         assert compute_name_similarity(a, b) >= NAME_SIMILARITY_THRESHOLD
 
-    def test_symmetry(self, manager: MemoriesManager) -> None:
+    def test_symmetry(self, manager: MemoryManager) -> None:
         # similarity is order-independent
         assert compute_name_similarity("auth/login", "security/login") == compute_name_similarity("security/login", "auth/login")
 
-    def test_cross_topic_suffix_coincidence_is_rejected(self, manager: MemoriesManager) -> None:
+    def test_cross_topic_suffix_coincidence_is_rejected(self, manager: MemoryManager) -> None:
         """
         Regression: when two long names live under *different* topic prefixes and share
         only a single trailing token (e.g. ``-subtleties``), the score must collapse to
@@ -238,7 +238,7 @@ class TestNameSimilarity:
         same_prefix_score = compute_name_similarity(target, "frontend/routing-app-shell-subtleties")
         assert same_prefix_score > 0.0
 
-    def test_find_candidates_ranks_by_descending_similarity(self, manager: MemoriesManager) -> None:
+    def test_find_candidates_ranks_by_descending_similarity(self, manager: MemoryManager) -> None:
         existing = ["auth/login", "security/login", "database", "authentication"]
         candidates = find_stale_reference_candidates("login", existing)
         # both auth/login and security/login share basename `login` -> tied at 1.0; expect them first, alphabetical tiebreak
@@ -246,11 +246,11 @@ class TestNameSimilarity:
         # `database` is unrelated and must not appear
         assert "database" not in candidates
 
-    def test_find_candidates_returns_empty_below_threshold(self, manager: MemoriesManager) -> None:
+    def test_find_candidates_returns_empty_below_threshold(self, manager: MemoryManager) -> None:
         existing = ["completely_unrelated", "another_thing"]
         assert find_stale_reference_candidates("foo", existing) == []
 
-    def test_find_candidates_custom_threshold(self, manager: MemoriesManager) -> None:
+    def test_find_candidates_custom_threshold(self, manager: MemoryManager) -> None:
         # raising the threshold filters out borderline matches
         existing = ["authentication"]
         loose = find_stale_reference_candidates("auth", existing, threshold=0.2)
@@ -260,24 +260,24 @@ class TestNameSimilarity:
 
 
 @pytest.fixture
-def fs_manager(tmp_path) -> MemoriesManager:
+def fs_manager(tmp_path) -> MemoryManager:
     """A MemoriesManager backed by tmp_path with no read-only patterns."""
-    return MemoriesManager(serena_data_folder=tmp_path)
+    return MemoryManager(serena_data_folder=tmp_path)
 
 
-def _write(manager: MemoriesManager, name: str, content: str) -> None:
+def _write(manager: MemoryManager, name: str, content: str) -> None:
     manager.save_memory(name, content, is_tool_context=False)
 
 
 class TestValidateReferentialIntegrity:
-    def test_clean_report_when_all_references_resolve(self, fs_manager: MemoriesManager) -> None:
+    def test_clean_report_when_all_references_resolve(self, fs_manager: MemoryManager) -> None:
         _write(fs_manager, "auth", "# auth notes")
         _write(fs_manager, "login_flow", "see `mem:auth` for details")
         report = fs_manager.validate_referential_integrity()
         assert report.is_clean()
         assert "No referential integrity issues" in report.format()
 
-    def test_stale_reference_with_topic_move_candidate(self, fs_manager: MemoriesManager) -> None:
+    def test_stale_reference_with_topic_move_candidate(self, fs_manager: MemoryManager) -> None:
         # original memory `login` was moved to `auth/login`; a reference still points to bare `login`
         _write(fs_manager, "auth/login", "# moved here")
         _write(fs_manager, "docs", "old reference: `mem:login`")
@@ -288,14 +288,14 @@ class TestValidateReferentialIntegrity:
         assert stale.referenced_name == "login"
         assert "auth/login" in stale.candidates
 
-    def test_stale_reference_with_no_candidate(self, fs_manager: MemoriesManager) -> None:
+    def test_stale_reference_with_no_candidate(self, fs_manager: MemoryManager) -> None:
         _write(fs_manager, "completely_unrelated", "# content")
         _write(fs_manager, "docs", "broken: `mem:xyz_unknown_thing`")
         report = fs_manager.validate_referential_integrity()
         assert len(report.stale_references) == 1
         assert report.stale_references[0].candidates == []
 
-    def test_high_confidence_unmarked_warning_for_topic_path(self, fs_manager: MemoriesManager) -> None:
+    def test_high_confidence_unmarked_warning_for_topic_path(self, fs_manager: MemoryManager) -> None:
         _write(fs_manager, "auth/login", "# notes")
         _write(fs_manager, "docs", "the auth/login process is documented elsewhere")
         report = fs_manager.validate_referential_integrity()
@@ -306,7 +306,7 @@ class TestValidateReferentialIntegrity:
         assert warning.occurrences == 1
         assert report.low_confidence_unmarked_memories == []
 
-    def test_low_confidence_unmarked_warning_for_short_flat_name(self, fs_manager: MemoriesManager) -> None:
+    def test_low_confidence_unmarked_warning_for_short_flat_name(self, fs_manager: MemoryManager) -> None:
         _write(fs_manager, "auth", "# notes")
         _write(fs_manager, "docs", "you must use auth here")
         report = fs_manager.validate_referential_integrity()
@@ -315,7 +315,7 @@ class TestValidateReferentialIntegrity:
         assert report.low_confidence_unmarked_memories[0].suspected_name == "auth"
         assert report.low_confidence_unmarked_memories[0].is_high_confidence is False
 
-    def test_long_flat_name_is_high_confidence(self, fs_manager: MemoriesManager) -> None:
+    def test_long_flat_name_is_high_confidence(self, fs_manager: MemoryManager) -> None:
         # a flat name >= _HIGH_CONFIDENCE_NAME_LENGTH chars is unlikely to be coincidental prose
         long_name = "authentication_flow"
         assert len(long_name) >= HIGH_CONFIDENCE_NAME_LENGTH
@@ -324,7 +324,7 @@ class TestValidateReferentialIntegrity:
         report = fs_manager.validate_referential_integrity()
         assert len(report.high_confidence_unmarked_memories) == 1
 
-    def test_fuzzy_near_miss_rejects_substring_only_matches(self, fs_manager: MemoriesManager) -> None:
+    def test_fuzzy_near_miss_rejects_substring_only_matches(self, fs_manager: MemoryManager) -> None:
         """
         Regression: fuzzy bare-text matching must require meaningful token overlap, not just
         substring containment. Without the token-Jaccard floor, generic words like
@@ -353,7 +353,7 @@ class TestValidateReferentialIntegrity:
             f"low={report.low_confidence_unmarked_memories}, stale={report.stale_references}"
         )
 
-    def test_long_flat_name_near_miss_is_high_confidence(self, fs_manager: MemoriesManager) -> None:
+    def test_long_flat_name_near_miss_is_high_confidence(self, fs_manager: MemoryManager) -> None:
         """
         Regression: bare text that is a *near-match* of an existing long memory name
         (e.g. the same name with a missing suffix) should be flagged as a high-confidence
@@ -380,7 +380,7 @@ class TestValidateReferentialIntegrity:
         assert warning.suspected_name == existing
         assert warning.source_memory == "docs"
 
-    def test_fuzzy_accepts_bare_token_when_jaccard_just_above_floor(self, fs_manager: MemoriesManager) -> None:
+    def test_fuzzy_accepts_bare_token_when_jaccard_just_above_floor(self, fs_manager: MemoryManager) -> None:
         """
         Edge case: bare token is a clean substring of the existing memory name AND
         their tokenized Jaccard sits just above ``_FUZZY_BARE_TOKEN_JACCARD_FLOOR``
@@ -398,7 +398,7 @@ class TestValidateReferentialIntegrity:
         assert fuzzy[0].suspected_name == existing
         assert fuzzy[0].actual_token == bare
 
-    def test_fuzzy_rejects_bare_token_when_jaccard_just_below_floor(self, fs_manager: MemoriesManager) -> None:
+    def test_fuzzy_rejects_bare_token_when_jaccard_just_below_floor(self, fs_manager: MemoryManager) -> None:
         """
         Edge case: bare token is still a clean substring of the existing memory name,
         but their tokenized Jaccard is just below ``_FUZZY_BARE_TOKEN_JACCARD_FLOOR``
@@ -414,7 +414,7 @@ class TestValidateReferentialIntegrity:
         assert report.high_confidence_unmarked_memories == []
         assert report.low_confidence_unmarked_memories == []
 
-    def test_fuzzy_requires_substring_containment(self, fs_manager: MemoriesManager) -> None:
+    def test_fuzzy_requires_substring_containment(self, fs_manager: MemoryManager) -> None:
         """
         Edge case: bare token and existing name share several tokens (and even a topic
         prefix) but neither is a substring of the other. Without the containment
@@ -430,7 +430,7 @@ class TestValidateReferentialIntegrity:
         assert report.high_confidence_unmarked_memories == []
         assert report.low_confidence_unmarked_memories == []
 
-    def test_fuzzy_accepts_reverse_containment(self, fs_manager: MemoriesManager) -> None:
+    def test_fuzzy_accepts_reverse_containment(self, fs_manager: MemoryManager) -> None:
         """
         Edge case: the *existing* memory name is a substring of the longer bare token
         (rather than the other way around). The containment gate must hold in both
@@ -447,7 +447,7 @@ class TestValidateReferentialIntegrity:
         assert fuzzy[0].suspected_name == existing
         assert fuzzy[0].actual_token == bare
 
-    def test_unmarked_exact_match_suppressed_for_ignored_word(self, fs_manager: MemoriesManager) -> None:
+    def test_unmarked_exact_match_suppressed_for_ignored_word(self, fs_manager: MemoryManager) -> None:
         """
         Names in ``_WORDS_TO_IGNORE_AS_MEMORY_NAME_CANDIDATES`` (e.g. ``core``) are
         common-word collisions and must not produce bare-occurrence warnings even
@@ -460,7 +460,7 @@ class TestValidateReferentialIntegrity:
         assert all(w.suspected_name != "core" for w in report.high_confidence_unmarked_memories)
         assert all(w.suspected_name != "core" for w in report.low_confidence_unmarked_memories)
 
-    def test_unmarked_exact_match_suppressed_for_topic_with_ignored_basename(self, fs_manager: MemoriesManager) -> None:
+    def test_unmarked_exact_match_suppressed_for_topic_with_ignored_basename(self, fs_manager: MemoryManager) -> None:
         """
         The ignore filter applies to the *basename* of a candidate name, so a memory
         named ``frontend/core`` is also exempt from bare-occurrence warnings (the
@@ -473,7 +473,7 @@ class TestValidateReferentialIntegrity:
         assert all(w.suspected_name != "frontend/core" for w in report.high_confidence_unmarked_memories)
         assert all(w.suspected_name != "frontend/core" for w in report.low_confidence_unmarked_memories)
 
-    def test_unmarked_exact_match_not_suppressed_for_non_ignored_basename(self, fs_manager: MemoriesManager) -> None:
+    def test_unmarked_exact_match_not_suppressed_for_non_ignored_basename(self, fs_manager: MemoryManager) -> None:
         """
         Sanity: the ignore filter must not over-apply to names whose basename happens
         to share a prefix with an ignored word.
@@ -483,7 +483,7 @@ class TestValidateReferentialIntegrity:
         report = fs_manager.validate_referential_integrity()
         assert any(w.suspected_name == "frontend/core-utils" for w in report.high_confidence_unmarked_memories)
 
-    def test_stale_reference_candidates_are_capped(self, fs_manager: MemoriesManager) -> None:
+    def test_stale_reference_candidates_are_capped(self, fs_manager: MemoryManager) -> None:
         """
         The candidate list proposed for an unresolved ``mem:`` reference is capped at
         :attr:`MAX_STALE_REFERENCE_CANDIDATES`. Beyond a small number the list stops
@@ -502,7 +502,7 @@ class TestValidateReferentialIntegrity:
         assert len(candidates) == cap
         assert candidates == candidate_names[:cap]
 
-    def test_include_unmarked_false_skips_both_scans(self, fs_manager: MemoriesManager) -> None:
+    def test_include_unmarked_false_skips_both_scans(self, fs_manager: MemoryManager) -> None:
         """
         With ``include_unmarked=False`` only stale references are reported; both the
         exact unmarked scan and the fuzzy near-miss scan are entirely skipped.
@@ -521,7 +521,7 @@ class TestValidateReferentialIntegrity:
         assert len(report.stale_references) == 1
         assert report.stale_references[0].referenced_name == "nope"
 
-    def test_include_fuzzy_matching_false_keeps_exact_only(self, fs_manager: MemoriesManager) -> None:
+    def test_include_fuzzy_matching_false_keeps_exact_only(self, fs_manager: MemoryManager) -> None:
         """
         With ``include_unmarked=True`` but ``include_fuzzy_matching=False``, exact
         bare-occurrence warnings still fire but fuzzy near-misses are suppressed.
@@ -542,7 +542,7 @@ class TestValidateReferentialIntegrity:
         # fuzzy near-miss for `playwright-gestures-guide` is suppressed
         assert fuzzy == []
 
-    def test_self_reference_is_ignored(self, fs_manager: MemoriesManager) -> None:
+    def test_self_reference_is_ignored(self, fs_manager: MemoryManager) -> None:
         # the basename `login` appears in `auth/login`'s own content -> must not be flagged
         _write(fs_manager, "auth/login", "this login flow ...")
         _write(fs_manager, "auth", "# auth notes")
@@ -553,14 +553,14 @@ class TestValidateReferentialIntegrity:
         for w in report.high_confidence_unmarked_memories + report.low_confidence_unmarked_memories:
             assert not (w.source_memory == "auth/login" and w.suspected_name in ("login", "auth/login"))
 
-    def test_marked_reference_does_not_produce_unmarked_warning(self, fs_manager: MemoriesManager) -> None:
+    def test_marked_reference_does_not_produce_unmarked_warning(self, fs_manager: MemoryManager) -> None:
         _write(fs_manager, "auth/login", "# notes")
         _write(fs_manager, "docs", "see `mem:auth/login` for details")
         report = fs_manager.validate_referential_integrity()
         # the marked reference is valid; no warning should fire on that occurrence
         assert report.is_clean()
 
-    def test_mixed_marked_and_bare_in_same_content(self, fs_manager: MemoriesManager) -> None:
+    def test_mixed_marked_and_bare_in_same_content(self, fs_manager: MemoryManager) -> None:
         _write(fs_manager, "auth/login", "# notes")
         _write(fs_manager, "docs", "we have `mem:auth/login` plus a bare auth/login mention")
         report = fs_manager.validate_referential_integrity()
@@ -568,7 +568,7 @@ class TestValidateReferentialIntegrity:
         assert len(report.high_confidence_unmarked_memories) == 1
         assert report.high_confidence_unmarked_memories[0].occurrences == 1
 
-    def test_empty_memory_skipped(self, fs_manager: MemoriesManager) -> None:
+    def test_empty_memory_skipped(self, fs_manager: MemoryManager) -> None:
         _write(fs_manager, "auth/login", "")
         _write(fs_manager, "docs", "# nothing relevant")
         # must not raise even though one memory is empty
@@ -576,7 +576,7 @@ class TestValidateReferentialIntegrity:
         assert report.is_clean()
 
     def test_read_only_status_propagated(self, tmp_path) -> None:
-        manager = MemoriesManager(serena_data_folder=tmp_path, read_only_memory_patterns=[r"frozen/.*"])
+        manager = MemoryManager(serena_data_folder=tmp_path, read_only_memory_patterns=[r"frozen/.*"])
         _write(manager, "frozen/notes", "see bare auth/login mention")
         _write(manager, "auth/login", "# notes")
         report = manager.validate_referential_integrity()
@@ -587,7 +587,7 @@ class TestValidateReferentialIntegrity:
 
 
 class TestAutoPrefixBareReferences:
-    def test_prefixes_high_confidence_warning_in_writable_memory(self, fs_manager: MemoriesManager) -> None:
+    def test_prefixes_high_confidence_warning_in_writable_memory(self, fs_manager: MemoryManager) -> None:
         _write(fs_manager, "auth/login", "# notes")
         _write(fs_manager, "docs", "the auth/login process is documented here")
         result = fs_manager.auto_prefix_bare_references()
@@ -596,7 +596,7 @@ class TestAutoPrefixBareReferences:
         # verify the file content was actually mutated
         assert fs_manager.load_memory("docs") == "the mem:auth/login process is documented here"
 
-    def test_skips_low_confidence_by_default(self, fs_manager: MemoriesManager) -> None:
+    def test_skips_low_confidence_by_default(self, fs_manager: MemoryManager) -> None:
         _write(fs_manager, "auth", "# notes")
         _write(fs_manager, "docs", "use auth here")
         result = fs_manager.auto_prefix_bare_references()
@@ -605,7 +605,7 @@ class TestAutoPrefixBareReferences:
         # content unchanged
         assert fs_manager.load_memory("docs") == "use auth here"
 
-    def test_include_flat_names_widens_scope(self, fs_manager: MemoriesManager) -> None:
+    def test_include_flat_names_widens_scope(self, fs_manager: MemoryManager) -> None:
         _write(fs_manager, "auth", "# notes")
         _write(fs_manager, "docs", "use auth here")
         result = fs_manager.auto_prefix_bare_references(include_flat_names=True)
@@ -613,7 +613,7 @@ class TestAutoPrefixBareReferences:
         assert fs_manager.load_memory("docs") == "use mem:auth here"
 
     def test_skips_read_only_source_by_default(self, tmp_path) -> None:
-        manager = MemoriesManager(serena_data_folder=tmp_path, read_only_memory_patterns=[r"frozen/.*"])
+        manager = MemoryManager(serena_data_folder=tmp_path, read_only_memory_patterns=[r"frozen/.*"])
         _write(manager, "frozen/notes", "the auth/login process")
         _write(manager, "auth/login", "# notes")
         result = manager.auto_prefix_bare_references()
@@ -623,21 +623,21 @@ class TestAutoPrefixBareReferences:
         assert manager.load_memory("frozen/notes") == "the auth/login process"
 
     def test_include_read_only_modifies_read_only_source(self, tmp_path) -> None:
-        manager = MemoriesManager(serena_data_folder=tmp_path, read_only_memory_patterns=[r"frozen/.*"])
+        manager = MemoryManager(serena_data_folder=tmp_path, read_only_memory_patterns=[r"frozen/.*"])
         _write(manager, "frozen/notes", "the auth/login process")
         _write(manager, "auth/login", "# notes")
         result = manager.auto_prefix_bare_references(include_read_only=True)
         assert result.total_replacements == 1
         assert manager.load_memory("frozen/notes") == "the mem:auth/login process"
 
-    def test_multiple_occurrences_in_same_memory(self, fs_manager: MemoriesManager) -> None:
+    def test_multiple_occurrences_in_same_memory(self, fs_manager: MemoryManager) -> None:
         _write(fs_manager, "auth/login", "# notes")
         _write(fs_manager, "docs", "auth/login here and auth/login there")
         result = fs_manager.auto_prefix_bare_references()
         assert result.total_replacements == 2
         assert fs_manager.load_memory("docs") == "mem:auth/login here and mem:auth/login there"
 
-    def test_marked_references_left_alone(self, fs_manager: MemoriesManager) -> None:
+    def test_marked_references_left_alone(self, fs_manager: MemoryManager) -> None:
         _write(fs_manager, "auth/login", "# notes")
         _write(fs_manager, "docs", "see `mem:auth/login` and also auth/login bare")
         result = fs_manager.auto_prefix_bare_references()
@@ -645,7 +645,7 @@ class TestAutoPrefixBareReferences:
         assert result.total_replacements == 1
         assert fs_manager.load_memory("docs") == "see `mem:auth/login` and also mem:auth/login bare"
 
-    def test_dry_run_does_not_modify_files(self, fs_manager: MemoriesManager) -> None:
+    def test_dry_run_does_not_modify_files(self, fs_manager: MemoryManager) -> None:
         _write(fs_manager, "auth/login", "# notes")
         _write(fs_manager, "docs", "the auth/login process is documented here")
         result = fs_manager.auto_prefix_bare_references(dry_run=True)
@@ -660,7 +660,7 @@ class TestAutoPrefixBareReferences:
         assert result.dry_run is False
         assert fs_manager.load_memory("docs") == "the mem:auth/login process is documented here"
 
-    def test_fuzzy_warnings_are_routed_to_skipped_fuzzy(self, fs_manager: MemoriesManager) -> None:
+    def test_fuzzy_warnings_are_routed_to_skipped_fuzzy(self, fs_manager: MemoryManager) -> None:
         # set up a fuzzy near-miss case (token shares all parts with a longer existing name)
         existing = "adding_new_language_support_guide"
         bare = "adding_new_language_support"
@@ -676,7 +676,7 @@ class TestAutoPrefixBareReferences:
         # source unchanged
         assert fs_manager.load_memory("docs") == f"See {bare} for details"
 
-    def test_no_double_prefix_on_repeated_runs(self, fs_manager: MemoriesManager) -> None:
+    def test_no_double_prefix_on_repeated_runs(self, fs_manager: MemoryManager) -> None:
         _write(fs_manager, "auth/login", "# notes")
         _write(fs_manager, "docs", "the auth/login process")
         fs_manager.auto_prefix_bare_references()

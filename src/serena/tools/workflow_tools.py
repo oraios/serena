@@ -25,7 +25,7 @@ class OnboardingTool(Tool):
         system = platform.system()
         # seed the project-local memory-maintenance memory (or detect a global override) so
         # the prompt can point the agent at the conventions before it writes anything
-        memory_maintenance_name = self.memories_manager.ensure_memory_maintenance_memory()
+        memory_maintenance_name = self.memory_manager.ensure_memory_maintenance_memory()
         return self.prompt_factory.create_onboarding_prompt(system=system, memory_maintenance_name=memory_maintenance_name)
 
 

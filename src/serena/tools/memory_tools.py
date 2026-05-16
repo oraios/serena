@@ -32,7 +32,7 @@ class WriteMemoryTool(Tool, ToolMarkerCanEdit):
                 f"Content for {memory_name} is too long. Max length is {max_chars} characters. " + "Please make the content shorter."
             )
 
-        return self.memories_manager.save_memory(memory_name, content, is_tool_context=True)
+        return self.memory_manager.save_memory(memory_name, content, is_tool_context=True)
 
 
 class ReadMemoryTool(Tool):
@@ -44,7 +44,7 @@ class ReadMemoryTool(Tool):
         """
         Use to read a memory that is likely to be relevant to the current task, inferring relevance e.g. from the name.
         """
-        return self.memories_manager.load_memory(memory_name)
+        return self.memory_manager.load_memory(memory_name)
 
 
 class ListMemoriesTool(Tool):
@@ -56,7 +56,7 @@ class ListMemoriesTool(Tool):
         """
         Lists available memories, optionally filtered by topic.
         """
-        return self._to_json(self.memories_manager.list_memories(topic).to_dict())
+        return self._to_json(self.memory_manager.list_memories(topic).to_dict())
 
 
 class DeleteMemoryTool(Tool, ToolMarkerCanEdit):
@@ -68,7 +68,7 @@ class DeleteMemoryTool(Tool, ToolMarkerCanEdit):
         """
         Delete a memory, only call if instructed explicitly or permission was granted by the user.
         """
-        return self.memories_manager.delete_memory(memory_name, is_tool_context=True)
+        return self.memory_manager.delete_memory(memory_name, is_tool_context=True)
 
 
 class RenameMemoryTool(Tool, ToolMarkerCanEdit):
@@ -83,7 +83,7 @@ class RenameMemoryTool(Tool, ToolMarkerCanEdit):
         References to other memories that are marked with the `mem:` prefix will be updated accordingly.
         References in read-only memories are not affected.
         """
-        renaming_message, n_references_updated = self.memories_manager.rename_memory_and_propagate_references(
+        renaming_message, n_references_updated = self.memory_manager.rename_memory_and_propagate_references(
             old_name, new_name, is_tool_context=True
         )
         if n_references_updated > 0:
@@ -117,6 +117,6 @@ class EditMemoryTool(Tool, ToolMarkerCanEdit):
         :param allow_multiple_occurrences: whether to allow matching and replacing multiple occurrences.
             If false and multiple occurrences are found, an error will be returned.
         """
-        return self.memories_manager.edit_memory(
+        return self.memory_manager.edit_memory(
             memory_name, needle, repl, mode, allow_multiple_occurrences, is_tool_context=True, regex_multiline=True
         )

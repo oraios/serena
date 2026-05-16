@@ -13,7 +13,7 @@ from serena.config.serena_config import (
     SerenaConfig,
 )
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
-from serena.memories.memory_manager import MemoriesManager
+from serena.memories.memory_manager import MemoryManager
 from serena.util.file_system import GitignoreParser, match_path
 from serena.util.text_utils import MatchedConsecutiveLines, search_files
 from solidlsp import SolidLanguageServer
@@ -44,7 +44,7 @@ class Project(ToStringMixin):
 
         read_only_memory_patterns = serena_config.read_only_memory_patterns + project_config.read_only_memory_patterns
         ignored_memory_patterns = serena_config.ignored_memory_patterns + project_config.ignored_memory_patterns
-        self.memories_manager = MemoriesManager(
+        self.memory_manager = MemoryManager(
             self._serena_data_folder,
             read_only_memory_patterns=read_only_memory_patterns,
             ignored_memory_patterns=ignored_memory_patterns,

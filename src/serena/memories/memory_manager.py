@@ -21,7 +21,7 @@ from .memory_reference_analysis import (
 log = logging.getLogger(__name__)
 
 
-class MemoriesManager:
+class MemoryManager:
     GLOBAL_TOPIC = "global"
     _global_memory_dir = SerenaPaths().global_memories_path
     _MEMORY_REF_PREFIX = "mem:"
@@ -70,7 +70,7 @@ class MemoriesManager:
         return name == self.GLOBAL_TOPIC or name.startswith(self.GLOBAL_TOPIC + "/")
 
     @classmethod
-    def _prepare_name(cls, name: str) -> str:
+    def _sanitize_name(cls, name: str) -> str:
         """Corrects the name for common mistakes made by LLMs (``mem:`` prefix, ``.md`` suffix, OS-specific separators)."""
         name = name.removeprefix(cls._MEMORY_REF_PREFIX)
         if name.endswith(".md"):
@@ -79,7 +79,7 @@ class MemoriesManager:
 
     @classmethod
     def _add_reference_prefix(cls, name: str) -> str:
-        name = cls._prepare_name(name)
+        name = cls._sanitize_name(name)
         return cls._MEMORY_REF_PREFIX + name
 
     MEMORY_MAINTENANCE_NAME: str = "memory_maintenance"
@@ -147,7 +147,7 @@ class MemoriesManager:
         return re.subn(pattern, lambda _m: ref_new, content)
 
     def get_memory_file_path(self, name: str) -> Path:
-        name = self._prepare_name(name)
+        name = self._sanitize_name(name)
         parts = name.split("/")
         if ".." in parts:
             raise ValueError(f"Memory name cannot contain '..' segments for security reasons. Got: {name}")
@@ -186,7 +186,7 @@ class MemoriesManager:
             raise PermissionError(f"Attempted to write to read_only memory: '{name}')")
 
     def load_memory(self, name: str) -> str:
-        name = self._prepare_name(name)
+        name = self._sanitize_name(name)
         self._check_not_ignored(name)
         memory_file_path = self.get_memory_file_path(name)
         if not memory_file_path.exists():
@@ -195,7 +195,7 @@ class MemoriesManager:
             return f.read()
 
     def save_memory(self, name: str, content: str, is_tool_context: bool) -> str:
-        name = self._prepare_name(name)
+        name = self._sanitize_name(name)
         self._check_not_ignored(name)
         self._check_write_access(name, is_tool_context)
         memory_file_path = self.get_memory_file_path(name)
@@ -217,7 +217,7 @@ class MemoriesManager:
             else:
                 self.memories.append(memory_name)
 
-        def extend(self, other: "MemoriesManager.MemoriesList") -> None:
+        def extend(self, other: "MemoryManager.MemoriesList") -> None:
             self.memories.extend(other.memories)
             self.read_only_memories.extend(other.read_only_memories)
 
@@ -262,7 +262,7 @@ class MemoriesManager:
         Lists all memories, optionally filtered by topic.
         If the topic is omitted, both global and project-specific memories are returned.
         """
-        memories: MemoriesManager.MemoriesList
+        memories: MemoryManager.MemoriesList
 
         if topic:
             if self._is_global(topic):
@@ -278,7 +278,7 @@ class MemoriesManager:
         return memories
 
     def delete_memory(self, name: str, is_tool_context: bool) -> str:
-        name = self._prepare_name(name)
+        name = self._sanitize_name(name)
         self._check_not_ignored(name)
         self._check_write_access(name, is_tool_context)
         memory_file_path = self.get_memory_file_path(name)
@@ -292,8 +292,8 @@ class MemoriesManager:
         Rename or move a memory file.
         Moving between global and project scope (e.g. "global/foo" -> "bar") is supported.
         """
-        old_name = self._prepare_name(old_name)
-        new_name = self._prepare_name(new_name)
+        old_name = self._sanitize_name(old_name)
+        new_name = self._sanitize_name(new_name)
         self._check_not_ignored(old_name)
         self._check_not_ignored(new_name)
         self._check_write_access(new_name, is_tool_context)
@@ -357,7 +357,7 @@ class MemoriesManager:
         :param is_tool_context: whether the call originates from a tool invocation (affects write-access checks)
         :param regex_multiline: whether to apply multi-line regex matching, enabling the flags re.DOTALL and re.MULTILINE
         """
-        name = self._prepare_name(name)
+        name = self._sanitize_name(name)
         self._check_not_ignored(name)
         self._check_write_access(name, is_tool_context)
         memory_file_path = self.get_memory_file_path(name)

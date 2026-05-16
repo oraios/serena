@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 from sensai.util.string import TextBuilder
 
 if TYPE_CHECKING:
-    from serena.project import MemoriesManager
+    from .memory_manager import MemoryManager
 
 
 # ---------------------------------------------------------------------------
@@ -516,7 +516,7 @@ class MemoryReferenceAnalyzer:
     independent of project-management concerns.
     """
 
-    def __init__(self, manager: MemoriesManager):
+    def __init__(self, manager: MemoryManager):
         self._manager = manager
 
     def validate_referential_integrity(

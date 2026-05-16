@@ -44,7 +44,7 @@ from solidlsp.ls_types import SymbolKind
 from solidlsp.util.subprocess_util import subprocess_kwargs
 
 if TYPE_CHECKING:
-    from serena.project import MemoriesManager
+    from serena.memories.memory_manager import MemoryManager
 
 log = logging.getLogger(__name__)
 
@@ -1127,7 +1127,7 @@ class MemoryCommands(AutoRegisteringGroup):
         )
 
     @staticmethod
-    def _load_memories_manager(project: str) -> "MemoriesManager":
+    def _load_memories_manager(project: str) -> "MemoryManager":
         """
         Load the project at ``project`` and return its memories manager.
 
@@ -1145,7 +1145,7 @@ class MemoryCommands(AutoRegisteringGroup):
             raise click.UsageError(
                 f"{e}\nNo Serena project found at {project_path}. Create one first with:\n  serena project create {project_path}"
             ) from e
-        return proj.memories_manager
+        return proj.memory_manager
 
     @staticmethod
     @click.command(

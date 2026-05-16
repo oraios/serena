@@ -41,7 +41,7 @@ from serena.config.serena_config import (
 )
 from serena.dashboard import SerenaDashboardAPI, SerenaDashboardTrayManager, SerenaDashboardViewer, open_url_in_browser
 from serena.ls_manager import LanguageServerManager
-from serena.memories.memory_manager import MemoriesManager
+from serena.memories.memory_manager import MemoryManager
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.task_executor import TaskExecutor
@@ -919,7 +919,7 @@ class SerenaAgent:
         """
         available_tools = self._active_tools
         available_markers = available_tools.tool_marker_names
-        global_memories = MemoriesManager(
+        global_memories = MemoryManager(
             serena_data_folder=None, read_only_memory_patterns=self.serena_config.read_only_memory_patterns
         ).list_global_memories()
         global_memories_str = dict_string(global_memories.to_dict()) if len(global_memories) > 0 else ""
@@ -977,7 +977,7 @@ class SerenaAgent:
         # add list of memories (if memories are enabled)
         include_memories = self._active_tools.contains_tool_class(ReadMemoryTool)
         if include_memories:
-            project_memories = proj.memories_manager.list_project_memories()
+            project_memories = proj.memory_manager.list_project_memories()
             if project_memories:
                 msg += (
                     f"\n{json.dumps(project_memories.to_dict())}\n"
