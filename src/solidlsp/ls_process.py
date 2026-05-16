@@ -729,9 +729,7 @@ class TCPLanguageServer(LanguageServerInterface):
                 log.error("Failed to write to TCP language server: %s", e)
                 self._sock = None
                 self._file = None
-                self._cancel_pending_requests(
-                    LanguageServerTerminatedException("TCP send error", self.language, cause=e)
-                )
+                self._cancel_pending_requests(LanguageServerTerminatedException("TCP send error", self.language, cause=e))
 
     def _read_loop(self) -> None:
         """Read Content-Length-framed LSP messages from the TCP socket and dispatch them."""
