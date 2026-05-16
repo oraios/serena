@@ -7,7 +7,7 @@ from typing import Any
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -66,7 +66,9 @@ class RLanguageServer(SolidLanguageServer):
         # Set specific options to improve parsing stability
         r_cmd = 'R --vanilla --quiet --slave -e "options(languageserver.debug_mode = FALSE); languageserver::run()"'
 
-        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=r_cmd, cwd=repository_root_path), "r", solidlsp_settings)
+        super().__init__(
+            config, repository_root_path, ProcessLaunchInfo(cmd=r_cmd, cwd=repository_root_path), Language.R, solidlsp_settings
+        )
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:

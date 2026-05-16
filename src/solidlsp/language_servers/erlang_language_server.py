@@ -11,7 +11,7 @@ import time
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -37,7 +37,7 @@ class ErlangLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             ProcessLaunchInfo(cmd=[self.erlang_ls_path, "--transport", "stdio"], cwd=repository_root_path),
-            "erlang",
+            Language.ERLANG,
             solidlsp_settings,
         )
 

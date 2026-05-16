@@ -17,7 +17,7 @@ from solidlsp.ls import (
     LSPFileBuffer,
     SolidLanguageServer,
 )
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import FileUtils, PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
@@ -99,7 +99,7 @@ class BashLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             None,
-            "bash",
+            Language.BASH,
             solidlsp_settings,
         )
         self.server_ready = threading.Event()

@@ -116,7 +116,9 @@ class OmniSharp(SolidLanguageServer):
                 "formattingOptions:indentationSize=4",
             ]
         )
-        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "csharp", solidlsp_settings)
+        super().__init__(
+            config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), Language.CSHARP, solidlsp_settings
+        )
 
         self.server_ready = threading.Event()
         self.definition_available = threading.Event()

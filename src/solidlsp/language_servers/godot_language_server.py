@@ -12,7 +12,7 @@ import pathlib
 from collections.abc import Callable
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_process import LanguageServerInterface, TCPConnectionInfo, TCPLanguageServer
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo, StringDict
@@ -47,7 +47,7 @@ class GodotLanguageServer(SolidLanguageServer):
             log.warning("Could not detect Godot version for project at %s", repository_root_path)
 
         # Dummy ProcessLaunchInfo — _create_language_server_interface() ignores it
-        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=""), "gdscript", solidlsp_settings)
+        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=""), Language.GDSCRIPT, solidlsp_settings)
 
     @staticmethod
     def _detect_godot_version(repo_path: str) -> int | None:

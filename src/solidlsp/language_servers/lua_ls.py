@@ -196,7 +196,7 @@ class LuaLanguageServer(SolidLanguageServer):
         lua_ls_path = self._setup_runtime_dependency(solidlsp_settings)
 
         super().__init__(
-            config, repository_root_path, ProcessLaunchInfo(cmd=lua_ls_path, cwd=repository_root_path), "lua", solidlsp_settings
+            config, repository_root_path, ProcessLaunchInfo(cmd=lua_ls_path, cwd=repository_root_path), Language.LUA, solidlsp_settings
         )
         self.request_id = 0
 

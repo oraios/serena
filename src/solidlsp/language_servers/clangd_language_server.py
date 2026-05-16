@@ -10,7 +10,7 @@ from typing import Any, cast
 from overrides import override
 
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, ProcessLaunchInfo, SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
@@ -71,7 +71,7 @@ class ClangdLanguageServer(SolidLanguageServer):
         """
         Creates a ClangdLanguageServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        super().__init__(config, repository_root_path, None, "cpp", solidlsp_settings)
+        super().__init__(config, repository_root_path, None, Language.CPP, solidlsp_settings)
         self.server_ready = threading.Event()
         self.service_ready_event = threading.Event()
         self.initialize_searcher_command_available = threading.Event()

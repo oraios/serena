@@ -259,7 +259,7 @@ class SvelteLanguageServer(SolidLanguageServer):
             config,
             resolved_root,
             None,
-            "svelte",
+            Language.SVELTE,
             solidlsp_settings,
         )
         self.repo_path: str = resolved_root

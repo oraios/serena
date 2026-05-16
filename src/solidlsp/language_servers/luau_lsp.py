@@ -30,7 +30,7 @@ from pathlib import Path
 from overrides import override
 
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import FileUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
@@ -267,7 +267,7 @@ class LuauLanguageServer(SolidLanguageServer):
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        super().__init__(config, repository_root_path, None, "luau", solidlsp_settings)
+        super().__init__(config, repository_root_path, None, Language.LUAU, solidlsp_settings)
         self.server_ready = threading.Event()
 
     @staticmethod

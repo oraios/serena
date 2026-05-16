@@ -19,7 +19,7 @@ from solidlsp.ls import (
     LSPFileBuffer,
     SolidLanguageServer,
 )
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_types import Hover
 from solidlsp.lsp_protocol_handler.lsp_types import DiagnosticSeverity, InitializeParams
@@ -58,7 +58,7 @@ class HaxeLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             None,
-            "haxe",
+            Language.HAXE,
             solidlsp_settings,
         )
 

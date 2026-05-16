@@ -40,7 +40,7 @@ import threading
 from typing import Any, cast
 
 from solidlsp.ls import LanguageServerDependencyProvider, LSPFileBuffer, SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import FileUtils
 from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, InitializeParams, SymbolInformation
 from solidlsp.settings import SolidLSPSettings
@@ -101,7 +101,7 @@ class MatlabLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             None,
-            "matlab",
+            Language.MATLAB,
             solidlsp_settings,
         )
 

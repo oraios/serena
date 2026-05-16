@@ -17,7 +17,7 @@ from solidlsp.ls import (
     LSPFileBuffer,
     SolidLanguageServer,
 )
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
@@ -155,7 +155,7 @@ class Marksman(SolidLanguageServer):
             config,
             repository_root_path,
             None,
-            "markdown",
+            Language.MARKDOWN,
             solidlsp_settings,
         )
 

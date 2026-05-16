@@ -7,7 +7,7 @@ import shutil
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -49,7 +49,7 @@ class RegalLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             ProcessLaunchInfo(cmd=f"{regal_executable_path} language-server", cwd=repository_root_path),
-            "rego",
+            Language.REGO,
             solidlsp_settings,
         )
 

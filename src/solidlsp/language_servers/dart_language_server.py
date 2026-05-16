@@ -62,7 +62,7 @@ class DartLanguageServer(SolidLanguageServer):
         """
         executable_path = self._setup_runtime_dependencies(solidlsp_settings)
         super().__init__(
-            config, repository_root_path, ProcessLaunchInfo(cmd=executable_path, cwd=repository_root_path), "dart", solidlsp_settings
+            config, repository_root_path, ProcessLaunchInfo(cmd=executable_path, cwd=repository_root_path), Language.DART, solidlsp_settings
         )
 
     @override

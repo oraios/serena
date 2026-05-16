@@ -16,7 +16,7 @@ from solidlsp.ls import (
     LanguageServerDependencyProviderSinglePath,
     SolidLanguageServer,
 )
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
@@ -63,7 +63,7 @@ class HlslLanguageServer(SolidLanguageServer):
     """
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings) -> None:
-        super().__init__(config, repository_root_path, None, "hlsl", solidlsp_settings)
+        super().__init__(config, repository_root_path, None, Language.HLSL, solidlsp_settings)
 
     @override
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:

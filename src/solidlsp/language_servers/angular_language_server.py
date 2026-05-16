@@ -233,7 +233,7 @@ class AngularLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             ProcessLaunchInfo(cmd=ng_cmd, cwd=repository_root_path),
-            "angular",
+            Language.ANGULAR,
             solidlsp_settings,
         )
         self.server_ready = threading.Event()

@@ -39,7 +39,7 @@ class TyLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             None,
-            str(config.code_language),
+            config.code_language,
             solidlsp_settings,
         )
 

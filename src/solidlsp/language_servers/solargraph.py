@@ -15,7 +15,7 @@ import threading
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -39,13 +39,11 @@ class Solargraph(SolidLanguageServer):
             config,
             repository_root_path,
             ProcessLaunchInfo(cmd=f"{solargraph_executable_path} stdio", cwd=repository_root_path),
-            "ruby",
+            Language.RUBY,
             solidlsp_settings,
         )
         # Override internal language enum for file matching (excludes .erb files)
         # while keeping LSP languageId as "ruby" for protocol compliance
-        from solidlsp.ls_config import Language
-
         self.language = Language.RUBY_SOLARGRAPH
         self.analysis_complete = threading.Event()
         self.service_ready_event = threading.Event()

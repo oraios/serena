@@ -12,7 +12,7 @@ import subprocess
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -97,7 +97,9 @@ class ZigLanguageServer(SolidLanguageServer):
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         self._setup_runtime_dependency()
 
-        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd="zls", cwd=repository_root_path), "zig", solidlsp_settings)
+        super().__init__(
+            config, repository_root_path, ProcessLaunchInfo(cmd="zls", cwd=repository_root_path), Language.ZIG, solidlsp_settings
+        )
         self.request_id = 0
 
     @staticmethod

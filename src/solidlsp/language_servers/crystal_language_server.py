@@ -9,7 +9,7 @@ import shutil
 import time
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -45,7 +45,7 @@ class CrystalLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             ProcessLaunchInfo(cmd=crystal_ls_path, cwd=repository_root_path),
-            "crystal",
+            Language.CRYSTAL,
             solidlsp_settings,
         )
         self._initialization_timestamp: float | None = None

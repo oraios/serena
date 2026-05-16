@@ -17,7 +17,7 @@ from typing import Any
 from overrides import override
 
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import FileUtils, PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
@@ -129,7 +129,7 @@ class TaploServer(SolidLanguageServer):
             config,
             repository_root_path,
             None,
-            "toml",
+            Language.TOML,
             solidlsp_settings,
         )
 

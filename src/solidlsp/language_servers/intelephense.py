@@ -11,7 +11,7 @@ from time import sleep
 from overrides import override
 
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, InitializeParams, LocationLink
 from solidlsp.settings import SolidLSPSettings
@@ -95,7 +95,7 @@ class Intelephense(SolidLanguageServer):
             return [core_path, "--stdio"]
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        super().__init__(config, repository_root_path, None, "php", solidlsp_settings)
+        super().__init__(config, repository_root_path, None, Language.PHP, solidlsp_settings)
         self.request_id = 0
 
         # For PHP projects, we should ignore:

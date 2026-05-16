@@ -30,7 +30,7 @@ from solidlsp.ls import (
     LanguageServerDependencyProviderSinglePath,
     SolidLanguageServer,
 )
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import FileUtils, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
@@ -95,7 +95,7 @@ class KotlinLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             None,
-            "kotlin",
+            Language.KOTLIN,
             solidlsp_settings,
         )
 

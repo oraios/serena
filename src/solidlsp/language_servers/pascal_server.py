@@ -172,7 +172,7 @@ class PascalLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             ProcessLaunchInfo(cmd=pasls_executable_path, cwd=repository_root_path, env=proc_env),
-            "pascal",
+            Language.PASCAL,
             solidlsp_settings,
         )
         self.server_ready = threading.Event()

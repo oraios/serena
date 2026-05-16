@@ -46,7 +46,7 @@ class VtsLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             ProcessLaunchInfo(cmd=vts_lsp_executable_path, cwd=repository_root_path),
-            "typescript",
+            Language.TYPESCRIPT,
             solidlsp_settings,
         )
         self.server_ready = threading.Event()

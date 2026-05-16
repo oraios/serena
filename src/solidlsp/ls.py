@@ -474,7 +474,7 @@ class SolidLanguageServer(ABC):
         config: LanguageServerConfig,
         repository_root_path: str,
         process_launch_info: ProcessLaunchInfo | None,
-        language_id: str,
+        language_id: Language,
         solidlsp_settings: SolidLSPSettings,
         cache_version_raw_document_symbols: Hashable = 1,
     ):
@@ -489,8 +489,8 @@ class SolidLanguageServer(ABC):
             the command used to start the actual language server.
             The command must pass appropriate flags to the binary, so that it runs in the stdio mode,
             as opposed to HTTP, TCP modes supported by some language servers.
-        :param language_id: The language identifier which will be passed to the language server in the `textDocument/didOpen`
-            notification by default.
+        :param language_id: The language identifier (``Language`` enum member) passed to the language server
+            in the `textDocument/didOpen` notification by default.
             If the language server uses multiple language identifiers, it must override the method `get_language_id_for_file`
             to provide the appropriate identifier for each type of file.
         :param cache_version_raw_document_symbols: the version, for caching, of the raw document symbols coming
@@ -513,7 +513,7 @@ class SolidLanguageServer(ABC):
 
         self.language_id = language_id
         self.open_file_buffers: dict[str, LSPFileBuffer] = {}
-        self.language = Language(language_id)
+        self.language = language_id
         self._published_diagnostics: dict[str, list[ls_types.Diagnostic]] = {}
         self._published_diagnostics_generation_by_uri: dict[str, int] = {}
         self._published_diagnostics_generation = 0

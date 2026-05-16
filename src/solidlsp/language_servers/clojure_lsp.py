@@ -14,7 +14,7 @@ from typing import cast
 from overrides import override
 
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
@@ -236,7 +236,7 @@ class ClojureLSP(SolidLanguageServer):
             config,
             repository_root_path,
             None,
-            "clojure",
+            Language.CLOJURE,
             solidlsp_settings,
         )
         self.server_ready = threading.Event()

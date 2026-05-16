@@ -248,7 +248,7 @@ class PowerShellLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path),
-            "powershell",
+            Language.POWERSHELL,
             solidlsp_settings,
         )
         self.server_ready = threading.Event()

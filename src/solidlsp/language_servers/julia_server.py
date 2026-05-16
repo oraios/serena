@@ -9,7 +9,7 @@ from typing import Any
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import DiagnosticTag, InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -45,7 +45,7 @@ class JuliaLanguageServer(SolidLanguageServer):
         log.info(f"[JULIA DEBUG] Command: {julia_ls_cmd}")
 
         super().__init__(
-            config, repository_root_path, ProcessLaunchInfo(cmd=julia_ls_cmd, cwd=repository_root_path), "julia", solidlsp_settings
+            config, repository_root_path, ProcessLaunchInfo(cmd=julia_ls_cmd, cwd=repository_root_path), Language.JULIA, solidlsp_settings
         )
 
     @staticmethod

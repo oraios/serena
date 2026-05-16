@@ -17,7 +17,7 @@ from overrides import override
 
 from solidlsp import ls_types
 from solidlsp.ls import DocumentSymbols, LSPFileBuffer, SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -247,7 +247,9 @@ class NixLanguageServer(SolidLanguageServer):
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         nixd_path = self._setup_runtime_dependency()
 
-        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=nixd_path, cwd=repository_root_path), "nix", solidlsp_settings)
+        super().__init__(
+            config, repository_root_path, ProcessLaunchInfo(cmd=nixd_path, cwd=repository_root_path), Language.NIX, solidlsp_settings
+        )
         self.request_id = 0
 
     @staticmethod

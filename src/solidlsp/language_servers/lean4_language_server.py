@@ -13,7 +13,7 @@ from typing import cast
 from overrides import override
 
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
@@ -85,7 +85,7 @@ class Lean4LanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             None,
-            "lean4",
+            Language.LEAN4,
             solidlsp_settings,
         )
 

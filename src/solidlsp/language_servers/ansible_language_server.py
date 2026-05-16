@@ -14,7 +14,7 @@ from overrides import override
 
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
@@ -153,7 +153,7 @@ class AnsibleLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             None,
-            "ansible",
+            Language.ANSIBLE,
             solidlsp_settings,
         )
 

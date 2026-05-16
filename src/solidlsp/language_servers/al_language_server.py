@@ -137,7 +137,7 @@ class ALLanguageServer(SolidLanguageServer):
         request fails, preventing repeated unsuccessful attempts.
         """
 
-        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), "al", solidlsp_settings)
+        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=cmd, cwd=repository_root_path), Language.AL, solidlsp_settings)
 
         # Cache mapping (file_path, line, char) -> original_full_name for hover injection
         self._al_original_names: dict[tuple[str, int, int], str] = {}

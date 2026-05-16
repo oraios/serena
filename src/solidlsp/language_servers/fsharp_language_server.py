@@ -50,7 +50,7 @@ class FSharpLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             ProcessLaunchInfo(cmd=fsharp_lsp_executable_path, cwd=repository_root_path),
-            "fsharp",
+            Language.FSHARP,
             solidlsp_settings,
         )
         self.server_ready = threading.Event()

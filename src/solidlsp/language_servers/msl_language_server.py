@@ -15,7 +15,7 @@ import threading
 from solidlsp.ls import (
     SolidLanguageServer,
 )
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -41,7 +41,7 @@ class MslLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             process_launch_info=process_launch_info,
-            language_id="msl",
+            language_id=Language.MSL,
             solidlsp_settings=solidlsp_settings,
         )
         self.server_ready = threading.Event()

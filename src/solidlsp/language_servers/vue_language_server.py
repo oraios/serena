@@ -174,7 +174,7 @@ class VueLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             ProcessLaunchInfo(cmd=vue_lsp_executable_path, cwd=repository_root_path),
-            "vue",
+            Language.VUE,
             solidlsp_settings,
         )
         self.server_ready = threading.Event()

@@ -101,7 +101,7 @@ class GroovyLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             ProcessLaunchInfo(cmd=cmd, env=proc_env, cwd=repository_root_path),
-            "groovy",
+            Language.GROOVY,
             solidlsp_settings,
         )
 

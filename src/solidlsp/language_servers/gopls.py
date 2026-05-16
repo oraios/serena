@@ -10,7 +10,7 @@ from typing import Any, cast
 from overrides import override
 
 from solidlsp.ls import RawDocumentSymbol, SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -100,7 +100,9 @@ class Gopls(SolidLanguageServer):
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         self._setup_runtime_dependency()
 
-        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd="gopls", cwd=repository_root_path), "go", solidlsp_settings)
+        super().__init__(
+            config, repository_root_path, ProcessLaunchInfo(cmd="gopls", cwd=repository_root_path), Language.GO, solidlsp_settings
+        )
         self.request_id = 0
 
     def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:

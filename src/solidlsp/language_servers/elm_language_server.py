@@ -57,7 +57,7 @@ class ElmLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             ProcessLaunchInfo(cmd=elm_lsp_executable_path, cwd=repository_root_path, env=env),
-            "elm",
+            Language.ELM,
             solidlsp_settings,
         )
 

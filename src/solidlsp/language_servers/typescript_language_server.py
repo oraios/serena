@@ -14,7 +14,7 @@ from sensai.util.logging import LogTime
 
 from solidlsp import ls_types
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
@@ -91,7 +91,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             None,
-            "typescript",
+            Language.TYPESCRIPT,
             solidlsp_settings,
         )
         self.server_ready = threading.Event()

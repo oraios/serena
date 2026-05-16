@@ -214,7 +214,7 @@ class TerraformLS(SolidLanguageServer):
             config,
             repository_root_path,
             ProcessLaunchInfo(cmd=f"{terraform_ls_executable_path} serve", cwd=repository_root_path),
-            "terraform",
+            Language.TERRAFORM,
             solidlsp_settings,
         )
         self.request_id = 0

@@ -20,7 +20,7 @@ from overrides import override
 
 from solidlsp import ls_types
 from solidlsp.ls import LanguageServerDependencyProvider, LSPFileBuffer, SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_types import UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils, PlatformUtils
@@ -237,7 +237,7 @@ class EclipseJDTLS(SolidLanguageServer):
         Creates a new EclipseJDTLS instance initializing the language server settings appropriately.
         This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
         """
-        super().__init__(config, repository_root_path, None, "java", solidlsp_settings)
+        super().__init__(config, repository_root_path, None, Language.JAVA, solidlsp_settings)
 
         # Extract runtime_dependency_paths from the dependency provider
         assert isinstance(self._dependency_provider, self.DependencyProvider)

@@ -17,7 +17,7 @@ from typing import Any
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -310,7 +310,7 @@ class OcamlLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             ProcessLaunchInfo(cmd=ocaml_lsp_cmd, cwd=repository_root_path),
-            "ocaml",
+            Language.OCAML,
             solidlsp_settings,
         )
         self.server_ready = threading.Event()

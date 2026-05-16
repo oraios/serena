@@ -43,7 +43,11 @@ class RubyLsp(SolidLanguageServer):
         """
         ruby_lsp_executable = self._setup_runtime_dependencies(config, repository_root_path, solidlsp_settings)
         super().__init__(
-            config, repository_root_path, ProcessLaunchInfo(cmd=ruby_lsp_executable, cwd=repository_root_path), "ruby", solidlsp_settings
+            config,
+            repository_root_path,
+            ProcessLaunchInfo(cmd=ruby_lsp_executable, cwd=repository_root_path),
+            Language.RUBY,
+            solidlsp_settings,
         )
         self.analysis_complete = threading.Event()
         self.service_ready_event = threading.Event()

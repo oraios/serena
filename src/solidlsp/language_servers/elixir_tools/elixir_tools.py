@@ -207,7 +207,7 @@ class ElixirTools(SolidLanguageServer):
             config,
             repository_root_path,
             ProcessLaunchInfo(cmd=f"{expert_executable_path} --stdio", cwd=repository_root_path),
-            "elixir",
+            Language.ELIXIR,
             solidlsp_settings,
         )
         self.server_ready = threading.Event()

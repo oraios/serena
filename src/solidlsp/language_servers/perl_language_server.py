@@ -14,7 +14,7 @@ from typing import Any
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import DidChangeConfigurationParams, InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -104,7 +104,7 @@ class PerlLanguageServer(SolidLanguageServer):
         perl_ls_cmd = self._setup_runtime_dependencies()
 
         super().__init__(
-            config, repository_root_path, ProcessLaunchInfo(cmd=perl_ls_cmd, cwd=repository_root_path), "perl", solidlsp_settings
+            config, repository_root_path, ProcessLaunchInfo(cmd=perl_ls_cmd, cwd=repository_root_path), Language.PERL, solidlsp_settings
         )
         self.request_id = 0
 

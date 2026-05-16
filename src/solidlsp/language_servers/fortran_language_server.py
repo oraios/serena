@@ -12,7 +12,7 @@ from overrides import override
 
 from solidlsp import ls_types
 from solidlsp.ls import DocumentSymbols, LSPConstants, LSPFileBuffer, SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -187,7 +187,7 @@ class FortranLanguageServer(SolidLanguageServer):
         fortls_cmd = f"{fortls_path}"
 
         super().__init__(
-            config, repository_root_path, ProcessLaunchInfo(cmd=fortls_cmd, cwd=repository_root_path), "fortran", solidlsp_settings
+            config, repository_root_path, ProcessLaunchInfo(cmd=fortls_cmd, cwd=repository_root_path), Language.FORTRAN, solidlsp_settings
         )
 
     @staticmethod

@@ -122,7 +122,7 @@ class ScalaLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             ProcessLaunchInfo(cmd=scala_lsp_executable_path, cwd=repository_root_path),
-            config.code_language.value,
+            config.code_language,
             solidlsp_settings,
         )
 

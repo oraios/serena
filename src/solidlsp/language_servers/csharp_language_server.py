@@ -21,7 +21,7 @@ from solidlsp.ls import (
     RawDocumentSymbol,
     SolidLanguageServer,
 )
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_types import Hover
 from solidlsp.ls_utils import FileUtils, PathUtils
@@ -215,7 +215,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         Creates a CSharpLanguageServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
-        super().__init__(config, repository_root_path, None, "csharp", solidlsp_settings)
+        super().__init__(config, repository_root_path, None, Language.CSHARP, solidlsp_settings)
         # Cache for original Roslyn symbol names with type annotations
         # Key: (relative_file_path, line, character) -> Value: original name
         self._original_symbol_names: dict[tuple[str, int, int], str] = {}

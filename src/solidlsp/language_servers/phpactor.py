@@ -110,7 +110,7 @@ class PhpactorServer(SolidLanguageServer):
             return ["php", core_path, "language-server"]
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        super().__init__(config, repository_root_path, None, "php", solidlsp_settings)
+        super().__init__(config, repository_root_path, None, Language.PHP, solidlsp_settings)
         # Override internal language enum for correct file matching
         self.language = Language.PHP_PHPACTOR
 
