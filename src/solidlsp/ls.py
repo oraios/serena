@@ -512,8 +512,14 @@ class SolidLanguageServer(ABC):
         )
 
         self.language_id = language_id
+        """
+        default language identifier to be passed to the language server in `textDocument/didOpen` notifications.
+        """
         self.open_file_buffers: dict[str, LSPFileBuffer] = {}
-        self.language = Language(language_id)
+        self.language = self.get_language_enum_instance()
+        """
+        identifies the language server (not to be confused with the language id passed to the language server)
+        """
         self._published_diagnostics: dict[str, list[ls_types.Diagnostic]] = {}
         self._published_diagnostics_generation_by_uri: dict[str, int] = {}
         self._published_diagnostics_generation = 0
