@@ -93,6 +93,11 @@ class Language(str, Enum):
     LEAN4 = "lean4"
     GROOVY = "groovy"
     VUE = "vue"
+    SVELTE = "svelte"
+    """Svelte language server using svelte-language-server.
+    Supports .svelte Single File Components plus TypeScript and JavaScript
+    files in Svelte projects. Requires Node.js v18+ and npm.
+    """
     POWERSHELL = "powershell"
     PASCAL = "pascal"
     """Pascal Language Server (pasls) for Free Pascal and Lazarus projects.
@@ -122,6 +127,12 @@ class Language(str, Enum):
     project file at the repository root. SPARK files are handled transparently
     by the same server, since SPARK is distinguished by pragmas/aspects in
     source rather than by file extension.
+    """
+    GDSCRIPT = "gdscript"
+    """GDScript language server for Godot Engine projects (Godot 3 and 4).
+    Connects to the Godot editor's built-in LSP server over TCP (port 6008).
+    The editor must already be running with its built-in LSP enabled (default).
+    Supports .gd and .gdscript files.
     """
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
@@ -266,8 +277,8 @@ class Language(str, Enum):
         # We assign lower priority to languages that are supersets of others, such that
         # the "larger" language is only chosen when it matches more strongly
         match self:
-            # languages that are supersets of others (Vue is superset of TypeScript/JavaScript)
-            case self.VUE:
+            # languages that are supersets of others (Vue/Svelte are supersets of TypeScript/JavaScript)
+            case self.VUE | self.SVELTE:
                 return 1
             # regular languages
             case _:
@@ -434,6 +445,12 @@ class Language(str, Enum):
                         for base_pattern in ["ts", "js"]:
                             path_patterns.append(f".{prefix}{base_pattern}{postfix}")
                 return FilenameMatcher(*path_patterns)
+            case self.SVELTE:
+                path_patterns = [".svelte"]
+                for prefix in ["c", "m", ""]:
+                    for base_pattern in ["ts", "js"]:
+                        path_patterns.append(f".{prefix}{base_pattern}")
+                return FilenameMatcher(*path_patterns)
             case self.POWERSHELL:
                 return FilenameMatcher(".ps1", ".psm1", ".psd1")
             case self.PASCAL:
@@ -472,6 +489,8 @@ class Language(str, Enum):
                 return FilenameMatcher(".bsl", ".os")
             case self.ADA:
                 return FilenameMatcher(".ads", ".adb", ".ada", case_sensitive=False)
+            case self.GDSCRIPT:
+                return FilenameMatcher(".gd", ".gdscript")
             case self.HTML:
                 return FilenameMatcher(".html", ".htm")
             case self.SCSS:
@@ -537,6 +556,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.vue_language_server import VueLanguageServer
 
                 return VueLanguageServer
+            case self.SVELTE:
+                from solidlsp.language_servers.svelte_language_server import SvelteLanguageServer
+
+                return SvelteLanguageServer
             case self.GO:
                 from solidlsp.language_servers.gopls import Gopls
 
@@ -727,6 +750,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.ada_language_server import AdaLanguageServer
 
                 return AdaLanguageServer
+            case self.GDSCRIPT:
+                from solidlsp.language_servers.godot_language_server import GodotLanguageServer
+
+                return GodotLanguageServer
             case self.HTML:
                 from solidlsp.language_servers.vscode_html_language_server import VsCodeHtmlLanguageServer
 

@@ -2,8 +2,12 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Make tool descriptions more amenable to tool search mechanisms as now used in several clients (e.g. avoid referencing other tools' names, etc.)
+
 * Language Servers:
   - No longer store temporary files (e.g. downloads) in `~/solidlsp_tmp`; instead, use OS-specific temporary directories
+  - Add **GDScript** (Godot Engine) support. Serena connects over TCP to the Godot editor's built-in LSP server (port 6008, same for Godot 3 and 4) — no separate language server process to install. Godot major version is auto-detected from `config_version` in `project.godot`. Note: Godot's LSP does not implement `workspace/symbol`; first workspace-wide scans fall back to per-file requests and can be slow for large projects (results are cached to disk). See the [GDScript Setup Guide](https://oraios.github.io/serena/03-special-guides/godot_gdscript_setup_guide_for_serena.html) for details. Closes #1446.
 
 * Dashboard:
   - UI polish: switch UI font to Inter (with system fallbacks) and use JetBrains Mono only for code/logs/paths/identifiers; refine the light/dark palette with softer borders, clearer text hierarchy, and a more nuanced shadow/elevation system; introduce a consistent spacing scale; keep the orange accent.
@@ -51,6 +55,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     - `get_diagnostics_for_symbol`: Retrieves diagnostics pertaining to a specific symbol
 
 * Language Servers:
+  - Add **Svelte** support via `svelte-language-server@0.18.0`, installed with npm into Serena-managed language-server resources. The `svelte` language handles `.svelte` Single File Components plus TypeScript/JavaScript files for Svelte projects; use it instead of also enabling `typescript` unless intentionally running multiple language servers.
   - Elixir (`elixir-tools/next-ls`): Fix deadlock in monorepo projects where `mix.exs` lives in a subdirectory. The server now searches immediate subdirectories when no `mix.exs` is found at the repository root. #1444
   - Java (`eclipse.jdt.ls`): Add upstream JDTLS mode for offline / restricted-network use. Setting both `jdtls_path` and `lombok_path` in `ls_specific_settings.java` makes Serena use an existing upstream JDTLS installation (e.g. `brew install jdtls`) and the system JDK 21+, skipping the ~500 MB vscode-java VSIX, Gradle, and IntelliCode downloads. New related setting `java_home` lets the user override the JDK used to launch JDTLS. Default behavior unchanged — the JDTLS workspace hash is preserved bit-for-bit for users on the default route, so existing project caches are reused without a one-time reindex; the launcher path is mixed into the hash only when `jdtls_path` is set, isolating upstream installations from the default workspace. #1415
   - Java (eclipse.jdt.ls): Lombok-generated methods (getters/setters, builder(), equals/hashCode/toString, etc.) are now included in symbol-based tools (find_symbol, get_symbols_overview, edits). Added lombok_show_generated setting (default: on) to toggle this. Updated bundled vscode-java to 1.54.0-923. Issue #1432.

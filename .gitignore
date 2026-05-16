@@ -81,6 +81,8 @@ eggs/
 lib/
 !test/resources/repos/dart/test_repo/lib/
 !test/resources/repos/dart/test_repo/lib/diagnostics_sample.dart
+!test/resources/repos/svelte/test_repo/src/lib/
+!test/resources/repos/svelte/test_repo/src/lib/**
 lib64/
 parts/
 sdist/

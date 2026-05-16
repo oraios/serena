@@ -24,8 +24,7 @@ class ReadFileTool(Tool):
 
     def apply(self, relative_path: str, start_line: int = 0, end_line: int | None = None, max_answer_chars: int = -1) -> str:
         """
-        Reads the given file or a chunk of it. Generally, symbolic operations
-        like find_symbol or find_referencing_symbols should be preferred if you know which symbols you are looking for.
+        Reads the given file or a chunk of it.
 
         :param relative_path: the relative path to the file to read
         :param start_line: the 0-based index of the first line to be retrieved.
@@ -337,17 +336,17 @@ class SearchForPatternTool(Tool):
     ) -> str:
         """
         Searches for a regex pattern across project files, returning whole matched lines (plus optional context).
-        Prefer `find_symbol`/`find_referencing_symbols` when looking for known symbols.
+        Prefer symbolic operations if you know which symbols you are looking for!
 
         :param substring_pattern: regular expression to search for.
         :param context_lines_before: number of context lines to include before each match.
         :param context_lines_after: number of context lines to include after each match.
         :param paths_include_glob: optional glob (relative to project root, e.g. ``"src/**/*.ts"``) restricting which files are searched.
         :param paths_exclude_glob: optional glob to exclude files; takes precedence over `paths_include_glob`.
-        :param relative_path: restricts the search to this file or subdirectory of the project root. Must exist.
+        :param relative_path: restricts the search to this file or subdirectory of the project root
         :param restrict_search_to_code_files: whether to search only files containing analyzable code symbols
             (useful when looking for class/method definitions); otherwise also search non-code files.
-        :param multiline: whether to apply multi-line matching, enabling the flags re.DOTALL and re.MULTILINE
+        :param multiline: whether to apply multi-line matching (default: True), enabling the flags re.DOTALL and re.MULTILINE
         :param max_answer_chars: if the output exceeds this many characters, a progressively shortened summary is returned instead.
             ``-1`` uses the configured default.
         :return: A mapping from file paths to matched consecutive lines (0-based line numbers).
