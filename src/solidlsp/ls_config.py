@@ -69,12 +69,6 @@ class Language(str, Enum):
     BASH = "bash"
     CRYSTAL = "crystal"
     CUE = "cue"
-    """CUE configuration language using the LSP mode of the official `cue` CLI (`cue lsp`).
-    Auto-downloads the `cue` binary from GitHub releases for the current platform
-    (linux-x64/arm64, darwin-x64/arm64, win-x64/arm64). Supports `.cue` files and works
-    best rooted at a directory containing a `cue.mod/` module. Users can override the
-    binary by setting `ls_specific_settings.cue.ls_path` to a pre-installed `cue` executable.
-    """
     ZIG = "zig"
     LUA = "lua"
     LUAU = "luau"

@@ -22,24 +22,11 @@ from .common import RuntimeDependency, RuntimeDependencyCollection
 
 log = logging.getLogger(__name__)
 
-# Version pinning convention (see eclipse_jdtls.py for the full spec):
-#   INITIAL_* — frozen forever; the unversioned install dir is reserved for it.
-#   DEFAULT_* — bumped on upgrades; every other version goes into a versioned subdir.
-#
 # How to refresh the pinned SHA256s when bumping DEFAULT_CUE_VERSION:
 #   gh release view <tag> --repo cue-lang/cue --json assets \
 #     --jq '.assets[] | select(.name | test("(darwin|linux|windows)_(amd64|arm64)")) | {name, digest}'
 #   The `digest` field is `sha256:<hex>` — copy the hex portion into DEFAULT_CUE_SHA256_BY_PLATFORM
 #   keyed by the Serena PlatformId (osx-arm64, osx-x64, linux-arm64, linux-x64, win-x64, win-arm64).
-INITIAL_CUE_VERSION = "v0.16.1"
-INITIAL_CUE_SHA256_BY_PLATFORM = {
-    "osx-arm64": "a72b0cddb377c52d1b003bed9a335d893b70cd75a182cd5e3fee8bae30ddb6d6",
-    "osx-x64": "97b0d78e4c5ee49ff72145fd6ef4f4bab0bb332d55f29660de3fec2af5ec96a9",
-    "linux-arm64": "3cc715a9e969f87b93c4fa34cfaef5388b93e96efa20b248e8ad6826abd25a83",
-    "linux-x64": "5d644c1305a2b86504c8dcd2ec829cf5b4999efc2cf51ee375624e0455f774ae",
-    "win-x64": "2f24123f458229fcf283db534bd86692ad1074da806defee0f0cc62976c0397c",
-    "win-arm64": "e0c15ce53f73e8609b0e8ce6507298f3474b334ac5eb0c826c9497a811fd0cce",
-}
 DEFAULT_CUE_VERSION = "v0.16.1"
 DEFAULT_CUE_SHA256_BY_PLATFORM = {
     "osx-arm64": "a72b0cddb377c52d1b003bed9a335d893b70cd75a182cd5e3fee8bae30ddb6d6",
@@ -52,8 +39,6 @@ DEFAULT_CUE_SHA256_BY_PLATFORM = {
 
 
 def _cue_sha(version: str, platform_key: str) -> str | None:
-    if version == INITIAL_CUE_VERSION:
-        return INITIAL_CUE_SHA256_BY_PLATFORM.get(platform_key)
     if version == DEFAULT_CUE_VERSION:
         return DEFAULT_CUE_SHA256_BY_PLATFORM.get(platform_key)
     return None
@@ -77,9 +62,8 @@ class CueLanguageServer(SolidLanguageServer):
           (e.g. via ``brew install cue`` or ``go install``).
         - ``cue_version``: Override the pinned cue version downloaded by Serena
           (default: the bundled Serena version). Setting this to a version other than
-          ``INITIAL_CUE_VERSION`` / ``DEFAULT_CUE_VERSION`` skips SHA256 verification
-          (checksums for arbitrary versions are unknown), so pair it with ``ls_path`` if
-          integrity matters.
+          ``DEFAULT_CUE_VERSION`` skips SHA256 verification (checksums for arbitrary
+          versions are unknown), so pair it with ``ls_path`` if integrity matters.
     """
 
     CUE_ALLOWED_HOSTS = CUE_ALLOWED_HOSTS
@@ -186,10 +170,7 @@ class CueLanguageServer(SolidLanguageServer):
             deps = CueLanguageServer._runtime_dependencies(cue_version)
             dependency = deps.get_single_dep_for_current_platform()
 
-            # legacy unversioned dir reserved for INITIAL; every other version goes into a versioned subdir
-            install_dir = (
-                self._ls_resources_dir if cue_version == INITIAL_CUE_VERSION else os.path.join(self._ls_resources_dir, f"cue-{cue_version}")
-            )
+            install_dir = os.path.join(self._ls_resources_dir, f"cue-{cue_version}")
             cue_executable_path = deps.binary_path(install_dir)
             if not os.path.exists(cue_executable_path):
                 log.info(f"Downloading and extracting cue from {dependency.url} to {install_dir}")
