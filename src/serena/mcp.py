@@ -258,15 +258,36 @@ class SerenaMCPFactory:
         assert self.agent is not None
         yield from self.agent.get_exposed_tool_instances()
 
-    # noinspection PyProtectedMember
     def _set_mcp_tools(self, mcp: FastMCP, openai_tool_compatible: bool = False) -> None:
-        """Update the tools in the MCP server"""
-        if mcp is not None:
-            mcp._tool_manager._tools = {}
-            for tool in self._iter_tools():
-                mcp_tool = self.make_mcp_tool(tool, openai_tool_compatible=openai_tool_compatible)
-                mcp._tool_manager._tools[tool.get_name()] = mcp_tool
-            log.info(f"Starting MCP server with {len(mcp._tool_manager._tools)} tools: {list(mcp._tool_manager._tools.keys())}")
+        """Update the tools in the MCP server.
+
+        Implementation note (2026-05-17 PoC #30):
+        Original code mutated the private ``mcp._tool_manager._tools`` dict directly.
+        This version replaces ``mcp._tool_manager`` with a fresh ``ToolManager`` built
+        via its public constructor's ``tools=`` keyword argument — a documented contract
+        that is far less likely to break across mcp-python-sdk 1.x→2.x than dict-level
+        access to a private member named ``_tools``.
+
+        We still assign to ``mcp._tool_manager`` (a private attribute on FastMCP), but
+        this is a one-shot component replacement rather than ongoing dict mutation, and
+        the right-hand side uses only public, advertised API surface.
+        """
+        if mcp is None:
+            return
+        from mcp.server.fastmcp.tools.tool_manager import ToolManager
+
+        tools = [
+            self.make_mcp_tool(tool, openai_tool_compatible=openai_tool_compatible)
+            for tool in self._iter_tools()
+        ]
+        new_tm = ToolManager(
+            warn_on_duplicate_tools=mcp.settings.warn_on_duplicate_tools,
+            tools=tools,
+        )
+        mcp._tool_manager = new_tm
+        log.info(
+            f"Starting MCP server with {len(tools)} tools: {[t.name for t in tools]}"
+        )
 
     def _create_serena_agent(self, serena_config: SerenaConfig, modes: ModeSelectionDefinition | None = None) -> SerenaAgent:
         return SerenaAgent(
