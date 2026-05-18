@@ -50,6 +50,10 @@
         sourcePreference = "wheel"; # or sourcePreference = "sdist";
       };
 
+      editableOverlay = workspace.mkEditablePyprojectOverlay {
+        root = "$REPO_ROOT";
+      };
+
       pyprojectOverrides = final: prev: {
         # Add setuptools for packages that need it during build
         ruamel-yaml-clib = prev.ruamel-yaml-clib.overrideAttrs (old: {
@@ -111,21 +115,26 @@
       };
 
       devShells = {
-        default = pkgs.mkShell {
+        default = let
+          pythonSetDev = pythonSet.overrideScope editableOverlay;
+          virtualenv = pythonSetDev.mkVirtualEnv "serena-dev-env" workspace.deps.all;
+        in pkgs.mkShell {
           packages = [
-            python
+            virtualenv
             pkgs.uv
           ];
           env =
             {
+              UV_NO_SYNC = "1";
               UV_PYTHON_DOWNLOADS = "never";
-              UV_PYTHON = python.interpreter;
+              UV_PYTHON = pythonSetDev.python.interpreter;
             }
             // lib.optionalAttrs pkgs.stdenv.isLinux {
               LD_LIBRARY_PATH = lib.makeLibraryPath pkgs.pythonManylinuxPackages.manylinux1;
             };
           shellHook = ''
             unset PYTHONPATH
+            export REPO_ROOT=$(git rev-parse --show-toplevel)
           '';
         };
       };
