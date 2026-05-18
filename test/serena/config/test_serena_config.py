@@ -16,7 +16,7 @@ from serena.config.serena_config import (
     SerenaConfigError,
 )
 from serena.constants import PROJECT_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
-from serena.project import MemoriesManager, Project
+from serena.project import MemoryManager, Project
 from solidlsp.ls_config import Language
 from test.conftest import create_default_serena_config
 
@@ -581,17 +581,17 @@ class TestMemoriesManagerCustomPath:
 
     def test_memories_subdir_is_created(self):
         assert not self.data_folder.exists()
-        MemoriesManager(str(self.data_folder))
+        MemoryManager(str(self.data_folder))
         assert (self.data_folder / "memories").exists()
 
     def test_save_and_load_memory(self):
-        manager = MemoriesManager(str(self.data_folder))
+        manager = MemoryManager(str(self.data_folder))
         manager.save_memory("test_topic", "test content", is_tool_context=False)
         content = manager.load_memory("test_topic")
         assert content == "test content"
 
     def test_list_memories(self):
-        manager = MemoriesManager(str(self.data_folder))
+        manager = MemoryManager(str(self.data_folder))
         manager.save_memory("topic_a", "content a", is_tool_context=False)
         manager.save_memory("topic_b", "content b", is_tool_context=False)
         memories = manager.list_project_memories()

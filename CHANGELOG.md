@@ -14,6 +14,23 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Modal markup cleanup: extract shared CSS classes (`.modal-info`, `.modal-hint`, `.modal-prompt`, `.modal-field`, `.modal-input`, `.modal-select`, `.modal-textarea`, `.modal-actions`, `.btn-secondary`) and remove duplicated inline styles from all seven modals. Inputs and textareas get an accent-colored focus ring; the modal backdrop has a subtle blur.
   - Add Language: replace the native `<select>` with a filterable combobox — type to filter, keyboard navigation (Up/Down/Enter/Esc), substring highlight, click-outside to close. The typed value is validated against the available languages list before submission.
 
+* Memories:
+  - Memories can now reference each other using the `mem:<name>` convention. Renames
+    propagate to all references automatically. See the [reference convention](https://oraios.github.io/serena/02-usage/045_memories.html#referencing-memories-from-other-memories).
+  - Onboarding now seeds a `memory_maintenance` memory describing the memory-style and conventions, 
+    and the agent is instructed to read it before writing any other memories. 
+    A `global/memory_maintenance` memory takes precedence over the per-project seed. 
+    See the [memory maintenance section](https://oraios.github.io/serena/02-usage/045_memories.html#the-memory-maintenance-memory).
+   
+* CLI:
+  - Add `serena memories` CLI command group: `list`, `read`, `write`, `check` (referential
+    integrity report) and `auto-prefix-references` (heuristic rewrite of bare occurrences).
+    See the [CLI subcommands](https://oraios.github.io/serena/02-usage/045_memories.html#cli-subcommands).
+
+* Tools:
+  - `search_for_pattern`: Add parameter `multiline`
+  - Delete `check_onboarding_performed` tool (instead extend project activation message)
+
 # v1.3.0 (2026-05-11)
 
 * General:

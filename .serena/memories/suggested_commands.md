@@ -1,26 +1,24 @@
 # Suggested Commands
 
-## Development Tasks (using uv and poe)
+Run via `uv run poe <task>` (or `poe <task>` inside the activated venv). Poe executor is `simple`, so plain `poe` works without uv re-resolving.
 
-The following tasks should generally be executed using `uv run poe <task_name>`.
+## Dev loop
+- `poe test` — pytest on `test/` (per-language tests are marker-gated; pass `-m <marker>` to enable).
+- `poe lint` — ruff format-check + ruff check (no fixes).
+- `poe format` — ruff `--fix` then `ruff format` (mutates files).
+- `poe type-check` — mypy on `src/serena`, `src/solidlsp`, and `test/` (test pass disables `no-untyped-def`).
+- Single test file: `uv run pytest test/path/to/test_x.py -vv`. Language-gated: add `-m python` etc.
 
-- `format`: This is the **only** allowed command for formatting. Run as `uv run poe format`.
-- `type-check`: This is the **only** allowed command for type checking. Run as `uv run poe type-check`.
-- `test`: This is the preferred command for running tests (`uv run poe test [args]`). You can select subsets of tests with markers,
-   the current markers are
-   ```toml
-    markers = [
-        "python: language server running for Python",
-        "go: language server running for Go",
-        "java: language server running for Java",
-        "rust: language server running for Rust",
-        "typescript: language server running for TypeScript",
-        "php: language server running for PHP",
-        "snapshot: snapshot tests for symbolic editing operations",
-    ]
-   ```
-  By default, `uv run poe test` uses the markers set in the env var `PYTEST_MARKERS`, or, if it unset, uses `-m "not java and not rust and not isolated process"`.
-  You can override this behavior by simply passing the `-m` option to `uv run poe test`, e.g. `uv run poe test -m "python or go"`.
+## Docs
+- `poe doc-build` — clean + autogen + sphinx (uses `rm -rf`; needs a unix-like shell, e.g. Git Bash on Windows).
 
-For finishing a task, make sure format, type-check and test pass! Run them at the end of the task
-and if needed fix any issues that come up and run them again until they pass.
+## Entrypoints
+- `uv run serena ...` — main CLI (`serena.cli:top_level`).
+- `uv run serena-hooks ...` — hook helpers.
+- `python scripts/gen_prompt_factory.py` — regenerate `src/serena/generated/generated_prompt_factory.py` after editing prompt templates.
+
+## Windows shell notes (PowerShell 7+ is the project shell)
+- Use `Remove-Item -Recurse -Force <path>` instead of `rm -rf` (the `doc-clean` poe task uses unix `rm -rf` and requires bash).
+- Env vars: `$env:NAME = 'value'` (not `export`).
+- Path separator in `pyproject.toml` poe tasks uses forward slashes; PowerShell accepts them in arguments.
+- `git`, `uv`, `poe`, `pytest` behave identically to unix.
