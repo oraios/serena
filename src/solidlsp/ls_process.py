@@ -727,6 +727,9 @@ class TCPLanguageServer(LanguageServerInterface):
                 sock.sendall(data)
             except OSError as e:
                 log.error("Failed to write to TCP language server: %s", e)
+                self._sock = None
+                self._file = None
+                self._cancel_pending_requests(LanguageServerTerminatedException("TCP send error", self.language, cause=e))
 
     def _read_loop(self) -> None:
         """Read Content-Length-framed LSP messages from the TCP socket and dispatch them."""
@@ -775,3 +778,7 @@ class TCPLanguageServer(LanguageServerInterface):
                 exception = LanguageServerTerminatedException("TCP language server read loop terminated unexpectedly", self.language)
             log.error(str(exception))
             self._cancel_pending_requests(exception)
+            # Clear the socket so is_running() returns False, allowing _ensure_functional_ls
+            # to detect the broken connection and restart the language server.
+            self._sock = None
+            self._file = None
