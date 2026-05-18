@@ -60,12 +60,7 @@ Some languages require additional installations or setup steps, as noted.
 * **Crystal**  
   (requires [Crystalline](https://github.com/elbywan/crystalline) language server to be installed and available on PATH;
   note: Crystalline has limited go-to-definition support and does not support find-references)
-* **CUE**  
-  (uses the LSP mode of the official [`cue` CLI](https://github.com/cue-lang/cue) (`cue lsp`);
-  the `cue` binary is automatically downloaded from GitHub releases and SHA-256-verified for
-  linux-x64/arm64, darwin-x64/arm64, and win-x64/arm64; supports `.cue` files and works best
-  rooted at a directory containing a `cue.mod/` module. To use a pre-installed `cue` binary,
-  set `ls_specific_settings.cue.ls_path`.)
+* **CUE**
 * **Dart**
 * **Elixir**  
   (requires Elixir installation; Expert language server is downloaded automatically)

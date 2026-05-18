@@ -2,13 +2,15 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Language Servers:
+  - Add **CUE** support via the LSP mode of the official [`cue` CLI](https://github.com/cue-lang/cue) (`cue lsp`).
+
 # v1.5.0 (2026-05-18)
 
 * General:
   - Make tool descriptions more amenable to tool search mechanisms as now used in several clients (e.g. avoid referencing other tools' names, etc.)
 
 * Language Servers:
-  - Add **CUE** support via the LSP mode of the official [`cue` CLI](https://github.com/cue-lang/cue) (`cue lsp`). Auto-downloads and SHA-256-verifies the `cue` release binary for linux-x64/arm64, darwin-x64/arm64, and win-x64/arm64. Handles `.cue` files; works best rooted at a directory containing a `cue.mod/` module. Users can override the binary by setting `ls_specific_settings.cue.ls_path` to a pre-installed `cue` executable (e.g. from Homebrew or `go install`). Default pinned version: `v0.16.1`; override via `ls_specific_settings.cue.cue_version`.
   - No longer store temporary files (e.g. downloads) in `~/solidlsp_tmp`; instead, use OS-specific temporary directories
   - Add **GDScript** (Godot Engine) support. Serena connects over TCP to the Godot editor's built-in LSP server (port 6008, same for Godot 3 and 4) — no separate language server process to install. Godot major version is auto-detected from `config_version` in `project.godot`. Note: Godot's LSP does not implement `workspace/symbol`; first workspace-wide scans fall back to per-file requests and can be slow for large projects (results are cached to disk). See the [GDScript Setup Guide](https://oraios.github.io/serena/03-special-guides/godot_gdscript_setup_guide_for_serena.html) for details. Closes #1446.
 
