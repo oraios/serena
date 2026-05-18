@@ -13,6 +13,7 @@ from serena.constants import SERENA_FILE_ENCODING
 from serena.util.text_utils import ContentReplacer
 
 from .memory_reference_analysis import (
+    MEMORY_REF_PREFIX,
     AutofixReport,
     MemoryReferenceAnalyzer,
     ReferentialIntegrityReport,
@@ -24,7 +25,7 @@ log = logging.getLogger(__name__)
 class MemoryManager:
     GLOBAL_TOPIC = "global"
     _global_memory_dir = SerenaPaths().global_memories_path
-    _MEMORY_REF_PREFIX = "mem:"
+    _MEMORY_REF_PREFIX = MEMORY_REF_PREFIX
 
     def __init__(
         self,
