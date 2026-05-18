@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import platform
+import socket
 import subprocess
 import threading
 import time
@@ -620,3 +621,164 @@ class StdioLanguageServer(LanguageServerInterface):
                 # Log the error but don't raise to prevent cascading failures
                 log.error(f"Failed to write to stdin: {e}")
                 return
+
+
+@dataclass
+class TCPConnectionInfo:
+    """Connection parameters for an LSP server reachable over a TCP socket."""
+
+    host: str = "127.0.0.1"
+    port: int = 6008
+    connection_timeout: float = 30.0
+    retry_interval: float = 1.0
+
+
+class TCPLanguageServer(LanguageServerInterface):
+    """LanguageServerInterface that connects to an already-running LSP server over TCP.
+
+    Unlike :class:`StdioLanguageServer`, this class does not own the server process — it
+    connects to an externally-managed server (e.g. the Godot editor) and simply closes
+    the socket on stop. No LSP ``shutdown``/``exit`` sequence is sent, because the remote
+    server is expected to keep running after Serena disconnects.
+    """
+
+    def __init__(
+        self,
+        connection_info: TCPConnectionInfo,
+        language: Language,
+        determine_log_level: Callable[[str], int],
+        logger: Callable[[str, str, StringDict | str], None] | None = None,
+        request_timeout: float | None = None,
+    ) -> None:
+        super().__init__(language, determine_log_level, logger, request_timeout)
+        self._connection_info = connection_info
+        self._sock: socket.socket | None = None
+        self._file: Any = None  # socket.makefile("rb") - buffered reader
+        self._write_lock = threading.Lock()
+
+    def is_running(self) -> bool:
+        return self._sock is not None
+
+    def _start(self) -> None:
+        deadline = time.monotonic() + self._connection_info.connection_timeout
+        last_exc: Exception | None = None
+        while True:
+            try:
+                sock = socket.create_connection((self._connection_info.host, self._connection_info.port), timeout=5.0)
+                sock.settimeout(None)
+                self._sock = sock
+                self._file = sock.makefile("rb")
+                log.info("TCPLanguageServer connected to %s:%d", self._connection_info.host, self._connection_info.port)
+                break
+            except OSError as exc:
+                last_exc = exc
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise RuntimeError(
+                        f"Could not connect to {self._connection_info.host}:{self._connection_info.port} "
+                        f"within {self._connection_info.connection_timeout}s"
+                    ) from last_exc
+                log.debug(
+                    "TCPLanguageServer: connection failed (%s), retrying in %.1fs (%.0fs left)",
+                    exc,
+                    self._connection_info.retry_interval,
+                    remaining,
+                )
+                time.sleep(min(self._connection_info.retry_interval, remaining))
+
+        threading.Thread(
+            target=self._read_loop,
+            name=f"LSP-tcp-reader:{self.language.value}",
+            daemon=True,
+        ).start()
+
+    def _stop(self, timeout: float) -> None:
+        # Close the socket first — this unblocks any readline() in the reader thread.
+        # BufferedReader.close() acquires an internal lock that readline() holds while
+        # blocked waiting for data; closing the socket first causes readline() to return
+        # with an error, releasing the lock before we call f.close().
+        sock = self._sock
+        self._sock = None
+        f = self._file
+        self._file = None
+        if sock:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except Exception:
+                pass
+            try:
+                sock.close()
+            except Exception:
+                pass
+        if f:
+            try:
+                f.close()
+            except Exception:
+                pass
+
+    def _send_payload(self, payload: StringDict) -> None:
+        sock = self._sock
+        if sock is None:
+            return
+        self._trace("solidlsp", "ls", payload)
+        data = b"".join(create_message(payload))
+        with self._write_lock:
+            try:
+                sock.sendall(data)
+            except OSError as e:
+                log.error("Failed to write to TCP language server: %s", e)
+                self._sock = None
+                self._file = None
+                self._cancel_pending_requests(LanguageServerTerminatedException("TCP send error", self.language, cause=e))
+
+    def _read_loop(self) -> None:
+        """Read Content-Length-framed LSP messages from the TCP socket and dispatch them."""
+        exception: Exception | None = None
+        try:
+            while self._sock is not None:
+                f = self._file
+                if f is None:
+                    break
+                try:
+                    line = f.readline()
+                except OSError as exc:
+                    if not self._is_stopping:
+                        exception = LanguageServerTerminatedException("TCP read error", self.language, cause=exc)
+                    break
+                if not line:
+                    break
+                try:
+                    num_bytes = content_length(line)
+                except ValueError:
+                    continue
+                if num_bytes is None:
+                    continue
+                while line and line.strip():
+                    try:
+                        line = f.readline()
+                    except OSError:
+                        line = b""
+                        break
+                if not line:
+                    continue
+                try:
+                    body = f.read(num_bytes)
+                except OSError as exc:
+                    if not self._is_stopping:
+                        exception = LanguageServerTerminatedException("TCP read error", self.language, cause=exc)
+                    break
+                if len(body) < num_bytes:
+                    break
+                self._handle_body(body)
+        except Exception as exc:
+            exception = LanguageServerTerminatedException("Unexpected error in TCP language server read loop", self.language, cause=exc)
+        log.info("TCP language server read loop has terminated")
+        if not self._is_stopping:
+            if exception is None:
+                exception = LanguageServerTerminatedException("TCP language server read loop terminated unexpectedly", self.language)
+            log.error(str(exception))
+            self._cancel_pending_requests(exception)
+            # Clear the socket so is_running() returns False, allowing _ensure_functional_ls
+            # to detect the broken connection and restart the language server.
+            self._sock = None
+            self._file = None

@@ -3,4 +3,3 @@ prompt: |
   The onboarding process is not applied.
 excluded_tools:
   - onboarding
-  - check_onboarding_performed

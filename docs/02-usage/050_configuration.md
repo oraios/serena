@@ -487,6 +487,27 @@ Supported settings:
 | `fsautocomplete_version` | `0.83.0` | Override the FsAutoComplete version Serena installs as a .NET tool. |
 
 
+#### GDScript (Godot Engine)
+
+Serena connects to the Godot editor's built-in LSP server over TCP. No separate process is launched.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `port` | `6008` | TCP port the running Godot editor listens on for LSP connections. |
+| `request_timeout` | `30.0` | Seconds to wait for a response from the Godot LSP server. |
+
+Example:
+
+```yaml
+ls_specific_settings:
+  gdscript:
+    port: 6008
+    request_timeout: 60.0
+```
+
+
 #### Go (`gopls`)
 
 Serena forwards `ls_specific_settings.go.gopls_settings` to `gopls` as LSP `initializationOptions` when the Go language server is started.
@@ -970,6 +991,26 @@ Supported settings:
 
 TypeScript supports [additional workspace folders](additional-workspace-folders) for cross-package
 reference discovery. Configure `additional_workspace_folders` in `project.yml` to enable this feature.
+
+#### Svelte
+
+Serena uses `svelte-language-server` for the `svelte` language key. Use `svelte` for Svelte projects instead of also listing `typescript`, unless you intentionally want multiple language servers active for the same files.
+
+A companion TypeScript language server (`typescript-language-server` + `typescript-svelte-plugin`) is spawned automatically alongside the Svelte LSP. The plugin makes the TypeScript program `.svelte`-aware so that cross-file operations — rename, go-to-definition, and find-references from `.ts`/`.js` files — correctly include `.svelte` consumers. Serena merges and deduplicates reference results from both servers automatically.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed install | Override the `svelteserver` executable path. |
+| `svelte_language_server_version` | `0.18.0` | Override the `svelte-language-server` npm package version Serena installs. |
+| `typescript_version` | `6.0.3` (falls back to `ls_specific_settings.typescript.typescript_version`) | Override the `typescript` npm package version used as the shared tsdk. |
+| `typescript_language_server_version` | `5.1.3` (falls back to `ls_specific_settings.typescript.typescript_language_server_version`) | Override the `typescript-language-server` npm package version for the companion server. |
+| `typescript_svelte_plugin_version` | `0.3.52` | Override the `typescript-svelte-plugin` npm package version used for `.svelte`-aware TS resolution. |
+| `npm_registry` | `null` | Override the npm registry Serena uses for all managed installs. |
+| `initialization_options_configuration` | `{}` | Deep-merge overrides for any of the ten plugin configuration sections (`svelte`, `prettier`, `emmet`, `typescript`, `javascript`, `js/ts`, `css`, `less`, `scss`, `html`). |
+
+All four packages are tracked via a version file; changing any version setting triggers a clean reinstall.
 
 #### TypeScript via `vtsls`
 

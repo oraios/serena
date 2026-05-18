@@ -22,7 +22,7 @@ class PromptFactory(PromptFactoryBase):
     def get_onboarding_prompt_template_string(self) -> str:
         return self.get_prompt_template_string("onboarding_prompt")
 
-    def create_onboarding_prompt(self, *, system: Any) -> str:
+    def create_onboarding_prompt(self, *, memory_maintenance_name: Any, system: Any) -> str:
         return self._render_prompt("onboarding_prompt", locals())
 
     def get_connection_prompt_template_string(self) -> str:

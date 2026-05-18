@@ -2,14 +2,37 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+# v1.5.0 (2026-05-18)
+
+* General:
+  - Make tool descriptions more amenable to tool search mechanisms as now used in several clients (e.g. avoid referencing other tools' names, etc.)
+
 * Language Servers:
   - Add **CUE** support via the LSP mode of the official [`cue` CLI](https://github.com/cue-lang/cue) (`cue lsp`). Auto-downloads and SHA-256-verifies the `cue` release binary for linux-x64/arm64, darwin-x64/arm64, and win-x64/arm64. Handles `.cue` files; works best rooted at a directory containing a `cue.mod/` module. Users can override the binary by setting `ls_specific_settings.cue.ls_path` to a pre-installed `cue` executable (e.g. from Homebrew or `go install`). Default pinned version: `v0.16.1`; override via `ls_specific_settings.cue.cue_version`.
   - No longer store temporary files (e.g. downloads) in `~/solidlsp_tmp`; instead, use OS-specific temporary directories
+  - Add **GDScript** (Godot Engine) support. Serena connects over TCP to the Godot editor's built-in LSP server (port 6008, same for Godot 3 and 4) — no separate language server process to install. Godot major version is auto-detected from `config_version` in `project.godot`. Note: Godot's LSP does not implement `workspace/symbol`; first workspace-wide scans fall back to per-file requests and can be slow for large projects (results are cached to disk). See the [GDScript Setup Guide](https://oraios.github.io/serena/03-special-guides/godot_gdscript_setup_guide_for_serena.html) for details. Closes #1446.
 
 * Dashboard:
   - UI polish: switch UI font to Inter (with system fallbacks) and use JetBrains Mono only for code/logs/paths/identifiers; refine the light/dark palette with softer borders, clearer text hierarchy, and a more nuanced shadow/elevation system; introduce a consistent spacing scale; keep the orange accent.
   - Modal markup cleanup: extract shared CSS classes (`.modal-info`, `.modal-hint`, `.modal-prompt`, `.modal-field`, `.modal-input`, `.modal-select`, `.modal-textarea`, `.modal-actions`, `.btn-secondary`) and remove duplicated inline styles from all seven modals. Inputs and textareas get an accent-colored focus ring; the modal backdrop has a subtle blur.
   - Add Language: replace the native `<select>` with a filterable combobox — type to filter, keyboard navigation (Up/Down/Enter/Esc), substring highlight, click-outside to close. The typed value is validated against the available languages list before submission.
+
+* Memories:
+  - Memories can now reference each other using the `mem:<name>` convention. Renames
+    propagate to all references automatically. See the [reference convention](https://oraios.github.io/serena/02-usage/045_memories.html#referencing-memories-from-other-memories).
+  - Onboarding now seeds a `memory_maintenance` memory describing the memory-style and conventions, 
+    and the agent is instructed to read it before writing any other memories. 
+    A `global/memory_maintenance` memory takes precedence over the per-project seed. 
+    See the [memory maintenance section](https://oraios.github.io/serena/02-usage/045_memories.html#the-memory-maintenance-memory).
+   
+* CLI:
+  - Add `serena memories` CLI command group: `list`, `read`, `write`, `check` (referential
+    integrity report) and `auto-prefix-references` (heuristic rewrite of bare occurrences).
+    See the [CLI subcommands](https://oraios.github.io/serena/02-usage/045_memories.html#cli-subcommands).
+
+* Tools:
+  - `search_for_pattern`: Add parameter `multiline`
+  - Delete `check_onboarding_performed` tool (instead extend project activation message)
 
 # v1.3.0 (2026-05-11)
 
@@ -35,6 +58,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     - `get_diagnostics_for_symbol`: Retrieves diagnostics pertaining to a specific symbol
 
 * Language Servers:
+  - Add **Svelte** support via `svelte-language-server@0.18.0`, installed with npm into Serena-managed language-server resources. The `svelte` language handles `.svelte` Single File Components plus TypeScript/JavaScript files for Svelte projects; use it instead of also enabling `typescript` unless intentionally running multiple language servers.
   - Elixir (`elixir-tools/next-ls`): Fix deadlock in monorepo projects where `mix.exs` lives in a subdirectory. The server now searches immediate subdirectories when no `mix.exs` is found at the repository root. #1444
   - Java (`eclipse.jdt.ls`): Add upstream JDTLS mode for offline / restricted-network use. Setting both `jdtls_path` and `lombok_path` in `ls_specific_settings.java` makes Serena use an existing upstream JDTLS installation (e.g. `brew install jdtls`) and the system JDK 21+, skipping the ~500 MB vscode-java VSIX, Gradle, and IntelliCode downloads. New related setting `java_home` lets the user override the JDK used to launch JDTLS. Default behavior unchanged — the JDTLS workspace hash is preserved bit-for-bit for users on the default route, so existing project caches are reused without a one-time reindex; the launcher path is mixed into the hash only when `jdtls_path` is set, isolating upstream installations from the default workspace. #1415
   - Java (eclipse.jdt.ls): Lombok-generated methods (getters/setters, builder(), equals/hashCode/toString, etc.) are now included in symbol-based tools (find_symbol, get_symbols_overview, edits). Added lombok_show_generated setting (default: on) to toggle this. Updated bundled vscode-java to 1.54.0-923. Issue #1432.

@@ -143,9 +143,17 @@ and to store memories, which it can then draw upon in future interactions.
 
 In general, **memories** provide a way for Serena to store and retrieve 
 information about the project, relevant conventions, and other relevant aspects.
+Memories may reference each other using the `` `mem:NAME` `` convention; references
+are kept in sync across renames, and a `serena memories check` command is available
+to report stale references.
 
-For more information on this, including how to manage
-or disable these features, see [Memories & Onboarding](045_memories).
+During the first onboarding, Serena seeds a `memory_maintenance` memory describing the
+conventions (style, references) that subsequent memories should follow, and the
+agent is instructed to read it before writing any project-specific memories.
+
+For more information on this, including the target memory layout, the `mem:` reference
+convention, the `serena memories` CLI subcommands, and how to manage or disable these
+features, see [Memories & Onboarding](045_memories).
 
 
 ## Preparing Your Project

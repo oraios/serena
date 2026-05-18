@@ -77,6 +77,10 @@ Some languages require additional installations or setup steps, as noted.
   (requires [.NET v8.0+](https://dotnet.microsoft.com/en-us/download/dotnet); uses FsAutoComplete/Ionide, which is auto-installed; for Homebrew .NET on macOS, set DOTNET_ROOT in your environment)
 * **Fortran**   
   (requires installation of fortls: `pip install fortls`)
+* **GDScript** (Godot Engine)  
+  (requires the Godot editor to be running with its built-in LSP enabled — default on port 6008;
+  Serena connects over TCP and does not launch Godot itself;
+  see the [GDScript Setup Guide](../03-special-guides/godot_gdscript_setup_guide_for_serena) for details)
 * **Go**  
   (requires installation of `gopls`)
 * **Groovy**  
@@ -134,6 +138,8 @@ Some languages require additional installations or setup steps, as noted.
 * **Solidity**  
   (experimental; requires Node.js and npm; automatically installs `@nomicfoundation/solidity-language-server`;
   works best with a `foundry.toml` or `hardhat.config.js` in the project root)
+* **Svelte**
+  (requires Node.js v18+ and npm; supports `.svelte` Single File Components plus TypeScript/JavaScript files via `svelte-language-server`; a companion `typescript-language-server` + `typescript-svelte-plugin` is spawned automatically for cross-file rename, go-to-definition, and references across `.ts`/`.js` and `.svelte` files; use language `svelte` for Svelte projects instead of also enabling `typescript`)
 * **Swift**
 * **TypeScript**
 * **Vue**    

@@ -9,7 +9,7 @@ import time
 from collections.abc import Iterator, Sequence
 from logging import Logger
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import click
 from sensai.util import logging
@@ -42,6 +42,9 @@ from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
 from solidlsp.util.subprocess_util import subprocess_kwargs
+
+if TYPE_CHECKING:
+    from serena.memories.memory_manager import MemoryManager
 
 log = logging.getLogger(__name__)
 
@@ -1113,6 +1116,282 @@ class ToolCommands(AutoRegisteringGroup):
         click.echo(mcp_tool.description)
 
 
+class MemoryCommands(AutoRegisteringGroup):
+    """Group for 'memories' subcommands; manage and inspect a project's memory files."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            name="memories",
+            help="Inspect, read, write, and validate Serena memories. "
+            "You can run `serena memories <command> --help` for more info on each command.",
+        )
+
+    @staticmethod
+    def _load_memories_manager(project: str) -> "MemoryManager":
+        """
+        Load the project at ``project`` and return its memories manager.
+
+        Requires the project to already be a Serena project (``.serena/project.yml`` must
+        exist at the configured location). Never auto-creates the ``.serena`` directory —
+        if no project configuration is found, the user is directed at ``serena project create``.
+        """
+        from serena.project import Project
+
+        serena_config = SerenaConfig.from_config_file()
+        project_path = os.path.abspath(project)
+        try:
+            proj = Project.load(project_path, serena_config=serena_config, autogenerate=False)
+        except FileNotFoundError as e:
+            raise click.UsageError(
+                f"{e}\nNo Serena project found at {project_path}. Create one first with:\n  serena project create {project_path}"
+            ) from e
+        return proj.memory_manager
+
+    @staticmethod
+    @click.command(
+        "initialize",
+        help=(
+            "Initialize this project's memory layout by seeding the `memory_maintenance` memory. "
+            "Requires the project to already exist as a Serena project (run `serena project create` first); "
+            "this command does not create a `.serena` directory on its own. "
+            "If a `global/memory_maintenance` memory exists, it takes precedence and no project copy is created."
+        ),
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
+    def initialize(project: str) -> None:
+        manager = MemoryCommands._load_memories_manager(project)
+        name = manager.ensure_memory_maintenance_memory()
+        click.echo(f"Memory maintenance memory ready: `mem:{name}`.")
+
+    @staticmethod
+    @click.command(
+        "list",
+        help="List memories of the active project (and global memories).",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
+    @click.option("--topic", "-t", type=str, default="", help="Restrict the listing to a single topic (e.g. 'auth' or 'global/style').")
+    def list(project: str, topic: str) -> None:
+        manager = MemoryCommands._load_memories_manager(project)
+        memories = manager.list_memories(topic=topic)
+        if not len(memories):
+            click.echo("(no memories found)")
+            return
+        if memories.memories:
+            click.echo("Project memories:")
+            for name in sorted(memories.memories):
+                click.echo(f"  - {name}")
+        if memories.read_only_memories:
+            click.echo("Read-only memories:")
+            for name in sorted(memories.read_only_memories):
+                click.echo(f"  - {name}")
+
+    @staticmethod
+    @click.command("read", help="Print the content of a memory to stdout.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
+    @click.argument("memory_name", type=str)
+    @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
+    def read(memory_name: str, project: str) -> None:
+        manager = MemoryCommands._load_memories_manager(project)
+        click.echo(manager.load_memory(memory_name))
+
+    @staticmethod
+    @click.command(
+        "write",
+        help="Write a memory file. Reads the content from --content, --file, or stdin (in that order of precedence).",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument("memory_name", type=str)
+    @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
+    @click.option("--content", type=str, default=None, help="Memory content provided directly on the command line.")
+    @click.option(
+        "--file", "file_path", type=click.Path(exists=True, dir_okay=False), default=None, help="Read memory content from the given file."
+    )
+    def write(memory_name: str, project: str, content: str | None, file_path: str | None) -> None:
+        if content is None and file_path is not None:
+            with open(file_path, encoding="utf-8") as f:
+                content = f.read()
+        if content is None:
+            content = sys.stdin.read()
+        manager = MemoryCommands._load_memories_manager(project)
+        click.echo(manager.save_memory(memory_name, content, is_tool_context=False))
+
+    @staticmethod
+    @click.command(
+        "delete",
+        help="Delete a memory file. Use the `global/` prefix to address a global memory (e.g. `global/style_guide`).",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument("memory_name", type=str)
+    @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
+    def delete(memory_name: str, project: str) -> None:
+        manager = MemoryCommands._load_memories_manager(project)
+        click.echo(manager.delete_memory(memory_name, is_tool_context=False))
+
+    @staticmethod
+    @click.command(
+        "rename",
+        help=(
+            "Rename or move a memory and update every `mem:OLD_NAME` reference across all memories. "
+            "Use `/` in the name to organize into topics; use the `global/` prefix to address a "
+            "global memory. Moving between project and global scope is supported."
+        ),
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument("old_name", type=str)
+    @click.argument("new_name", type=str)
+    @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
+    def rename(old_name: str, new_name: str, project: str) -> None:
+        manager = MemoryCommands._load_memories_manager(project)
+        message, n_refs = manager.rename_memory_and_propagate_references(old_name, new_name, is_tool_context=False)
+        click.echo(message)
+        if n_refs > 0:
+            click.echo(f"Updated {n_refs} `mem:` reference occurrence(s) across the memory graph.")
+
+    @staticmethod
+    @click.command(
+        "edit",
+        help=(
+            "Replace content matching a pattern in a memory. By default operates in literal "
+            "(non-regex) mode and refuses to replace more than one occurrence; pass --mode regex "
+            "to enable regex matching and --allow-multiple-occurrences to permit multiple hits."
+        ),
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument("memory_name", type=str)
+    @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
+    @click.option("--needle", type=str, required=True, help="The text to search for (literal by default; regex if --mode=regex).")
+    @click.option("--repl", type=str, required=True, help="The replacement text (verbatim).")
+    @click.option(
+        "--mode",
+        type=click.Choice(["literal", "regex"]),
+        default="literal",
+        show_default=True,
+        help="Treat --needle as literal text or as a Python regex (MULTILINE and DOTALL flags enabled).",
+    )
+    @click.option(
+        "--allow-multiple-occurrences",
+        is_flag=True,
+        default=False,
+        help="Permit and apply multiple matches; without this, multiple matches raise an error.",
+    )
+    def edit(
+        memory_name: str,
+        project: str,
+        needle: str,
+        repl: str,
+        mode: Literal["literal", "regex"],
+        allow_multiple_occurrences: bool,
+    ) -> None:
+        manager = MemoryCommands._load_memories_manager(project)
+        click.echo(
+            manager.edit_memory(
+                memory_name,
+                needle,
+                repl,
+                mode,
+                allow_multiple_occurrences,
+                is_tool_context=False,
+            )
+        )
+
+    @staticmethod
+    @click.command(
+        "check",
+        help=(
+            "Check referential integrity across all memories of the project (and global memories). "
+            "By default reports only stale `mem:` references. Pass --include-unmarked to also report "
+            "bare occurrences of existing memory names (exact matches) and --fuzzy-matching (only "
+            "meaningful in combination with --include-unmarked) to additionally report fuzzy "
+            "near-misses. Read-only and never writes. Always exits 0."
+        ),
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
+    @click.option(
+        "--include-unmarked",
+        is_flag=True,
+        default=False,
+        help="Also report bare exact occurrences of existing memory names (i.e. without the `mem:` prefix).",
+    )
+    @click.option(
+        "--fuzzy-matching",
+        is_flag=True,
+        default=False,
+        help=(
+            "Additionally report fuzzy near-misses (long bare tokens that similarity-match an existing "
+            "memory name). Only meaningful together with --include-unmarked; ignored otherwise."
+        ),
+    )
+    def check(project: str, include_unmarked: bool, fuzzy_matching: bool) -> None:
+        if fuzzy_matching and not include_unmarked:
+            click.echo(
+                "Warning: --fuzzy-matching has no effect without --include-unmarked; ignoring it.",
+                err=True,
+            )
+        manager = MemoryCommands._load_memories_manager(project)
+        report = manager.validate_referential_integrity(
+            include_unmarked=include_unmarked,
+            include_fuzzy_matching=fuzzy_matching,
+        )
+        click.echo(report.format())
+
+    @staticmethod
+    @click.command(
+        "auto-prefix-references",
+        help=(
+            "Rewrite exact bare occurrences of existing memory names by adding the `mem:` prefix. "
+            "This is a heuristic, file-mutating operation: a word that happens to coincide with a memory name "
+            "will be rewritten as a reference even if it was intended as ordinary prose. "
+            "Use --dry-run to preview the rewrites without modifying any files. "
+            "\n\n"
+            "Scope is narrower than what `serena memories check` reports. Only EXACT bare occurrences are rewritten "
+            "(the body text must equal an existing memory name verbatim); fuzzy near-miss findings surfaced by `check` "
+            "are NOT autofixable here, since rewriting them would require substring substitution rather than a prefix "
+            "addition — they are reported for manual review. "
+            "By default the rewrite is further restricted to memory names containing `/` or longer than the configured "
+            "threshold, and skips global and read-only memories; use the --include-* flags below to widen the scope."
+        ),
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
+    @click.option(
+        "--dry-run",
+        is_flag=True,
+        default=False,
+        help="Preview the rewrites this command would apply; do not modify any files.",
+    )
+    @click.option(
+        "--include-flat-names",
+        is_flag=True,
+        default=False,
+        help="Also rewrite short, flat memory names (no `/`, below the length threshold). Raises false-positive risk significantly.",
+    )
+    @click.option(
+        "--include-read-only",
+        is_flag=True,
+        default=False,
+        help="Also rewrite occurrences inside read-only memories.",
+    )
+    @click.option(
+        "--include-global",
+        is_flag=True,
+        default=False,
+        help="Also rewrite occurrences inside global memories (affects every project consuming them).",
+    )
+    def auto_prefix_references(
+        project: str, dry_run: bool, include_flat_names: bool, include_read_only: bool, include_global: bool
+    ) -> None:
+        manager = MemoryCommands._load_memories_manager(project)
+        report = manager.auto_prefix_bare_references(
+            include_flat_names=include_flat_names,
+            include_read_only=include_read_only,
+            include_global=include_global,
+            dry_run=dry_run,
+        )
+        click.echo(report.format())
+
+
 class PromptCommands(AutoRegisteringGroup):
     def __init__(self) -> None:
         super().__init__(name="prompts", help="Commands related to Serena's prompts that are outside of contexts and modes.")
@@ -1244,10 +1523,11 @@ _project = ProjectCommands()
 _config = SerenaConfigCommands()
 _tools = ToolCommands()
 _prompts = PromptCommands()
+_memories = MemoryCommands()
 
 # Expose so we can use this as an entrypoint
 top_level = TopLevelCommands()
 
 # needed for the help script to work - register all subcommands to the top-level group
-for subgroup in (_mode, _context, _project, _config, _tools, _prompts):
+for subgroup in (_mode, _context, _project, _config, _tools, _prompts, _memories):
     top_level.add_command(subgroup)

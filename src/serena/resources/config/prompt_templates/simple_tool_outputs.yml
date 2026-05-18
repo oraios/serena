@@ -4,33 +4,38 @@
 prompts:
   onboarding_prompt: |
     You are viewing the project for the first time.
-    Your task is to assemble relevant high-level information about the project which
-    will be saved to memory files in the following steps.
-    The information should be sufficient to understand what the project is about,
-    and the most important commands for developing code.
+    Your task is to assemble durable, non-obvious information about the project and write it
+    to memory files that future agents will consult.
     The project is being developed on the system: {{ system }}.
 
-    You need to identify at least the following information:
-    * the project's purpose
-    * the tech stack used
-    * the code style and conventions used (including naming, type hints, docstrings, etc.)
-    * which commands to run when a task is completed (linting, formatting, testing, etc.)
-    * the rough structure of the codebase
-    * the commands for testing, formatting, and linting
-    * the commands for running the entrypoints of the project
-    * the util commands for the system, like `git`, `ls`, `cd`, `grep`, `find`, etc. Keep in mind that the system is {{ system }},
-      so the commands might be different than on a regular unix system.
-    * whether there are particular guidelines, styles, design patterns, etc. that one should know about
+    **Before writing anything, read `mem:{{ memory_maintenance_name }}`** using the `read_memory` tool.
+    It defines the style, naming, reference, and add/update threshold conventions that every
+    memory in this project must follow. Do not skip this step.
 
-    This list is not exhaustive, you can add more information if you think it is relevant.
+    Target memory layout — use the `write_memory` tool, one call per memory:
 
-    For doing that, you will need to acquire information about the project with the corresponding tools.
-    Read only the necessary files and directories to avoid loading too much data into memory.
-    If you cannot find everything you need from the project itself, you should ask the user for more information.
+    * `mem:core` — top-level source map and project-wide invariants that don't belong in a
+      focused memory.
+    * `mem:tech_stack` — language(s), framework(s), build tools, package manager, version
+      pins where they matter.
+    * `mem:suggested_commands` — project commands the user will actually run (dev, test, lint,
+      format, run entrypoints) and any system util commands (`git`, `ls`, `grep`, …) whose
+      form differs on {{ system }} from a standard unix shell. Skip generic commands that
+      behave identically across systems.
+    * `mem:conventions` — code style, naming, type hints, docstring conventions, design
+      patterns specific to this codebase.
+    * `mem:task_completion` — exact commands to run when a coding task is considered done
+      (linter, formatter, test runner, type checker, etc.).
 
-    After collecting all the information, you will use the `write_memory` tool (in multiple calls) to save it to various memory files.
-    A particularly important memory file will be the `suggested_commands.md` file, which should contain
-    a list of commands that the user should know about to develop code in this project.
-    Moreover, you should create memory files for the style and conventions and a dedicated memory file for
-    what should be done when a task is completed.
-    **Important**: after done with the onboarding task, remember to call the `write_memory` to save the collected information!
+    If the project has clearly distinct modules (e.g. frontend/backend), create per-module
+    `mem:<module>/core` memories with module-specific references to further memories instead 
+    of pushing everything into `mem:core`.
+
+    Acquire information using the available tools. Read only the files needed; do not load
+    entire directory trees. If essential information is missing, ask the user.
+
+    When all memories are written, sanity-check the references by mentioning that the user can run
+    `serena memories check` from the project root.
+
+    **Important**: the onboarding is only complete once you have actually called `write_memory`
+    for each memory above — do not summarize the content in chat and skip writing.

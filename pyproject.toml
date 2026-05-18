@@ -4,7 +4,7 @@ requires = ["hatchling"]
 
 [project]
 name = "serena-agent"
-version = "1.3.1.dev0"
+version = "1.5.1.dev0"
 description = "A powerful MCP toolkit for coding, providing semantic retrieval and editing capabilities - the IDE for your agent"
 authors = [{ name = "Oraios AI", email = "info@oraios-ai.de" }]
 readme = "README.md"
@@ -311,6 +311,7 @@ markers = [
   "groovy: language server running for Groovy",
   "rust: language server running for Rust",
   "typescript: language server running for TypeScript",
+  "svelte: language server running for Svelte (uses svelte-language-server)",
   "vue: language server running for Vue (uses TypeScript LSP)",
   "php: language server running for PHP",
   "perl: language server running for Perl",
@@ -362,7 +363,7 @@ markers = [
 
 [tool.codespell]
 # Ref: https://github.com/codespell-project/codespell#using-a-config-file
-skip = '.git*,*.svg,*.lock,*.min.*'
+skip = '.git*,*.svg,*.lock,*.min.*,*test_memories_manager.py'
 check-hidden = true
 ignore-regex = '\.\w+'
 ignore-words-list = 'paket,EDN,als'

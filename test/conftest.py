@@ -269,6 +269,7 @@ _LANGUAGE_PYTEST_MARKERS: dict[Language, list[MarkDecorator | Mark]] = {
         pytest.mark.bsl,
         pytest.mark.skipif(_sh.which("java") is None, reason="Java is not installed"),
     ],
+    Language.SVELTE: [pytest.mark.svelte],
     Language.ANGULAR: [pytest.mark.angular],
     Language.HTML: [pytest.mark.html],
     Language.SCSS: [pytest.mark.scss],

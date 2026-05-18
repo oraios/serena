@@ -14,7 +14,8 @@ from sensai.util import logging
 from sensai.util.string import dict_string
 
 from serena.config.serena_config import LanguageBackend
-from serena.project import MemoriesManager, Project
+from serena.memories.memory_manager import MemoryManager
+from serena.project import Project
 from serena.prompt_factory import PromptFactory
 from serena.util.class_decorators import singleton
 from serena.util.inspection import iter_subclasses
@@ -46,8 +47,8 @@ class Component(ABC):
         return self.agent.prompt_factory
 
     @property
-    def memories_manager(self) -> "MemoriesManager":
-        return self.project.memories_manager
+    def memory_manager(self) -> "MemoryManager":
+        return self.project.memory_manager
 
     def create_language_server_symbol_retriever(self) -> "LanguageServerSymbolRetriever":
         from serena.symbol import LanguageServerSymbolRetriever
@@ -528,6 +529,7 @@ class ToolRegistry:
         "summarize_changes",
         "think_about_whether_you_are_done",
         "switch_modes",
+        "check_onboarding_performed",
     ]
 
     def __init__(self) -> None:
