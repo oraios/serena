@@ -19,7 +19,8 @@ and tools for formatting and type checking.
        git push
        git push --tags
 
-   Pushing the tag triggers the `create-release` workflow, which creates a
+   Important: This must push a single tag only!
+   Pushing the single tag triggers the `create-release` workflow for the tag, which creates a
    **draft release** on GitHub.
 4. Review the draft release on the
    [GitHub Releases page](https://github.com/oraios/serena/releases).
