@@ -68,6 +68,7 @@ class Language(str, Enum):
     SWIFT = "swift"
     BASH = "bash"
     CRYSTAL = "crystal"
+    CUE = "cue"
     ZIG = "zig"
     LUA = "lua"
     LUAU = "luau"
@@ -400,6 +401,8 @@ class Language(str, Enum):
                 return FilenameMatcher(".sh", ".bash")
             case self.CRYSTAL:
                 return FilenameMatcher(".cr")
+            case self.CUE:
+                return FilenameMatcher(".cue")
             case self.YAML:
                 return FilenameMatcher(".yaml", ".yml")
             case self.JSON:
@@ -624,6 +627,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.crystal_language_server import CrystalLanguageServer
 
                 return CrystalLanguageServer
+            case self.CUE:
+                from solidlsp.language_servers.cue_language_server import CueLanguageServer
+
+                return CueLanguageServer
             case self.YAML:
                 from solidlsp.language_servers.yaml_language_server import YamlLanguageServer
 

@@ -60,6 +60,7 @@ Some languages require additional installations or setup steps, as noted.
 * **Crystal**  
   (requires [Crystalline](https://github.com/elbywan/crystalline) language server to be installed and available on PATH;
   note: Crystalline has limited go-to-definition support and does not support find-references)
+* **CUE**
 * **Dart**
 * **Elixir**  
   (requires Elixir installation; Expert language server is downloaded automatically)
