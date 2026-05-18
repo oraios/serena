@@ -14,6 +14,13 @@ Example configuration for large projects:
     ls_specific_settings:
       kotlin:
         jvm_options: '-Xmx4G -XX:+UseG1GC'
+
+IntelliJ system directory:
+    KLS is built on IntelliJ's platform, which by default creates a new ~52 MB
+    idea-system<random>/ directory in /tmp for each instance. These directories
+    are never cleaned up, which can exhaust RAM on tmpfs systems after many runs.
+    Serena redirects idea.system.path to <ls_resources_dir>/kotlin_language_server/system/,
+    making it a bounded per-project cache that persists across sessions (faster restarts).
 """
 
 import logging
@@ -182,7 +189,18 @@ class KotlinLanguageServer(SolidLanguageServer):
             else:
                 jvm_options = DEFAULT_KOTLIN_JVM_OPTIONS
 
-            env["JAVA_TOOL_OPTIONS"] = jvm_options
+            # Redirect IntelliJ's system directory to a stable path under ls_resources_dir.
+            # Without this, each KLS instance creates a new ~52 MB /tmp/idea-system<random>/ directory
+            # that is never removed on shutdown. On tmpfs systems this causes unbounded RAM consumption
+            # (e.g. 329 stale directories totalling 30 GiB after repeated test runs).
+            # Using a fixed path makes it a bounded per-project cache and preserves the IntelliJ index
+            # across sessions for faster restarts.
+            system_dir = os.path.join(self._ls_resources_dir, "kotlin_language_server", "system")
+            os.makedirs(system_dir, exist_ok=True)
+            idea_system_path_opt = f"-Didea.system.path={system_dir}"
+            jvm_options_full = f"{jvm_options} {idea_system_path_opt}".strip() if jvm_options else idea_system_path_opt
+
+            env["JAVA_TOOL_OPTIONS"] = jvm_options_full
             return env
 
     @staticmethod
