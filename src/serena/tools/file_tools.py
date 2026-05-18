@@ -111,12 +111,22 @@ class ListDirTool(Tool):
 
         self.project.validate_relative_path(relative_path, require_not_ignored=skip_ignored_files)
 
+        # scan_directory already knows the entry kind from os.scandir, so we wrap is_ignored_path
+        # to thread is_dir through and skip its os.path.exists / os.path.isfile syscalls.
+        if skip_ignored_files:
+            project = self.project
+            is_ignored_dir = lambda p: project.is_ignored_path(p, is_dir=True)
+            is_ignored_file = lambda p: project.is_ignored_path(p, is_dir=False)
+        else:
+            is_ignored_dir = None
+            is_ignored_file = None
+
         dirs, files = scan_directory(
             os.path.join(self.get_project_root(), relative_path),
             relative_to=self.get_project_root(),
             recursive=recursive,
-            is_ignored_dir=self.project.is_ignored_path if skip_ignored_files else None,
-            is_ignored_file=self.project.is_ignored_path if skip_ignored_files else None,
+            is_ignored_dir=is_ignored_dir,
+            is_ignored_file=is_ignored_file,
         )
 
         result = self._to_json({"dirs": dirs, "files": files})
@@ -140,9 +150,12 @@ class FindFileTool(Tool):
 
         dir_to_scan = os.path.join(self.get_project_root(), relative_path)
 
-        # find the files by ignoring everything that doesn't match
+        # scan_directory tells us the entry kind (file vs dir) implicitly by which callback it
+        # picks; thread that through so is_ignored_path can skip its own stat syscalls.
+        project = self.project
+
         def is_ignored_file(abs_path: str) -> bool:
-            if self.project.is_ignored_path(abs_path):
+            if project.is_ignored_path(abs_path, is_dir=False):
                 return True
             filename = os.path.basename(abs_path)
             return not fnmatch(filename, file_mask)
@@ -150,7 +163,7 @@ class FindFileTool(Tool):
         _dirs, files = scan_directory(
             path=dir_to_scan,
             recursive=True,
-            is_ignored_dir=self.project.is_ignored_path,
+            is_ignored_dir=lambda p: project.is_ignored_path(p, is_dir=True),
             is_ignored_file=is_ignored_file,
             relative_to=self.get_project_root(),
         )
@@ -392,11 +405,13 @@ class SearchForPatternTool(Tool):
             if os.path.isfile(abs_path):
                 rel_paths_to_search = [relative_path]
             else:
+                # thread is_dir through to skip per-call stat syscalls in is_ignored_path
+                project = self.project
                 _dirs, rel_paths_to_search = scan_directory(
                     path=abs_path,
                     recursive=True,
-                    is_ignored_dir=self.project.is_ignored_path,
-                    is_ignored_file=self.project.is_ignored_path,
+                    is_ignored_dir=lambda p: project.is_ignored_path(p, is_dir=True),
+                    is_ignored_file=lambda p: project.is_ignored_path(p, is_dir=False),
                     relative_to=self.get_project_root(),
                 )
             # TODO (maybe): not super efficient to walk through the files again and filter if glob patterns are provided

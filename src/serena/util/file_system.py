@@ -96,8 +96,14 @@ def find_all_non_ignored_files(repo_root: str) -> list[str]:
     :return: A list of all non-ignored files in the repository
     """
     gitignore_parser = GitignoreParser(repo_root)
+    # scan_directory already knows whether each entry is a file or directory (from os.scandir).
+    # We thread that knowledge through into the ignore check via separate callbacks so
+    # GitignoreParser.should_ignore can skip its own os.path.isdir/os.path.exists syscalls.
     _, files = scan_directory(
-        repo_root, recursive=True, is_ignored_dir=gitignore_parser.should_ignore, is_ignored_file=gitignore_parser.should_ignore
+        repo_root,
+        recursive=True,
+        is_ignored_dir=lambda p: gitignore_parser.should_ignore(p, is_dir=True),
+        is_ignored_file=lambda p: gitignore_parser.should_ignore(p, is_dir=False),
     )
     return files
 
@@ -117,14 +123,16 @@ class GitignoreSpec:
         """Initialize the PathSpec from patterns."""
         self.pathspec = PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, self.patterns)
 
-    def matches(self, relative_path: str) -> bool:
+    def matches(self, relative_path: str, is_dir: bool | None = None) -> bool:
         """
         Check if the given path matches any pattern in this gitignore spec.
 
         :param relative_path: Path to check (should be relative to repo root)
+        :param is_dir: whether the path is a directory; forwarded to ``match_path`` to avoid
+            a per-call ``os.path.isdir`` syscall when the caller already knows
         :return: True if path matches any pattern
         """
-        return match_path(relative_path, self.pathspec, root_path=os.path.dirname(self.file_path))
+        return match_path(relative_path, self.pathspec, root_path=os.path.dirname(self.file_path), is_dir=is_dir)
 
 
 class GitignoreParser:
@@ -185,7 +193,8 @@ class GitignoreParser:
                 except ValueError:
                     # If the path is on a different drive (Windows) or cannot be made relative for another reason, we ignore it
                     continue
-                if self.should_ignore(rel_path):
+                # everything in the queue is a directory (only is_dir entries are appended)
+                if self.should_ignore(rel_path, is_dir=True):
                     continue
             yield from scan(next_abs_path)
 
@@ -285,11 +294,16 @@ class GitignoreParser:
 
         return patterns
 
-    def should_ignore(self, path: str) -> bool:
+    def should_ignore(self, path: str, is_dir: bool | None = None) -> bool:
         """
         Check if a path should be ignored based on the gitignore rules.
 
         :param path: Path to check (absolute or relative to repo_root)
+        :param is_dir: whether ``path`` is a directory; if the caller already knows (e.g. from
+            ``os.scandir(...).is_dir()``), passing it skips an ``os.path.exists`` /
+            ``os.path.isdir`` syscall pair per call. The syscalls are particularly expensive
+            on Windows where each one is a separate ``GetFileAttributes`` round-trip.
+            ``None`` falls back to the syscall path (backwards compatible).
         :return: True if the path should be ignored, False otherwise
         """
         # Convert to relative path from repo root
@@ -309,17 +323,19 @@ class GitignoreParser:
         if rel_path_first_path == ".git":
             return True
 
-        abs_path = os.path.join(self.repo_root, rel_path)
-
         # Normalize path separators
         rel_path = rel_path.replace(os.sep, "/")
 
-        if os.path.exists(abs_path) and os.path.isdir(abs_path) and not rel_path.endswith("/"):
+        # determine kind: prefer the caller's hint, fall back to syscalls
+        if is_dir is None:
+            abs_path = os.path.join(self.repo_root, rel_path)
+            is_dir = os.path.exists(abs_path) and os.path.isdir(abs_path)
+        if is_dir and not rel_path.endswith("/"):
             rel_path = rel_path + "/"
 
-        # Check against each ignore spec
+        # Check against each ignore spec — pass the kind through so each spec.matches() doesn't re-stat
         for spec in self.ignore_specs:
-            if spec.matches(rel_path):
+            if spec.matches(rel_path, is_dir=is_dir):
                 return True
 
         return False
@@ -338,7 +354,7 @@ class GitignoreParser:
         self._load_gitignore_files()
 
 
-def match_path(relative_path: str, path_spec: PathSpec, root_path: str = "") -> bool:
+def match_path(relative_path: str, path_spec: PathSpec, root_path: str = "", is_dir: bool | None = None) -> bool:
     """
     Match a relative path against a given pathspec. Just pathspec.match_file() is not enough,
     we need to do some massaging to fix issues with pathspec matching.
@@ -346,6 +362,10 @@ def match_path(relative_path: str, path_spec: PathSpec, root_path: str = "") -> 
     :param relative_path: relative path to match against the pathspec
     :param path_spec: the pathspec to match against
     :param root_path: the root path from which the relative path is derived
+    :param is_dir: whether ``relative_path`` refers to a directory; if known by the caller
+        (typically from ``os.scandir(...).is_dir()``), passing it here avoids a per-call
+        ``os.path.isdir`` syscall — the dominant tottime contributor on large trees,
+        especially on Windows. ``None`` falls back to the syscall (backwards compatible).
     :return:
     """
     if str(relative_path) in {"", "."}:
@@ -363,7 +383,9 @@ def match_path(relative_path: str, path_spec: PathSpec, root_path: str = "") -> 
 
     # pathspec can't handle the matching of directories if they don't end with a slash!
     # see https://github.com/cpburnz/python-pathspec/issues/89
-    abs_path = os.path.abspath(os.path.join(root_path, relative_path))
-    if os.path.isdir(abs_path) and not normalized_path.endswith("/"):
+    if is_dir is None:
+        abs_path = os.path.abspath(os.path.join(root_path, relative_path))
+        is_dir = os.path.isdir(abs_path)
+    if is_dir and not normalized_path.endswith("/"):
         normalized_path = normalized_path + "/"
     return path_spec.match_file(normalized_path)

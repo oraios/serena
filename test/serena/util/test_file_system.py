@@ -684,6 +684,39 @@ src/*.o
         # foo.txt in other/ should NOT be ignored (outside foo/ subtree)
         assert not parser.should_ignore("other/foo.txt"), "other/foo.txt should NOT be ignored by foo/.gitignore"
 
+    def test_should_ignore_with_is_dir_hint(self):
+        """``is_dir`` hint must produce the same result as the syscall fallback, for both files and directories."""
+        parser = GitignoreParser(str(self.repo_path))
+
+        # existing file (test.log matches `*.log`) - syscall path and hint path should agree
+        assert parser.should_ignore("test.log") is True
+        assert parser.should_ignore("test.log", is_dir=False) is True
+
+        # existing directory (src/build matches `/build/` from src/.gitignore)
+        assert parser.should_ignore("src/build") is True
+        assert parser.should_ignore("src/build", is_dir=True) is True
+
+        # non-ignored file - both paths agree
+        assert parser.should_ignore("file1.txt", is_dir=False) is False
+
+    def test_should_ignore_hint_skips_syscalls_for_nonexistent_path(self):
+        """Hint path must not depend on the file actually existing on disk."""
+        parser = GitignoreParser(str(self.repo_path))
+
+        # `*.log` from root .gitignore — path doesn't exist but hint says it's a file → ignored
+        assert parser.should_ignore("does/not/exist/test.log", is_dir=False) is True
+        # path that doesn't match any pattern is not ignored, with or without hint
+        assert parser.should_ignore("nope/file1.txt", is_dir=False) is False
+
+    def test_match_path_with_is_dir_hint(self):
+        """``match_path`` must respect the explicit hint instead of stat-ing the path."""
+        spec = PathSpec.from_lines("gitwildmatch", ["build/"])
+
+        # is_dir=True → trailing slash appended, directory-only pattern matches
+        assert match_path("nonexistent/build", spec, root_path=str(self.repo_path), is_dir=True) is True
+        # is_dir=False → no trailing slash, directory-only pattern does NOT match
+        assert match_path("nonexistent/build", spec, root_path=str(self.repo_path), is_dir=False) is False
+
     def test_anchored_double_star_pattern(self):
         """Test that /**/pattern in subdirectory works correctly."""
         test_dir = self.repo_path / "test_anchored_doublestar"

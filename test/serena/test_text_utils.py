@@ -214,6 +214,33 @@ class TestSearchText:
 
         assert len(matches) == 0
 
+    def test_search_text_multiline_many_matches_line_numbers(self):
+        """Many-match regression: incremental newline counting must produce the same line numbers
+        as the previous prefix-counting implementation, including the very first match on line 0
+        and matches separated by varying line counts.
+        """
+        content = "\n".join(f"alpha_{i:04d} = compute({i})" for i in range(200))
+        matches = search_text(r"alpha_\d+", content=content, allow_multiline_match=True)
+
+        assert len(matches) == 200
+        for i, m in enumerate(matches):
+            assert m.start_line == i, f"match {i} reported line {m.start_line}, expected {i}"
+            assert m.matched_lines[0].line_content == f"alpha_{i:04d} = compute({i})"
+
+    def test_search_text_multiline_match_spanning_multiple_lines(self):
+        """A match that spans several lines must report start/end line correctly under the
+        new incremental cursor logic.
+        """
+        content = "header\nline1\nline2\nMARK\nline3\nMARK\nfooter\n"
+        # match from first MARK through the second MARK on a later line
+        matches = search_text(r"MARK.*MARK", content=content, allow_multiline_match=True)
+
+        assert len(matches) == 1
+        m = matches[0]
+        # MARK starts on line 3 (0-indexed), second MARK ends on line 5
+        assert m.matched_lines[0].line_number == 3
+        assert m.matched_lines[-1].line_number == 5
+
 
 # Mock file reader that always returns matching content
 def mock_reader_always_match(file_path: str) -> str:
@@ -575,3 +602,37 @@ class TestExpandBraces:
         from serena.util.text_utils import expand_braces
 
         assert sorted(expand_braces(pattern)) == sorted(expected)
+
+
+class TestGlobMatchCache:
+    """The compile cache must be transparent (correctness unchanged) and actually populate."""
+
+    def test_repeated_calls_consistent(self):
+        """Calling glob_match many times must keep returning the same result for the same input."""
+        from serena.util.text_utils import glob_match
+
+        for _ in range(50):
+            assert glob_match("**/*.py", "src/serena/agent.py") is True
+            assert glob_match("**/*.py", "src/serena/agent.txt") is False
+            assert glob_match("src/**/test_*.py", "src/a/b/test_foo.py") is True
+            assert glob_match("src/**/test_*.py", "other/test_foo.py") is False
+
+    def test_cache_populates_after_first_call(self):
+        """After a call, the (normalised) pattern must be in the cache as a list of compiled regexes."""
+        import re
+
+        from serena.util.text_utils import _GLOB_CACHE, glob_match
+
+        _GLOB_CACHE.pop("**/*.unique-ext", None)
+        glob_match("**/*.unique-ext", "foo.unique-ext")
+        cached = _GLOB_CACHE.get("**/*.unique-ext")
+        assert cached is not None
+        assert all(isinstance(rx, re.Pattern) for rx in cached)
+
+    def test_backslash_pattern_normalised_in_cache_key(self):
+        """Windows-style patterns must reach the cache under the same key as forward-slash ones."""
+        from serena.util.text_utils import _GLOB_CACHE, glob_match
+
+        _GLOB_CACHE.pop("src/foo/*.py", None)
+        glob_match("src\\foo\\*.py", "src/foo/bar.py")
+        assert "src/foo/*.py" in _GLOB_CACHE
