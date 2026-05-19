@@ -80,6 +80,13 @@ class Language(str, Enum):
     ERLANG = "erlang"
     OCAML = "ocaml"
     AL = "al"
+    CA65 = "ca65"
+    """CA65 6502/65C02/65816 assembly (cc65 toolchain).
+    Uses the bundled ca65-ls language server (Python + pygls + tree-sitter-ca65).
+    Requires the cc65 toolchain (`brew install cc65` on macOS) for diagnostics.
+    Supports .s / .asm / .inc source files; opt-in enrichment from
+    `ld65 --dbgfile=*.dbg` build artifacts.
+    """
     FSHARP = "fsharp"
     REGO = "rego"
     SCALA = "scala"
@@ -423,6 +430,8 @@ class Language(str, Enum):
                 return FilenameMatcher(".ml", ".mli", ".re", ".rei")
             case self.AL:
                 return FilenameMatcher(".al", ".dal")
+            case self.CA65:
+                return FilenameMatcher(".s", ".asm", ".inc")
             case self.FSHARP:
                 return FilenameMatcher(".fs", ".fsx", ".fsi")
             case self.REGO:
@@ -673,6 +682,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.al_language_server import ALLanguageServer
 
                 return ALLanguageServer
+            case self.CA65:
+                from solidlsp.language_servers.ca65_language_server import Ca65LanguageServer
+
+                return Ca65LanguageServer
             case self.REGO:
                 from solidlsp.language_servers.regal_server import RegalLanguageServer
 

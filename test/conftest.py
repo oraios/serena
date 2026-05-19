@@ -301,6 +301,12 @@ def _determine_disabled_languages() -> list[Language]:
     if not clojure_tests_enabled:
         result.append(Language.CLOJURE)
 
+    # Disable CA65 tests if the cc65 toolchain isn't installed.
+    # ca65-ls itself can run without it (tree-sitter-only mode), but the test
+    # suite expects to assemble fixtures and may invoke `ca65 -g` for diagnostics.
+    if _sh.which("ca65") is None:
+        result.append(Language.CA65)
+
     # Disable CPP_CCLS tests if ccls is not available
     ccls_tests_enabled = _sh.which("ccls") is not None
     # Skip ccls tests on Windows since no recent binary is available and version

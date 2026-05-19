@@ -1,0 +1,58 @@
+Modules list:
+-------------
+zp.o:
+    ZEROPAGE          Offs=000000  Size=000005  Align=00001  Fill=0000
+lib.o:
+    CODE              Offs=000000  Size=000005  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=000100  Align=00001  Fill=0000
+helpers.o:
+    CODE              Offs=000005  Size=000011  Align=00001  Fill=0000
+main.o:
+    STARTUP           Offs=000000  Size=000021  Align=00001  Fill=0000
+
+
+Segment list:
+-------------
+Name                   Start     End    Size  Align
+----------------------------------------------------
+ZEROPAGE              000002  000006  000005  00001
+STARTUP               000801  000821  000021  00001
+CODE                  000822  000837  000016  00001
+BSS                   000838  000937  000100  00001
+
+
+Exports list by name:
+---------------------
+helpers_bar               000833 RLA    helpers_foo               000827 RLA    
+lib_buffer                000838 RLA    lib_const                 001234 RLA    
+lib_export                000822 RLA    ptr1                      000002 RLZ    
+tmp1                      000006 RLZ    
+
+
+Exports list by value:
+----------------------
+ptr1                      000002 RLZ    tmp1                      000006 RLZ    
+lib_export                000822 RLA    helpers_foo               000827 RLA    
+helpers_bar               000833 RLA    lib_buffer                000838 RLA    
+lib_const                 001234 RLA    
+
+
+Imports list:
+-------------
+helpers_bar (helpers.o):
+    main.o                    src/main.s(6)
+helpers_foo (helpers.o):
+    main.o                    src/main.s(5)
+lib_buffer (lib.o):
+    main.o                    src/main.s(8)
+lib_const (lib.o):
+    main.o                    src/main.s(9)
+lib_export (lib.o):
+    main.o                    src/main.s(7)
+ptr1 (zp.o):
+    main.o                    inc/zp.inc(5)
+    helpers.o                 inc/zp.inc(5)
+tmp1 (zp.o):
+    helpers.o                 inc/zp.inc(5)
+    lib.o                     inc/zp.inc(5)
+
