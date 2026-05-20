@@ -28,6 +28,10 @@ class PerlLanguageServer(SolidLanguageServer):
     Provides Perl specific instantiation of the LanguageServer class using Perl::LanguageServer.
     """
 
+    # Keep in sync with Language.PERL.get_source_fn_matcher() in solidlsp/ls_config.py:
+    # extensions missing here are invisible to Perl::LanguageServer's project index.
+    _FILE_FILTER: list = [".pm", ".pl", ".t"]
+
     @staticmethod
     def _get_perl_version() -> str | None:
         """Get the installed Perl version or None if not found."""
@@ -162,7 +166,7 @@ class PerlLanguageServer(SolidLanguageServer):
 
             perl_config = {
                 "perlInc": [self.repository_root_path, "."],
-                "fileFilter": [".pm", ".pl"],
+                "fileFilter": self._FILE_FILTER,
                 "ignoreDirs": [".git", ".svn", "blib", "local", ".carton", "vendor", "_build", "cover_db"],
             }
 
@@ -198,7 +202,7 @@ class PerlLanguageServer(SolidLanguageServer):
             "settings": {
                 "perl": {
                     "perlInc": [self.repository_root_path, "."],
-                    "fileFilter": [".pm", ".pl"],
+                    "fileFilter": self._FILE_FILTER,
                     "ignoreDirs": [".git", ".svn", "blib", "local", ".carton", "vendor", "_build", "cover_db"],
                 }
             }
