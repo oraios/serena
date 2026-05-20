@@ -84,7 +84,7 @@ class MemoryManager:
         return cls._MEMORY_REF_PREFIX + name
 
     MEMORY_MAINTENANCE_NAME: str = "memory_maintenance"
-    _MEMORY_MAINTENANCE_TEMPLATE_PATH: Path = SerenaPaths().serena_resources_path / "memory_maintenance.md"
+    _MEMORY_MAINTENANCE_TEMPLATE_PATH: Path = SerenaPaths().get_resource_path("memory_maintenance.md")
 
     def ensure_memory_maintenance_memory(self) -> str:
         """

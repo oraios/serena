@@ -26,6 +26,7 @@ from serena.constants import (
     PROJECT_LOCAL_TEMPLATE_FILE,
     PROJECT_TEMPLATE_FILE,
     REPO_ROOT,
+    RESOURCES_DIR,
     SERENA_CONFIG_TEMPLATE_FILE,
     SERENA_FILE_ENCODING,
     SERENA_MANAGED_DIR_NAME,
@@ -61,9 +62,10 @@ class SerenaPaths:
             home_dir = str(Path.home() / SERENA_MANAGED_DIR_NAME)
         else:
             home_dir = home_dir.strip()
-        self.serena_pkg_path = Path(__file__).parent.parent.resolve()
-        self.serena_resources_path = self.serena_pkg_path / "resources"
-
+        self.resources_dir: str = RESOURCES_DIR
+        """
+        the resources directory (within the `serena` package) 
+        """
         self.serena_user_home_dir: str = home_dir
         """
         the path to the Serena home directory, where the user's configuration/data is stored.
@@ -127,6 +129,9 @@ class SerenaPaths:
         os.makedirs(log_dir, exist_ok=True)
         self.last_returned_log_file_path = os.path.join(log_dir, prefix + "_" + datetime_tag() + f"_{os.getpid()}" + ".txt")
         return self.last_returned_log_file_path
+
+    def get_resource_path(self, *path_elems: str) -> Path:
+        return Path(os.path.join(self.resources_dir, *path_elems))
 
     # TODO: Paths from constants.py should be moved here
 
