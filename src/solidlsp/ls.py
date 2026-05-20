@@ -352,7 +352,9 @@ class SolidLanguageServer(ABC):
     DOCUMENT_SYMBOL_CACHE_FILENAME = "document_symbols.pkl"
 
     # Directories that should always be ignored regardless of language:
-    # VCS internals, virtual environments, caches, and serena's own data.
+    # VCS internals, virtual environments, caches, and tool internals.
+    # Note: .serena is intentionally excluded — memory files stored there
+    # are valid targets for symbol retrieval when markdown is configured.
     _ALWAYS_IGNORED_DIRS = frozenset(
         {
             ".git",
@@ -368,7 +370,6 @@ class SolidLanguageServer(ABC):
             ".tox",
             ".nox",  # test runners
             ".idea",  # IDE internals
-            ".serena",  # serena's own data
             ".vscode",  # Doesn't contain symbols
         }
     )
@@ -379,7 +380,11 @@ class SolidLanguageServer(ABC):
         A language-specific condition for directories that should always be ignored. For example, venv
         in Python and node_modules in JS/TS should be ignored always.
         """
-        return dirname in self._ALWAYS_IGNORED_DIRS
+        if dirname in self._ALWAYS_IGNORED_DIRS:
+            return True
+        if self._ignore_all_dot_files and dirname.startswith(".") and dirname not in (".", ".."):
+            return True
+        return False
 
     @staticmethod
     def _determine_log_level(line: str) -> int:
@@ -505,6 +510,7 @@ class SolidLanguageServer(ABC):
         self._ls_resources_dir = self.ls_resources_dir(solidlsp_settings)
         log.debug(f"Custom config (LS-specific settings) for {lang}: {self._custom_settings}")
         self._encoding = config.encoding
+        self._ignore_all_dot_files = config.ignore_all_dot_files
         self.repository_root_path: str = repository_root_path
 
         log.debug(
@@ -1188,7 +1194,9 @@ class SolidLanguageServer(ABC):
         """
         abs_path = os.path.join(self.repository_root_path, relative_path)
         if not os.path.exists(abs_path):
-            raise FileNotFoundError(f"File {abs_path} not found, the ignore check cannot be performed")
+            # Non-existent paths (e.g. broken symlinks) are treated as ignored
+            log.debug("Path %s does not exist (possibly a broken symlink), treating as ignored", abs_path)
+            return True
 
         # Check file extension if it's a file
         is_file = os.path.isfile(abs_path)
@@ -2050,6 +2058,11 @@ class SolidLanguageServer(ABC):
 
             for contained_dir_or_file_name in contained_dir_or_file_names:
                 contained_dir_or_file_abs_path = os.path.join(abs_dir_path, contained_dir_or_file_name)
+
+                # Skip broken symlinks early — os.listdir returns them but they have no valid target
+                if os.path.islink(contained_dir_or_file_abs_path) and not os.path.exists(contained_dir_or_file_abs_path):
+                    log.debug("Skipping broken symlink: %s", contained_dir_or_file_abs_path)
+                    continue
 
                 # obtain relative path
                 try:

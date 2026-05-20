@@ -29,6 +29,7 @@ class LanguageServerFactory:
         ls_specific_settings: dict | None = None,
         additional_workspace_folders: list[str] | None = None,
         trace_lsp_communication: bool = False,
+        ignore_all_dot_files: bool = True,
     ):
         self.project_root = project_root
         self.project_data_path = project_data_path
@@ -38,6 +39,7 @@ class LanguageServerFactory:
         self.ls_specific_settings = ls_specific_settings
         self.additional_workspace_folders = additional_workspace_folders or []
         self.trace_lsp_communication = trace_lsp_communication
+        self.ignore_all_dot_files = ignore_all_dot_files
 
     def create_language_server(self, language: Language) -> SolidLanguageServer:
         ls_config = LanguageServerConfig(
@@ -45,6 +47,7 @@ class LanguageServerFactory:
             ignored_paths=self.ignored_patterns,
             trace_lsp_communication=self.trace_lsp_communication,
             encoding=self.encoding,
+            ignore_all_dot_files=self.ignore_all_dot_files,
         )
 
         log.info(f"Creating language server instance for {self.project_root}, language={language}.")

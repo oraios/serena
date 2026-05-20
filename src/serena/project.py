@@ -191,8 +191,8 @@ class Project(ToStringMixin):
 
     def _is_ignored_relative_path(self, relative_path: str | Path, ignore_non_source_files: bool = True) -> bool:
         """
-        Determine whether an existing path should be ignored based on file type and ignore patterns.
-        Raises `FileNotFoundError` if the path does not exist.
+        Determine whether a path should be ignored based on file type and ignore patterns.
+        Non-existent paths (e.g. broken symlinks) are treated as ignored.
 
         :param relative_path: Relative path to check
         :param ignore_non_source_files: whether files that are not source files (according to the file masks
@@ -208,7 +208,9 @@ class Project(ToStringMixin):
 
         abs_path = os.path.join(self.project_root, relative_path)
         if not os.path.exists(abs_path):
-            raise FileNotFoundError(f"File {abs_path} not found, the ignore check cannot be performed")
+            # Non-existent paths (e.g. broken symlinks) are treated as ignored
+            log.debug("Path %s does not exist (possibly a broken symlink), treating as ignored", abs_path)
+            return True
 
         # Check file extension if it's a file
         is_file = os.path.isfile(abs_path)
@@ -427,6 +429,7 @@ class Project(ToStringMixin):
                 ls_specific_settings=ls_specific_settings,
                 additional_workspace_folders=self.project_config.additional_workspace_folders,
                 trace_lsp_communication=self.serena_config.trace_lsp_communication,
+                ignore_all_dot_files=self.project_config.ignore_all_dot_files,
             )
             self.language_server_manager = LanguageServerManager.from_languages(self.project_config.languages, factory)
             return self.language_server_manager
