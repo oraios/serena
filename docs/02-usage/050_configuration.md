@@ -1022,6 +1022,30 @@ Supported settings:
 |---|---|---|
 | `vtsls_version` | `0.2.9` | Override the `@vtsls/language-server` npm package version Serena installs. |
 | `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
+| `initialization_options` | `null` | Dict forwarded to vtsls on three LSP channels: the `initializationOptions` field of the `initialize` request, a `workspace/didChangeConfiguration` notification sent right after initialize, and as the response to `workspace/configuration` pull requests (section-scoped). Typical use is Yarn PnP: point `typescript.tsdk` at the Yarn-generated SDK and enable `vtsls.autoUseWorkspaceTsdk`. |
+
+Example (Yarn PnP project with TypeScript in a subdirectory; run `yarn dlx @yarnpkg/sdks vscode` in the project once to generate the SDK):
+
+```yaml
+ls_specific_settings:
+  typescript_vts:
+    initialization_options:
+      typescript:
+        tsdk: "project/.yarn/sdks/typescript/lib"
+      vtsls:
+        autoUseWorkspaceTsdk: true
+```
+
+vtsls reads `typescript.tsdk` through the `workspace/configuration` pull, not through `initializationOptions`, so Serena answers those pulls from the same dict (and also pushes it on `workspace/didChangeConfiguration` for compatibility with servers that expect the notification). Without `autoUseWorkspaceTsdk: true`, vtsls falls back to its bundled TypeScript and ignores `tsdk` (there is no UI prompt to confirm the switch in a headless LSP).
+
+The dict is forwarded to vtsls verbatim — Serena does not validate its structure. For the list of supported keys and their expected types, refer to the vtsls [configuration schema](https://github.com/yioneko/vtsls/blob/main/packages/service/configuration.schema.json) and the underlying [VS Code TypeScript settings](https://code.visualstudio.com/docs/languages/typescript). `null` (the default) and `{}` are both treated as "unset": no `initializationOptions` are sent and no `workspace/didChangeConfiguration` notification is pushed. A non-dict value (e.g. a string or list) raises an error at server start.
+
+**Troubleshooting:**
+
+- *vtsls keeps using its bundled TypeScript and ignores `tsdk`* — ensure `vtsls.autoUseWorkspaceTsdk: true` is set alongside `typescript.tsdk`. Without it vtsls does not auto-switch to the workspace TS in a headless LSP.
+- *tsserver fails to start after pointing at a custom `tsdk`* — verify the path resolves to a directory containing `tsserver.js` (e.g. `.yarn/sdks/typescript/lib`, not `.yarn/sdks/typescript`). Relative paths are interpreted relative to the project root.
+- *Setting appears in `solidlsp` logs but vtsls does not react* — cross-check the key against the vtsls configuration schema linked above. The dict is forwarded as-is, so an unknown or wrong-typed key is silently ignored by vtsls.
+- *Need to inspect what Serena is actually forwarding* — the dict is logged at INFO level via the `Forwarding user-provided initializationOptions to vtsls: …` line at language server startup.
 
 #### Vue
 
