@@ -4,6 +4,7 @@ which provides TypeScript language server functionality via VSCode's TypeScript 
 (contrary to typescript-language-server, which uses the TypeScript compiler directly).
 """
 
+import functools
 import logging
 import os
 import pathlib
@@ -34,7 +35,20 @@ DEFAULT_VTSLS_VERSION = "0.2.9"
 class VtsLanguageServer(SolidLanguageServer):
     """
     Provides TypeScript specific instantiation of the LanguageServer class using vtsls.
-    Contains various configurations and settings specific to TypeScript via vtsls wrapper.
+
+    Supported entries in ``ls_specific_settings["typescript_vts"]``:
+        - ``vtsls_version``: version of ``@vtsls/language-server`` to install (default: ``"0.2.9"``).
+        - ``npm_registry``: custom npm registry for the managed install.
+        - ``initialization_options``: optional dict forwarded verbatim as LSP
+          ``initializationOptions``. Useful for Yarn PnP projects, e.g.::
+
+              initialization_options:
+                typescript:
+                  tsdk: "project/.yarn/sdks/typescript/lib"
+                vtsls:
+                  autoUseWorkspaceTsdk: true
+
+          See https://github.com/yioneko/vtsls/issues/169 for the PnP recipe.
     """
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
@@ -114,12 +128,53 @@ class VtsLanguageServer(SolidLanguageServer):
         return f"{vts_executable_path} --stdio"
 
     @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _extract_section_value(user_settings: dict, section: str) -> object:
+        """
+        Returns the LSP-configuration value at the given (possibly dotted) ``section`` path
+        within ``user_settings``, or ``{}`` if any segment is missing or non-dict.
+
+        Used to answer vtsls ``workspace/configuration`` pull requests; for top-level
+        sections like ``typescript`` the value is typically a sub-dict, while for dotted
+        paths like ``typescript.tsdk`` it can be any LSP-serialisable primitive (string,
+        bool, int, list).
+
+        :param user_settings: the user-provided ``initialization_options`` dict.
+        :param section: section name, optionally dotted (e.g. ``typescript.tsdk``).
+        :return: value at the path, or ``{}`` if the path does not resolve.
+        """
+        value: object = user_settings
+        if section:
+            for part in section.split("."):
+                if isinstance(value, dict) and part in value:
+                    value = value[part]
+                else:
+                    return {}
+        return value if value is not None else {}
+
+    @functools.cached_property
+    def _initialization_options(self) -> dict:
+        """
+        Validated user-provided ``initializationOptions`` (computed and logged once per instance).
+
+        :raises ValueError: if ``ls_specific_settings.typescript_vts.initialization_options``
+            is set to a value that is not a dict.
+        """
+        opts = self._custom_settings.get("initialization_options")
+        if opts is None:
+            return {}
+        if not isinstance(opts, dict):
+            raise ValueError(f"ls_specific_settings.typescript_vts.initialization_options must be a dict, got {type(opts).__name__}")
+        return opts
+
+    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the VTS Language Server.
+
+        If ``initialization_options`` is set in ``ls_specific_settings["typescript_vts"]``,
+        it is forwarded verbatim as LSP ``initializationOptions``.
         """
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
-        initialize_params = {
+        initialize_params: dict = {
             "locale": "en",
             "capabilities": {
                 "textDocument": {
@@ -152,6 +207,11 @@ class VtsLanguageServer(SolidLanguageServer):
                 }
             ],
         }
+
+        if self._initialization_options:
+            log.info("Forwarding user-provided initializationOptions to vtsls: %s", self._initialization_options)
+            initialize_params["initializationOptions"] = self._initialization_options
+
         return cast(InitializeParams, initialize_params)
 
     def _start_server(self) -> None:
@@ -179,12 +239,14 @@ class VtsLanguageServer(SolidLanguageServer):
         def execute_client_command_handler(params: dict) -> list:
             return []
 
-        def workspace_configuration_handler(params: dict) -> list[dict] | dict:
-            # VTS may request workspace configuration
-            # Return empty configuration for each requested item
+        init_options = self._initialization_options
+
+        def workspace_configuration_handler(params: dict) -> list[object] | object:
+            # vtsls pulls settings for sections like "typescript", "vtsls", "javascript".
+            # Return the matching sub-dicts from the user-provided initialization_options.
             if "items" in params:
-                return [{}] * len(params["items"])
-            return {}
+                return [self._extract_section_value(init_options, item.get("section", "")) for item in params["items"]]
+            return self._extract_section_value(init_options, "")
 
         def do_nothing(params: dict) -> None:
             return
@@ -227,6 +289,14 @@ class VtsLanguageServer(SolidLanguageServer):
         log.debug(f"completionProvider: {init_response['capabilities']['completionProvider']}")
 
         self.server.notify.initialized({})
+
+        # vtsls also reads settings via workspace/didChangeConfiguration (in addition
+        # to initializationOptions and workspace/configuration pulls). Push the same
+        # user-provided settings on all three channels for maximum compatibility,
+        # e.g. so that `typescript.tsdk` is honoured for Yarn PnP projects.
+        if init_options:
+            self.server.notify.workspace_did_change_configuration({"settings": init_options})
+
         if self.server_ready.wait(timeout=1.0):
             log.info("VTS server is ready")
         else:
