@@ -1,0 +1,46 @@
+name: Parallel Matrix CI
+
+on:
+  push:
+    branches:
+      - feature/parallel-ci-workflows
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  parallel-tests:
+    name: ${{ matrix.batch_name }}
+    runs-on: ubuntu-latest
+    
+    container:
+      image: ghcr.io/tirthpatel90/serena-maximal:latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - batch_name: 'Heavy Toolchains (C++, Rust, Java)'
+            pytest_marker: '-m "cpp or rust or java"'
+          
+          - batch_name: 'Medium Toolchains (Go)'
+            pytest_marker: '-m "go"'
+          
+          - batch_name: 'Catch-All (Core Framework & Remaining Languages)'
+            # We are also ignoring the missing toolchains (haskell, swift, lean4, zig, ocaml) for now.
+            pytest_marker: '-m "not cpp and not rust and not java and not go and not julia and not haskell and not swift and not lean4 and not zig and not ocaml and not ruby and not nix and not powershell and not scala and not csharp and not haxe"'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Quick Workspace Sync
+        shell: bash
+        run: |
+          uv sync --extra dev --locked
+          uv pip list
+
+      - name: Run Pytest Batch
+        shell: bash
+        run: uv run poe test -q --tb=short ${{ matrix.pytest_marker }}
