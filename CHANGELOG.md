@@ -4,6 +4,9 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 # v1.5.1 (2026-05-18)
 
+* General:
+  - Fix `onboarding_tool`: Used incorrect path to bootstrap memory (regression in v1.5.0)  
+ 
 * Language Servers:
   - Add **CUE** support via the LSP mode of the official [`cue` CLI](https://github.com/cue-lang/cue) (`cue lsp`).
 
@@ -11,6 +14,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * General:
   - Make tool descriptions more amenable to tool search mechanisms as now used in several clients (e.g. avoid referencing other tools' names, etc.)
+  - Onboarding is now less invasive (LLM is instructed to ask the user whether to proceed)
 
 * Language Servers:
   - No longer store temporary files (e.g. downloads) in `~/solidlsp_tmp`; instead, use OS-specific temporary directories
