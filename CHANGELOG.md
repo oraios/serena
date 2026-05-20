@@ -2,6 +2,12 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Language Servers:
+  - `typescript_vts`: Add `initialization_options` setting in `ls_specific_settings.typescript_vts`.
+    The dict is forwarded to vtsls via `initializationOptions`, `workspace/didChangeConfiguration`,
+    and `workspace/configuration` pulls. Enables Yarn PnP setups with `typescript.tsdk` pointing
+    at the Yarn-generated SDK.
+
 # v1.5.1 (2026-05-18)
 
 * Language Servers:
