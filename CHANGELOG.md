@@ -2,6 +2,21 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Language Servers:
+  - Add **CA65** (6502 / 65C02 / 65816 assembly via the [cc65](https://cc65.github.io/) toolchain) support.
+    Wraps [`ca65-ls`](https://github.com/JC-000/ca65-asm-serena-lsp), a Python + pygls language server
+    backed by the [`pogyomo/tree-sitter-ca65`](https://github.com/pogyomo/tree-sitter-ca65) grammar.
+    Supports document/workspace symbols, definition, references (scope-aware for cheap locals
+    and `.proc`/`.scope` nested labels), hover, rename + prepareRename, and `ca65 -g` driven
+    diagnostics. Optional post-link enrichment (resolved addresses + segments + symbol sizes)
+    from `ld65 --dbgfile` debug info when present.
+
+* General:
+  - `LanguageServerSymbol.to_dict` now forwards the LSP `detail` field when the language server
+    provides it.  Lets language servers ship per-symbol context (e.g. ca65-ls puts post-link
+    addresses + segment + size into `detail`) without an extra hover round-trip.  No behavior
+    change for language servers that leave `detail` unset.
+
 # v1.5.1 (2026-05-18)
 
 * Language Servers:

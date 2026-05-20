@@ -1,0 +1,9 @@
+# ca65-ls's per-project symbol cache; auto-generated, not a fixture.
+.ca65-ls/
+
+# Intermediate build artifacts (regenerable via tools/regen_fixtures.sh in the
+# ca65-ls source repo). The committed *.dbg / *.lbl / *.map fixtures next to
+# them ARE intentional — they're the ground-truth oracle for the integration
+# tests.
+*.o
+*.prg

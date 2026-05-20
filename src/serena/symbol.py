@@ -427,6 +427,12 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         """
         string representation of the symbol kind (name attribute of the `SymbolKind` enum item)
         """
+        detail: NotRequired[str]
+        """
+        free-form per-symbol context string forwarded from the LSP `DocumentSymbol.detail`
+        field (e.g. ca65-ls publishes resolved address / segment / size here).  Only set
+        when the language server provided it.
+        """
         children: NotRequired[list["LanguageServerSymbol.OutputDict"]]
         content_around_reference: NotRequired[str]
         """set by :class:`FindReferencingSymbolsTool` when including surrounding code lines"""
@@ -441,6 +447,7 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         "body_location",
         "body",
         "kind",
+        "detail",
         "children",
         "content_around_reference",
         "reference_line",
@@ -499,6 +506,14 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
 
         if kind:
             result["kind"] = self.symbol_kind_name
+            # Surface the LSP `detail` field too, when the LS provided it.
+            # ca65-ls uses this to ship address/segment/parent info inline
+            # (e.g. "$0822 in CODE — 5 bytes; parent: hkdf_extract") so MCP
+            # clients see it without a separate hover round-trip.  Other
+            # language servers may or may not populate it; absent => omitted.
+            detail = self.symbol_root.get("detail")
+            if detail:
+                result["detail"] = detail
 
         if location:
             result["location"] = self.location.to_dict(include_relative_path=relative_path)

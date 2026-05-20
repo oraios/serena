@@ -301,6 +301,7 @@ max-complexity = 20
 [tool.pytest.ini_options]
 addopts = "--snapshot-patch-pycharm-diff"
 markers = [
+  "ca65: language server running for CA65 (6502 assembly, cc65 toolchain)",
   "clojure: language server running for Clojure",
   "crystal: language server running for Crystal",
   "cue: language server running for CUE",

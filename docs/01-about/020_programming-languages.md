@@ -56,6 +56,15 @@ Some languages require additional installations or setup steps, as noted.
   (by default, uses the clangd language server (language `cpp`) but we also support ccls (language `cpp_ccls`);
   for best results, provide a `compile_commands.json` at the repository root;
   see the [C/C++ Setup Guide](../03-special-guides/cpp_setup) for details.)
+* **CA65** (6502 / 65C02 / 65816 assembly via the cc65 toolchain)  
+  (uses [`ca65-ls`](https://github.com/JC-000/ca65-asm-serena-lsp), a Python + pygls language server
+  backed by the [`pogyomo/tree-sitter-ca65`](https://github.com/pogyomo/tree-sitter-ca65) grammar;
+  install into the Serena environment via
+  `pip install "ca65-ls @ git+https://github.com/JC-000/ca65-asm-serena-lsp@main#subdirectory=packages/ca65-ls"`
+  (PyPI release pending); supports `.s`, `.asm`, and `.inc` files; the `ca65` binary from
+  the [cc65](https://cc65.github.io/) toolchain is required for live diagnostics;
+  opt-in enrichment with post-link addresses and segments from `ld65 --dbgfile` debug info
+  when present in `build/*.dbg` or `obj/*.dbg`)
 * **Clojure**
 * **Crystal**  
   (requires [Crystalline](https://github.com/elbywan/crystalline) language server to be installed and available on PATH;
