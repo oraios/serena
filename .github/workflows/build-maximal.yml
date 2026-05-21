@@ -1,5 +1,9 @@
-name: Build Maximal Image
-on: workflow_dispatch
+name: Build My Maximal Image
+on:
+  push:
+    branches:
+      - feature/parallel-ci-workflows
+  workflow_dispatch:
 permissions:
   packages: write
   contents: read
