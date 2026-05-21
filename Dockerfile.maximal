@@ -57,11 +57,17 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
 # 1. Install Ruby, Julia, Java (JRE for Scala), Scala, and Haxe via apt
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ruby-full \
-    julia \
     default-jre \
     scala \
     haxe \
     && rm -rf /var/lib/apt/lists/*
+
+# 1.5 Install Julia officially via pre-compiled binaries
+RUN curl -L -o /tmp/julia.tar.gz https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-1.10.4-linux-x86_64.tar.gz \
+    && mkdir -p /opt/julia \
+    && tar zxf /tmp/julia.tar.gz -C /opt/julia --strip-components=1 \
+    && ln -s /opt/julia/bin/julia /usr/local/bin/julia \
+    && rm /tmp/julia.tar.gz
 
 # 2. Install PowerShell (pwsh)
 RUN curl -L -o /tmp/powershell.tar.gz https://github.com/PowerShell/PowerShell/releases/download/v7.4.2/powershell-7.4.2-linux-x64.tar.gz \
