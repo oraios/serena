@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from types import SimpleNamespace
 
 from serena.dashboard import SerenaDashboardAPI
@@ -15,6 +16,9 @@ class _DummyMemoryLogHandler:
 class _DummyAgent:
     def __init__(self, project: SimpleNamespace | None) -> None:
         self._project = project
+
+    def register_config_changed_callback(self, callback: Callable[[], None]) -> None:
+        pass
 
     def execute_task(self, func, *, logged: bool | None = None, name: str | None = None):
         del logged, name

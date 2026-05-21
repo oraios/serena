@@ -207,7 +207,12 @@ class SerenaDashboardAPI:
         self._news_ready = threading.Event()
         self._setup_routes()
         self._read_news = ReadNews.load()
-        # Fetch remote news in background on startup (non-blocking)
+
+        # register callback for config changes
+        self._current_config_overview: dict[str, Any] | None = None
+        self._agent.register_config_changed_callback(self._on_agent_config_changed)
+
+        # fetch remote news in background on startup (non-blocking)
         threading.Thread(target=self._fetch_news, daemon=True).start()
 
     @property
@@ -272,8 +277,10 @@ class SerenaDashboardAPI:
 
         @self._app.route("/get_config_overview", methods=["GET"])
         def get_config_overview() -> dict[str, Any]:
-            result = self._agent.execute_task(self._get_config_overview, logged=False)
-            return result.model_dump()
+            result = self._current_config_overview
+            if result is None:
+                raise ValueError("Config overview not yet available")
+            return result
 
         @self._app.route("/shutdown", methods=["PUT"])
         def shutdown() -> dict[str, str]:
@@ -468,7 +475,7 @@ class SerenaDashboardAPI:
         if self._tool_usage_stats is not None:
             self._tool_usage_stats.clear()
 
-    def _get_config_overview(self) -> ResponseConfigOverview:
+    def _compute_config_overview(self) -> ResponseConfigOverview:
         from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
         from serena.tools.tools_base import Tool
 
@@ -595,6 +602,9 @@ class SerenaDashboardAPI:
             current_client=Tool.get_last_tool_call_client_str(),
             serena_version=self._agent.version,
         )
+
+    def _on_agent_config_changed(self) -> None:
+        self._current_config_overview = self._compute_config_overview().model_dump()
 
     def _get_available_languages(self) -> ResponseAvailableLanguages:
         from solidlsp.ls_config import Language

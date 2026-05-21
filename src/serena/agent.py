@@ -544,6 +544,7 @@ class SerenaAgent:
         self._project_prompt_status = ProjectPromptProvisionStatus()
         self._session_mode_selection_definition = modes
         self.version = serena_version()
+        self._config_changed_callbacks: list[Callable[[], None]] = []
 
         # obtain serena configuration using the decoupled factory function
         self.serena_config = serena_config or SerenaConfig.from_config_file()
@@ -633,7 +634,7 @@ class SerenaAgent:
 
         # create executor for starting the language server and running tools in another thread
         # This executor is used to achieve linear task execution
-        self._task_executor = TaskExecutor("SerenaAgentTaskExecutor")
+        self._task_executor = TaskExecutor("SerenaAgentTaskExecutor", self._task_completion_callback)
 
         # Initialize the prompt factory
         self.prompt_factory = SerenaPromptFactory()
@@ -659,13 +660,22 @@ class SerenaAgent:
         self._active_tools: AvailableTools
         self._update_active_tools()
 
-        # start the dashboard (web frontend), registering its log handler
-        # should be the last thing to happen in the initialization since the dashboard
-        # may access various parts of the agent
+        # create the dashboard backend (if enabled), which will register callback.
+        dashboard_api: SerenaDashboardAPI | None = None
         if self.serena_config.web_dashboard:
-            self._dashboard_thread, port = SerenaDashboardAPI(
-                get_memory_log_handler(), tool_names, agent=self, tool_usage_stats=self._tool_usage_stats
-            ).run_in_thread(host=self.serena_config.web_dashboard_listen_address)
+            dashboard_api = SerenaDashboardAPI(get_memory_log_handler(), tool_names, agent=self, tool_usage_stats=self._tool_usage_stats)
+
+        # propagate the initial config/state to listeners, particularly to the dashboard API.
+        # Note: The only ongoing task can be the LS initialisation, which does not change the config
+        # This is executed before starting the dashboard thread to ensure that the dashboard
+        # has the correct initial state before can requests come in.
+        self._on_config_changed()
+
+        # start the dashboard backend thread and the dashboard frontend manager (if enabled).
+        # This should be the last thing to happen in the initialization since the dashboard
+        # may access various parts of the agent
+        if dashboard_api:
+            dashboard_thread, port = dashboard_api.run_in_thread(host=self.serena_config.web_dashboard_listen_address)
             self._dashboard_manager = DashboardManager(
                 port,
                 self.serena_config.web_dashboard_listen_address,
@@ -1071,6 +1081,27 @@ class SerenaAgent:
         :return: the result of the task execution
         """
         return self._task_executor.execute_task(task, name=name, logged=logged, timeout=timeout)
+
+    def _task_completion_callback(self) -> None:
+        """
+        Called after every task completion. Tasks potentially change the agent's state/configuration.
+        """
+        self._on_config_changed()
+
+    def _on_config_changed(self) -> None:
+        for callback in self._config_changed_callbacks:
+            try:
+                callback()
+            except Exception as e:
+                log.error(f"Error in config changed callback {callback}: {e}", exc_info=e)
+
+    def register_config_changed_callback(self, callback: Callable[[], None]) -> None:
+        """
+        Registers a callback to be called when the agent configuration has (potentially) changed.
+
+        :param callback: the callback function to register
+        """
+        self._config_changed_callbacks.append(callback)
 
     def is_using_language_server(self) -> bool:
         """

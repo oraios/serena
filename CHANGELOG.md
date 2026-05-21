@@ -2,6 +2,10 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Dashboard:
+  - Decouple configuration computation from the agent's task queue by introducing events for agent config/status updates.
+    This allows the dashboard to display the configuration while the project provided at startup is still initialising. #1064
+    
 # v1.5.1 (2026-05-18)
 
 * General:
