@@ -944,6 +944,7 @@ class Dashboard {
 
     displayActiveExecutionsQueue(executions) {
         if (!executions || executions.length === 0) {
+            this.$activeExecutionQueueDisplay.html('<div class="loaded">No executions queued.</div>');
             return;
         }
 

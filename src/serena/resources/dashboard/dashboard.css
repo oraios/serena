@@ -1012,6 +1012,11 @@ code, pre, kbd, samp,
     font-style: italic;
 }
 
+.loaded {
+    text-align: center;
+    color: var(--text-muted);
+}
+
 .error-message {
     color: var(--log-error);
     text-align: center;
