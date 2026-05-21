@@ -54,12 +54,13 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
 # Adding Ruby, Julia, Scala (needs Java), Haxe, PowerShell, .NET (C#), and Nix
 # ==============================================================================
 
-# 1. Install Ruby, Julia, Java (JRE for Scala), Scala, and Haxe via apt
+# 1. Install Ruby, Java (JRE for Scala), Scala, Haxe, and Nix via apt
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ruby-full \
     default-jre \
     scala \
     haxe \
+    nix-bin \
     && rm -rf /var/lib/apt/lists/*
 
 # 1.5 Install Julia officially via pre-compiled binaries
@@ -82,11 +83,6 @@ RUN curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin -c Current 
     && ln -s /root/.dotnet/dotnet /usr/bin/dotnet
 ENV DOTNET_ROOT=/root/.dotnet
 ENV PATH="${PATH}:${DOTNET_ROOT}"
-
-# 4. Install Nix (Single-user mode without daemon)
-RUN groupadd -r nixbld \
-    && bash -c "USER=root sh <(curl -L https://nixos.org/nix/install) --no-daemon"
-ENV PATH="/root/.nix-profile/bin:${PATH}"
 
 # ==============================================================================
 # END MAXIMAL ADDITIONS
