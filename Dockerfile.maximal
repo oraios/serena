@@ -84,7 +84,8 @@ ENV DOTNET_ROOT=/root/.dotnet
 ENV PATH="${PATH}:${DOTNET_ROOT}"
 
 # 4. Install Nix (Single-user mode without daemon)
-RUN bash -c "sh <(curl -L https://nixos.org/nix/install) --no-daemon"
+RUN groupadd -r nixbld \
+    && bash -c "USER=root sh <(curl -L https://nixos.org/nix/install) --no-daemon"
 ENV PATH="/root/.nix-profile/bin:${PATH}"
 
 # ==============================================================================
