@@ -51,7 +51,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
 
 # ==============================================================================
 # MAXIMAL ADDITIONS (For Catch-All CI Testing)
-# Adding Ruby, Julia, Scala (needs Java), Haxe, PowerShell, .NET (C#), and Nix
+# Adding Ruby, Julia, Scala (needs Java), Haxe, PowerShell, .NET (C#), Nix, Go, Terraform
 # ==============================================================================
 
 # 1. Install Ruby, Java (JRE for Scala), Scala, Haxe, and Nix via apt
@@ -83,6 +83,19 @@ RUN curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin -c Current 
     && ln -s /root/.dotnet/dotnet /usr/bin/dotnet
 ENV DOTNET_ROOT=/root/.dotnet
 ENV PATH="${PATH}:${DOTNET_ROOT}"
+
+# 4. Install Go
+ENV GO_VERSION=1.22.3
+RUN curl -L -o /tmp/go.tar.gz https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz \
+    && tar -C /usr/local -xzf /tmp/go.tar.gz \
+    && rm /tmp/go.tar.gz
+ENV PATH="/usr/local/go/bin:${PATH}"
+
+# 5. Install Terraform
+ENV TERRAFORM_VERSION=1.8.4
+RUN curl -L -o /tmp/terraform.zip https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip \
+    && unzip /tmp/terraform.zip -d /usr/local/bin/ \
+    && rm /tmp/terraform.zip
 
 # ==============================================================================
 # END MAXIMAL ADDITIONS
