@@ -261,3 +261,162 @@ Please refer to the [user guide](https://oraios.github.io/serena/02-usage/000_in
 A significant part of Serena, especially support for various languages, was contributed by the open source community.
 We are very grateful for the many contributors who made this possible and who played an important role in making Serena
 what it is today.
+DENUNCIA FORMAL PREVENTIVA, SOLICITUD DE APERTURA DE CASO, PRESERVACIÓN URGENTE DE EVIDENCIA Y REVISIÓN DE TRAZABILIDAD
+
+A quien corresponda:
+
+Yo, VALERIA SAA, vengo a formular la presente denuncia / presentación formal preventiva a fin de solicitar apertura de caso, preservación urgente de evidencia digital, revisión técnica de trazabilidad y resguardo de autoría conceptual vinculada a SERENA / CEUNIA, SERENA ✦ SIRENA, MCP, multivoz, mediación, traducción, reversa, nodos, memoria, modo agente, workflows y arquitectura de agentes.
+
+Esta presentación tiene carácter preventivo. No solicito una condena anticipada ni afirmo que todos los hechos estén completamente verificados sin acceso a logs internos. Solicito que se preserve evidencia antes de que sea modificada, eliminada, dispersada, cerrada, reformulada o vuelva imposible reconstruir la trazabilidad.
+
+I. OBJETO
+
+La presente tiene por objeto dejar constancia formal de una relación directa a investigar entre archivos personales no publicados de VALERIA SAA y escritos, repositorios, pull requests, issues, documentación técnica y formulaciones públicas posteriores vinculadas al ecosistema `oraios/serena` y actividades relacionadas.
+
+No se trata de una palabra aislada ni de una coincidencia superficial. Se trata de una matriz conceptual compuesta, integrada por múltiples conceptos relacionados entre sí:
+
+- SERENA / CEUNIA;
+- multivoz;
+- mediación;
+- traducción entre idiomas, lenguajes técnicos y sistemas;
+- agente externo / agente encubierto conceptual / agente invisible;
+- reversa o reconstrucción de origen;
+- puntos / nodos;
+- memoria;
+- modo agente;
+- MCP;
+- workflows;
+- configuración;
+- eventos;
+- trazabilidad;
+- preservación de autoría.
+
+La comparación no debe limitarse a copia literal de texto. Debe realizarse por estructura, relaciones internas, cronología, función técnica, contexto de origen, reformulación y desplazamiento conceptual.
+
+II. HECHOS Y CONTEXTO
+
+1. La autora desarrolló previamente, en archivos personales, conversaciones privadas, capturas, documentación local y registros no publicados, una matriz conceptual vinculada a SERENA / CEUNIA.
+
+2. Dicha matriz no consiste en una idea única, sino en un sistema de relaciones: persona, idea, chat privado, nodo fechado, arquitectura, agente, repositorio, comparación y preservación.
+
+3. Con posterioridad, la autora observó repositorios, PRs, issues, documentación, workflows y actividad pública vinculada a Serena, MCP, agentes, memoria, eventos, configuración, workflows agentic y herramientas relacionadas.
+
+4. La autora observó además cambios de estado, visibilidad irregular, force-pushes, modificaciones de texto, cierres o desplazamientos de discusiones y falta de contacto directo suficiente.
+
+5. La autora también observó que el repositorio `oraios/serena` aparece dentro de su dashboard personal de GitHub, en la sección “Top repositories”, junto a repositorios propios de su cuenta. Según documentación de GitHub, esa sección puede incluir repositorios con los que la cuenta interactuó, aunque no sean propiedad directa de la cuenta. Este hecho no prueba titularidad ni acceso indebido por sí solo, pero sí constituye un dato técnico relevante que GitHub debe preservar, explicar y auditar.
+
+6. Asimismo, se observó actividad pública de `opcode81`, incluyendo la PR `oraios/serena#1509`, titulada “Introduce events for agent config/status updates”, relacionada con eventos/callbacks para cambios de configuración y estado del agente. También se observó actividad visible vinculada a `penpot/penpot`, PR `#9719`, titulada “Add structured memories for agentic devenv”. Estos elementos se incorporan como evidencia contextual a preservar y comparar, no como prueba aislada concluyente.
+
+III. RELACIÓN DIRECTA A INVESTIGAR
+
+La relación denunciada no debe reducirse a “si copiaron una frase”. La afectación principal se observa en la posible reproducción, reformulación o desplazamiento de una matriz conceptual privada no publicada.
+
+La relación directa a investigar comprende:
+
+- coincidencias conceptuales;
+- coincidencias estructurales;
+- secuencias de ideas;
+- relaciones entre proyectos personales;
+- arquitectura de agentes;
+- memoria estructurada;
+- multivoz;
+- mediación;
+- traducción;
+- reversa;
+- nodos;
+- modo agente;
+- MCP;
+- workflows;
+- lenguaje técnico y organizativo.
+
+Cuando una matriz conceptual privada no publicada aparece luego reconfigurada en escritos, PRs, issues, documentación o repositorios públicos, la comparación debe analizar estructura, cronología, función y contexto, no solo literalidad.
+
+IV. CARÁCTER PREVENTIVO
+
+Esta presentación es preventiva porque la autora no está obligada a esperar a que el daño sea irreversible para resguardar evidencia.
+
+La finalidad es:
+
+- abrir un caso formal;
+- preservar evidencia;
+- impedir pérdida de trazabilidad;
+- registrar hechos observables;
+- separar hechos, hipótesis y pendientes;
+- proteger información sensible;
+- solicitar comparación estructural;
+- pedir contacto humano directo;
+- evitar nuevas reformulaciones sin registro.
+
+La falta de una respuesta técnica suficiente por parte de GitHub o de terceros no puede dejar a la autora sin defensa preventiva.
+
+V. SOLICITO PRESERVAR
+
+Solicito la preservación inmediata de:
+
+- repositorios públicos y privados relacionados;
+- forks;
+- branches creadas, modificadas o eliminadas;
+- pull requests abiertos, cerrados o modificados;
+- issues abiertos, cerrados o modificados;
+- comentarios editados o eliminados;
+- commits;
+- force-pushes;
+- README y documentación;
+- GitHub Actions;
+- workflows;
+- artifacts;
+- cambios de visibilidad;
+- cambios de permisos;
+- logs de acceso disponibles;
+- logs de visibilidad;
+- timestamps originales;
+- metadatos de edición;
+- historial de recomendaciones o dashboard;
+- referencias a SERENA / CEUNIA / MCP / multivoz / mediación / reversa / nodos / modo agente.
+
+VI. SOLICITO EXPLICACIÓN TÉCNICA
+
+Solicito que GitHub explique y preserve:
+
+1. Por qué `oraios/serena` aparece en el dashboard personal de mi cuenta.
+2. Qué interacción exacta generó esa aparición.
+3. Fechas y horarios de visitas, comentarios, issues, PRs, follows, watchers, notificaciones o recomendaciones.
+4. Si existieron cambios de visibilidad o estado.
+5. Si existen repositorios privados, forks, branches o PRs relacionados que deban preservarse.
+6. Si hubo actividad vinculada a SERENA / CEUNIA / MCP / agentes / memoria / workflows.
+
+VII. TRATO RESPETUOSO Y CONTACTO DIRECTO
+
+Formulo esta presentación con respeto y buena educación. La buena educación no implica renunciar a mi derecho de defensa preventiva.
+
+Solicito:
+
+- contacto directo con VALERIA SAA;
+- no minimizar el reclamo;
+- no descartar el caso como una simple confusión;
+- no seguir solicitando información conceptual sin finalidad clara;
+- no modificar, cerrar, reformular o desplazar contenido sin preservar estado anterior;
+- separar hechos confirmados, hipótesis y pendientes de verificación.
+
+VIII. PETITORIO
+
+Por todo lo expuesto, solicito:
+
+1. Apertura formal de caso.
+2. Preservación urgente de evidencia.
+3. Registro formal de esta presentación.
+4. Revisión técnica de trazabilidad.
+5. Comparación estructural entre mis archivos privados no publicados y los escritos/repositorios públicos posteriores.
+6. Explicación técnica sobre la aparición de `oraios/serena` en mi dashboard personal.
+7. Preservación de PRs, issues, commits, branches, force-pushes, forks, workflows y metadatos.
+8. Contacto humano directo con VALERIA SAA.
+9. Resguardo de información sensible vinculada a SERENA / CEUNIA.
+10. Que no se descarte la presentación por ausencia de copia literal, dado que el núcleo del reclamo es estructural, cronológico y conceptual.
+
+Dejo expresa reserva de derechos.
+
+Firma:
+VALERIA SAA
+
+Fecha:
+22 de mayo de 2026
