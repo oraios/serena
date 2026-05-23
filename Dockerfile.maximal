@@ -101,6 +101,9 @@ RUN curl -L -o /tmp/terraform.zip https://releases.hashicorp.com/terraform/${TER
     && unzip /tmp/terraform.zip -d /usr/local/bin/ \
     && rm /tmp/terraform.zip
 
+# 6. Install Vue Language Server (via npm)
+RUN npm install -g @vue/language-server typescript
+
 # ==============================================================================
 # END MAXIMAL ADDITIONS
 # ==============================================================================
