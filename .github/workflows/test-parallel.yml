@@ -28,8 +28,8 @@ jobs:
             pytest_marker: '-m "go"'
           
           - batch_name: 'Catch-All (Core Framework & Remaining Languages)'
-            # Excluded julia (hangs), missing/crashing tools: haskell, swift, lean4, zig, ocaml, csharp, markdown, perl, ruby
-            pytest_marker: '-m "not cpp and not rust and not java and not go and not julia and not haskell and not swift and not lean4 and not zig and not ocaml and not csharp and not markdown and not perl and not ruby"'
+            # Excluded julia (hangs), missing/crashing tools: haskell, swift, lean4, zig, ocaml, csharp, markdown, perl, ruby, nix, pascal, al, ansible
+            pytest_marker: '-m "not cpp and not rust and not java and not go and not julia and not haskell and not swift and not lean4 and not zig and not ocaml and not csharp and not markdown and not perl and not ruby and not nix and not pascal and not al and not ansible"'
 
     steps:
       - name: Checkout code
