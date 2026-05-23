@@ -79,7 +79,7 @@ RUN curl -L -o /tmp/powershell.tar.gz https://github.com/PowerShell/PowerShell/r
     && rm /tmp/powershell.tar.gz
 
 # 3. Install .NET SDK (for C#)
-RUN curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin -c Current \
+RUN curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin -c 10.0 \
     && ln -s /root/.dotnet/dotnet /usr/bin/dotnet
 ENV DOTNET_ROOT=/root/.dotnet
 ENV PATH="${PATH}:${DOTNET_ROOT}"
@@ -90,6 +90,10 @@ RUN curl -L -o /tmp/go.tar.gz https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.
     && tar -C /usr/local -xzf /tmp/go.tar.gz \
     && rm /tmp/go.tar.gz
 ENV PATH="/usr/local/go/bin:${PATH}"
+
+# Install gopls (Go Language Server)
+RUN go install golang.org/x/tools/gopls@latest
+ENV PATH="/root/go/bin:${PATH}"
 
 # 5. Install Terraform
 ENV TERRAFORM_VERSION=1.8.4
