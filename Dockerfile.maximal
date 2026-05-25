@@ -2,12 +2,11 @@
 FROM python:3.11-slim AS base
 SHELL ["/bin/bash", "-c"]
 
-# Set environment variables to make Python print directly to the terminal and avoid .pyc files.
+# Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Install system dependencies required for package manager and build tools.
-# sudo, wget, zip needed for some assistants, like junie
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     build-essential \
@@ -19,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Install pipx.
+# Install pipx
 RUN python3 -m pip install --no-cache-dir pipx \
     && pipx ensurepath
 
@@ -27,7 +26,6 @@ RUN python3 -m pip install --no-cache-dir pipx \
 ENV NVM_VERSION=0.40.3
 ENV NODE_VERSION=22.18.0
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v${NVM_VERSION}/install.sh | bash
-# standard location
 ENV NVM_DIR=/root/.nvm
 RUN . "$NVM_DIR/nvm.sh" && nvm install ${NODE_VERSION}
 RUN . "$NVM_DIR/nvm.sh" && nvm use v${NODE_VERSION}
@@ -40,7 +38,7 @@ ENV PATH="${PATH}:/root/.local/bin"
 # Install the latest version of uv
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Install Rust and rustup for rust-analyzer support (minimal profile)
+# Install Rust and rustup (minimal profile)
 ENV RUSTUP_HOME=/usr/local/rustup
 ENV CARGO_HOME=/usr/local/cargo
 ENV PATH="${CARGO_HOME}/bin:${PATH}"
@@ -51,19 +49,20 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
 
 # ==============================================================================
 # MAXIMAL ADDITIONS (For Catch-All CI Testing)
-# Adding Ruby, Julia, Scala (needs Java), Haxe, PowerShell, .NET (C#), Nix, Go, Terraform
 # ==============================================================================
 
-# 1. Install Ruby, Java (JRE for Scala), Scala, Haxe, and Nix via apt
+# 1. Install Ruby, Java (JDK/JRE), Scala, Haxe, Nix, and Clangd via apt
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ruby-full \
     default-jre \
+    default-jdk \
     scala \
     haxe \
     nix-bin \
+    clangd \
     && rm -rf /var/lib/apt/lists/*
 
-# 1.5 Install Julia officially via pre-compiled binaries
+# 1.5 Install Julia officially
 RUN curl -L -o /tmp/julia.tar.gz https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-1.10.4-linux-x86_64.tar.gz \
     && mkdir -p /opt/julia \
     && tar zxf /tmp/julia.tar.gz -C /opt/julia --strip-components=1 \
@@ -84,16 +83,14 @@ RUN curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin -c 10.0 \
 ENV DOTNET_ROOT=/root/.dotnet
 ENV PATH="${PATH}:${DOTNET_ROOT}"
 
-# 4. Install Go
+# 4. Install Go and gopls (Globally exposed)
 ENV GO_VERSION=1.22.3
 RUN curl -L -o /tmp/go.tar.gz https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz \
     && tar -C /usr/local -xzf /tmp/go.tar.gz \
     && rm /tmp/go.tar.gz
 ENV PATH="/usr/local/go/bin:${PATH}"
-
-# Install gopls (Go Language Server)
-RUN go install golang.org/x/tools/gopls@latest
-ENV PATH="/root/go/bin:${PATH}"
+RUN go install golang.org/x/tools/gopls@latest \
+    && mv /root/go/bin/gopls /usr/local/bin/gopls
 
 # 5. Install Terraform
 ENV TERRAFORM_VERSION=1.8.4
@@ -101,20 +98,28 @@ RUN curl -L -o /tmp/terraform.zip https://releases.hashicorp.com/terraform/${TER
     && unzip /tmp/terraform.zip -d /usr/local/bin/ \
     && rm /tmp/terraform.zip
 
-# 6. Install Vue Language Server (via npm)
-RUN npm install -g @vue/language-server typescript
+# 6. Install JS Ecosystem Language Servers (Typescript, Vue, Bash, HTML/CSS)
+RUN npm install -g \
+    typescript \
+    typescript-language-server \
+    @vue/language-server \
+    bash-language-server \
+    vscode-langservers-extracted
+
+# 7. Install Java Language Server (jdtls) wrapper
+RUN wget https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz -O jdtls.tar.gz \
+    && mkdir -p /opt/jdtls \
+    && tar -xzf jdtls.tar.gz -C /opt/jdtls \
+    && rm jdtls.tar.gz \
+    && printf '#!/bin/bash\njava -Declipse.application=org.eclipse.jdt.ls.core.id1 -Dosgi.bundles.defaultStartLevel=4 -Declipse.product=org.eclipse.jdt.ls.core.product -noverify -Xmx1G -jar /opt/jdtls/plugins/org.eclipse.equinox.launcher_*.jar -configuration /opt/jdtls/config_linux -data /tmp/workspace "$@"\n' > /usr/local/bin/jdtls \
+    && chmod +x /usr/local/bin/jdtls
 
 # ==============================================================================
 # END MAXIMAL ADDITIONS
 # ==============================================================================
 
-# Set the working directory
 WORKDIR /workspaces/serena
-
-# Copy all files for development
 COPY . /workspaces/serena/
-
-# Install sed
 RUN apt-get update && apt-get install -y sed
 
 # Create Serena configuration
@@ -131,5 +136,4 @@ RUN . .venv/bin/activate
 RUN uv pip install -r pyproject.toml -e .
 ENV PATH="/workspaces/serena/.venv/bin:${PATH}"
 
-# Entrypoint to ensure environment is activated
 ENTRYPOINT ["/bin/bash", "-c", "source .venv/bin/activate && $0 $@"]
