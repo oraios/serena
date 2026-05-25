@@ -19,18 +19,23 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - batch_name: 'Heavy Toolchains (C++, Rust, Java)'
+          - batch_name: "Heavy Toolchains (C++, Rust, Java)"
             pytest_marker: '-m "cpp or rust or java"'
-          
-          - batch_name: 'Medium Toolchains (Go)'
+
+          - batch_name: "Medium Toolchains (Go)"
             pytest_marker: '-m "go"'
-          
-          - batch_name: 'Catch-All (Core Framework & Remaining Languages)'
-            # Clean filtering: selective testing of installed servers while isolating non-existent tools
+
+          - batch_name: "Catch-All (Core Framework & Remaining Languages)"
             pytest_marker: '-m "not cpp and not rust and not java and not go and not elm and not r and not rego and not scala"'
 
     name: ${{ matrix.batch_name }}
-    
+
+    env:
+      # Avoid uv hardlink warnings and reduce overhead in container FS setups
+      UV_LINK_MODE: copy
+      # uv cache in a stable location:
+      # UV_CACHE_DIR: ~/.cache/uv
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -47,17 +52,21 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
-          cache-dependency-glob: pyproject.toml
+          cache-dependency-glob: |
+            pyproject.toml
 
-      - name: Setup Virtual Environment & Install Dependencies
+      - name: Create venv + install deps (pyproject)
         run: |
-          # Create a pristine environment inside the mounted runtime path
           uv venv
-          # Install using modern pyproject.toml configuration without relying on legacy files
+          # Install your package editable + ensure test deps exist
           uv pip install -e . pytest pytest-asyncio
+
+          # Sanity checks (helps debugging when something changes)
+          .venv/bin/python -V
+          .venv/bin/python -m pip -V
+          .venv/bin/python -m pytest --version
 
       - name: Run Pytest Batch
         run: |
-          # Enforce absolute path execution using the freshly built environment setup
-          source .venv/bin/activate
-          python3 -m pytest ${{ matrix.pytest_marker }}
+          # Do NOT use `source` (bash-only). Do NOT rely on activation.
+          .venv/bin/python -m pytest ${{ matrix.pytest_marker }}
