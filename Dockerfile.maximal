@@ -7,7 +7,12 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
 # Install system dependencies required for package manager and build tools.
+# IMPORTANT additions:
+# - python3-venv: makes venv/ensurepip reliable 
+# - bash, ca-certificates: better compatibility in CI containers
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    ca-certificates \
     curl \
     build-essential \
     git \
@@ -16,10 +21,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     zip \
     unzip \
-    ca-certificates \
+    sed \
+    python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
-# Install pipx 
+# Install pipx
 RUN python3 -m pip install --no-cache-dir pipx \
     && pipx ensurepath
 
@@ -126,11 +132,7 @@ WORKDIR /workspaces/serena
 # Copy all files for development
 COPY . /workspaces/serena/
 
-# sed 
-RUN apt-get update && apt-get install -y --no-install-recommends sed \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create Serena configuration 
+# Create Serena configuration
 ENV SERENA_HOME=/workspaces/serena/config
 RUN mkdir -p "$SERENA_HOME" \
  && cp src/serena/resources/serena_config.template.yml "$SERENA_HOME/serena_config.yml" \

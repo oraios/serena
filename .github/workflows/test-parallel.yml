@@ -33,8 +33,6 @@ jobs:
     env:
       # Avoid uv hardlink warnings and reduce overhead in container FS setups
       UV_LINK_MODE: copy
-      # uv cache in a stable location:
-      # UV_CACHE_DIR: ~/.cache/uv
 
     steps:
       - name: Checkout code
@@ -55,18 +53,27 @@ jobs:
           cache-dependency-glob: |
             pyproject.toml
 
-      - name: Create venv + install deps (pyproject)
+      - name: Create venv + bootstrap pip + install deps
         run: |
-          uv venv
-          # Install your package editable + ensure test deps exist
-          uv pip install -e . pytest pytest-asyncio
+          set -euxo pipefail
 
-          # Sanity checks (helps debugging when something changes)
+          # Create venv
+          uv venv .venv
+
+          # CRITICAL: ensure pip exists inside the venv (your current failure)
+          .venv/bin/python -m ensurepip --upgrade || true
+          .venv/bin/python -m pip install -U pip setuptools wheel
+
+          # Install project + dev deps (pytest is already in your pyproject optional deps)
+          # If you don't want all dev deps, replace ".[dev]" with "."
+          uv pip install -e ".[dev]"
+
+          # Sanity checks
           .venv/bin/python -V
           .venv/bin/python -m pip -V
           .venv/bin/python -m pytest --version
 
       - name: Run Pytest Batch
         run: |
-          # Do NOT use `source` (bash-only). Do NOT rely on activation.
+          set -euxo pipefail
           .venv/bin/python -m pytest ${{ matrix.pytest_marker }}
