@@ -2,11 +2,11 @@
 FROM python:3.11-slim AS base
 SHELL ["/bin/bash", "-c"]
 
-# Set environment variables
+# Set environment variables to make Python print directly to the terminal and avoid .pyc files.
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Install system dependencies
+# Install system dependencies required for package manager and build tools.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     build-essential \
@@ -18,11 +18,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Install pipx
+# Install pipx.
 RUN python3 -m pip install --no-cache-dir pipx \
     && pipx ensurepath
 
-# Install nodejs
+# Install nodejs via NVM
 ENV NVM_VERSION=0.40.3
 ENV NODE_VERSION=22.18.0
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v${NVM_VERSION}/install.sh | bash
@@ -38,7 +38,7 @@ ENV PATH="${PATH}:/root/.local/bin"
 # Install the latest version of uv
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Install Rust and rustup (minimal profile)
+# Install Rust and rustup for rust-analyzer support (minimal profile)
 ENV RUSTUP_HOME=/usr/local/rustup
 ENV CARGO_HOME=/usr/local/cargo
 ENV PATH="${CARGO_HOME}/bin:${PATH}"
@@ -49,9 +49,10 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
 
 # ==============================================================================
 # MAXIMAL ADDITIONS (For Catch-All CI Testing)
+# Adding Ruby, Julia, Scala (needs Java), Haxe, PowerShell, .NET (C#), Nix, Go, Terraform
 # ==============================================================================
 
-# 1. Install Ruby, Java (JDK/JRE), Scala, Haxe, Nix, and Clangd via apt
+# 1. Install Ruby, Java (JDK & JRE), Scala, Haxe, Nix, and Clangd (C++) via apt
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ruby-full \
     default-jre \
@@ -62,7 +63,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     clangd \
     && rm -rf /var/lib/apt/lists/*
 
-# 1.5 Install Julia officially
+# 1.5 Install Julia officially via pre-compiled binaries
 RUN curl -L -o /tmp/julia.tar.gz https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-1.10.4-linux-x86_64.tar.gz \
     && mkdir -p /opt/julia \
     && tar zxf /tmp/julia.tar.gz -C /opt/julia --strip-components=1 \
@@ -83,7 +84,7 @@ RUN curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin -c 10.0 \
 ENV DOTNET_ROOT=/root/.dotnet
 ENV PATH="${PATH}:${DOTNET_ROOT}"
 
-# 4. Install Go and gopls (Globally exposed)
+# 4. Install Go and gopls (Go Language Server) globally in system paths
 ENV GO_VERSION=1.22.3
 RUN curl -L -o /tmp/go.tar.gz https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz \
     && tar -C /usr/local -xzf /tmp/go.tar.gz \
@@ -106,7 +107,7 @@ RUN npm install -g \
     bash-language-server \
     vscode-langservers-extracted
 
-# 7. Install Java Language Server (jdtls) wrapper
+# 7. Install Java Language Server (jdtls) snapshot with global system binary wrapper
 RUN wget https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz -O jdtls.tar.gz \
     && mkdir -p /opt/jdtls \
     && tar -xzf jdtls.tar.gz -C /opt/jdtls \
@@ -118,8 +119,13 @@ RUN wget https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest
 # END MAXIMAL ADDITIONS
 # ==============================================================================
 
+# Set the working directory
 WORKDIR /workspaces/serena
+
+# Copy all files for development
 COPY . /workspaces/serena/
+
+# Install sed
 RUN apt-get update && apt-get install -y sed
 
 # Create Serena configuration
@@ -130,10 +136,5 @@ RUN sed -i 's/^gui_log_window: .*/gui_log_window: False/' $SERENA_HOME/serena_co
 RUN sed -i 's/^web_dashboard_listen_address: .*/web_dashboard_listen_address: 0.0.0.0/' $SERENA_HOME/serena_config.yml
 RUN sed -i 's/^web_dashboard_open_on_launch: .*/web_dashboard_open_on_launch: False/' $SERENA_HOME/serena_config.yml
 
-# Create virtual environment and install dependencies
-RUN uv venv
-RUN . .venv/bin/activate
-RUN uv pip install -r pyproject.toml -e .
-ENV PATH="/workspaces/serena/.venv/bin:${PATH}"
-
-ENTRYPOINT ["/bin/bash", "-c", "source .venv/bin/activate && $0 $@"]
+# Clean container initialization point
+CMD ["/bin/bash"]

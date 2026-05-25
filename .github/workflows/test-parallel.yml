@@ -26,7 +26,7 @@ jobs:
             pytest_marker: '-m "go"'
           
           - batch_name: 'Catch-All (Core Framework & Remaining Languages)'
-            # Skipping heavy AND the 4 explicitly missing/crashing tools (Go, Elm, R, Rego, Scala) to keep this batch fast and focused on core framework tests
+            # Clean filtering: selective testing of installed servers while isolating non-existent tools
             pytest_marker: '-m "not cpp and not rust and not java and not go and not elm and not r and not rego and not scala"'
 
     name: ${{ matrix.batch_name }}
@@ -43,12 +43,21 @@ jobs:
           restore-keys: |
             ls-cache-${{ runner.os }}-
 
-      - name: Sync dependencies & Force Pytest
-        # GitHub Actions bypasses .venv, so we force-install pytest system-wide here
+      - name: Setup uv (Fast Python Package Manager)
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: pyproject.toml
+
+      - name: Setup Virtual Environment & Install Dependencies
         run: |
-          python3 -m pip install uv || true
-          uv pip install --system -r requirements.txt || true
-          uv pip install --system pytest pytest-asyncio || python3 -m pip install pytest
+          # Create a pristine environment inside the mounted runtime path
+          uv venv
+          # Install using modern pyproject.toml configuration without relying on legacy files
+          uv pip install -e . pytest pytest-asyncio
 
       - name: Run Pytest Batch
-        run: python3 -m pytest ${{ matrix.pytest_marker }}
+        run: |
+          # Enforce absolute path execution using the freshly built environment setup
+          source .venv/bin/activate
+          python3 -m pytest ${{ matrix.pytest_marker }}
