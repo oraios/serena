@@ -8,7 +8,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 # Install system dependencies required for package manager and build tools.
 # IMPORTANT additions:
-# - python3-venv: makes venv/ensurepip reliable 
+# - python3-venv: makes venv/ensurepip reliable
 # - bash, ca-certificates: better compatibility in CI containers
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
@@ -69,6 +69,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nix-bin \
     clangd \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Ruby language server (needed for ruby tests)
+RUN gem install ruby-lsp
 
 # 1.5 Install Julia officially via pre-compiled binaries
 RUN curl -L -o /tmp/julia.tar.gz https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-1.10.4-linux-x86_64.tar.gz \
