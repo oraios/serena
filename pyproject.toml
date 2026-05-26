@@ -52,7 +52,7 @@ dependencies = [
   "filelock==3.25.2",
   "cryptography==46.0.7",
   "regex==2026.2.28",
-  "pythonnet==3.1.0-rc0 ; sys_platform == 'win32'",
+  "pythonnet==3.1.0 ; sys_platform == 'win32'",
 ]
 
 
@@ -64,6 +64,7 @@ explicit = true
 
 [project.scripts]
 serena = "serena.cli:top_level"
+serena-agent = "serena.cli:top_level"
 serena-hooks = "serena.hooks:hook_commands"
 
 [project.license]
