@@ -4,6 +4,8 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * General:
   - Not existing paths return `False` on is ignored checks (instead of raising an error)
+  - Add `serena-agent` CLI command so that `uvx serena-agent` can be used as entrypoint.
+  - Fortls and pyright are now installed on the fly instead of being bundled in the serena-agent package.
 
 # v1.5.1 (2026-05-18)
 
