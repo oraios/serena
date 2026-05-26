@@ -226,7 +226,7 @@ To achieve this, Serena offers multiple levels of (composable) configuration:
 **Install Serena**. Serena is installed via uv as follows:
 
 ```bash
-uv tool install -p 3.13 serena-agent@latest --prerelease=allow
+uv tool install -p 3.13 serena-agent
 ```
 
 After successful installation, the command `serena` should be available in your shell.
