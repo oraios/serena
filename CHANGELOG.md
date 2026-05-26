@@ -2,6 +2,9 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Not existing paths return `False` on is ignored checks (instead of raising an error)
+
 # v1.5.1 (2026-05-18)
 
 * General:

@@ -102,6 +102,31 @@ class TestGlobalIgnoredPaths:
         assert project.is_ignored_path(str(self.project_path / "debug.log"))
         assert not project.is_ignored_path(str(self.project_path / "main.py"))
 
+    def test_nonexistent_path_not_ignored(self) -> None:
+        """Non-existent paths should return False (not ignored), not raise FileNotFoundError."""
+        project = _create_test_project(self.project_path)
+        nonexistent = str(self.project_path / "src" / "new_file.py")
+        assert not os.path.exists(nonexistent)
+        assert not project.is_ignored_path(nonexistent)
+
+    def test_nonexistent_path_with_ignore_patterns(self) -> None:
+        """Non-existent paths matching ignore patterns still return False (cannot check)."""
+        project = _create_test_project(
+            self.project_path,
+            global_ignored_paths=["*.log"],
+        )
+        nonexistent = str(self.project_path / "nonexistent.log")
+        assert not os.path.exists(nonexistent)
+        # Should not raise, should not match the *.log pattern
+        assert not project.is_ignored_path(nonexistent)
+
+    def test_validate_relative_path_allows_nonexistent(self) -> None:
+        """validate_relative_path with require_not_ignored should not raise for non-existent paths."""
+        project = _create_test_project(self.project_path)
+        nonexistent = "src/new_file.py"
+        # Should not raise
+        project.validate_relative_path(nonexistent, require_not_ignored=True)
+
 
 class TestRegisteredProjectGlobalIgnoredPaths:
     """RegisteredProject.get_project_instance() correctly passes global patterns to Project."""
