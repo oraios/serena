@@ -6,18 +6,25 @@ import logging
 import os
 import pathlib
 import re
-import shutil
 
 from overrides import override
 
 from solidlsp import ls_types
-from solidlsp.ls import DocumentSymbols, LSPConstants, LSPFileBuffer, SolidLanguageServer
+from solidlsp.ls import (
+    DocumentSymbols,
+    LanguageServerDependencyProvider,
+    LanguageServerDependencyProviderUvx,
+    LSPConstants,
+    LSPFileBuffer,
+    SolidLanguageServer,
+)
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
+
+FORTLS_VERSION = "3.2.2"
 
 
 class FortranLanguageServer(SolidLanguageServer):
@@ -170,24 +177,17 @@ class FortranLanguageServer(SolidLanguageServer):
 
         return DocumentSymbols(fixed_root_symbols)
 
-    @staticmethod
-    def _check_fortls_installation() -> str:
-        """Check if fortls is available."""
-        fortls_path = shutil.which("fortls")
-        if fortls_path is None:
-            raise RuntimeError("fortls is not installed or not in PATH.\nInstall it with: pip install fortls")
-        return fortls_path
-
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        # Check fortls installation
-        fortls_path = self._check_fortls_installation()
+        super().__init__(config, repository_root_path, None, "fortran", solidlsp_settings)
 
-        # Command to start fortls language server
-        # fortls uses stdio for LSP communication by default
-        fortls_cmd = f"{fortls_path}"
-
-        super().__init__(
-            config, repository_root_path, ProcessLaunchInfo(cmd=fortls_cmd, cwd=repository_root_path), "fortran", solidlsp_settings
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        return LanguageServerDependencyProviderUvx(
+            self._custom_settings,
+            self._ls_resources_dir,
+            package="fortls",
+            entrypoint="fortls",
+            default_version=FORTLS_VERSION,
+            version_setting_key="fortls_version",
         )
 
     @staticmethod

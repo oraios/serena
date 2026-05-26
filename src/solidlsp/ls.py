@@ -8,7 +8,7 @@ import shutil
 import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Callable, Hashable, Iterator
+from collections.abc import Callable, Hashable, Iterator, Sequence
 from contextlib import contextmanager
 from copy import copy
 from pathlib import Path, PurePath
@@ -22,6 +22,7 @@ from sensai.util.string import ToStringMixin
 from serena.util.file_system import match_path
 from serena.util.text_utils import MatchedConsecutiveLines
 from solidlsp import ls_types
+from solidlsp.language_servers.common import build_uvx_launch_command
 from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_process import LanguageServerInterface, StdioLanguageServer
@@ -331,6 +332,48 @@ class LanguageServerDependencyProviderSinglePath(LanguageServerDependencyProvide
         :param core_path: path to the core dependency
         :return: the launch command as a list containing the executable and its arguments
         """
+
+
+class LanguageServerDependencyProviderUvx(LanguageServerDependencyProvider):
+    """
+    Dependency provider for language servers distributed as a PyPI package, run on demand via ``uvx`` / ``uv x``.
+
+    The pinned package version can be overridden by the user via the LS-specific setting given by
+    ``version_setting_key``. Alternatively, the LS-specific setting "ls_path" can be set to the path of an
+    already-installed language server executable, in which case it is launched directly, bypassing uv entirely.
+    """
+
+    def __init__(
+        self,
+        custom_settings: "SolidLSPSettings.CustomLSSettings",
+        ls_resources_dir: str,
+        *,
+        package: str,
+        entrypoint: str,
+        default_version: str,
+        version_setting_key: str,
+        extra_args: Sequence[str] = (),
+    ):
+        """
+        :param package: the PyPI package name (e.g. ``"pyright"``)
+        :param entrypoint: the console script provided by the package (e.g. ``"pyright-langserver"``)
+        :param default_version: the package version to pin unless overridden
+        :param version_setting_key: the LS-specific setting key through which the user can override the version
+        :param extra_args: arguments appended after the entrypoint (e.g. ``("--stdio",)``)
+        """
+        super().__init__(custom_settings, ls_resources_dir)
+        self._package = package
+        self._entrypoint = entrypoint
+        self._default_version = default_version
+        self._version_setting_key = version_setting_key
+        self._extra_args = tuple(extra_args)
+
+    def create_launch_command(self) -> list[str]:
+        ls_path = self._custom_settings.get("ls_path")
+        if ls_path is not None:
+            return [ls_path, *self._extra_args]
+        version = self._custom_settings.get(self._version_setting_key, self._default_version)
+        return build_uvx_launch_command(self._package, version, self._entrypoint, self._extra_args)
 
 
 class SolidLanguageServer(ABC):
