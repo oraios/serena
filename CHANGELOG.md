@@ -2,6 +2,8 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+# v1.5.2 (2026-05-26)
+
 * General:
   - Not existing paths return `False` on is ignored checks (instead of raising an error)
   - Add `serena-agent` CLI command so that `uvx serena-agent` can be used as entrypoint.
