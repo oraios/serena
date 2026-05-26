@@ -7,6 +7,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add `serena-agent` CLI command so that `uvx serena-agent` can be used as entrypoint.
   - Fortls and pyright are now installed on the fly instead of being bundled in the serena-agent package.
 
+* Hooks:
+  - Extend list of extensions that are considered code files (affects the reminder hook counter).
+
 # v1.5.1 (2026-05-18)
 
 * General:
