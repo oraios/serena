@@ -9,7 +9,6 @@ on:
     branches:
       - main
 
-# Security bot asked for explicit permissions
 permissions:
   contents: read
 
@@ -24,18 +23,17 @@ jobs:
       matrix:
         include:
           - batch_name: "Heavy Toolchains (C++, Rust, Java)"
-            pytest_marker: '-m "cpp or rust or java"'
+            marker_expr: 'cpp or rust or java'
 
           - batch_name: "Medium Toolchains (Go)"
-            pytest_marker: '-m "go"'
+            marker_expr: 'go'
 
           - batch_name: "Catch-All (Core Framework & Remaining Languages)"
-            pytest_marker: '-m "not cpp and not rust and not java and not go and not elm and not r and not rego and not scala"'
+            marker_expr: 'not cpp and not rust and not java and not go and not elm and not r and not rego and not scala'
 
     name: ${{ matrix.batch_name }}
 
     env:
-      # Avoid uv hardlink warnings and reduce overhead in container FS setups
       UV_LINK_MODE: copy
 
     steps:
@@ -58,82 +56,54 @@ jobs:
             pyproject.toml
 
       - name: Create venv + bootstrap pip + install deps
+        shell: bash
         run: |
           set -euxo pipefail
 
           uv venv .venv
 
-          # ensurepip helps inside slim images / containers
           .venv/bin/python -m ensurepip --upgrade || true
           .venv/bin/python -m pip install -U pip setuptools wheel
 
-          # Install project + dev deps
           uv pip install -e ".[dev]"
 
-          # Sanity checks
           .venv/bin/python -V
           .venv/bin/python -m pip -V
           .venv/bin/python -m pytest --version
 
-      - name: Detect toolchains (Catch-All safety)
-        id: detect
+      - name: Compute Catch-All marker expression (skip broken toolchains)
+        id: markers
         shell: bash
         run: |
           set -euo pipefail
 
-          has() { command -v "$1" >/dev/null 2>&1; }
+          MARKERS='${{ matrix.marker_expr }}'
 
-          echo "Toolchain detection:"
-          for c in zig zls sourcekit-lsp ruby ruby-lsp; do
-            if has "$c"; then
-              echo "   $c: $(command -v "$c")"
+          # Only mutate Catch-All
+          if [[ '${{ matrix.batch_name }}' == 'Catch-All (Core Framework & Remaining Languages)' ]]; then
+            # Ruby: ruby-lsp exists but can still crash; smoke-test it
+            if command -v ruby-lsp >/dev/null 2>&1; then
+              ruby-lsp --version >/dev/null 2>&1 || MARKERS="$MARKERS and not ruby"
             else
-              echo "   $c: missing"
+              MARKERS="$MARKERS and not ruby"
             fi
-          done
 
-          # Build a dynamic -k expression that excludes tests which will fail
-          # when toolchains are missing. This keeps Catch-All fast
-          K_EXPR=""
+            # Zig (optional safety; keep if you want Catch-All resilient)
+            if ! command -v zig >/dev/null 2>&1; then
+              MARKERS="$MARKERS and not zig"
+            fi
 
-          # Zig tests: require zig (and often zls)
-          if ! has zig; then
-            K_EXPR="${K_EXPR} and not zig"
+            # Swift (optional safety; sourcekit-lsp usually absent on linux containers)
+            if ! command -v sourcekit-lsp >/dev/null 2>&1; then
+              MARKERS="$MARKERS and not swift"
+            fi
           fi
 
-          # Swift tests: require sourcekit-lsp
-          if ! has sourcekit-lsp; then
-            K_EXPR="${K_EXPR} and not swift"
-          fi
-
-          # Ruby tests: require ruby-lsp gem / ruby-lsp binary.
-          # If ruby-lsp is missing, exclude ruby tests 
-          if ! has ruby-lsp; then
-            K_EXPR="${K_EXPR} and not ruby"
-          fi
-
-          # Emit output for next step
-          # Remove leading " and" if present
-          K_EXPR="${K_EXPR# and }"
-          echo "k_expr=${K_EXPR}" >> "$GITHUB_OUTPUT"
-          echo "Dynamic -k expr: '${K_EXPR}'"
+          echo "markers=$MARKERS" >> "$GITHUB_OUTPUT"
+          echo "Final marker expression: $MARKERS"
 
       - name: Run Pytest Batch
         shell: bash
         run: |
           set -euxo pipefail
-
-          # For Heavy + Medium: run as-is
-          if [[ "${{ matrix.batch_name }}" != "Catch-All (Core Framework & Remaining Languages)" ]]; then
-            .venv/bin/python -m pytest ${{ matrix.pytest_marker }}
-            exit 0
-          fi
-
-          # Catch-All: apply dynamic filtering when toolchains are missing
-          K_EXPR="${{ steps.detect.outputs.k_expr }}"
-
-          if [[ -n "$K_EXPR" ]]; then
-            .venv/bin/python -m pytest ${{ matrix.pytest_marker }} -k "$K_EXPR"
-          else
-            .venv/bin/python -m pytest ${{ matrix.pytest_marker }}
-          fi
+          .venv/bin/python -m pytest -m "${{ steps.markers.outputs.markers }}"
