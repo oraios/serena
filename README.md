@@ -262,4 +262,4 @@ A significant part of Serena, especially support for various languages, was cont
 We are very grateful for the many contributors who made this possible and who played an important role in making Serena
 what it is today.
 
-<!-- mcp-name: oraios/serena -->
+<!-- mcp-name: io.github.oraios/serena -->
