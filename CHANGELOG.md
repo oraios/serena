@@ -2,6 +2,8 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+# v1.5.3 (2026-05-26)
+
 # v1.5.2 (2026-05-26)
 
 * General:
