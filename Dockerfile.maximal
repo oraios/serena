@@ -107,11 +107,11 @@ ENV DOTNET_ROOT=/root/.dotnet
 ENV PATH="${DOTNET_ROOT}:${PATH}"
 RUN curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
     && chmod +x /tmp/dotnet-install.sh \
-    && /tmp/dotnet-install.sh --channel 8.0 --install-dir "${DOTNET_ROOT}" \
-    && /tmp/dotnet-install.sh --channel 8.0 --runtime dotnet --install-dir "${DOTNET_ROOT}" \
+    && /tmp/dotnet-install.sh --channel 10.0 --install-dir "${DOTNET_ROOT}" \
+    && /tmp/dotnet-install.sh --channel 10.0 --runtime dotnet --install-dir "${DOTNET_ROOT}" \
     && ln -sf "${DOTNET_ROOT}/dotnet" /usr/bin/dotnet \
     && rm -f /tmp/dotnet-install.sh
-
+    
 # 4. Install Go and gopls globally in system paths
 ENV GO_VERSION=1.22.3
 RUN curl -L -o /tmp/go.tar.gz https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz \
