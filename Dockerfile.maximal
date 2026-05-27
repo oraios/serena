@@ -10,6 +10,7 @@ ENV PYTHONUNBUFFERED=1 \
 # IMPORTANT additions:
 # - python3-venv: makes venv/ensurepip reliable
 # - bash, ca-certificates: better compatibility in CI containers
+# - libicu + locales: required for dotnet to run reliably on slim images
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     ca-certificates \
@@ -23,7 +24,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     sed \
     python3-venv \
+    libicu-dev \
+    locales \
     && rm -rf /var/lib/apt/lists/*
+
+# Configure a UTF-8 locale (helps dotnet + some tools)
+RUN sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen \
+    && locale-gen
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
 
 # Install pipx
 RUN python3 -m pip install --no-cache-dir pipx \
@@ -89,21 +98,15 @@ RUN curl -L -o /tmp/powershell.tar.gz https://github.com/PowerShell/PowerShell/r
     && rm /tmp/powershell.tar.gz
 
 # 3. Install .NET (pin to stable channel, and include runtime)
-# NOTE: Pinning prevents Roslyn LS from crashing due to preview runtime issues.
 ENV DOTNET_ROOT=/root/.dotnet
 ENV PATH="${DOTNET_ROOT}:${PATH}"
 
 RUN curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
     && chmod +x /tmp/dotnet-install.sh \
-    # Install SDK (gives us dotnet + runtime)
     && /tmp/dotnet-install.sh --channel 8.0 --install-dir "${DOTNET_ROOT}" \
-    # Also install runtime explicitly (belt-and-suspenders)
     && /tmp/dotnet-install.sh --channel 8.0 --runtime dotnet --install-dir "${DOTNET_ROOT}" \
     && ln -sf "${DOTNET_ROOT}/dotnet" /usr/bin/dotnet \
     && rm -f /tmp/dotnet-install.sh
-
-# sanity check at build time
-RUN dotnet --info
 
 # 4. Install Go and gopls globally in system paths
 ENV GO_VERSION=1.22.3
