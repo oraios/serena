@@ -37,8 +37,7 @@ jobs:
       UV_LINK_MODE: copy
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Cache language servers
         uses: actions/cache@v4
@@ -48,30 +47,24 @@ jobs:
           restore-keys: |
             ls-cache-${{ runner.os }}-
 
-      - name: Setup uv (Fast Python Package Manager)
+      - name: Setup uv
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
           cache-dependency-glob: |
             pyproject.toml
 
-      - name: Create venv + bootstrap pip + install deps
+      - name: Create venv + install deps
         shell: bash
         run: |
           set -euxo pipefail
-
           uv venv .venv
-
           .venv/bin/python -m ensurepip --upgrade || true
           .venv/bin/python -m pip install -U pip setuptools wheel
-
           uv pip install -e ".[dev]"
-
-          .venv/bin/python -V
-          .venv/bin/python -m pip -V
           .venv/bin/python -m pytest --version
 
-      - name: Compute Catch-All marker expression (skip broken toolchains)
+      - name: Compute marker expression (robust)
         id: markers
         shell: bash
         run: |
@@ -79,31 +72,21 @@ jobs:
 
           MARKERS='${{ matrix.marker_expr }}'
 
-          # Only mutate Catch-All
           if [[ '${{ matrix.batch_name }}' == 'Catch-All (Core Framework & Remaining Languages)' ]]; then
-            # Ruby: ruby-lsp exists but can still crash; smoke-test it
+            # Ruby: if ruby-lsp can't even print a version, ruby tests will fail -> skip them
             if command -v ruby-lsp >/dev/null 2>&1; then
               ruby-lsp --version >/dev/null 2>&1 || MARKERS="$MARKERS and not ruby"
             else
               MARKERS="$MARKERS and not ruby"
             fi
-
-            # Zig (optional safety; keep if you want Catch-All resilient)
-            if ! command -v zig >/dev/null 2>&1; then
-              MARKERS="$MARKERS and not zig"
-            fi
-
-            # Swift (optional safety; sourcekit-lsp usually absent on linux containers)
-            if ! command -v sourcekit-lsp >/dev/null 2>&1; then
-              MARKERS="$MARKERS and not swift"
-            fi
           fi
 
+          echo "MARKERS=$MARKERS"
           echo "markers=$MARKERS" >> "$GITHUB_OUTPUT"
-          echo "Final marker expression: $MARKERS"
 
-      - name: Run Pytest Batch
+      - name: Run pytest (print exact command)
         shell: bash
         run: |
           set -euxo pipefail
-          .venv/bin/python -m pytest -m "${{ steps.markers.outputs.markers }}"
+          echo "Running: pytest -m '${{ steps.markers.outputs.markers }}'"
+          .venv/bin/python -m pytest -m "${{ steps.markers.outputs.markers }}" --maxfail=1 -q
