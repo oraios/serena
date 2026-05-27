@@ -88,11 +88,22 @@ RUN curl -L -o /tmp/powershell.tar.gz https://github.com/PowerShell/PowerShell/r
     && ln -s /opt/microsoft/powershell/7/pwsh /usr/bin/pwsh \
     && rm /tmp/powershell.tar.gz
 
-# 3. Install .NET SDK (for C#)
-RUN curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin -c 10.0 \
-    && ln -s /root/.dotnet/dotnet /usr/bin/dotnet
+# 3. Install .NET (pin to stable channel, and include runtime)
+# NOTE: Pinning prevents Roslyn LS from crashing due to preview runtime issues.
 ENV DOTNET_ROOT=/root/.dotnet
-ENV PATH="${PATH}:${DOTNET_ROOT}"
+ENV PATH="${DOTNET_ROOT}:${PATH}"
+
+RUN curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
+    && chmod +x /tmp/dotnet-install.sh \
+    # Install SDK (gives us dotnet + runtime)
+    && /tmp/dotnet-install.sh --channel 8.0 --install-dir "${DOTNET_ROOT}" \
+    # Also install runtime explicitly (belt-and-suspenders)
+    && /tmp/dotnet-install.sh --channel 8.0 --runtime dotnet --install-dir "${DOTNET_ROOT}" \
+    && ln -sf "${DOTNET_ROOT}/dotnet" /usr/bin/dotnet \
+    && rm -f /tmp/dotnet-install.sh
+
+# sanity check at build time
+RUN dotnet --info
 
 # 4. Install Go and gopls globally in system paths
 ENV GO_VERSION=1.22.3

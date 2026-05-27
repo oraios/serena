@@ -64,6 +64,12 @@ jobs:
           uv pip install -e ".[dev]"
           .venv/bin/python -m pytest --version
 
+      - name: Dotnet diagnostics
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet --info
+
       - name: Compute marker expression (robust)
         id: markers
         shell: bash
