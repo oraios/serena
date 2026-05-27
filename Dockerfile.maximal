@@ -7,10 +7,9 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
 # Install system dependencies required for package manager and build tools.
-# IMPORTANT additions:
+# Notes:
 # - python3-venv: makes venv/ensurepip reliable
-# - bash, ca-certificates: better compatibility in CI containers
-# - libicu + locales: required for dotnet to run reliably on slim images
+# - locales + libicu: required for dotnet to run on slim images
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     ca-certificates \
@@ -24,11 +23,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     sed \
     python3-venv \
-    libicu-dev \
     locales \
+    libicu72 \
     && rm -rf /var/lib/apt/lists/*
 
-# Configure a UTF-8 locale (helps dotnet + some tools)
+# Configure UTF-8 locale (helps dotnet and some language servers)
 RUN sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen \
     && locale-gen
 ENV LANG=en_US.UTF-8
@@ -65,7 +64,6 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
 
 # ==============================================================================
 # MAXIMAL ADDITIONS (For Catch-All CI Testing)
-# Ruby, Java, Scala, Haxe, PowerShell, .NET, Nix, Go, Terraform, Clangd, etc.
 # ==============================================================================
 
 # 1. Install Ruby, Java (JDK & JRE), Scala, Haxe, Nix, and Clangd (C++) via apt
@@ -82,6 +80,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install Ruby language server (needed for ruby tests)
 RUN gem install ruby-lsp
 
+# 1.25 Install Lean 4 via elan (required for lean4 tests)
+ENV ELAN_HOME=/root/.elan
+ENV PATH="${ELAN_HOME}/bin:${PATH}"
+RUN curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y \
+    && elan default stable \
+    && lean --version
+
 # 1.5 Install Julia officially via pre-compiled binaries
 RUN curl -L -o /tmp/julia.tar.gz https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-1.10.4-linux-x86_64.tar.gz \
     && mkdir -p /opt/julia \
@@ -97,14 +102,13 @@ RUN curl -L -o /tmp/powershell.tar.gz https://github.com/PowerShell/PowerShell/r
     && ln -s /opt/microsoft/powershell/7/pwsh /usr/bin/pwsh \
     && rm /tmp/powershell.tar.gz
 
-# 3. Install .NET (C# Roslyn LS requires .NET 10+)
+# 3. Install .NET (stable, for Roslyn language server)
 ENV DOTNET_ROOT=/root/.dotnet
 ENV PATH="${DOTNET_ROOT}:${PATH}"
-
 RUN curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
     && chmod +x /tmp/dotnet-install.sh \
-    && /tmp/dotnet-install.sh --channel 10.0 --install-dir "${DOTNET_ROOT}" \
-    && /tmp/dotnet-install.sh --channel 10.0 --runtime dotnet --install-dir "${DOTNET_ROOT}" \
+    && /tmp/dotnet-install.sh --channel 8.0 --install-dir "${DOTNET_ROOT}" \
+    && /tmp/dotnet-install.sh --channel 8.0 --runtime dotnet --install-dir "${DOTNET_ROOT}" \
     && ln -sf "${DOTNET_ROOT}/dotnet" /usr/bin/dotnet \
     && rm -f /tmp/dotnet-install.sh
 
