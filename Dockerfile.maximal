@@ -24,7 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sed \
     python3-venv \
     locales \
-    libicu72 \
+    libicu-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Configure UTF-8 locale (helps dotnet and some language servers)
