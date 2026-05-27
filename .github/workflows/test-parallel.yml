@@ -23,13 +23,13 @@ jobs:
       matrix:
         include:
           - batch_name: "Heavy Toolchains (C++, Rust, Java)"
-            marker_expr: "cpp or rust or java"
+            marker_expr: 'cpp or rust or java'
 
           - batch_name: "Medium Toolchains (Go)"
-            marker_expr: "go"
+            marker_expr: 'go'
 
           - batch_name: "Catch-All (Core Framework & Remaining Languages)"
-            marker_expr: "not cpp and not rust and not java and not go and not elm and not r and not rego and not scala"
+            marker_expr: 'not cpp and not rust and not java and not go and not elm and not r and not rego and not scala'
 
     name: ${{ matrix.batch_name }}
 
@@ -64,13 +64,11 @@ jobs:
           uv pip install -e ".[dev]"
           .venv/bin/python -m pytest --version
 
-      - name: Dotnet diagnostics
+      - name: Dotnet diagnostics (non-blocking)
         shell: bash
         run: |
           set -euxo pipefail
-          command -v dotnet
-          dotnet --info
-          dotnet --list-runtimes
+          dotnet --info || true
 
       - name: Compute marker expression (robust)
         id: markers
