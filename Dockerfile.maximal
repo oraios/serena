@@ -97,14 +97,14 @@ RUN curl -L -o /tmp/powershell.tar.gz https://github.com/PowerShell/PowerShell/r
     && ln -s /opt/microsoft/powershell/7/pwsh /usr/bin/pwsh \
     && rm /tmp/powershell.tar.gz
 
-# 3. Install .NET (pin to stable channel, and include runtime)
+# 3. Install .NET (C# Roslyn LS requires .NET 10+)
 ENV DOTNET_ROOT=/root/.dotnet
 ENV PATH="${DOTNET_ROOT}:${PATH}"
 
 RUN curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
     && chmod +x /tmp/dotnet-install.sh \
-    && /tmp/dotnet-install.sh --channel 8.0 --install-dir "${DOTNET_ROOT}" \
-    && /tmp/dotnet-install.sh --channel 8.0 --runtime dotnet --install-dir "${DOTNET_ROOT}" \
+    && /tmp/dotnet-install.sh --channel 10.0 --install-dir "${DOTNET_ROOT}" \
+    && /tmp/dotnet-install.sh --channel 10.0 --runtime dotnet --install-dir "${DOTNET_ROOT}" \
     && ln -sf "${DOTNET_ROOT}/dotnet" /usr/bin/dotnet \
     && rm -f /tmp/dotnet-install.sh
 
