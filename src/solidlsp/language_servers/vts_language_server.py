@@ -4,7 +4,6 @@ which provides TypeScript language server functionality via VSCode's TypeScript 
 (contrary to typescript-language-server, which uses the TypeScript compiler directly).
 """
 
-import functools
 import logging
 import os
 import pathlib
@@ -127,34 +126,10 @@ class VtsLanguageServer(SolidLanguageServer):
         assert os.path.exists(vts_executable_path), "vtsls executable not found. Please install @vtsls/language-server and try again."
         return f"{vts_executable_path} --stdio"
 
-    @staticmethod
-    def _extract_section_value(user_settings: dict, section: str) -> object:
-        """
-        Returns the LSP-configuration value at the given (possibly dotted) ``section`` path
-        within ``user_settings``, or ``{}`` if any segment is missing or non-dict.
-
-        Used to answer vtsls ``workspace/configuration`` pull requests; for top-level
-        sections like ``typescript`` the value is typically a sub-dict, while for dotted
-        paths like ``typescript.tsdk`` it can be any LSP-serialisable primitive (string,
-        bool, int, list).
-
-        :param user_settings: the user-provided ``initialization_options`` dict.
-        :param section: section name, optionally dotted (e.g. ``typescript.tsdk``).
-        :return: value at the path, or ``{}`` if the path does not resolve.
-        """
-        value: object = user_settings
-        if section:
-            for part in section.split("."):
-                if isinstance(value, dict) and part in value:
-                    value = value[part]
-                else:
-                    return {}
-        return value if value is not None else {}
-
-    @functools.cached_property
+    @property
     def _initialization_options(self) -> dict:
         """
-        Validated user-provided ``initializationOptions`` (computed and logged once per instance).
+        Validated user-provided ``initializationOptions``.
 
         :raises ValueError: if ``ls_specific_settings.typescript_vts.initialization_options``
             is set to a value that is not a dict.
@@ -241,12 +216,10 @@ class VtsLanguageServer(SolidLanguageServer):
 
         init_options = self._initialization_options
 
-        def workspace_configuration_handler(params: dict) -> list[object] | object:
+        def workspace_configuration_handler(params: dict) -> list[object]:
             # vtsls pulls settings for sections like "typescript", "vtsls", "javascript".
             # Return the matching sub-dicts from the user-provided initialization_options.
-            if "items" in params:
-                return [self._extract_section_value(init_options, item.get("section", "")) for item in params["items"]]
-            return self._extract_section_value(init_options, "")
+            return [init_options.get(item.get("section", ""), {}) for item in params["items"]]
 
         def do_nothing(params: dict) -> None:
             return
