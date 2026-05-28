@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Self
 
 import psutil
-from flask import Flask, Response, abort, redirect, request, send_from_directory
+from flask import Flask, Response, redirect, request, send_from_directory
 from PIL import Image
 from pydantic import BaseModel
 from sensai.util import logging
@@ -202,6 +202,9 @@ class SerenaDashboardAPI:
         self._tool_names = tool_names
         self._agent = agent
         self._app = Flask(__name__)
+
+        self._app.config["TRUSTED_HOSTS"] = ["127.0.0.1", "localhost"]
+
         self._tool_usage_stats = tool_usage_stats
         self._loaded_news: dict[str, str] = {}
         self._news_ready = threading.Event()
@@ -775,16 +778,7 @@ class SerenaDashboardAPI:
         from flask import cli
 
         cli.show_server_banner = lambda *args, **kwargs: None
-
-        # Verify host and port on each request to prevent DNS-rebinding-based attacks
-        @self._app.before_request
-        def check_host() -> None:
-            allowed = {f"127.0.0.1:{port}", f"localhost:{port}"}
-            if request.host not in allowed:
-                abort(403)
-
         self._app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
-
         return port
 
     def run_in_thread(self, host: str) -> tuple[threading.Thread, int]:
