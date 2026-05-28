@@ -720,6 +720,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
     web_dashboard_open_on_launch: bool = True
     web_dashboard_interface: str | None = None
     web_dashboard_listen_address: str = "127.0.0.1"
+    web_dashboard_trusted_hosts: list[str] = field(default_factory=lambda: ["127.0.0.1", "localhost"])
     jetbrains_plugin_server_address: str = "127.0.0.1"
     tool_timeout: float = DEFAULT_TOOL_TIMEOUT
 

@@ -198,15 +198,15 @@ class SerenaDashboardAPI:
         agent: "SerenaAgent",
         tool_usage_stats: ToolUsageStats | None = None,
         host: str = "127.0.0.1",
+        trusted_hosts: list[str] | None = None,
     ) -> None:
         self._memory_log_handler = memory_log_handler
         self._tool_names = tool_names
         self._agent = agent
         self._host = host
         self._app = Flask(__name__)
-        local_hosts = ["127.0.0.1", "localhost"]
-        if self._host in local_hosts:
-            self._app.config["TRUSTED_HOSTS"] = local_hosts
+        if trusted_hosts:
+            self._app.config["TRUSTED_HOSTS"] = trusted_hosts
         self._tool_usage_stats = tool_usage_stats
         self._loaded_news: dict[str, str] = {}
         self._news_ready = threading.Event()

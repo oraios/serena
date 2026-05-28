@@ -669,6 +669,7 @@ class SerenaAgent:
                 agent=self,
                 tool_usage_stats=self._tool_usage_stats,
                 host=self.serena_config.web_dashboard_listen_address,
+                trusted_hosts=self.serena_config.web_dashboard_trusted_hosts,
             ).run_in_thread()
             self._dashboard_manager = DashboardManager(
                 port,

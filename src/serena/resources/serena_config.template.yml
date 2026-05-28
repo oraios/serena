@@ -67,6 +67,14 @@ web_dashboard_interface:
 # the address the web dashboard will listen on (bind address).
 web_dashboard_listen_address: 127.0.0.1
 
+# trusted hosts used to access the web dashboard.
+# By default, only allow access via local addresses for security reasons.
+# If you want to allow access from remote machines, add the hostname used to access the dashboard to this list.
+# If the list is empty/undefined, all hosts are trusted.
+web_dashboard_trusted_hosts:
+  - 127.0.0.1
+  - localhost
+
 # address where JetBrains plugin servers are running (only relevant when using the JetBrains language backend)
 jetbrains_plugin_server_address: 127.0.0.1
 
