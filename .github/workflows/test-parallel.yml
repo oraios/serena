@@ -71,7 +71,7 @@ jobs:
           dotnet --list-runtimes || true
           dotnet --info || true
 
-      - name: Compute marker expression
+      - name: Compute marker expression (final)
         id: markers
         shell: bash
         run: |
@@ -79,11 +79,16 @@ jobs:
           MARKERS='${{ matrix.marker_expr }}'
 
           if [[ '${{ matrix.batch_name }}' == 'Catch-All (Core Framework & Remaining Languages)' ]]; then
-            # Ruby: if ruby-lsp can't even print a version, ruby tests will fail -> skip them
+            # Ruby
             if command -v ruby-lsp >/dev/null 2>&1; then
               ruby-lsp --version >/dev/null 2>&1 || MARKERS="$MARKERS and not ruby"
             else
               MARKERS="$MARKERS and not ruby"
+            fi
+
+            # Nix
+            if ! command -v nixd >/dev/null 2>&1; then
+              MARKERS="$MARKERS and not nix"
             fi
           fi
 
@@ -97,7 +102,6 @@ jobs:
           echo "Batch: ${{ matrix.batch_name }}"
           echo "Running: pytest -m '${{ steps.markers.outputs.markers }}'"
 
-          # Catch-All only: deselect the known flaky Lean reference integration test in CI
           if [[ '${{ matrix.batch_name }}' == 'Catch-All (Core Framework & Remaining Languages)' ]]; then
             .venv/bin/python -m pytest \
               -m "${{ steps.markers.outputs.markers }}" \
