@@ -22,7 +22,7 @@ def scala_ls():
     solidlsp_settings = SolidLSPSettings()
     ls = ScalaLanguageServer(config, repo_root, solidlsp_settings)
 
-    with ls.start_server():
+    with ls.start_server_context():
         yield ls
 
 

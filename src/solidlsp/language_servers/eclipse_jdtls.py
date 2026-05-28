@@ -772,16 +772,24 @@ class EclipseJDTLS(SolidLanguageServer):
             """
             Compute the JDTLS workspace directory name.
 
-            Default mode hashes the project path only — preserves backwards compatibility with
-            workspaces created before upstream-JDTLS support. Upstream mode (when ``jdtls_path``
-            is set) mixes in the launcher path so switching between default and upstream
-            installations (or between different upstream JDTLS versions) lands in a separate
-            ws_dir and avoids stale OSGi configs blocking startup.
+            The launcher jar path is mixed in so that switching JDTLS versions (default
+            vscode-java VSIX bump or upstream install change) lands in a separate ws_dir
+            and avoids stale OSGi configs from the previous version blocking startup.
+
+            Exception: legacy default-mode users on INITIAL_VSCODE_JAVA_VERSION keep the
+            original ``md5(repository_root_path)`` format. These are users who installed
+            under the legacy unversioned ``vscode-java/`` directory (see the version-pinning
+            convention at the top of this module) — preserving their hash means existing
+            JDTLS workspaces and project caches are reused without a one-time reindex.
             """
-            if custom_settings.get("jdtls_path"):
-                ws_hash_input = (repository_root_path + "|" + jdtls_launcher_jar_path).encode()
-            else:
+            is_legacy_initial = (
+                not custom_settings.get("jdtls_path")
+                and custom_settings.get("vscode_java_version", DEFAULT_VSCODE_JAVA_VERSION) == INITIAL_VSCODE_JAVA_VERSION
+            )
+            if is_legacy_initial:
                 ws_hash_input = repository_root_path.encode()
+            else:
+                ws_hash_input = (repository_root_path + "|" + jdtls_launcher_jar_path).encode()
             return hashlib.md5(ws_hash_input).hexdigest()
 
         def create_launch_command(self) -> list[str]:

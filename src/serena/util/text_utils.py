@@ -145,6 +145,7 @@ def search_text(
     context_lines_before: int = 0,
     context_lines_after: int = 0,
     is_glob: bool = False,
+    multiline: bool = True,
 ) -> list[MatchedConsecutiveLines]:
     """
     Search for a pattern in text content. Supports both regex and glob-like patterns.
@@ -159,11 +160,9 @@ def search_text(
     :param context_lines_after: Number of context lines to include after matches
     :param is_glob: If True, pattern is treated as a glob-like pattern (e.g., "*.py", "test_??.py")
              and will be converted to regex internally
-
+    :param multiline: whether to apply multi-line matching, enabling the flags re.DOTALL and re.MULTILINE
     :return: List of `TextSearchMatch` objects
-
     :raises: ValueError if the pattern is not valid
-
     """
     if source_file_path and content is None:
         with open(source_file_path) as f:
@@ -180,8 +179,9 @@ def search_text(
     if is_glob:
         pattern = glob_to_regex(pattern)
     if allow_multiline_match:
-        # For multiline matches, we need to use the DOTALL flag to make '.' match newlines
-        compiled_pattern = re.compile(pattern, re.DOTALL)
+        # For multiline matches, optionally use DOTALL so '.' matches newlines
+        flags = (re.MULTILINE | re.DOTALL) if multiline else 0
+        compiled_pattern = re.compile(pattern, flags)
         # Search across the entire content as a single string
         for match in compiled_pattern.finditer(content):
             start_pos = match.start()
@@ -327,20 +327,22 @@ def search_files(
     context_lines_after: int = 0,
     paths_include_glob: str | None = None,
     paths_exclude_glob: str | None = None,
+    multiline: bool = True,
 ) -> list[MatchedConsecutiveLines]:
     """
     Search for a pattern in a list of files.
 
-    :param relative_file_paths: List of relative file paths in which to search
-    :param pattern: Pattern to search for
-    :param root_path: Root path to resolve relative paths against (by default, current working directory).
-    :param file_reader: Function to read a file, by default will just use os.open.
+    :param relative_file_paths: list of relative file paths in which to search
+    :param pattern: pattern to search for
+    :param root_path: root path to resolve relative paths against (by default, current working directory).
+    :param file_reader: function to read a file, by default will just use os.open.
         All files that can't be read by it will be skipped.
-    :param context_lines_before: Number of context lines to include before matches
-    :param context_lines_after: Number of context lines to include after matches
-    :param paths_include_glob: Optional glob pattern to include files from the list
-    :param paths_exclude_glob: Optional glob pattern to exclude files from the list
-    :return: List of MatchedConsecutiveLines objects
+    :param context_lines_before: number of context lines to include before matches
+    :param context_lines_after: number of context lines to include after matches
+    :param paths_include_glob: optional glob pattern to include files from the list
+    :param paths_exclude_glob: optional glob pattern to exclude files from the list
+    :param multiline: whether to apply multi-line matching, enabling the flags re.DOTALL and re.MULTILINE (default: True)
+    :return: list of MatchedConsecutiveLines objects
     """
     # Pre-filter paths (done sequentially to avoid overhead)
     # Use proper glob matching instead of gitignore patterns
@@ -375,6 +377,7 @@ def search_files(
                 allow_multiline_match=True,
                 context_lines_before=context_lines_before,
                 context_lines_after=context_lines_after,
+                multiline=multiline,
             )
             if len(search_results) > 0:
                 log.debug(f"Found {len(search_results)} matches in {path}")
@@ -430,16 +433,18 @@ class ContentReplacer:
     provides dual modes for maximum flexibility.
     """
 
-    def __init__(self, mode: Literal["literal", "regex"], allow_multiple_occurrences: bool):
+    def __init__(self, mode: Literal["literal", "regex"], allow_multiple_occurrences: bool, regex_multiline: bool = True):
         """
 
         :param mode: the mode indicating whether to the needle in replacements corresponds to a regular expression
             (mode "regex") or to a literal string (mode "literal")
         :param allow_multiple_occurrences: whether it is allowed that the search expression matches multiple occurrences.
             If False, an error will be raised if more than one match is found.
+        :param regex_multiline: whether to apply multi-line regex matching, enabling the flags re.DOTALL and re.MULTILINE
         """
         self.mode = mode
         self.allow_multiple_occurrences = allow_multiple_occurrences
+        self.regex_multiline = regex_multiline
 
     @staticmethod
     def _create_replacement_function(regex_pattern: str, repl_template: str, regex_flags: int) -> Callable[[re.Match], str]:
@@ -505,7 +510,7 @@ class ContentReplacer:
         else:
             raise ValueError(f"Invalid mode: '{self.mode}', expected 'literal' or 'regex'.")
 
-        regex_flags = re.DOTALL | re.MULTILINE
+        regex_flags = (re.MULTILINE | re.DOTALL) if self.regex_multiline else 0
 
         # create replacement function with validation and backreference handling
         repl_fn = self._create_replacement_function(regex, repl, regex_flags=regex_flags)

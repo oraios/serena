@@ -103,22 +103,8 @@ def start_ls_context(
         language, repo_path, ignored_paths, trace_lsp_communication, ls_specific_settings, additional_workspace_folders, solidlsp_dir
     )
     log.info(f"Starting language server for {language} {repo_path}")
-    ls.start()
-    try:
-        log.info(f"Language server started for {language} {repo_path}")
+    with ls.start_server_context():
         yield ls
-    finally:
-        log.info(f"Stopping language server for {language} {repo_path}")
-        try:
-            ls.stop(shutdown_timeout=5)
-        except Exception as e:
-            log.warning(f"Warning: Error stopping language server: {e}")
-            # try to force cleanup
-            if hasattr(ls, "server") and hasattr(ls.server, "process"):
-                try:
-                    ls.server.process.terminate()
-                except:
-                    pass
 
 
 @contextmanager
@@ -255,12 +241,14 @@ is_windows = platform.system() == "Windows"
 
 
 _LANGUAGE_PYTEST_MARKERS: dict[Language, list[MarkDecorator | Mark]] = {
+    Language.ADA: [pytest.mark.ada],
     Language.CLOJURE: [
         pytest.mark.clojure,
         pytest.mark.skipif(not is_clojure_cli_available(), reason="clojure CLI is not installed"),
     ],
     Language.CPP: [pytest.mark.cpp],
     Language.CPP_CCLS: [pytest.mark.cpp],
+    Language.CUE: [pytest.mark.cue],
     Language.CSHARP: [pytest.mark.csharp],
     Language.FSHARP: [pytest.mark.fsharp],
     Language.GO: [pytest.mark.go],
@@ -277,6 +265,11 @@ _LANGUAGE_PYTEST_MARKERS: dict[Language, list[MarkDecorator | Mark]] = {
     Language.PYTHON_TY: [pytest.mark.python],
     Language.RUST: [pytest.mark.rust],
     Language.TYPESCRIPT: [pytest.mark.typescript],
+    Language.BSL: [
+        pytest.mark.bsl,
+        pytest.mark.skipif(_sh.which("java") is None, reason="Java is not installed"),
+    ],
+    Language.SVELTE: [pytest.mark.svelte],
     Language.ANGULAR: [pytest.mark.angular],
     Language.HTML: [pytest.mark.html],
     Language.SCSS: [pytest.mark.scss],
@@ -329,6 +322,10 @@ def _determine_disabled_languages() -> list[Language]:
     al_tests_enabled = True
     if not al_tests_enabled:
         result.append(Language.AL)
+
+    # Disable BSL tests only when Java is not available (Java IS present in CI via actions/setup-java)
+    if _sh.which("java") is None:
+        result.append(Language.BSL)
 
     return result
 

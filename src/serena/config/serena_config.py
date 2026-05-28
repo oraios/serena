@@ -26,6 +26,7 @@ from serena.constants import (
     PROJECT_LOCAL_TEMPLATE_FILE,
     PROJECT_TEMPLATE_FILE,
     REPO_ROOT,
+    RESOURCES_DIR,
     SERENA_CONFIG_TEMPLATE_FILE,
     SERENA_FILE_ENCODING,
     SERENA_MANAGED_DIR_NAME,
@@ -61,6 +62,10 @@ class SerenaPaths:
             home_dir = str(Path.home() / SERENA_MANAGED_DIR_NAME)
         else:
             home_dir = home_dir.strip()
+        self.resources_dir: str = RESOURCES_DIR
+        """
+        the resources directory (within the `serena` package) 
+        """
         self.serena_user_home_dir: str = home_dir
         """
         the path to the Serena home directory, where the user's configuration/data is stored.
@@ -124,6 +129,9 @@ class SerenaPaths:
         os.makedirs(log_dir, exist_ok=True)
         self.last_returned_log_file_path = os.path.join(log_dir, prefix + "_" + datetime_tag() + f"_{os.getpid()}" + ".txt")
         return self.last_returned_log_file_path
+
+    def get_resource_path(self, *path_elems: str) -> Path:
+        return Path(os.path.join(self.resources_dir, *path_elems))
 
     # TODO: Paths from constants.py should be moved here
 
@@ -873,7 +881,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         if "projects" not in loaded_commented_yaml:
             raise SerenaConfigError("`projects` key not found in Serena configuration. Please update your `serena_config.yml` file.")
         instance.projects = []
-        for path in loaded_commented_yaml["projects"]:
+        for path in loaded_commented_yaml["projects"] or []:
             path = Path(path).resolve()
             try:
                 path_exists = path.exists()

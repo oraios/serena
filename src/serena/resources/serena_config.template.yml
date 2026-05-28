@@ -141,7 +141,7 @@ default_max_tool_answer_chars: 150000
 # See the `RegisteredTokenCountEstimator` enum for available options.
 #
 # By default, a very naive character count estimator is used, which simply counts the number of characters.
-# You can configure this to TIKTOKEN_GPT4 to use a local tiktoken-based estimator for GPT-4 (will download tiktoken
+# You can configure this to TIKTOKEN_GPT4O to use a local tiktoken-based estimator for GPT-4o (will download tiktoken
 # data files on first run), or ANTHROPIC_CLAUDE_SONNET_4 which will use the (free of cost) Anthropic API to
 # estimate the token count using the Claude Sonnet 4 tokenizer.
 token_count_estimator: CHAR_COUNT

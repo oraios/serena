@@ -53,6 +53,7 @@ import pathlib
 import platform
 import shutil
 import tarfile
+import tempfile
 import threading
 import time
 import urllib.error
@@ -535,7 +536,7 @@ class PascalLanguageServer(SolidLanguageServer):
         """Atomic update: download -> verify checksum -> extract -> replace."""
         temp_dir = pasls_dir + ".tmp"
         backup_dir = pasls_dir + ".backup"
-        temp_archive_dir = os.path.join(os.path.expanduser("~"), "solidlsp_tmp")
+        temp_archive_dir = tempfile.mkdtemp(prefix="solidlsp_")
 
         try:
             dep = deps.get_single_dep_for_current_platform()
@@ -548,8 +549,6 @@ class PascalLanguageServer(SolidLanguageServer):
             # 1. Clean up any existing temp directory
             if os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir)
-            os.makedirs(temp_archive_dir, exist_ok=True)
-
             # 2. Download archive
             log.info(f"Downloading pasls archive: {archive_filename}")
             if not cls._download_archive(dep.url, archive_path):
@@ -605,11 +604,7 @@ class PascalLanguageServer(SolidLanguageServer):
                         shutil.copytree(backup_meta, target_meta)
 
             # 9. Clean up downloaded archive and temp directory
-            try:
-                os.remove(archive_path)
-                os.rmdir(temp_archive_dir)
-            except OSError:
-                pass
+            shutil.rmtree(temp_archive_dir, ignore_errors=True)
 
             log.info("pasls installation completed successfully")
             return True
@@ -625,12 +620,13 @@ class PascalLanguageServer(SolidLanguageServer):
                 except Exception as rollback_error:
                     log.error(f"Rollback failed: {rollback_error}")
 
-            # Clean up temp directory
+            # Clean up temp directories
             if os.path.exists(temp_dir):
                 try:
                     shutil.rmtree(temp_dir)
                 except Exception:
                     pass
+            shutil.rmtree(temp_archive_dir, ignore_errors=True)
 
             return False
 

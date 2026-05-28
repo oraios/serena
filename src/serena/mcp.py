@@ -52,14 +52,22 @@ class SerenaMCPFactory:
     Factory for the creation of the Serena MCP server with an associated SerenaAgent.
     """
 
-    def __init__(self, context: str = DEFAULT_CONTEXT, project: str | None = None, memory_log_handler: MemoryLogHandler | None = None):
+    def __init__(
+        self,
+        transport: Literal["stdio", "sse", "streamable-http"],
+        context: str = DEFAULT_CONTEXT,
+        project: str | None = None,
+        memory_log_handler: MemoryLogHandler | None = None,
+    ):
         """
+        :param transport: The transport to use for the MCP server.
         :param context: The context name or path to context file
         :param project: Either an absolute path to the project directory or a name of an already registered project.
             If the project passed here hasn't been registered yet, it will be registered automatically and can be activated by its name
             afterward.
         :param memory_log_handler: the in-memory log handler to use for the agent's logging
         """
+        self.transport = transport
         self.context = SerenaAgentContext.load(context)
         self.project = project
         self.agent: SerenaAgent | None = None
@@ -342,16 +350,27 @@ class SerenaMCPFactory:
 
     @asynccontextmanager
     async def server_lifespan(self, mcp_server: FastMCP) -> AsyncIterator[None]:
-        """Manage server startup and shutdown lifecycle."""
+        """
+        Manages the lifespan of MCP server instances and performs necessary setup and teardown.
+        For stdio transport, there is a single server instance.
+        For other transports, this is called once per connection!
+
+        :param mcp_server: the MCP server instance to configure
+        """
         openai_tool_compatible = self.context.name in ["chatgpt", "codex", "oaicompat-agent"]
         self._set_mcp_tools(mcp_server, openai_tool_compatible=openai_tool_compatible)
         log.info("MCP server lifetime setup complete")
         try:
             yield
         finally:
-            log.info("MCP server shutting down")
-            if self.agent is not None:
-                self.agent.on_shutdown()
+            # Shut down the server if we are running in stdio mode.
+            # For other transports, we do nothing; the singleton agent instance remains active.
+            if self.transport == "stdio":
+                log.info("MCP server shutting down")
+                if self.agent is not None:
+                    self.agent.on_shutdown()
+            else:
+                log.info("Client disconnected")
 
     def _get_initial_instructions(self) -> str:
         assert self.agent is not None

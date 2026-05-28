@@ -197,11 +197,16 @@ class SerenaDashboardAPI:
         tool_names: list[str],
         agent: "SerenaAgent",
         tool_usage_stats: ToolUsageStats | None = None,
+        host: str = "127.0.0.1",
     ) -> None:
         self._memory_log_handler = memory_log_handler
         self._tool_names = tool_names
         self._agent = agent
+        self._host = host
         self._app = Flask(__name__)
+        local_hosts = ["127.0.0.1", "localhost"]
+        if self._host in local_hosts:
+            self._app.config["TRUSTED_HOSTS"] = local_hosts
         self._tool_usage_stats = tool_usage_stats
         self._loaded_news: dict[str, str] = {}
         self._news_ready = threading.Event()
@@ -566,7 +571,7 @@ class SerenaDashboardAPI:
         # Get available memories if ReadMemoryTool is active
         available_memories = None
         if self._agent.tool_is_active("read_memory") and project is not None:
-            available_memories = project.memories_manager.list_memories().get_full_list()
+            available_memories = project.memory_manager.list_memories().get_full_list()
 
         # Get list of languages for the active project
         languages = []
@@ -620,7 +625,7 @@ class SerenaDashboardAPI:
             if project is None:
                 raise ValueError("No active project")
 
-            content = project.memories_manager.load_memory(request_get_memory.memory_name)
+            content = project.memory_manager.load_memory(request_get_memory.memory_name)
             return ResponseGetMemory(content=content, memory_name=request_get_memory.memory_name)
 
         return self._agent.execute_task(run, logged=False)
@@ -630,7 +635,7 @@ class SerenaDashboardAPI:
             project = self._agent.get_active_project()
             if project is None:
                 raise ValueError("No active project")
-            project.memories_manager.save_memory(request_save_memory.memory_name, request_save_memory.content, is_tool_context=False)
+            project.memory_manager.save_memory(request_save_memory.memory_name, request_save_memory.content, is_tool_context=False)
 
         self._agent.execute_task(run, logged=True, name="SaveMemory")
 
@@ -639,7 +644,7 @@ class SerenaDashboardAPI:
             project = self._agent.get_active_project()
             if project is None:
                 raise ValueError("No active project")
-            project.memories_manager.delete_memory(request_delete_memory.memory_name, is_tool_context=False)
+            project.memory_manager.delete_memory(request_delete_memory.memory_name, is_tool_context=False)
 
         self._agent.execute_task(run, logged=True, name="DeleteMemory")
 
@@ -649,9 +654,7 @@ class SerenaDashboardAPI:
             if project is None:
                 raise ValueError("No active project")
 
-            return project.memories_manager.move_memory(
-                request_rename_memory.old_name, request_rename_memory.new_name, is_tool_context=False
-            )
+            return project.memory_manager.move_memory(request_rename_memory.old_name, request_rename_memory.new_name, is_tool_context=False)
 
         return self._agent.execute_task(run, logged=True, name="RenameMemory")
 
@@ -769,7 +772,7 @@ class SerenaDashboardAPI:
 
         raise RuntimeError(f"No free ports found starting from {start_port}")
 
-    def run(self, host: str, port: int) -> int:
+    def run(self, port: int) -> int:
         """
         Runs the dashboard on the given host and port and returns the port number.
         """
@@ -777,14 +780,13 @@ class SerenaDashboardAPI:
         from flask import cli
 
         cli.show_server_banner = lambda *args, **kwargs: None
-
-        self._app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
+        self._app.run(host=self._host, port=port, debug=False, use_reloader=False, threaded=True)
         return port
 
-    def run_in_thread(self, host: str) -> tuple[threading.Thread, int]:
-        port = self._find_first_free_port(self.BASE_PORT, host)
-        log.info("Starting dashboard (listen_address=%s, port=%d)", host, port)
-        thread = threading.Thread(target=lambda: self.run(host=host, port=port), daemon=True)
+    def run_in_thread(self) -> tuple[threading.Thread, int]:
+        port = self._find_first_free_port(self.BASE_PORT, self._host)
+        log.info("Starting dashboard (listen_address=%s, port=%d)", self._host, port)
+        thread = threading.Thread(target=lambda: self.run(port=port), daemon=True)
         thread.start()
         return thread, port
 

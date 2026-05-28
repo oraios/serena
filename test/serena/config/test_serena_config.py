@@ -16,7 +16,7 @@ from serena.config.serena_config import (
     SerenaConfigError,
 )
 from serena.constants import PROJECT_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
-from serena.project import MemoriesManager, Project
+from serena.project import MemoryManager, Project
 from solidlsp.ls_config import Language
 from test.conftest import create_default_serena_config
 
@@ -523,6 +523,20 @@ class TestSerenaConfigFromConfigFileRobustness:
             body_lines.append(f"  - {p}")
         self.master_config_path.write_text("\n".join(body_lines) + "\n")
 
+    def test_empty_projects_key_is_treated_as_empty_list(self, monkeypatch):
+        """A bare ``projects:`` key should not abort config loading."""
+        self.master_config_path.write_text("projects:\n")
+
+        monkeypatch.setattr(
+            SerenaConfig,
+            "_determine_config_file_path",
+            classmethod(lambda cls: str(self.master_config_path)),
+        )
+
+        config = SerenaConfig.from_config_file(generate_if_missing=False)
+
+        assert config.projects == []
+
     def test_malformed_project_is_skipped_with_warning(self, caplog, monkeypatch):
         """A malformed project.yml must not abort loading of the others."""
         good_project = self._make_project_dir(
@@ -567,17 +581,17 @@ class TestMemoriesManagerCustomPath:
 
     def test_memories_subdir_is_created(self):
         assert not self.data_folder.exists()
-        MemoriesManager(str(self.data_folder))
+        MemoryManager(str(self.data_folder))
         assert (self.data_folder / "memories").exists()
 
     def test_save_and_load_memory(self):
-        manager = MemoriesManager(str(self.data_folder))
+        manager = MemoryManager(str(self.data_folder))
         manager.save_memory("test_topic", "test content", is_tool_context=False)
         content = manager.load_memory("test_topic")
         assert content == "test content"
 
     def test_list_memories(self):
-        manager = MemoriesManager(str(self.data_folder))
+        manager = MemoryManager(str(self.data_folder))
         manager.save_memory("topic_a", "content a", is_tool_context=False)
         manager.save_memory("topic_b", "content b", is_tool_context=False)
         memories = manager.list_project_memories()

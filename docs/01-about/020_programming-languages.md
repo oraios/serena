@@ -28,6 +28,13 @@ or at least freely available for use.
 We currently provide direct, out-of-the-box support for the programming languages listed below.
 Some languages require additional installations or setup steps, as noted.
 
+* **Ada / SPARK**  
+  (uses AdaCore's [Ada Language Server (ALS)](https://github.com/AdaCore/ada_language_server),
+  automatically downloaded; supports `.ads`, `.adb`, and `.ada` files;
+  works best with a `.gpr` GNAT project file at the repository root;
+  SPARK is handled by the same server transparently — set language `ada` for both.
+  To use a pre-installed ALS (e.g. from Alire, GNAT Studio, or the VS Code Ada extension),
+  set `ls_specific_settings.ada.ls_path`.)
 * **AL**
 * **Angular**  
   (experimental; requires Node.js + npm, plus `npm install` having been run in the project root so that `@angular/core`
@@ -40,6 +47,8 @@ Some languages require additional installations or setup steps, as noted.
   semantic tokens, and validation; document symbols, workspace symbols, references, and rename
   are not supported by this version)
 * **Bash**
+* **BSL** (1C:Enterprise / OneScript)  
+  (requires Java 21+ on PATH; uses [bsl-language-server](https://github.com/1c-syntax/bsl-language-server) by 1c-syntax; the JAR is auto-downloaded and SHA-256-verified for the bundled default version; supports `.bsl` and `.os` files; configure optional `ls_path` or `bsl_ls_version` under `ls_specific_settings.bsl`)
 * **C#**  
   (by default, uses the Roslyn language server (language `csharp`), requiring [.NET v10+](https://dotnet.microsoft.com/en-us/download/dotnet) and, on Windows, `pwsh` ([PowerShell 7+](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows?view=powershell-7.5));
   set language to `csharp_omnisharp` to use OmiSharp instead)
@@ -51,6 +60,7 @@ Some languages require additional installations or setup steps, as noted.
 * **Crystal**  
   (requires [Crystalline](https://github.com/elbywan/crystalline) language server to be installed and available on PATH;
   note: Crystalline has limited go-to-definition support and does not support find-references)
+* **CUE**
 * **Dart**
 * **Elixir**  
   (requires Elixir installation; Expert language server is downloaded automatically)
@@ -62,6 +72,10 @@ Some languages require additional installations or setup steps, as noted.
   (requires [.NET v8.0+](https://dotnet.microsoft.com/en-us/download/dotnet); uses FsAutoComplete/Ionide, which is auto-installed; for Homebrew .NET on macOS, set DOTNET_ROOT in your environment)
 * **Fortran**   
   (requires installation of fortls: `pip install fortls`)
+* **GDScript** (Godot Engine)  
+  (requires the Godot editor to be running with its built-in LSP enabled — default on port 6008;
+  Serena connects over TCP and does not launch Godot itself;
+  see the [GDScript Setup Guide](../03-special-guides/godot_gdscript_setup_guide_for_serena) for details)
 * **Go**  
   (requires installation of `gopls`)
 * **Groovy**  
@@ -119,6 +133,8 @@ Some languages require additional installations or setup steps, as noted.
 * **Solidity**  
   (experimental; requires Node.js and npm; automatically installs `@nomicfoundation/solidity-language-server`;
   works best with a `foundry.toml` or `hardhat.config.js` in the project root)
+* **Svelte**
+  (requires Node.js v18+ and npm; supports `.svelte` Single File Components plus TypeScript/JavaScript files via `svelte-language-server`; a companion `typescript-language-server` + `typescript-svelte-plugin` is spawned automatically for cross-file rename, go-to-definition, and references across `.ts`/`.js` and `.svelte` files; use language `svelte` for Svelte projects instead of also enabling `typescript`)
 * **Swift**
 * **TypeScript**
 * **Vue**    

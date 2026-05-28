@@ -138,7 +138,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
       - name: Setup .NET SDK (for F# and C# languages)
         uses: actions/setup-dotnet@v4
         with:

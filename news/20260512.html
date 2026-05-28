@@ -1,0 +1,41 @@
+<div class="news-item">
+    <h3>Serena v1.3.0</h3>
+    <p class="date">May 12, 2026</p>
+    <p>
+        <b>Diagnostics &amp; Inspections.</b>
+        New retrieval tools and inspection/diagnostics tools for both backends.
+        <ul>
+            <li>
+                LSP:
+                <code>find_declaration</code>, <code>find_implementations</code>,
+                <code>get_diagnostics_for_file</code>, and <code>get_diagnostics_for_symbol</code>
+            </li>
+            <li>
+                JetBrains: <code>jet_brains_list_inspections</code> and <code>jet_brains_run_inspections</code>
+            </li>
+        </ul>
+    </p>
+    <p>
+        <b>Expanded Language Support.</b>
+        Five new languages to Serena's LSP backend:
+        Ada/SPARK, Angular, HTML, SCSS/Sass/CSS, and 1C/OneScript.
+    </p>
+    <p>
+        <b>Changes in Mode Configuration.</b>
+        Projects can no longer override <code>base_modes</code> in <code>project.yml</code>
+        but can now use the new <code>added_modes</code> key for more flexible configuration.
+        See the updated <a target="_blank" href="https://oraios.github.io/serena/02-usage/050_configuration.html#modes">configuration documentation</a> for details.
+    </p>
+    <p>
+        <b>Improved Reminder Hook Logic.</b>
+        The hooks have been improved and now also react to Codex' bash tool.
+    </p>
+    <p>
+        See our <a target="_blank" href="https://github.com/oraios/serena/blob/main/CHANGELOG.md">change log</a> for the full list of improvements.<br>
+    </p>
+    <p>
+        <b>Update Now.</b>
+        If you are using the uv tool installation of Serena, upgrade as follows:<br>
+        uv tool upgrade serena-agent --prerelease=allow
+    </p>
+</div>

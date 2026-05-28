@@ -167,25 +167,20 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         :param depth: depth up to which descendants shall be retrieved (e.g. use 1 to also retrieve immediate children;
             for the case where the symbol is a class, this will return its methods).
             Ignored if `include_body=True`. Default 0.
-        :param relative_path: Optional. Restrict search to this file or directory. If None, searches entire codebase.
+        :param relative_path: (optional) restrict search to this file or directory. If None, searches entire codebase.
             If a directory is passed, the search will be restricted to the files in that directory.
             If a file is passed, the search will be restricted to that file.
-            If you have some knowledge about the codebase, you should use this parameter, as it will significantly
-            speed up the search as well as reduce the number of results.
         :param include_body: whether to include the symbol's source code. Use judiciously.
         :param include_info: whether to include additional info (hover-like, typically including docstring and signature),
             about the symbol (ignored if include_body is True). Info is never included for child symbols.
             Note: Depending on the language, this can be slow (e.g., C/C++).
-        :param include_kinds: List of LSP symbol kind integers to include.
-            If not provided, all kinds are included.
-        :param exclude_kinds: Optional. List of LSP symbol kind integers to exclude. Takes precedence over `include_kinds`.
-            If not provided, no kinds are excluded.
+        :param include_kinds: (optional) limits results to the given LSP symbol kinds (integers)
+        :param exclude_kinds: (optional) list of LSP symbol kinds (integers) to exclude.
         :param substring_matching: If True, use substring matching for the last element of the pattern, such that
             "Foo/get" would match "Foo/getValue" and "Foo/getData".
-        :param max_matches: Maximum number of permitted matches. If exceeded, a shortened result is returned
+        :param max_matches: maximum number of permitted matches. If exceeded, a shortened result is returned
              which allows refining the search. -1 (default) means no limit. Set to 1 if you search for a single symbol.
-        :param max_answer_chars: Max characters for the JSON result. If exceeded, no content is returned.
-            -1 means the default value from the config will be used.
+        :param max_answer_chars: max result length; -1 for default
         :return: symbols (with locations) matching the name.
         """
         if include_body:
@@ -260,13 +255,13 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
         Finds references to the symbol at the given `name_path`. The result will contain metadata about the referencing symbols
         as well as a short code snippet around the reference.
 
-        :param name_path: for finding the symbol to find references for, same logic as in the `find_symbol` tool.
+        :param name_path: name path of the symbol
         :param relative_path: the relative path to the file containing the symbol for which to find references.
             Note: for external dependencies, this must be an identifier starting with `<ext` that you have received
             earlier (don't try to guess!).
-        :param include_kinds: same as in the `find_symbol` tool.
-        :param exclude_kinds: same as in the `find_symbol` tool.
-        :param max_answer_chars: same as in the `find_symbol` tool.
+        :param include_kinds: (optional) limits results to the given LSP symbol kinds (integers)
+        :param exclude_kinds: optional list of LSP symbol kinds (integers) to exclude.
+        :param max_answer_chars: max result length; -1 for default
         :return: a list of JSON objects with the symbols referencing the requested symbol
         """
         include_body = False  # It is probably never a good idea to include the body of the referencing symbols
@@ -346,14 +341,14 @@ class FindImplementationsTool(Tool, ToolMarkerSymbolicRead):
         """
         Finds implementations of the symbol at the given `name_path`.
 
-        :param name_path: for finding the symbol to find implementations for, same logic as in the `find_symbol` tool.
+        :param name_path: the symbol's name path
         :param relative_path: the relative path to the file containing the symbol for which to find implementations.
             Note that here you can't pass a directory but must pass a file.
         :param include_info: whether to include additional info (hover-like, typically including docstring and signature),
             about the implementing symbols.
-        :param include_kinds: same as in the `find_symbol` tool.
-        :param exclude_kinds: same as in the `find_symbol` tool.
-        :param max_answer_chars: same as in the `find_symbol` tool.
+        :param include_kinds: (optional) limits results to the given LSP symbol kinds (integers)
+        :param exclude_kinds: (optional) list of LSP symbol kinds (integers) to exclude.
+        :param max_answer_chars: max result length; -1 for default
         :return: a list of JSON objects with the symbols implementing the requested symbol
         """
         include_body = False
@@ -488,7 +483,7 @@ class GetDiagnosticsForFileTool(Tool, ToolMarkerSymbolicRead):
         :param end_line: the last 0-based line to include. Defaults to -1, which means until the end of the file.
         :param min_severity: minimum LSP severity to include, where 1=Error, 2=Warning, 3=Information, 4=Hint.
             Diagnostics with lower-or-equal numeric severity are returned.
-        :param max_answer_chars: same as in the `find_symbol` tool.
+        :param max_answer_chars: max result length; -1 for default
         :return: grouped diagnostics for the requested file.
         """
         symbol_retriever = self.create_language_server_symbol_retriever()
@@ -539,7 +534,7 @@ class GetDiagnosticsForSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOption
         :param check_symbol_references: whether to additionally collect diagnostics for symbols that reference the symbol.
         :param min_severity: minimum LSP severity to include, where 1=Error, 2=Warning, 3=Information, 4=Hint.
             Diagnostics with lower-or-equal numeric severity are returned.
-        :param max_answer_chars: same as in the `find_symbol` tool.
+        :param max_answer_chars: max result length; -1 for default
         :return: grouped diagnostics for the requested symbol and, optionally, its referencing symbols.
         """
         symbol_retriever = self.create_language_server_symbol_retriever()
@@ -575,17 +570,16 @@ class ReplaceSymbolBodyTool(EditingToolWithDiagnostics):
         body: str,
     ) -> str:
         r"""
-        Replaces the body of the symbol with the given `name_path`.
+        Replaces the body of the given symbol.
 
-        The tool shall be used to replace symbol bodies that have been previously retrieved
-        (e.g. via `find_symbol`).
-        IMPORTANT: Do not use this tool if you do not know what exactly constitutes the body of the symbol.
+        IMPORTANT: Only replace symbol bodies if you have previously made a retrieval with include_body=True and thus know what
+        constitutes the body!
 
-        :param name_path: for finding the symbol to replace, same logic as in the `find_symbol` tool.
+        :param name_path: name path of the symbol whose body to replace
         :param relative_path: the relative path to the file containing the symbol
         :param body: the new symbol body. The symbol body is the definition of a symbol
             in the programming language, including e.g. the signature line for functions.
-            IMPORTANT: The body does NOT include any preceding docstrings/comments or imports, in particular.
+            Depending on the language, it may or may not include a preceding docstring or other preceding annotations.
         """
         with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
             code_editor = self.create_code_editor()
@@ -612,7 +606,7 @@ class InsertAfterSymbolTool(EditingToolWithDiagnostics):
         Use this to insert code after a class/method/function definition.
         Don't use to insert after assignments (constants, fields).
 
-        :param name_path: name path of the symbol after which to insert content (definitions in the `find_symbol` tool apply)
+        :param name_path: name path of the symbol after which to insert content
         :param relative_path: the relative path to the file containing the symbol
         :param body: the body/content to be inserted. The inserted code shall begin with the next line after
             the symbol.
@@ -639,7 +633,7 @@ class InsertBeforeSymbolTool(EditingToolWithDiagnostics):
         A typical use case is to insert a new class, function, method, field or variable assignment; or
         a new import statement before the first symbol in the file.
 
-        :param name_path: name path of the symbol before which to insert content (definitions in the `find_symbol` tool apply)
+        :param name_path: name path of the symbol before which to insert content
         :param relative_path: the relative path to the file containing the symbol
         :param body: the body/content to be inserted before the line in which the referenced symbol is defined
         """
@@ -666,7 +660,7 @@ class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
         Note: for languages with method overloading, like Java, name_path may have to include a method's
         signature to uniquely identify a method.
 
-        :param name_path: name path of the symbol to rename (definitions in the `find_symbol` tool apply)
+        :param name_path: name path of the symbol to rename
         :param relative_path: the relative path to the file containing the symbol to rename
         :param new_name: the new name for the symbol
         :return: result summary indicating success or failure
@@ -686,7 +680,7 @@ class SafeDeleteSymbol(Tool, ToolMarkerSymbolicEdit):
         Deletes the symbol if it is safe to do so (i.e., if there are no references to it)
         or returns a list of references to it.
 
-        :param name_path_pattern: name path of the symbol to delete (definitions in the `find_symbol` tool apply)
+        :param name_path_pattern: name path of the symbol to delete
         :param relative_path: the relative path to the file containing the symbol to delete
         """
         ls_symbol_retriever = self.create_language_server_symbol_retriever()

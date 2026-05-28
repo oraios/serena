@@ -4,7 +4,7 @@ requires = ["hatchling"]
 
 [project]
 name = "serena-agent"
-version = "1.2.0"
+version = "1.5.4.dev0"
 description = "A powerful MCP toolkit for coding, providing semantic retrieval and editing capabilities - the IDE for your agent"
 authors = [{ name = "Oraios AI", email = "info@oraios-ai.de" }]
 readme = "README.md"
@@ -18,8 +18,6 @@ classifiers = [
 ]
 dependencies = [
   "requests==2.33.0",
-  "pyright==1.1.403",
-  "fortls==3.2.2",
   "overrides==7.7.0",
   "python-dotenv==1.2.2",
   "mcp==1.27.0",
@@ -45,14 +43,14 @@ dependencies = [
   "lsprotocol==2025.0.0",
   # Transitive deps pinned for security (dependabot alerts).
   # Exact pins because uvx installs from git, ignoring the lock file.
-  "urllib3==2.6.3",
+  "urllib3==2.7.0",
   "werkzeug==3.1.7",
   "starlette==1.0.0",
-  "python-multipart==0.0.26",
+  "python-multipart==0.0.27",
   "filelock==3.25.2",
   "cryptography==46.0.7",
   "regex==2026.2.28",
-  "pythonnet==3.1.0-rc0 ; sys_platform == 'win32'",
+  "pythonnet==3.1.0 ; sys_platform == 'win32'",
 ]
 
 
@@ -64,6 +62,7 @@ explicit = true
 
 [project.scripts]
 serena = "serena.cli:top_level"
+serena-agent = "serena.cli:top_level"
 serena-hooks = "serena.hooks:hook_commands"
 
 [project.license]
@@ -294,12 +293,16 @@ max-complexity = 20
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D103"]
 "scripts/**" = ["D103"]
+# BSL integration tests deliberately contain Cyrillic identifiers (1C:Enterprise metadata
+# object names and procedure names). ruff's ambiguous-unicode rules flag every such char.
+"test/solidlsp/bsl/**" = ["RUF001", "RUF002", "RUF003"]
 
 [tool.pytest.ini_options]
 addopts = "--snapshot-patch-pycharm-diff"
 markers = [
   "clojure: language server running for Clojure",
   "crystal: language server running for Crystal",
+  "cue: language server running for CUE",
   "python: language server running for Python",
   "go: language server running for Go",
   "java: language server running for Java",
@@ -307,6 +310,7 @@ markers = [
   "groovy: language server running for Groovy",
   "rust: language server running for Rust",
   "typescript: language server running for TypeScript",
+  "svelte: language server running for Svelte (uses svelte-language-server)",
   "vue: language server running for Vue (uses TypeScript LSP)",
   "php: language server running for PHP",
   "perl: language server running for Perl",
@@ -349,14 +353,16 @@ markers = [
   "solidity: language server running for Solidity (uses @nomicfoundation/solidity-language-server)",
   "ansible: language server running for Ansible (uses @ansible/ansible-language-server)",
   "msl: language server running for mSL (mIRC Scripting Language)",
+  "bsl: language server running for BSL (1C:Enterprise / OneScript)",
   "html: language server running for HTML (vscode-html-language-server, used as companion by Angular)",
   "scss: language server running for SCSS / Sass / CSS (some-sass-language-server)",
   "angular: language server running for Angular (uses @angular/language-server + @angular/language-service tsserver plugin)",
+  "ada: language server running for Ada / SPARK (uses AdaCore Ada Language Server)",
 ]
 
 [tool.codespell]
 # Ref: https://github.com/codespell-project/codespell#using-a-config-file
-skip = '.git*,*.svg,*.lock,*.min.*'
+skip = '.git*,*.svg,*.lock,*.min.*,*test_memories_manager.py'
 check-hidden = true
 ignore-regex = '\.\w+'
-ignore-words-list = 'paket'
+ignore-words-list = 'paket,EDN,als'

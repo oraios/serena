@@ -5,11 +5,10 @@ import logging
 import os
 import pathlib
 import shutil
-import subprocess
 import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Hashable, Iterator
+from collections.abc import Callable, Hashable, Iterator, Sequence
 from contextlib import contextmanager
 from copy import copy
 from pathlib import Path, PurePath
@@ -23,9 +22,10 @@ from sensai.util.string import ToStringMixin
 from serena.util.file_system import match_path
 from serena.util.text_utils import MatchedConsecutiveLines
 from solidlsp import ls_types
+from solidlsp.language_servers.common import build_uvx_launch_command
 from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
-from solidlsp.ls_process import LanguageServerProcess
+from solidlsp.ls_process import LanguageServerInterface, StdioLanguageServer
 from solidlsp.ls_types import UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils, PathUtils, TextUtils
 from solidlsp.lsp_protocol_handler import lsp_types
@@ -334,10 +334,51 @@ class LanguageServerDependencyProviderSinglePath(LanguageServerDependencyProvide
         """
 
 
+class LanguageServerDependencyProviderUvx(LanguageServerDependencyProvider):
+    """
+    Dependency provider for language servers distributed as a PyPI package, run on demand via ``uvx`` / ``uv x``.
+
+    The pinned package version can be overridden by the user via the LS-specific setting given by
+    ``version_setting_key``. Alternatively, the LS-specific setting "ls_path" can be set to the path of an
+    already-installed language server executable, in which case it is launched directly, bypassing uv entirely.
+    """
+
+    def __init__(
+        self,
+        custom_settings: "SolidLSPSettings.CustomLSSettings",
+        ls_resources_dir: str,
+        *,
+        package: str,
+        entrypoint: str,
+        default_version: str,
+        version_setting_key: str,
+        extra_args: Sequence[str] = (),
+    ):
+        """
+        :param package: the PyPI package name (e.g. ``"pyright"``)
+        :param entrypoint: the console script provided by the package (e.g. ``"pyright-langserver"``)
+        :param default_version: the package version to pin unless overridden
+        :param version_setting_key: the LS-specific setting key through which the user can override the version
+        :param extra_args: arguments appended after the entrypoint (e.g. ``("--stdio",)``)
+        """
+        super().__init__(custom_settings, ls_resources_dir)
+        self._package = package
+        self._entrypoint = entrypoint
+        self._default_version = default_version
+        self._version_setting_key = version_setting_key
+        self._extra_args = tuple(extra_args)
+
+    def create_launch_command(self) -> list[str]:
+        ls_path = self._custom_settings.get("ls_path")
+        if ls_path is not None:
+            return [ls_path, *self._extra_args]
+        version = self._custom_settings.get(self._version_setting_key, self._default_version)
+        return build_uvx_launch_command(self._package, version, self._entrypoint, self._extra_args)
+
+
 class SolidLanguageServer(ABC):
     """
-    The LanguageServer class provides a language agnostic interface to the Language Server Protocol.
-    It is used to communicate with Language Servers of different programming languages.
+    High-level abstraction for language server interaction, which wraps the underlying low-level LSP interface
     """
 
     CACHE_FOLDER_NAME = "cache"
@@ -505,6 +546,7 @@ class SolidLanguageServer(ABC):
             whenever the format of the raw document symbols changes (typically because the language server
             improves/fixes its output).
         """
+        self._solidlsp_config = config
         self._solidlsp_settings = solidlsp_settings
         lang = self.get_language_enum_instance()
         self._custom_settings = solidlsp_settings.get_ls_specific_settings(lang)
@@ -519,8 +561,14 @@ class SolidLanguageServer(ABC):
         )
 
         self.language_id = language_id
+        """
+        default language identifier to be passed to the language server in `textDocument/didOpen` notifications.
+        """
         self.open_file_buffers: dict[str, LSPFileBuffer] = {}
-        self.language = Language(language_id)
+        self.language = self.get_language_enum_instance()
+        """
+        identifies the language server (not to be confused with the language id passed to the language server)
+        """
         self._published_diagnostics: dict[str, list[ls_types.Diagnostic]] = {}
         self._published_diagnostics_generation_by_uri: dict[str, int] = {}
         self._published_diagnostics_generation = 0
@@ -557,13 +605,10 @@ class SolidLanguageServer(ABC):
             self._dependency_provider = self._create_dependency_provider()
             process_launch_info = self._create_process_launch_info()
         log.debug(f"Creating language server instance with {language_id=} and process launch info: {process_launch_info}")
-        self.server = LanguageServerProcess(
-            process_launch_info,
-            language=self.language,
-            determine_log_level=self._determine_log_level,
-            logger=logging_fn,
-            start_independent_lsp_process=config.start_independent_lsp_process,
-        )
+        self.server = self._create_language_server_interface(process_launch_info, logging_fn)
+        """
+        the low-level language server interface
+        """
         self.server.on_any_notification(self._observe_server_notification)
 
         # Set up the pathspec matcher for the ignored paths
@@ -577,8 +622,6 @@ class SolidLanguageServer(ABC):
 
         # Create a pathspec matcher from the processed patterns
         self._ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)
-
-        self._request_timeout: float | None = None
 
         self._has_waited_for_cross_file_references = False
 
@@ -604,6 +647,48 @@ class SolidLanguageServer(ABC):
                 continue
             _seen.add(additional_workspace_abs_path)
             self._additional_workspace_abs_paths.append(additional_workspace_abs_path)
+
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        """
+        Creates the dependency provider for this language server.
+
+        Subclasses should override this method to provide their specific dependency provider.
+        This method is only called if process_launch_info is not passed to __init__.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement _create_dependency_provider() or pass process_launch_info to __init__()"
+        )
+
+    def _create_process_launch_info(self) -> ProcessLaunchInfo:
+        assert self._dependency_provider is not None
+        cmd = self._dependency_provider.create_launch_command()
+        env = self._dependency_provider.create_launch_command_env()
+        return ProcessLaunchInfo(cmd=cmd, cwd=self.repository_root_path, env=env)
+
+    def _create_language_server_interface(
+        self, process_launch_info: ProcessLaunchInfo, logging_fn: Callable[[str, str, StringDict | str], None] | None
+    ) -> LanguageServerInterface:
+        """
+        Creates the low-level language server interface for LSP communication.
+
+        The interface is created but not started.
+
+        The default implementation creates a StdioLanguageServer, but subclasses can override this method to create a different type
+        of interface if needed.
+
+        :param process_launch_info: process launch information
+        :param logging_fn: the trace logging function
+        :return: the interface
+        """
+        return StdioLanguageServer(
+            process_launch_info,
+            language=self.language,
+            determine_log_level=self._determine_log_level,
+            logger=logging_fn,
+            start_independent_lsp_process=self._solidlsp_config.start_independent_lsp_process,
+        )
+
+    # --- diagnostics-related functions ---
 
     def _observe_server_notification(self, method: str, params: Any) -> None:
         """
@@ -987,23 +1072,6 @@ class SolidLanguageServer(ABC):
 
         return self._filter_diagnostics(ret, start_line, end_line, min_severity)
 
-    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
-        """
-        Creates the dependency provider for this language server.
-
-        Subclasses should override this method to provide their specific dependency provider.
-        This method is only called if process_launch_info is not passed to __init__.
-        """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} must implement _create_dependency_provider() or pass process_launch_info to __init__()"
-        )
-
-    def _create_process_launch_info(self) -> ProcessLaunchInfo:
-        assert self._dependency_provider is not None
-        cmd = self._dependency_provider.create_launch_command()
-        env = self._dependency_provider.create_launch_command_env()
-        return ProcessLaunchInfo(cmd=cmd, cwd=self.repository_root_path, env=env)
-
     def _get_wait_time_for_cross_file_referencing(self) -> float:
         """Meant to be overridden by subclasses for LS that don't have a reliable "finished initializing" signal.
 
@@ -1195,78 +1263,20 @@ class SolidLanguageServer(ABC):
 
         return match_path(relative_path, self.get_ignore_spec(), root_path=self.repository_root_path)
 
-    def _shutdown(self, timeout: float = 5.0) -> None:
-        """
-        A robust shutdown process designed to terminate cleanly on all platforms, including Windows,
-        by explicitly closing all I/O pipes.
-        """
-        if not self.server.is_running():
-            log.debug("Server process not running, skipping shutdown.")
-            return
-
-        log.info(f"Initiating final robust shutdown with a {timeout}s timeout...")
-        process = self.server.process
-        if process is None:
-            log.debug("Server process is None, cannot shutdown.")
-            return
-
-        # --- Main Shutdown Logic ---
-        # Stage 1: Graceful Termination Request
-        # Send LSP shutdown and close stdin to signal no more input.
-        try:
-            log.debug("Sending LSP shutdown request...")
-            # Use a thread to timeout the LSP shutdown call since it can hang
-            shutdown_thread = threading.Thread(target=self.server.shutdown)
-            shutdown_thread.daemon = True
-            shutdown_thread.start()
-            shutdown_thread.join(timeout=2.0)  # 2 second timeout for LSP shutdown
-
-            if shutdown_thread.is_alive():
-                log.debug("LSP shutdown request timed out, proceeding to terminate...")
-            else:
-                log.debug("LSP shutdown request completed.")
-
-            if process.stdin and not process.stdin.closed:
-                process.stdin.close()
-            log.debug("Stage 1 shutdown complete.")
-        except Exception as e:
-            log.debug(f"Exception during graceful shutdown: {e}")
-            # Ignore errors here, we are proceeding to terminate anyway.
-
-        # Stage 2: Terminate and Wait for Process to Exit
-        log.debug(f"Terminating process {process.pid}, current status: {process.poll()}")
-        process.terminate()
-
-        # Stage 3: Wait for process termination with timeout
-        try:
-            log.debug(f"Waiting for process {process.pid} to terminate...")
-            exit_code = process.wait(timeout=timeout)
-            log.info(f"Language server process terminated successfully with exit code {exit_code}.")
-        except subprocess.TimeoutExpired:
-            # If termination failed, forcefully kill the process
-            log.warning(f"Process {process.pid} termination timed out, killing process forcefully...")
-            process.kill()
-            try:
-                exit_code = process.wait(timeout=2.0)
-                log.info(f"Language server process killed successfully with exit code {exit_code}.")
-            except subprocess.TimeoutExpired:
-                log.error(f"Process {process.pid} could not be killed within timeout.")
-        except Exception as e:
-            log.error(f"Error during process shutdown: {e}")
-
     @contextmanager
-    def start_server(self) -> Iterator["SolidLanguageServer"]:
+    def start_server_context(self) -> Iterator["SolidLanguageServer"]:
         self.start()
         yield self
         self.stop()
 
-    def _start_server_process(self) -> None:
-        self.server_started = True
-        self._start_server()
-
     @abstractmethod
     def _start_server(self) -> None:
-        pass
+        """
+        Starts the low-level language server interface (i.e. self.server).
+
+        This method must ultimately call `self.server.start()` and may perform additional setup before or after starting the server,
+        such as waiting for initialization to complete or activating additional workspaces.
+        """
 
     def _get_language_id_for_file(self, relative_file_path: str) -> str:
         """
@@ -3124,7 +3134,8 @@ class SolidLanguageServer(ABC):
         :return: self for method chaining
         """
         log.info(f"Starting language server with language {self.language_server.language} for {self.language_server.repository_root_path}")
-        self._start_server_process()
+        self.server_started = True
+        self._start_server()
         return self
 
     def stop(self, shutdown_timeout: float = 2.0) -> None:
@@ -3135,16 +3146,18 @@ class SolidLanguageServer(ABC):
         :param shutdown_timeout: time, in seconds, to wait for the server to shutdown gracefully before killing it
         """
         try:
-            self._shutdown(timeout=shutdown_timeout)
+            self.server.stop(timeout=shutdown_timeout)
         except Exception as e:
             log.warning(f"Exception while shutting down language server: {e}")
+        finally:
+            self.server_started = False
 
     @property
     def language_server(self) -> Self:
         return self
 
     @property
-    def handler(self) -> LanguageServerProcess:
+    def handler(self) -> LanguageServerInterface:
         """Access the underlying language server handler.
 
         Useful for advanced operations like sending custom commands

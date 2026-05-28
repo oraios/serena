@@ -68,6 +68,7 @@ class Language(str, Enum):
     SWIFT = "swift"
     BASH = "bash"
     CRYSTAL = "crystal"
+    CUE = "cue"
     ZIG = "zig"
     LUA = "lua"
     LUAU = "luau"
@@ -93,6 +94,11 @@ class Language(str, Enum):
     LEAN4 = "lean4"
     GROOVY = "groovy"
     VUE = "vue"
+    SVELTE = "svelte"
+    """Svelte language server using svelte-language-server.
+    Supports .svelte Single File Components plus TypeScript and JavaScript
+    files in Svelte projects. Requires Node.js v18+ and npm.
+    """
     POWERSHELL = "powershell"
     PASCAL = "pascal"
     """Pascal Language Server (pasls) for Free Pascal and Lazarus projects.
@@ -109,6 +115,25 @@ class Language(str, Enum):
     Supports .mrc files used in mIRC and AdiIRC IRC clients.
     Uses a custom LSP server based on pygls. Automatically sets up
     a virtual environment with pygls dependencies on first use.
+    """
+    BSL = "bsl"
+    """BSL Language Server for 1C:Enterprise and OneScript languages.
+    Uses bsl-language-server by 1c-syntax. Automatically downloads the JAR.
+    Supports .bsl and .os files. Requires Java 21+ on PATH.
+    """
+    ADA = "ada"
+    """Ada / SPARK language server using AdaCore's Ada Language Server (ALS).
+    Supports .ads (specs), .adb (bodies), and .ada files. Auto-downloads the
+    ALS binary from AdaCore's GitHub releases. Works best with a .gpr GNAT
+    project file at the repository root. SPARK files are handled transparently
+    by the same server, since SPARK is distinguished by pragmas/aspects in
+    source rather than by file extension.
+    """
+    GDSCRIPT = "gdscript"
+    """GDScript language server for Godot Engine projects (Godot 3 and 4).
+    Connects to the Godot editor's built-in LSP server over TCP (port 6008).
+    The editor must already be running with its built-in LSP enabled (default).
+    Supports .gd and .gdscript files.
     """
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
@@ -253,8 +278,8 @@ class Language(str, Enum):
         # We assign lower priority to languages that are supersets of others, such that
         # the "larger" language is only chosen when it matches more strongly
         match self:
-            # languages that are supersets of others (Vue is superset of TypeScript/JavaScript)
-            case self.VUE:
+            # languages that are supersets of others (Vue/Svelte are supersets of TypeScript/JavaScript)
+            case self.VUE | self.SVELTE:
                 return 1
             # regular languages
             case _:
@@ -376,6 +401,8 @@ class Language(str, Enum):
                 return FilenameMatcher(".sh", ".bash")
             case self.CRYSTAL:
                 return FilenameMatcher(".cr")
+            case self.CUE:
+                return FilenameMatcher(".cue")
             case self.YAML:
                 return FilenameMatcher(".yaml", ".yml")
             case self.JSON:
@@ -421,6 +448,12 @@ class Language(str, Enum):
                         for base_pattern in ["ts", "js"]:
                             path_patterns.append(f".{prefix}{base_pattern}{postfix}")
                 return FilenameMatcher(*path_patterns)
+            case self.SVELTE:
+                path_patterns = [".svelte"]
+                for prefix in ["c", "m", ""]:
+                    for base_pattern in ["ts", "js"]:
+                        path_patterns.append(f".{prefix}{base_pattern}")
+                return FilenameMatcher(*path_patterns)
             case self.POWERSHELL:
                 return FilenameMatcher(".ps1", ".psm1", ".psd1")
             case self.PASCAL:
@@ -455,6 +488,12 @@ class Language(str, Enum):
                 return FilenameMatcher(".yaml", ".yml")
             case self.MSL:
                 return FilenameMatcher(".mrc")
+            case self.BSL:
+                return FilenameMatcher(".bsl", ".os")
+            case self.ADA:
+                return FilenameMatcher(".ads", ".adb", ".ada", case_sensitive=False)
+            case self.GDSCRIPT:
+                return FilenameMatcher(".gd", ".gdscript")
             case self.HTML:
                 return FilenameMatcher(".html", ".htm")
             case self.SCSS:
@@ -505,7 +544,7 @@ class Language(str, Enum):
 
                 return CSharpLanguageServer
             case self.CSHARP_OMNISHARP:
-                from solidlsp.language_servers.omnisharp import OmniSharp
+                from solidlsp.language_servers.omnisharp import OmniSharp  # type: ignore[attr-defined]
 
                 return OmniSharp
             case self.TYPESCRIPT:
@@ -520,6 +559,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.vue_language_server import VueLanguageServer
 
                 return VueLanguageServer
+            case self.SVELTE:
+                from solidlsp.language_servers.svelte_language_server import SvelteLanguageServer
+
+                return SvelteLanguageServer
             case self.GO:
                 from solidlsp.language_servers.gopls import Gopls
 
@@ -584,6 +627,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.crystal_language_server import CrystalLanguageServer
 
                 return CrystalLanguageServer
+            case self.CUE:
+                from solidlsp.language_servers.cue_language_server import CueLanguageServer
+
+                return CueLanguageServer
             case self.YAML:
                 from solidlsp.language_servers.yaml_language_server import YamlLanguageServer
 
@@ -702,6 +749,18 @@ class Language(str, Enum):
                 from solidlsp.language_servers.msl_language_server import MslLanguageServer
 
                 return MslLanguageServer
+            case self.BSL:
+                from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
+
+                return BSLLanguageServer
+            case self.ADA:
+                from solidlsp.language_servers.ada_language_server import AdaLanguageServer
+
+                return AdaLanguageServer
+            case self.GDSCRIPT:
+                from solidlsp.language_servers.godot_language_server import GodotLanguageServer
+
+                return GodotLanguageServer
             case self.HTML:
                 from solidlsp.language_servers.vscode_html_language_server import VsCodeHtmlLanguageServer
 

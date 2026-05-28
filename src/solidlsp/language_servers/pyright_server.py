@@ -6,18 +6,19 @@ import logging
 import os
 import pathlib
 import re
-import sys
 import threading
 from typing import cast
 
 from overrides import override
 
-from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
+from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderUvx, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
+
+PYRIGHT_VERSION = "1.1.403"
 
 
 class PyrightServer(SolidLanguageServer):
@@ -44,14 +45,15 @@ class PyrightServer(SolidLanguageServer):
         self.found_source_files = False
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
-        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
-
-    class DependencyProvider(LanguageServerDependencyProviderSinglePath):
-        def _get_or_install_core_dependency(self) -> str:
-            return sys.executable
-
-        def _create_launch_command(self, core_path: str) -> list[str]:
-            return [core_path, "-m", "pyright.langserver", "--stdio"]
+        return LanguageServerDependencyProviderUvx(
+            self._custom_settings,
+            self._ls_resources_dir,
+            package="pyright",
+            entrypoint="pyright-langserver",
+            default_version=PYRIGHT_VERSION,
+            version_setting_key="pyright_version",
+            extra_args=("--stdio",),
+        )
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
