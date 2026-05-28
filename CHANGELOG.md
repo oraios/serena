@@ -14,6 +14,8 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 # v1.5.3 (2026-05-26)
 
+Add meta-data for the GitHub MCP registry
+
 # v1.5.2 (2026-05-26)
 
 * General:
