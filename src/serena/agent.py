@@ -664,8 +664,12 @@ class SerenaAgent:
         # may access various parts of the agent
         if self.serena_config.web_dashboard:
             self._dashboard_thread, port = SerenaDashboardAPI(
-                get_memory_log_handler(), tool_names, agent=self, tool_usage_stats=self._tool_usage_stats
-            ).run_in_thread(host=self.serena_config.web_dashboard_listen_address)
+                get_memory_log_handler(),
+                tool_names,
+                agent=self,
+                tool_usage_stats=self._tool_usage_stats,
+                host=self.serena_config.web_dashboard_listen_address,
+            ).run_in_thread()
             self._dashboard_manager = DashboardManager(
                 port,
                 self.serena_config.web_dashboard_listen_address,

@@ -8,6 +8,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     and `workspace/configuration` pulls. Enables Yarn PnP setups with `typescript.tsdk` pointing
     at the Yarn-generated SDK.
 
+* Dashboard: 
+  - Fix: Host validation required a local host even if the listen address was set to a non-local address (regression introduced in v1.5.2)
+
 # v1.5.3 (2026-05-26)
 
 # v1.5.2 (2026-05-26)
@@ -16,6 +19,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Not existing paths return `False` on is ignored checks (instead of raising an error)
   - Add `serena-agent` CLI command so that `uvx serena-agent` can be used as entrypoint.
   - Fortls and pyright are now installed on the fly instead of being bundled in the serena-agent package.
+
+Dashboard:
+  - Add host & port validation to prevent DNS rebinding attacks
 
 * Hooks:
   - Extend list of extensions that are considered code files (affects the reminder hook counter).
