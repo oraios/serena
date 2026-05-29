@@ -14,6 +14,7 @@ from serena.config.serena_config import (
     RegisteredProject,
     SerenaConfig,
     SerenaConfigError,
+    ToolInclusionDefinition,
 )
 from serena.constants import PROJECT_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
 from serena.project import MemoryManager, Project
@@ -596,3 +597,21 @@ class TestMemoriesManagerCustomPath:
         manager.save_memory("topic_b", "content b", is_tool_context=False)
         memories = manager.list_project_memories()
         assert sorted(memories.get_full_list()) == ["topic_a", "topic_b"]
+
+
+class TestToolInclusionDefinitionDisablesTool:
+    """Unit tests for ToolInclusionDefinition.disables_tool, used by QueryProjectTool's forwarding gate."""
+
+    def test_default_disables_nothing(self):
+        definition = ToolInclusionDefinition()
+        assert not definition.disables_tool("any_tool")
+
+    def test_incremental_mode_blocks_only_excluded(self):
+        definition = ToolInclusionDefinition(excluded_tools=["search_for_pattern"])
+        assert definition.disables_tool("search_for_pattern")
+        assert not definition.disables_tool("find_symbol")
+
+    def test_fixed_mode_blocks_anything_outside_the_fixed_set(self):
+        definition = ToolInclusionDefinition(fixed_tools=["find_symbol"])
+        assert definition.disables_tool("search_for_pattern")
+        assert not definition.disables_tool("find_symbol")

@@ -12,6 +12,12 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Host validation required a local host regardless of the listen address (regression introduced in v1.5.2),
     preventing remote connections
 
+* Tools:
+  - Fix: `query_project` rejected read-only tools that the active context hides (e.g.
+    `read_file`, `find_file`, `list_dir`, `search_for_pattern` in CLI/IDE contexts such as
+    `claude-code`, `codex`, `copilot-cli`, `vscode`), preventing forwarding to other
+    registered projects. Globally disabled tools remain blocked.
+
 # v1.5.3 (2026-05-26)
 
 Add meta-data for the GitHub MCP registry

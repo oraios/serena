@@ -165,6 +165,16 @@ class ToolInclusionDefinition:
             raise ValueError("Cannot use both fixed_tools and excluded_tools/included_optional_tools at the same time.")
         return num_fixed > 0
 
+    def disables_tool(self, tool_name: str) -> bool:
+        """Whether this definition disables the given tool by configuration policy.
+
+        Fixed mode: anything outside the fixed set is disabled.
+        Incremental mode: only explicitly excluded tools are disabled.
+        """
+        if self.is_fixed_tool_set():
+            return tool_name not in self.fixed_tools
+        return tool_name in self.excluded_tools
+
 
 @dataclass
 class NamedToolInclusionDefinition(ToolInclusionDefinition):
