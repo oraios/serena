@@ -94,12 +94,17 @@ reactive and writes funnel through methods.
 
 ## Charts (`ChartPanel.svelte`)
 
-Frappe Charts wrapper. Series colors are read from CSS vars at construction. A
-**create-effect** rebuilds the chart only on theme change / element rebind
-(`data`/`title`/`type` read via `untrack`); a separate **update-effect** diffs
-`data` in place — full teardown triggered a ResizeObserver `removeChild` race. A
-module-level error suppressor still swallows exactly that benign `NotFoundError`
-(the ResizeObserver fires it on initial grid layout / unmount). Keep both.
+Chart.js wrapper (`chart.js/auto`). `charts.ts` builds pure, colourless
+`ChartSpec`s (`pieSpec`, `tokensBarSpec`); `ChartPanel` is the **only** importer
+of `chart.js`/`chartjs-plugin-datalabels`. It resolves the palette
+(`--accent`, `--chart-2…6`) and theme colours (`--text-primary`, `--chart-grid`)
+from CSS vars and writes them onto the live chart. A **create-effect** builds the
+chart once per canvas bind (reads `spec` via `untrack`); a **data-effect** copies
+labels/data in place on `spec` change; a **theme-effect** re-applies colours on
+`theme.current`. All three end in `chart.update()` — no teardown, so there is no
+frappe-style `removeChild` race to suppress. `chartjs-plugin-datalabels` is
+registered **per-instance** (`plugins: [ChartDataLabels]`), enabled on the pies
+and disabled on the dual-axis bar.
 
 ## Testing (Vitest + jsdom + Testing Library)
 
@@ -112,8 +117,13 @@ module-level error suppressor still swallows exactly that benign `NotFoundError`
 
 ## Gotchas
 
-- **frappe-charts@1.6.2** ships no CSS and no types — import only the JS; ambient
-  types live in `src/types/frappe-charts.d.ts`. Don't add a `dist/*.css` import.
+- **Charts use `chart.js/auto`** (auto-registers all controllers/scales — simpler
+  than manual tree-shaking). `chartjs-plugin-datalabels` is registered per-chart,
+  not globally. Its Chart.js type augmentation is loaded via the type-only
+  `src/types/chartjs-datalabels.d.ts`.
+- **jsdom has no canvas backend** — component tests that mount a chart must
+  `vi.mock('chart.js/auto', ...)` and `vi.mock('chartjs-plugin-datalabels', ...)`
+  (see `tests/chart-panel.test.ts`).
 - **Node 26 + Vitest:** Node's experimental `localStorage` shadows jsdom's, so
   `tests/setup.ts` reinstalls it; localStorage tests must `clear()` in `beforeEach`.
 - `$state(someProp)` (prop as initial state) emits a `state_referenced_locally`

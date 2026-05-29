@@ -2,10 +2,23 @@
   import { detectLevel, highlightTools } from '$lib/format';
   let { lines, toolNames }: { lines: string[]; toolNames: string[] } = $props();
   let el = $state<HTMLDivElement | null>(null);
+  // Tracks whether we've performed the unconditional first scroll-to-bottom yet.
+  // Per-instance: re-entering the Logs view remounts this component, so we tail
+  // the newest line again on each entry.
+  let didInitialScroll = false;
 
   $effect(() => {
     void lines.length; // re-run when new lines arrive
-    if (!el) return;
+    if (!el || lines.length === 0) return;
+    if (!didInitialScroll) {
+      // Initial load: jump to the newest line unconditionally (legacy parity).
+      didInitialScroll = true;
+      queueMicrotask(() => {
+        if (el) el.scrollTop = el.scrollHeight;
+      });
+      return;
+    }
+    // Subsequent updates: only stay pinned if the user is already at the bottom.
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
     if (atBottom)
       queueMicrotask(() => {

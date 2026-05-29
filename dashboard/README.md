@@ -75,15 +75,12 @@ only task-scoped files can leave other files prettier-dirty and fail CI's
 
 ## Gotchas
 
-- **frappe-charts@1.6.2 ships no compiled CSS** — `ChartPanel.svelte` imports
-  only the JS. Don't re-add a `frappe-charts/dist/*.css` import; it breaks the
-  build. The library also has no TS types — ambient declaration lives in
-  `src/types/frappe-charts.d.ts`.
+- **Charts use Chart.js** (`chart.js/auto`) + `chartjs-plugin-datalabels`, wrapped
+  by `src/components/stats/ChartPanel.svelte` (the only file importing them).
+  Series colours come from CSS vars, not hardcoded hex.
 - **Node 26 + Vitest:** Node's experimental `localStorage` global shadows
   jsdom's, so `tests/setup.ts` reinstalls jsdom's Storage. Tests that touch
   `localStorage` must `clear()` it in `beforeEach`.
 - **`$state(someProp)`** (capturing a prop as initial state) emits a
   `state_referenced_locally` svelte-check warning; it's suppressed where
   intentional. These are warnings, not errors.
-- Charts go only through `ChartPanel.svelte`; the chart instance is destroyed in
-  the `$effect` cleanup to avoid leaking resize listeners on re-render.

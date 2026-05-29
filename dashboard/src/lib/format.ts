@@ -40,3 +40,12 @@ export function highlightTools(text: string, toolNames: string[]): string {
     return `<span class="tool-name">${escapeHtml(name)}</span>`;
   });
 }
+
+const numberFormatter = new Intl.NumberFormat('en-US');
+
+// Thousands-separated integer formatter. Locale fixed to 'en-US' to keep
+// rendering identical across browsers and CI; numbers are the user-facing
+// stat totals (Tool Calls, tokens) where commas read naturally.
+export function formatNumber(n: number): string {
+  return numberFormatter.format(n);
+}

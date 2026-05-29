@@ -84,9 +84,13 @@ export interface ResponseAvailableLanguages {
 export interface ResponseGetMemory {
   content: string;
   memory_name: string;
+  status?: string;
+  message?: string;
 }
 export interface ResponseGetSerenaConfig {
   content: string;
+  status?: string;
+  message?: string;
 }
 
 export interface QueuedExecution {

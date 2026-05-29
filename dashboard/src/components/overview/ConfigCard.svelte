@@ -158,7 +158,14 @@
     border: none;
     background: none;
     cursor: pointer;
-    color: var(--text-muted);
+    color: var(--log-error);
+    font-weight: bold;
+    line-height: 1;
+    padding: 0 2px;
+    border-radius: 3px;
+  }
+  .lang-remove:hover {
+    background: var(--bg-secondary-btn);
   }
   .tools-grid {
     display: grid;

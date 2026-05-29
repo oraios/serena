@@ -24,4 +24,12 @@ describe('CreateMemoryModal', () => {
     expect(await screen.findByText('already exists')).toBeInTheDocument();
     expect(oncreated).not.toHaveBeenCalled();
   });
+
+  it('renders a "Create Memory" title heading', () => {
+    stubFetchJson(errBody('nope'));
+    render(CreateMemoryModal, {
+      props: { projectName: 'serena', onclose: vi.fn(), oncreated: vi.fn() },
+    });
+    expect(screen.getByRole('heading', { name: 'Create Memory' })).toBeInTheDocument();
+  });
 });

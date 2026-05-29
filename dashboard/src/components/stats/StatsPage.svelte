@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { stats } from '$lib/stores/stats.svelte';
-  import { toPieData, toSingleSeriesBar } from '$lib/charts';
+  import { pieSpec, tokensBarSpec } from '$lib/charts';
   import ChartPanel from './ChartPanel.svelte';
   import StatsSummary from './StatsSummary.svelte';
   import Button from '../common/Button.svelte';
@@ -20,23 +20,12 @@
   <StatsSummary stats={stats.stats} />
   <div class="estimator-name">Token estimator: {stats.estimator}</div>
   <div class="charts-grid">
-    <ChartPanel title="Tool Calls" type="pie" data={toPieData(stats.stats, 'num_times_called')} />
-    <ChartPanel title="Input Tokens" type="pie" data={toPieData(stats.stats, 'input_tokens')} />
-    <ChartPanel title="Output Tokens" type="pie" data={toPieData(stats.stats, 'output_tokens')} />
+    <ChartPanel title="Tool Calls" height={360} spec={pieSpec(stats.stats, 'num_times_called')} />
+    <ChartPanel title="Input Tokens" height={360} spec={pieSpec(stats.stats, 'input_tokens')} />
+    <ChartPanel title="Output Tokens" height={360} spec={pieSpec(stats.stats, 'output_tokens')} />
   </div>
   <div class="charts-bars">
-    <ChartPanel
-      title="Input Tokens (by tool)"
-      type="bar"
-      valuesOverPoints
-      data={toSingleSeriesBar(stats.stats, 'input_tokens', 'Input Tokens')}
-    />
-    <ChartPanel
-      title="Output Tokens (by tool)"
-      type="bar"
-      valuesOverPoints
-      data={toSingleSeriesBar(stats.stats, 'output_tokens', 'Output Tokens')}
-    />
+    <ChartPanel title="Token Usage (by tool)" height={460} spec={tokensBarSpec(stats.stats)} />
   </div>
 {:else}
   <div class="no-stats-message">No tool stats collected yet.</div>
@@ -45,8 +34,14 @@
 <style>
   .controls {
     display: flex;
-    gap: var(--space-3);
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
     margin-bottom: var(--space-4);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
   }
   .charts-grid {
     display: grid;

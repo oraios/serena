@@ -1,57 +1,20 @@
-<script module lang="ts">
-  let removeChildSuppressorInstalled = false;
-  /**
-   * Frappe Charts redraws from a ResizeObserver callback; during initial grid layout (and on
-   * teardown) that redraw can call removeChild on a node Svelte — or Frappe's own cleanup — has
-   * already detached, throwing a benign NotFoundError. Because it surfaces asynchronously from the
-   * observer callback, a try/catch around our Chart usage can't reach it, so we install a single
-   * window-level handler that swallows exactly that message and lets everything else through.
-   * NOTE: update()-in-place removed most teardown, but the ResizeObserver still fires this on
-   * initial grid layout and on theme-recreate/unmount, so the suppressor is still required
-   * (verified via Playwright runtime check).
-   */
-  function installFrappeRemoveChildSuppressor(): void {
-    if (removeChildSuppressorInstalled || typeof window === 'undefined') return;
-    removeChildSuppressorInstalled = true;
-    window.addEventListener(
-      'error',
-      (event: ErrorEvent) => {
-        const msg = event.message ?? '';
-        if (msg.includes('removeChild') && msg.includes('not a child')) {
-          event.preventDefault();
-          event.stopImmediatePropagation();
-        }
-      },
-      true,
-    );
-  }
-</script>
-
 <script lang="ts">
   import { untrack } from 'svelte';
-  import { Chart } from 'frappe-charts';
-  import type { FrappeData } from '$lib/charts';
+  import Chart from 'chart.js/auto';
+  import ChartDataLabels from 'chartjs-plugin-datalabels';
+  import type { ChartConfiguration, ChartDataset } from 'chart.js';
+  import type { ChartSpec } from '$lib/charts';
   import { theme } from '$lib/stores/theme.svelte';
 
-  installFrappeRemoveChildSuppressor();
-
-  let {
-    title,
-    data,
-    type,
-    valuesOverPoints = false,
-  }: {
-    title: string;
-    data: FrappeData;
-    type: 'pie' | 'percentage' | 'bar';
-    valuesOverPoints?: boolean;
-  } = $props();
-  let el = $state<HTMLDivElement | null>(null);
+  let { title, spec, height = 240 }: { title: string; spec: ChartSpec; height?: number } = $props();
+  let canvas = $state<HTMLCanvasElement | null>(null);
+  let chart: Chart | null = null;
 
   function cssVar(name: string, fallback: string): string {
+    if (typeof document === 'undefined') return fallback;
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
   }
-  function seriesColors(): string[] {
+  function palette(): string[] {
     return [
       cssVar('--accent', '#eaa45d'),
       cssVar('--chart-2', '#6aa3d8'),
@@ -62,49 +25,86 @@
     ];
   }
 
-  let chartRef: Chart | null = null;
+  // Re-resolve palette + theme colours from CSS vars and write them onto the live
+  // chart, then redraw. Called after create, on data change, and on theme change —
+  // Chart.js updates in place, so no teardown (and no frappe removeChild race).
+  function applyTheme(): void {
+    if (!chart) return;
+    const colors = palette();
+    const text = cssVar('--text-primary', '#1f2328');
+    const grid = cssVar('--chart-grid', '#dddddd');
+    const sliceColors = (chart.data.labels ?? []).map((_label, i) => colors[i % colors.length]);
 
-  // Recreate the chart only when the theme changes (colors are baked in at construction) or
-  // when `el` (re)binds. `data`/`title`/`type` are read via untrack() so a data change does
-  // NOT re-run this effect — the separate update-effect below handles data in place, avoiding
-  // the full DOM teardown that previously triggered the ResizeObserver removeChild race.
-  $effect(() => {
-    void theme.current; // re-run on theme change
-    if (!el) return; // reading `el` makes (re)bind a dependency, which we want
-    const node = el;
-    const chart = untrack(() => {
-      node.innerHTML = '';
-      return new Chart(node, {
-        title,
-        data,
-        type,
-        height: type === 'bar' ? 240 : 220,
-        colors: seriesColors(),
-        valuesOverPoints: valuesOverPoints ? 1 : 0,
-      });
-    });
-    chartRef = chart;
-    return () => {
-      chartRef = null;
-      try {
-        chart.destroy();
-      } catch {
-        /* frappe removeChild race on teardown */
+    if (spec.type === 'pie') {
+      chart.data.datasets[0].backgroundColor = sliceColors;
+    } else {
+      // Dual-axis bar: input semi-transparent fill + solid border, output solid.
+      // Narrow once — `ChartDataset<'pie' | 'bar'>` resolves `borderWidth` to `never`.
+      const input = chart.data.datasets[0] as ChartDataset<'bar'>;
+      const output = chart.data.datasets[1] as ChartDataset<'bar'>;
+      input.backgroundColor = sliceColors.map((c) => c + '80');
+      input.borderColor = sliceColors;
+      input.borderWidth = 2;
+      output.backgroundColor = sliceColors;
+    }
+
+    const o = chart.options as ChartConfiguration['options'] & {
+      plugins?: { legend?: { labels?: { color?: string } } };
+      scales?: Record<
+        string,
+        { ticks?: { color?: string }; grid?: { color?: string }; title?: { color?: string } }
+      >;
+    };
+    if (o.plugins?.legend?.labels) o.plugins.legend.labels.color = text;
+    if (o.scales) {
+      for (const axis of Object.values(o.scales)) {
+        if (!axis) continue;
+        axis.ticks = { ...axis.ticks, color: text };
+        axis.grid = { ...axis.grid, color: grid };
+        if (axis.title) axis.title.color = text;
       }
+    }
+    chart.update();
+  }
+
+  // Create once per canvas bind. Reads `spec` via untrack so data changes don't
+  // recreate the chart (the data-effect below handles those in place). Registers
+  // datalabels per-instance instead of globally.
+  $effect(() => {
+    if (!canvas) return;
+    const node = canvas;
+    const created = untrack(
+      () => new Chart(node, { ...spec, plugins: [ChartDataLabels] } as ChartConfiguration),
+    );
+    chart = created;
+    untrack(() => applyTheme());
+    return () => {
+      chart = null;
+      created.destroy();
     };
   });
 
-  // Data-only updates: read `data` (registers the dependency) and diff in place. Skips when
-  // the chart hasn't been built yet — the create-effect renders the first frame.
+  // Data-only updates: copy labels/data from the new spec and recolour in place.
   $effect(() => {
-    const next = data;
-    if (chartRef) chartRef.update(next);
+    const next = spec;
+    if (!chart) return;
+    chart.data.labels = next.data.labels ?? [];
+    next.data.datasets.forEach((ds, i) => {
+      if (chart!.data.datasets[i]) chart!.data.datasets[i].data = ds.data;
+    });
+    applyTheme();
+  });
+
+  // Re-apply colours when the theme flips.
+  $effect(() => {
+    void theme.current;
+    if (chart) applyTheme();
   });
 </script>
 
 <div class="chart-group">
   <h3>{title}</h3>
-  <div bind:this={el}></div>
+  <div class="canvas-wrap" style="height: {height}px"><canvas bind:this={canvas}></canvas></div>
 </div>
 
 <style>
@@ -114,5 +114,8 @@
     border-radius: var(--radius);
     padding: var(--space-4);
     box-shadow: var(--shadow);
+  }
+  .canvas-wrap {
+    position: relative;
   }
 </style>

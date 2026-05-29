@@ -15,6 +15,7 @@
   --chart-4: #d88c8c;
   --chart-5: #b39ddb;
   --chart-6: #e0a458;
+  --chart-grid: #dddddd;
   --text-on-accent: #ffffff;
   --btn-disabled: #adb5bd;
   --tool-highlight: #fff3bf;
@@ -53,6 +54,7 @@
   --text-muted: #8b95a1;
   --border: #2d333b;
   --border-strong: #3d444d;
+  --chart-grid: #444444;
   --btn-disabled: #4a5159;
   --tool-highlight: #f6c948;
   --tool-highlight-text: #15181c;

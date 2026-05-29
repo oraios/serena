@@ -9,12 +9,20 @@
   let { onclose }: { onclose: () => void } = $props();
   let content = $state('');
   let initialContent = $state('');
+  let loaded = $state(false);
+  let loadError = $state('');
   const dirty = $derived(content !== initialContent);
   const action = createModalAction();
   async function load() {
-    const loaded = (await getSerenaConfig()).content;
-    content = loaded;
-    initialContent = loaded;
+    const res = await runMutation(() => getSerenaConfig());
+    if (!res.ok) {
+      loadError = res.message ?? 'Failed to load configuration.';
+      return;
+    }
+    const loadedContent = res.data?.content ?? '';
+    content = loadedContent;
+    initialContent = loadedContent;
+    loaded = true;
   }
   onMount(() => {
     void load();
@@ -27,7 +35,12 @@
   }
 </script>
 
-<Modal open={true} title="Global Serena Configuration" error={action.error} onclose={requestClose}>
+<Modal
+  open={true}
+  title="Global Serena Configuration"
+  error={loadError || action.error}
+  onclose={requestClose}
+>
   <p class="modal-hint">
     Note: Changes to the configuration only take effect after Serena is restarted.
   </p>
@@ -35,6 +48,6 @@
   ></textarea>
   <div class="modal-actions">
     <Button variant="secondary" onclick={requestClose}>Cancel</Button>
-    <Button disabled={action.busy} onclick={save}>Save</Button>
+    <Button disabled={!loaded || action.busy} onclick={save}>Save</Button>
   </div>
 </Modal>

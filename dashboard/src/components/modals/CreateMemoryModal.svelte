@@ -23,7 +23,7 @@
   }
 </script>
 
-<Modal open={true} error={action.error} {onclose}>
+<Modal open={true} title="Create Memory" error={action.error} {onclose}>
   <p class="modal-info">Create a new memory for project <strong>{projectName}</strong>.</p>
   <p class="modal-hint">
     Use underscores instead of spaces (e.g. "api_architecture"). Use "/" for subdirectories (e.g.

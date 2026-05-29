@@ -15,19 +15,26 @@
   let currentName = $state(untrack(() => name));
   let content = $state('');
   let initialContent = $state('');
+  let loaded = $state(false);
+  let loadError = $state('');
   let renaming = $state(false);
   let renameValue = $state(untrack(() => name));
   const dirty = $derived(content !== initialContent);
   const action = createModalAction();
   const renameAction = createModalAction();
+  async function load() {
+    const res = await runMutation(() => getMemory(name));
+    if (!res.ok) {
+      loadError = res.message ?? 'Failed to load memory.';
+      return;
+    }
+    const loadedContent = res.data?.content ?? '';
+    content = loadedContent;
+    initialContent = loadedContent;
+    loaded = true;
+  }
   onMount(() => {
-    void (async () => {
-      // On failure the backend returns {status:'error', message} (HTTP 200) with no `content`;
-      // fall back to an empty string so the textarea never binds to `undefined`.
-      const loaded = (await getMemory(name)).content ?? '';
-      content = loaded;
-      initialContent = loaded;
-    })();
+    void load();
   });
   function requestClose() {
     if (confirmDiscard(dirty)) onclose();
@@ -50,7 +57,7 @@
   }
 </script>
 
-<Modal open={true} error={action.error || renameAction.error} onclose={requestClose}>
+<Modal open={true} error={loadError || action.error || renameAction.error} onclose={requestClose}>
   <h3 class="modal-title-with-meta">
     Memory:
     {#if renaming}
@@ -90,7 +97,7 @@
   ></textarea>
   <div class="modal-actions">
     <Button variant="secondary" onclick={requestClose}>Cancel</Button>
-    <Button disabled={action.busy} onclick={save}>Save</Button>
+    <Button disabled={!loaded || action.busy} onclick={save}>Save</Button>
   </div>
 </Modal>
 

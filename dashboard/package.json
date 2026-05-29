@@ -32,6 +32,7 @@
     "vitest": "^2.1.0"
   },
   "dependencies": {
-    "frappe-charts": "^1.6.2"
+    "chart.js": "^4.5.1",
+    "chartjs-plugin-datalabels": "^2.2.0"
   }
 }
