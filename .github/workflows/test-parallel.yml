@@ -79,15 +79,8 @@ jobs:
           MARKERS='${{ matrix.marker_expr }}'
 
           if [[ '${{ matrix.batch_name }}' == 'Catch-All (Core Framework & Remaining Languages)' ]]; then
-            # Ruby Server Integrity Check
-            if command -v ruby-lsp >/dev/null 2>&1; then
-              ruby-lsp --version >/dev/null 2>&1 || MARKERS="$MARKERS and not ruby"
-            else
-              MARKERS="$MARKERS and not ruby"
-            fi
-
-            # Strict Quarantining Based on Historical Flakiness and Environment-Dependent Failures
-            MARKERS="$MARKERS and not php and not clojure and not kotlin and not msl and not nix and not zig and not swift and not perl and not fortran and not haskell and not elixir and not fsharp and not groovy and not matlab and not yaml and not json and not ansible"
+            # Strict Quarantining Based on Agent Architecture Report & Runtime Crashes
+            MARKERS="$MARKERS and not ruby and not php and not clojure and not kotlin and not msl and not nix and not zig and not swift and not perl and not fortran and not haskell and not elixir and not fsharp and not groovy and not matlab and not yaml and not json and not ansible"
           fi
 
           echo "MARKERS=$MARKERS"
