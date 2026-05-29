@@ -9,6 +9,7 @@ import platform
 import signal
 import subprocess
 import threading
+import time
 from collections import defaultdict
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
@@ -864,15 +865,34 @@ class SerenaAgent:
                 os.environ["COMSPEC"] = ""  # force use of default shell
                 log.info("Adjusting COMSPEC environment variable to use the default shell instead of '%s'", comspec)
 
-    def record_tool_usage(self, input_kwargs: dict, tool_result: str | dict, tool: Tool) -> None:
+    def _record_tool_call_safely(
+        self,
+        tool_name: str,
+        input_str: str,
+        output_str: str,
+        duration_ms: float,
+        success: bool,
+        error_message: str | None,
+    ) -> None:
         """
-        Record the usage of a tool with the given input and output strings if tool usage statistics recording is enabled.
+        Record a tool call into the in-memory analytics buffer. Instrumentation must
+        never break the agent — any exception from the analytics layer is caught
+        and logged at WARNING.
         """
-        tool_name = tool.get_name()
-        input_str = str(input_kwargs)
-        output_str = str(tool_result)
-        log.debug(f"Recording tool usage for tool '{tool_name}'")
-        self._tool_usage_stats.record_tool_usage(tool_name, input_str, output_str)
+        if self._tool_usage_stats is None:
+            return
+        try:
+            self._tool_usage_stats.record_call(
+                tool_name=tool_name,
+                input_str=input_str,
+                output_str=output_str,
+                duration_ms=duration_ms,
+                success=success,
+                error_message=error_message,
+                now=time.time(),
+            )
+        except Exception as e:  # noqa: BLE001 — instrumentation MUST NOT break agent
+            log.warning(f"Failed to record tool call analytics for '{tool_name}': {e}", exc_info=e)
 
     def get_dashboard_url(self) -> str | None:
         """

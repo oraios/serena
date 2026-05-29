@@ -13,6 +13,11 @@ import type {
   ResponseNews,
   StatusResponse,
   TokenEstimatorResponse,
+  ResponseToolCallTimeline,
+  ResponseListDir,
+  ResponseFileSymbols,
+  ResponseWorkspaceSymbolSearch,
+  ResponseDiagnosticsSummary,
 } from './types';
 
 export const fetchConfigOverview = () => getJson<ResponseConfigOverview>('/get_config_overview');
@@ -50,3 +55,31 @@ export const fetchLastExecution = () => getJson<ResponseLastExecution>('/last_ex
 export const fetchUnreadNews = () => getJson<ResponseNews>('/fetch_unread_news');
 export const markNewsRead = (news_snippet_id: string) =>
   postJson<StatusResponse>('/mark_news_snippet_as_read', { news_snippet_id });
+
+export const fetchToolCallTimeline = (params: {
+  since_seq?: number;
+  tool?: string;
+  limit?: number;
+}) => {
+  const qs = new URLSearchParams();
+  if (params.since_seq !== undefined) qs.set('since_seq', String(params.since_seq));
+  if (params.tool) qs.set('tool', params.tool);
+  if (params.limit !== undefined) qs.set('limit', String(params.limit));
+  const query = qs.toString();
+  const url = query ? `/get_tool_call_timeline?${query}` : '/get_tool_call_timeline';
+  return getJson<ResponseToolCallTimeline>(url);
+};
+
+export const fetchCodeListDir = (path: string) =>
+  getJson<ResponseListDir>(`/code/list_dir?path=${encodeURIComponent(path)}`);
+
+export const fetchCodeFileSymbols = (path: string) =>
+  getJson<ResponseFileSymbols>(`/code/file_symbols?path=${encodeURIComponent(path)}`);
+
+export const fetchCodeWorkspaceSymbolSearch = (q: string, limit = 50) =>
+  getJson<ResponseWorkspaceSymbolSearch>(
+    `/code/workspace_symbol_search?q=${encodeURIComponent(q)}&limit=${limit}`,
+  );
+
+export const fetchCodeDiagnosticsSummary = (file_limit = 1000) =>
+  getJson<ResponseDiagnosticsSummary>(`/code/diagnostics_summary?file_limit=${file_limit}`);

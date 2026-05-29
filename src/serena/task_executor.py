@@ -1,4 +1,5 @@
 import concurrent.futures
+import re
 import threading
 import time
 from collections.abc import Callable
@@ -13,6 +14,8 @@ from sensai.util.string import ToStringMixin
 
 log = logging.getLogger(__name__)
 T = TypeVar("T")
+
+_TASK_PREFIX_RE = re.compile(r"^Task-\d+:\s*(.*)$")
 
 
 class TaskExecutor:
@@ -44,6 +47,8 @@ class TaskExecutor:
             self.logged = logged
             self.timeout = timeout
             self._function = function
+            self.started_at: float | None = None
+            self.finished_at: float | None = None
 
         def _tostring_includes(self) -> list[str]:
             return ["name"]
@@ -54,18 +59,22 @@ class TaskExecutor:
             """
 
             def run_task() -> None:
+                self.started_at = time.time()
                 try:
                     if self.future.done():
                         if self.logged:
                             log.info(f"Task {self.name} was already completed/cancelled; skipping execution")
+                        self.finished_at = time.time()
                         return
                     with LogTime(self.name, logger=log, enabled=self.logged):
                         result = self._function()
                         if not self.future.done():
+                            self.finished_at = time.time()
                             self.future.set_result(result)
                 except Exception as e:
                     if not self.future.done():
                         log.error(f"Error during execution of {self.name}: {e}", exc_info=e)
+                        self.finished_at = time.time()
                         self.future.set_exception(e)
 
             thread = Thread(target=run_task, name=self.name)
@@ -156,13 +165,41 @@ class TaskExecutor:
         unique identifier of the task
         """
         logged: bool
+        started_at: float | None = None
+        finished_at: float | None = None
 
         def finished_successfully(self) -> bool:
             return self.future.done() and not self.future.cancelled() and self.future.exception() is None
 
+        def get_duration_ms(self) -> int | None:
+            if self.started_at is None or self.finished_at is None:
+                return None
+            return int(max(0.0, (self.finished_at - self.started_at) * 1000))
+
+        def get_error_message(self) -> str | None:
+            if not self.future.done() or self.future.cancelled():
+                return None
+            exc = self.future.exception()
+            if exc is None:
+                return None
+            return f"{type(exc).__name__}: {exc}"
+
+        def get_display_name(self) -> str:
+            """Strip "Task-N: " prefix if present."""
+            m = _TASK_PREFIX_RE.match(self.name)
+            return m.group(1) if m else self.name
+
         @staticmethod
         def from_task(task: "TaskExecutor.Task", is_running: bool) -> "TaskExecutor.TaskInfo":
-            return TaskExecutor.TaskInfo(name=task.name, is_running=is_running, future=task.future, task_id=id(task), logged=task.logged)
+            return TaskExecutor.TaskInfo(
+                name=task.name,
+                is_running=is_running,
+                future=task.future,
+                task_id=id(task),
+                logged=task.logged,
+                started_at=task.started_at,
+                finished_at=task.finished_at,
+            )
 
         def cancel(self) -> None:
             self.future.cancel()

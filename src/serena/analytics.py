@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from abc import ABC, abstractmethod
-from collections import defaultdict
+from collections import defaultdict, deque
 from copy import copy
 from dataclasses import asdict, dataclass
 from enum import Enum
@@ -116,6 +117,36 @@ class RegisteredTokenCountEstimator(Enum):
         return estimator_instance
 
 
+_INPUT_OUTPUT_PREVIEW_BYTES = 8 * 1024
+_RECORD_BUFFER_SIZE = 2000
+
+
+def _truncate_preview(text: str) -> tuple[str, bool]:
+    """
+    Truncate text so its UTF-8 byte length is at most _INPUT_OUTPUT_PREVIEW_BYTES.
+    Returns (possibly-truncated text, was_truncated).
+    """
+    encoded = text.encode("utf-8")
+    if len(encoded) <= _INPUT_OUTPUT_PREVIEW_BYTES:
+        return text, False
+    truncated = encoded[:_INPUT_OUTPUT_PREVIEW_BYTES].decode("utf-8", errors="ignore")
+    return truncated, True
+
+
+@dataclass(frozen=True)
+class ToolCallRecord:
+    seq: int
+    tool: str
+    started_at: float
+    duration_ms: float
+    success: bool
+    error_message: str | None
+    input_preview: str
+    output_preview: str
+    input_truncated: bool
+    output_truncated: bool
+
+
 class ToolUsageStats:
     """
     A class to record and manage tool usage statistics.
@@ -126,6 +157,8 @@ class ToolUsageStats:
         self._token_estimator_name = token_count_estimator.value
         self._tool_stats: dict[str, ToolUsageStats.Entry] = defaultdict(ToolUsageStats.Entry)
         self._tool_stats_lock = threading.Lock()
+        self._records: deque[ToolCallRecord] = deque(maxlen=_RECORD_BUFFER_SIZE)
+        self._seq_counter: int = 0
 
     @property
     def token_estimator_name(self) -> str:
@@ -137,16 +170,38 @@ class ToolUsageStats:
     @dataclass(kw_only=True)
     class Entry:
         num_times_called: int = 0
+        num_errors: int = 0
         input_tokens: int = 0
         output_tokens: int = 0
+        total_duration_ms: float = 0.0
+        min_duration_ms: float | None = None
+        max_duration_ms: float | None = None
+        last_called_at: float | None = None
 
-        def update_on_call(self, input_tokens: int, output_tokens: int) -> None:
+        def update_on_call(
+            self,
+            input_tokens: int,
+            output_tokens: int,
+            duration_ms: float,
+            success: bool,
+            now: float,
+        ) -> None:
             """
-            Update the entry with the number of tokens used for a single call.
+            Update the entry for a single call: tokens, duration, success/error, timestamp.
             """
             self.num_times_called += 1
+            if not success:
+                self.num_errors += 1
             self.input_tokens += input_tokens
             self.output_tokens += output_tokens
+            self.total_duration_ms += duration_ms
+            self.min_duration_ms = (
+                duration_ms if self.min_duration_ms is None else min(self.min_duration_ms, duration_ms)
+            )
+            self.max_duration_ms = (
+                duration_ms if self.max_duration_ms is None else max(self.max_duration_ms, duration_ms)
+            )
+            self.last_called_at = now
 
     def _estimate_token_count(self, text: str) -> int:
         return self._token_count_estimator.estimate_token_count(text)
@@ -158,17 +213,78 @@ class ToolUsageStats:
         with self._tool_stats_lock:
             return copy(self._tool_stats[tool_name])
 
-    def record_tool_usage(self, tool_name: str, input_str: str, output_str: str) -> None:
+    def record_call(
+        self,
+        tool_name: str,
+        input_str: str,
+        output_str: str,
+        duration_ms: float,
+        success: bool,
+        error_message: str | None,
+        now: float,
+    ) -> None:
+        """
+        Record a tool call: updates the aggregate Entry AND appends a ToolCallRecord
+        to the bounded ring buffer. Atomic under the stats lock.
+        """
         input_tokens = self._estimate_token_count(input_str)
         output_tokens = self._estimate_token_count(output_str)
+        input_preview, input_truncated = _truncate_preview(input_str)
+        output_preview, output_truncated = _truncate_preview(output_str)
         with self._tool_stats_lock:
-            entry = self._tool_stats[tool_name]
-            entry.update_on_call(input_tokens, output_tokens)
+            self._seq_counter += 1
+            seq = self._seq_counter
+            self._tool_stats[tool_name].update_on_call(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                duration_ms=duration_ms,
+                success=success,
+                now=now,
+            )
+            self._records.append(
+                ToolCallRecord(
+                    seq=seq,
+                    tool=tool_name,
+                    started_at=now - duration_ms / 1000.0,
+                    duration_ms=duration_ms,
+                    success=success,
+                    error_message=error_message,
+                    input_preview=input_preview,
+                    output_preview=output_preview,
+                    input_truncated=input_truncated,
+                    output_truncated=output_truncated,
+                )
+            )
 
-    def get_tool_stats_dict(self) -> dict[str, dict[str, int]]:
+    def get_records_since(
+        self,
+        since_seq: int | None,
+        tool: str | None,
+        limit: int,
+    ) -> tuple[list[ToolCallRecord], int]:
+        """
+        Return (records, max_seq). since_seq=None returns the tail; otherwise only
+        records with seq > since_seq are returned. Optional per-tool filter.
+        Result is capped at `limit` (newest preferred via tail-slicing).
+        """
+        limit = max(0, min(limit, _RECORD_BUFFER_SIZE))
+        with self._tool_stats_lock:
+            max_seq = self._seq_counter
+            snapshot = list(self._records)
+        if since_seq is not None:
+            snapshot = [r for r in snapshot if r.seq > since_seq]
+        if tool is not None:
+            snapshot = [r for r in snapshot if r.tool == tool]
+        if len(snapshot) > limit:
+            snapshot = snapshot[-limit:]
+        return snapshot, max_seq
+
+    def get_tool_stats_dict(self) -> dict[str, dict[str, float | int | None]]:
         with self._tool_stats_lock:
             return {name: asdict(entry) for name, entry in self._tool_stats.items()}
 
     def clear(self) -> None:
         with self._tool_stats_lock:
             self._tool_stats.clear()
+            self._records.clear()
+            self._seq_counter = 0

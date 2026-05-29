@@ -8,8 +8,13 @@ function exec(over: Partial<QueuedExecution>): QueuedExecution {
     task_id: 5,
     is_running: false,
     name: 'init',
+    display_name: 'init',
     finished_successfully: true,
     logged: true,
+    started_at: null,
+    finished_at: null,
+    duration_ms: null,
+    error_message: null,
     ...over,
   };
 }

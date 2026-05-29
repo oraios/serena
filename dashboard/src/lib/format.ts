@@ -49,3 +49,33 @@ const numberFormatter = new Intl.NumberFormat('en-US');
 export function formatNumber(n: number): string {
   return numberFormatter.format(n);
 }
+
+// Human-readable duration. Crosses ms → s → m → h as the magnitude grows.
+export function formatDurationMs(ms: number): string {
+  if (ms < 1) return '<1 ms';
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(1)} s`;
+  const m = s / 60;
+  if (m < 60) return `${m.toFixed(1)} m`;
+  const h = m / 60;
+  return `${h.toFixed(1)} h`;
+}
+
+// Token totals: 5,678 → "5.7k", 1_234_000 → "1.23M".
+export function formatTokens(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`;
+  return `${(n / 1_000_000).toFixed(2)}M`;
+}
+
+// Inclusive-linear nearest-rank percentile (B24): floor((q/100) * (n-1)).
+// `percentile([1..100], 95)` → sorted[94] = 95. Empty input → 0. q is clamped
+// to [0, 100] so out-of-range quantiles don't blow up the index.
+export function percentile(xs: number[], q: number): number {
+  if (xs.length === 0) return 0;
+  const sorted = [...xs].sort((a, b) => a - b);
+  const clamped = Math.max(0, Math.min(100, q));
+  const idx = Math.floor((clamped / 100) * (sorted.length - 1));
+  return sorted[idx];
+}

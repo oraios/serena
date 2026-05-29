@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any, Optional, Self
 import psutil
 from flask import Flask, Response, redirect, request, send_from_directory
 from PIL import Image
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sensai.util import logging
 from sensai.util.pickle import dump_pickle, load_pickle
 
@@ -52,7 +52,7 @@ class ResponseToolNames(BaseModel):
 
 
 class ResponseToolStats(BaseModel):
-    stats: dict[str, dict[str, int]]
+    stats: dict[str, dict[str, float | int | None]]
 
 
 class ResponseConfigOverview(BaseModel):
@@ -60,7 +60,10 @@ class ResponseConfigOverview(BaseModel):
     context: dict[str, str]
     modes: list[dict[str, str]]
     active_tools: list[str]
-    tool_stats_summary: dict[str, dict[str, int]]
+    tool_stats_summary: dict[str, dict[str, float | int | None]]
+    tool_stats_totals: dict[str, float] = Field(
+        default_factory=lambda: {"num_calls": 0, "num_errors": 0, "total_duration_ms": 0.0, "total_tokens": 0}
+    )
     registered_projects: list[dict[str, str | bool]]
     available_tools: list[dict[str, str | bool]]
     available_modes: list[dict[str, str | bool]]
@@ -124,8 +127,13 @@ class QueuedExecution(BaseModel):
     task_id: int
     is_running: bool
     name: str
+    display_name: str
     finished_successfully: bool
     logged: bool
+    started_at: float | None = None
+    finished_at: float | None = None
+    duration_ms: int | None = None
+    error_message: str | None = None
 
     @classmethod
     def from_task_info(cls, task_info: TaskExecutor.TaskInfo) -> Self:
@@ -133,9 +141,32 @@ class QueuedExecution(BaseModel):
             task_id=task_info.task_id,
             is_running=task_info.is_running,
             name=task_info.name,
+            display_name=task_info.get_display_name(),
             finished_successfully=task_info.finished_successfully(),
             logged=task_info.logged,
+            started_at=task_info.started_at,
+            finished_at=task_info.finished_at,
+            duration_ms=task_info.get_duration_ms(),
+            error_message=task_info.get_error_message(),
         )
+
+
+class ToolCallRecordResponse(BaseModel):
+    seq: int
+    tool: str
+    started_at: float
+    duration_ms: float
+    success: bool
+    error_message: str | None
+    input_preview: str
+    output_preview: str
+    input_truncated: bool
+    output_truncated: bool
+
+
+class ResponseToolCallTimeline(BaseModel):
+    records: list[ToolCallRecordResponse]
+    max_seq: int
 
 
 class ReadNews:
@@ -264,6 +295,58 @@ class SerenaDashboardAPI:
         def get_tool_stats_route() -> dict[str, Any]:
             result = self._get_tool_stats()
             return result.model_dump()
+
+        @self._app.route("/get_tool_call_timeline", methods=["GET"])
+        def get_tool_call_timeline_route() -> tuple[dict[str, Any], int] | dict[str, Any]:
+            # Flask's type=int returns None for both "absent" and "present but non-numeric".
+            # Disambiguate by inspecting the raw value first so garbage input 400s instead
+            # of silently returning the full tail.
+            since_seq_str = request.args.get("since_seq", default=None, type=str)
+            if since_seq_str is not None and since_seq_str != "":
+                try:
+                    since_seq_raw: int | None = int(since_seq_str)
+                except ValueError:
+                    return {"status": "error", "message": "since_seq must be an integer"}, 400
+            else:
+                since_seq_raw = None
+            limit_str = request.args.get("limit", default=None, type=str)
+            if limit_str is not None and limit_str != "":
+                try:
+                    limit = int(limit_str)
+                except ValueError:
+                    return {"status": "error", "message": "limit must be an integer"}, 400
+            else:
+                limit = 200
+            tool = request.args.get("tool", default=None, type=str) or None  # treat "" as None
+            if since_seq_raw is not None and since_seq_raw < 0:
+                return {"status": "error", "message": "since_seq must be >= 0"}, 400
+            if limit < 0:
+                return {"status": "error", "message": "limit must be >= 0"}, 400
+            if self._tool_usage_stats is None:
+                return ResponseToolCallTimeline(records=[], max_seq=0).model_dump()
+            records, max_seq = self._tool_usage_stats.get_records_since(
+                since_seq=since_seq_raw,
+                tool=tool,
+                limit=limit,
+            )
+            return ResponseToolCallTimeline(
+                records=[
+                    ToolCallRecordResponse(
+                        seq=r.seq,
+                        tool=r.tool,
+                        started_at=r.started_at,
+                        duration_ms=r.duration_ms,
+                        success=r.success,
+                        error_message=r.error_message,
+                        input_preview=r.input_preview,
+                        output_preview=r.output_preview,
+                        input_truncated=r.input_truncated,
+                        output_truncated=r.output_truncated,
+                    )
+                    for r in records
+                ],
+                max_seq=max_seq,
+            ).model_dump()
 
         @self._app.route("/clear_tool_stats", methods=["POST"])
         def clear_tool_stats_route() -> dict[str, str]:
@@ -461,6 +544,11 @@ class SerenaDashboardAPI:
             except Exception as e:
                 return {"status": "error", "message": str(e)}
 
+        # Register /code/* routes (file tree, symbols, workspace search, diagnostics).
+        from serena.dashboard_code import register_code_routes
+
+        register_code_routes(self)
+
     def _get_log_messages(self, request_log: RequestLog) -> ResponseLog:
         messages = self._memory_log_handler.get_log_messages(from_idx=request_log.start_idx)
         project = self._agent.get_active_project()
@@ -569,11 +657,24 @@ class SerenaDashboardAPI:
                 }
             )
 
+        # Snapshot tool stats once — reused for both summary and totals to avoid TOCTOU.
+        full_stats = self._tool_usage_stats.get_tool_stats_dict() if self._tool_usage_stats is not None else {}
+
         # Get basic tool stats (just num_calls for overview)
-        tool_stats_summary = {}
-        if self._tool_usage_stats is not None:
-            full_stats = self._tool_usage_stats.get_tool_stats_dict()
-            tool_stats_summary = {name: {"num_calls": stats["num_times_called"]} for name, stats in full_stats.items()}
+        tool_stats_summary = {name: {"num_calls": stats["num_times_called"]} for name, stats in full_stats.items()}
+
+        # Aggregate totals across all tools (drives the Overview SummaryCards strip).
+        tool_stats_totals: dict[str, float] = {
+            "num_calls": 0,
+            "num_errors": 0,
+            "total_duration_ms": 0.0,
+            "total_tokens": 0,
+        }
+        for s in full_stats.values():
+            tool_stats_totals["num_calls"] += s.get("num_times_called", 0) or 0
+            tool_stats_totals["num_errors"] += s.get("num_errors", 0) or 0
+            tool_stats_totals["total_duration_ms"] += s.get("total_duration_ms", 0.0) or 0.0
+            tool_stats_totals["total_tokens"] += (s.get("input_tokens", 0) or 0) + (s.get("output_tokens", 0) or 0)
 
         # Get available memories if ReadMemoryTool is active
         available_memories = None
@@ -596,6 +697,7 @@ class SerenaDashboardAPI:
             modes=modes_info,
             active_tools=active_tools,
             tool_stats_summary=tool_stats_summary,
+            tool_stats_totals=tool_stats_totals,
             registered_projects=registered_projects,
             available_tools=available_tools,
             available_modes=available_modes,

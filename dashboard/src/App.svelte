@@ -8,11 +8,13 @@
   import { config } from '$lib/stores/config.svelte';
   import { executions } from '$lib/stores/executions.svelte';
   import { logs } from '$lib/stores/logs.svelte';
+  import { timeline } from '$lib/stores/timeline.svelte';
   import { pageTitle } from '$lib/title';
   // View components are added in Phases 3–6; import them as they land.
   import OverviewPage from './components/overview/OverviewPage.svelte';
   import LogsPage from './components/logs/LogsPage.svelte';
   import StatsPage from './components/stats/StatsPage.svelte';
+  import CodePage from './components/code/CodePage.svelte';
   import ModalHost from './components/modals/ModalHost.svelte';
   import { modal } from '$lib/stores/modal.svelte';
 
@@ -30,16 +32,20 @@
   const queuedPoller = createPoller(() => safe(executions.pollQueued()), 1000);
   const lastPoller = createPoller(() => safe(executions.pollLast()), 1000);
   const logsPoller = createPoller(() => safe(logs.poll()), 1000);
+  const timelinePoller = createPoller(() => safe(timeline.poll()), 1000);
 
   const pollers: Record<PollerName, Poller> = {
     config: configPoller,
     queued: queuedPoller,
     last: lastPoller,
     logs: logsPoller,
+    timeline: timelinePoller,
   };
 
   function startPollers(v: View) {
     for (const p of Object.values(pollers)) p.stop();
+    // Skip starting when the tab is hidden — visibility handler resumes on unhide.
+    if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
     for (const name of pollersForView(v)) pollers[name].start();
   }
 
@@ -51,6 +57,15 @@
   onMount(() => {
     theme.init();
     startPollers('overview');
+    const onVis = () => {
+      if (document.visibilityState === 'visible') {
+        startPollers(view);
+      } else {
+        for (const p of Object.values(pollers)) p.stop();
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
   });
 </script>
 
@@ -72,7 +87,15 @@
         />
       </div>{/if}
     {#if view === 'logs'}<div class="page-view"><LogsPage /></div>{/if}
-    {#if view === 'stats'}<div class="page-view"><StatsPage /></div>{/if}
+    {#if view === 'stats'}<div class="page-view">
+        <StatsPage
+          onOpenInTimeline={(tool) => {
+            timeline.setFilter(tool);
+            navigate('overview');
+          }}
+        />
+      </div>{/if}
+    {#if view === 'code'}<div class="page-view"><CodePage /></div>{/if}
   </div>
 </div>
 

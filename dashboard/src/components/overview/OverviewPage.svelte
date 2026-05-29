@@ -1,6 +1,7 @@
 <script lang="ts">
   import { config } from '$lib/stores/config.svelte';
   import { executions } from '$lib/stores/executions.svelte';
+  import { timeline } from '$lib/stores/timeline.svelte';
   import ConfigCard from './ConfigCard.svelte';
   import ToolUsageBars from './ToolUsageBars.svelte';
   import ListPanel from './ListPanel.svelte';
@@ -10,6 +11,8 @@
   import LastExecution from './LastExecution.svelte';
   import CancelledExecutions from './CancelledExecutions.svelte';
   import NewsSection from './NewsSection.svelte';
+  import SummaryCards from './SummaryCards.svelte';
+  import Timeline from './Timeline.svelte';
   import type { QueuedExecution } from '$lib/api/types';
   import Card from '../common/Card.svelte';
   import BannerCarousel from '../banners/BannerCarousel.svelte';
@@ -31,11 +34,22 @@
     oncancelexecution: (_ex: QueuedExecution) => void;
   } = $props();
   const d = $derived(config.data);
+  // Tool names for the Timeline FilterDropdown: union of the keys of the live
+  // tool_stats_summary (config poller, 1s) and any tool names already seen in
+  // the timeline ring buffer (catches tools that fired before stats summary updated).
+  const toolNames = $derived.by(() => {
+    const fromSummary = Object.keys(d?.tool_stats_summary ?? {});
+    const fromTimeline = new Set(timeline.records.map((r) => r.tool));
+    for (const n of fromSummary) fromTimeline.add(n);
+    return [...fromTimeline].sort();
+  });
 </script>
 
 {#if !d}
   <Spinner />
 {:else}
+  <SummaryCards totals={d.tool_stats_totals} />
+  <Timeline store={timeline} {toolNames} />
   <div class="overview-container">
     <div class="overview-left">
       <NewsSection />

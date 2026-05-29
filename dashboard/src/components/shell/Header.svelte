@@ -2,7 +2,7 @@
   import { theme } from '$lib/stores/theme.svelte';
   import ThemeToggle from './ThemeToggle.svelte';
   import BannerCarousel from '../banners/BannerCarousel.svelte';
-  type View = 'overview' | 'logs' | 'stats';
+  import type { View } from '$lib/pollers';
   let {
     active,
     onnavigate,
@@ -52,6 +52,13 @@
         class:active={active === 'stats'}
         aria-current={active === 'stats' ? 'page' : undefined}
         onclick={() => onnavigate('stats')}>Stats</button
+      >
+      <button
+        type="button"
+        class="header-tab"
+        class:active={active === 'code'}
+        aria-current={active === 'code' ? 'page' : undefined}
+        onclick={() => onnavigate('code')}>Code</button
       >
     </div>
   </nav>

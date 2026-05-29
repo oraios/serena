@@ -1,14 +1,16 @@
-export type View = 'overview' | 'logs' | 'stats';
-export type PollerName = 'config' | 'queued' | 'last' | 'logs';
+export type View = 'overview' | 'logs' | 'stats' | 'code';
+export type PollerName = 'config' | 'queued' | 'last' | 'logs' | 'timeline';
 
 /** Which pollers should be running for a given view. Pure so it is unit-testable. */
 export function pollersForView(view: View): PollerName[] {
   switch (view) {
     case 'overview':
-      return ['config', 'queued', 'last'];
+      return ['config', 'queued', 'last', 'timeline'];
     case 'logs':
       return ['logs'];
     case 'stats':
-      return [];
+      return ['config', 'timeline'];
+    case 'code':
+      return ['config'];
   }
 }

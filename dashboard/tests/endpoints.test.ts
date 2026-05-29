@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as api from '../src/lib/api/endpoints';
+import { stubFetchRoutes } from './helpers';
+import { fetchToolCallTimeline } from '../src/lib/api/endpoints';
 
 let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
@@ -25,5 +27,21 @@ describe('endpoints', () => {
   it('shutdown PUTs /shutdown', async () => {
     await api.shutdown();
     expect(fetchMock).toHaveBeenCalledWith('/shutdown', expect.objectContaining({ method: 'PUT' }));
+  });
+});
+
+describe('fetchToolCallTimeline', () => {
+  it('passes since_seq, tool, limit as query params', async () => {
+    const seen: string[] = [];
+    stubFetchRoutes({
+      '/get_tool_call_timeline': (url: string) => {
+        seen.push(url);
+        return { records: [], max_seq: 0 };
+      },
+    });
+    await fetchToolCallTimeline({ since_seq: 42, tool: 'read_file', limit: 100 });
+    expect(seen[0]).toContain('since_seq=42');
+    expect(seen[0]).toContain('tool=read_file');
+    expect(seen[0]).toContain('limit=100');
   });
 });

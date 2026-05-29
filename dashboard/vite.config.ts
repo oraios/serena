@@ -30,6 +30,11 @@ const API_ROUTES = [
   '/fetch_unread_news',
   '/mark_news_snippet_as_read',
   '/heartbeat',
+  '/get_tool_call_timeline',
+  '/code/list_dir',
+  '/code/file_symbols',
+  '/code/workspace_symbol_search',
+  '/code/diagnostics_summary',
 ];
 
 export default defineConfig({

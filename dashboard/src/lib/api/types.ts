@@ -4,6 +4,13 @@ export interface ToolStatEntry {
   num_times_called: number;
   input_tokens: number;
   output_tokens: number;
+  // Optional fields — backend Entry was extended in Phase 1. May be missing on
+  // older backends, so all consumers must guard with `?? 0` / null checks.
+  num_errors?: number;
+  total_duration_ms?: number;
+  min_duration_ms?: number | null;
+  max_duration_ms?: number | null;
+  last_called_at?: number | null;
 }
 export type ToolStats = Record<string, ToolStatEntry>;
 
@@ -60,12 +67,21 @@ export interface ContextOption {
   path: string;
 }
 
+// Overview SummaryCards totals — backend-aggregated KPI strip for the Overview page.
+export interface ToolStatsTotals {
+  num_calls: number;
+  num_errors: number;
+  total_duration_ms: number;
+  total_tokens: number;
+}
+
 export interface ResponseConfigOverview {
   active_project: ActiveProject | null;
   context: ContextInfo;
   modes: ModeInfo[];
   active_tools: string[];
   tool_stats_summary: ToolStatsSummary;
+  tool_stats_totals?: ToolStatsTotals;
   registered_projects: ProjectInfo[];
   available_tools: ToolInfo[];
   available_modes: ModeInfo[];
@@ -97,8 +113,13 @@ export interface QueuedExecution {
   task_id: number;
   is_running: boolean;
   name: string;
+  display_name: string;
   finished_successfully: boolean;
   logged: boolean;
+  started_at: number | null;
+  finished_at: number | null;
+  duration_ms: number | null;
+  error_message: string | null;
 }
 export interface ResponseQueuedExecutions {
   queued_executions: QueuedExecution[];
@@ -127,4 +148,69 @@ export interface StatusResponse {
 }
 export interface TokenEstimatorResponse {
   token_count_estimator_name: string;
+}
+
+// Tool Call Timeline — cursor-paginated ring buffer of per-call records.
+export interface ToolCallRecord {
+  seq: number;
+  tool: string;
+  started_at: number;
+  duration_ms: number;
+  success: boolean;
+  error_message: string | null;
+  input_preview: string;
+  output_preview: string;
+  input_truncated: boolean;
+  output_truncated: boolean;
+}
+export interface ResponseToolCallTimeline {
+  records: ToolCallRecord[];
+  max_seq: number;
+}
+
+// Code-tab types (consumed in Phase 5/6; declared now so endpoints typecheck).
+export interface DirEntry {
+  name: string;
+  kind: 'dir' | 'file';
+  size?: number;
+}
+export interface ResponseListDir {
+  entries: DirEntry[];
+}
+
+export interface FileSymbol {
+  name: string;
+  kind: string;
+  range: { start: { line: number; character: number }; end: { line: number; character: number } };
+  children?: FileSymbol[];
+}
+export interface ResponseFileSymbols {
+  symbols: FileSymbol[];
+}
+
+export interface WorkspaceMatch {
+  name: string;
+  kind: string;
+  path: string;
+  range: { start: { line: number; character: number }; end: { line: number; character: number } };
+}
+export interface ResponseWorkspaceSymbolSearch {
+  matches: WorkspaceMatch[];
+}
+
+export type DiagnosticSeverity = 'error' | 'warning' | 'info' | 'hint';
+export interface Diagnostic {
+  severity: DiagnosticSeverity;
+  message: string;
+  line: number;
+  column: number;
+  source?: string;
+}
+export interface FileDiagnostics {
+  path: string;
+  diagnostics: Diagnostic[];
+}
+export interface ResponseDiagnosticsSummary {
+  files: FileDiagnostics[];
+  truncated: boolean;
 }
