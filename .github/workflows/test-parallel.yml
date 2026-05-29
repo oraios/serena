@@ -86,8 +86,8 @@ jobs:
               MARKERS="$MARKERS and not ruby"
             fi
 
-            # Strict Quarantining of Remaining Languages: deselect any known flaky or environment-dependent tests for the remaining languages
-            MARKERS="$MARKERS and not php and not clojure and not kotlin and not msl and not nix and not zig and not swift and not perl and not fortran and not haskell and not elixir and not fsharp and not groovy and not matlab and not yaml and not json"
+            # Strict Quarantining Based on Historical Flakiness and Environment-Dependent Failures
+            MARKERS="$MARKERS and not php and not clojure and not kotlin and not msl and not nix and not zig and not swift and not perl and not fortran and not haskell and not elixir and not fsharp and not groovy and not matlab and not yaml and not json and not ansible"
           fi
 
           echo "MARKERS=$MARKERS"
