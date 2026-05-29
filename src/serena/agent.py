@@ -525,6 +525,7 @@ class SerenaAgent:
         context: SerenaAgentContext | None = None,
         modes: ModeSelectionDefinition | None = None,
         memory_log_handler: MemoryLogHandler | None = None,
+        enable_project_activation: bool = False,
     ):
         """
         :param project: the project to load immediately or None to not load any project; may be a path to the project or a name of
@@ -536,8 +537,13 @@ class SerenaAgent:
         :param modes: mode selection definition to apply for this session
         :param memory_log_handler: a MemoryLogHandler instance from which to read log messages; if None, a new one will be created
             if necessary.
+        :param enable_project_activation: if True, keep the activate_project tool available even in a single-project
+            context (i.e. when a startup project is set, e.g. via --project-from-cwd), so that the active project can be
+            switched at runtime within the session. The startup project is still auto-activated and all other
+            single-project tool guardrails remain in effect.
         """
         self._active_project: Project | None = None
+        self._enable_project_activation = enable_project_activation
         self._project_activation_callback = project_activation_callback
         self._gui_log_viewer: Optional["GuiLogViewer"] = None
         self._dashboard_manager: DashboardManager | None = None
@@ -650,7 +656,12 @@ class SerenaAgent:
 
         # determine the base toolset defining the set of exposed tools (which e.g. the MCP shall see),
         self._base_toolset = self._create_base_toolset(
-            self.serena_config, self._language_backend, self._context, self._active_modes, self._active_project
+            self.serena_config,
+            self._language_backend,
+            self._context,
+            self._active_modes,
+            self._active_project,
+            enable_project_activation=self._enable_project_activation,
         )
         self._exposed_tools = self._base_toolset.to_available_tools(self._all_tools)
         log.info(f"Number of exposed tools: {len(self._exposed_tools)}. Exposed tools: {self._exposed_tools.tool_names}")
@@ -707,6 +718,7 @@ class SerenaAgent:
         context: SerenaAgentContext,
         modes: ActiveModes,
         project: Project | None,
+        enable_project_activation: bool = False,
     ) -> ToolSet:
         """
         Determines the base toolset defining the set of exposed tools (which e.g. the MCP shall see).
@@ -764,10 +776,20 @@ class SerenaAgent:
                 "Applying tool inclusion/exclusion definitions for single-project context based on project '%s'",
                 project.project_name,
             )
+            # In a single-project context we normally disable the project-activation tools, since the project is fixed.
+            # However, if project activation has been explicitly enabled -- either per-launch via the CLI flag
+            # (enable_project_activation) or by the context itself (context.allow_project_activation), e.g. for CLI
+            # agents that create git worktrees mid-session and need to re-root onto them -- we keep ActivateProjectTool
+            # available while still excluding GetCurrentConfigTool and applying the project's own tool exclusions.
+            allow_project_activation = enable_project_activation or context.allow_project_activation
+            single_project_excluded_tools = []
+            if not allow_project_activation:
+                single_project_excluded_tools.append(ActivateProjectTool.get_name_from_cls())
+            single_project_excluded_tools.append(GetCurrentConfigTool.get_name_from_cls())
             tool_inclusion_definitions.append(
                 NamedToolInclusionDefinition(
                     name="SingleProjectExclusions",
-                    excluded_tools=[ActivateProjectTool.get_name_from_cls(), GetCurrentConfigTool.get_name_from_cls()],
+                    excluded_tools=single_project_excluded_tools,
                 )
             )
             tool_inclusion_definitions.append(project.project_config)

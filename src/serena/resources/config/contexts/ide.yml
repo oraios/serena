@@ -22,5 +22,6 @@ tool_description_overrides: {}
 # If set to true and a project is provided at startup, the set of tools is limited to those required by the project's
 # concrete configuration, and other tools are excluded completely, allowing the set of tools to be minimal.
 # Tools explicitly disabled by the project will not be available at all.
-# The `activate_project` tool is always disabled in this case, as project switching cannot be allowed.
+# The `activate_project` tool is disabled in this case (project switching is not allowed), unless
+# `allow_project_activation` is set to true or the MCP server is started with `--enable-project-activation`.
 single_project: true

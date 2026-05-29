@@ -309,10 +309,21 @@ class TopLevelCommands(AutoRegisteringGroup):
         default=False,
         help="Auto-detect project from current working directory (searches for .serena/project.yml or .git, falls back to CWD). Intended for CLI-based agents like Claude Code, Gemini and Codex.",
     )
+    @click.option(
+        "--enable-project-activation",
+        is_flag=True,
+        default=False,
+        help="Keep the activate_project tool available even when a startup project is set "
+        "(e.g. via --project-from-cwd or --project), enabling runtime project switching within a "
+        "single session. Useful for CLI agents (Claude Code, etc.) that create git worktrees on the "
+        "fly and need to re-root Serena onto them mid-session, without losing the single-project "
+        "startup auto-activation and tool guardrails.",
+    )
     def start_mcp_server(
         project: str | None,
         project_file_arg: str | None,
         project_from_cwd: bool | None,
+        enable_project_activation: bool,
         context: str,
         default_modes: Sequence[str],
         added_modes: Sequence[str],
@@ -377,6 +388,7 @@ class TopLevelCommands(AutoRegisteringGroup):
             log_level=log_level,
             trace_lsp_communication=trace_lsp_communication,
             tool_timeout=tool_timeout,
+            enable_project_activation=enable_project_activation,
         )
         if project_file_arg:
             log.warning(
