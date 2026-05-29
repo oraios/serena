@@ -7,6 +7,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     The dict is forwarded to vtsls via `initializationOptions`, `workspace/didChangeConfiguration`,
     and `workspace/configuration` pulls. Enables Yarn PnP setups with `typescript.tsdk` pointing
     at the Yarn-generated SDK.
+  - `typescript` / `typescript_vts`: No longer ignore directories named `coverage`. This was intended to skip
+    coverage-report output, but matched by bare dirname and so also hid legitimate source directories named
+    `coverage` (e.g. `src/routes/coverage/`) from symbol tools. Generated report dirs are already covered by
+    gitignore. Fixes #1523.
 
 * Dashboard: 
   - Fix: Host validation required a local host regardless of the listen address (regression introduced in v1.5.2),

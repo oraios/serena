@@ -132,7 +132,6 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             "node_modules",
             "dist",
             "build",
-            "coverage",
         ]
 
     @staticmethod
