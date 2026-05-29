@@ -86,7 +86,7 @@ jobs:
               MARKERS="$MARKERS and not ruby"
             fi
 
-            # Strict Quarantining of Remaining Languages: Exclude tests for languages that have shown significant flakiness or environment-dependence in CI, to maintain overall pipeline stability while we work on improving these areas.
+            # Strict Quarantining of Remaining Languages: deselect any known flaky or environment-dependent tests for the remaining languages
             MARKERS="$MARKERS and not php and not clojure and not kotlin and not msl and not nix and not zig and not swift and not perl and not fortran and not haskell and not elixir and not fsharp and not groovy and not matlab and not yaml and not json"
           fi
 
@@ -104,7 +104,7 @@ jobs:
           if [[ '${{ matrix.batch_name }}' == 'Catch-All (Core Framework & Remaining Languages)' ]]; then
             .venv/bin/python -m pytest \
               -m "${{ steps.markers.outputs.markers }}" \
-              -k "not test_find_symbol_references_stable and not test_show_fatal_exception_safe_headless" \
+              -k "not test_find_symbol_references_stable and not test_show_fatal_exception_safe" \
               --maxfail=1 -q
           else
             .venv/bin/python -m pytest \
