@@ -11,7 +11,7 @@ Serena is an MCP-based "IDE for coding agents": semantic code retrieval/editing/
   - `config/` — `serena_config.py`, `context_mode.py`, `client_setup.py`
   - `resources/config/contexts/*.yml`, `resources/config/modes/*.yml` — context/mode definitions
   - `code_editor.py`, `symbol.py`, `ls_manager.py` — symbolic editing / LS lifecycle
-  - `dashboard.py`, `gui_log_viewer.py` — web dashboard / log viewer
+  - `dashboard.py`, `gui_log_viewer.py` — web dashboard backend (frozen API) / log viewer; the Svelte frontend lives in `dashboard/` — see `mem:dashboard_frontend`
   - `prompt_factory.py` + `generated/generated_prompt_factory.py` — prompts (regenerate with `scripts/gen_prompt_factory.py`)
 - `src/solidlsp/` — LSP client framework; per-language servers under `language_servers/`
 - `src/interprompt/` — prompt template library (synced from external repo; see `.syncCommitId.*`)

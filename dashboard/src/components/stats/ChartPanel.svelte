@@ -31,7 +31,9 @@
       cssVar('--chart-3', '#7fb77e'),
       cssVar('--chart-4', '#d88c8c'),
       cssVar('--chart-5', '#b39ddb'),
-      cssVar('--chart-6', '#e0a458'),
+      cssVar('--chart-6', '#4db6ac'),
+      cssVar('--chart-7', '#e57aa8'),
+      cssVar('--chart-8', '#a1887f'),
     ];
   }
 

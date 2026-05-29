@@ -6,13 +6,18 @@
   type WindowMinutes = 15 | 30 | 60 | 360;
   let windowMinutes = $state<WindowMinutes>(15);
   let stacked = $state(false);
-  let enabledTools = $state<Set<string>>(new Set());
+  // null = "all tools" (the default, and what "Show all" restores — new tools
+  // auto-included). An explicit Set is the user's selection; an empty Set means
+  // "Disable all" (show none), which a plain empty Set could not distinguish
+  // from the initial state.
+  let enabledTools = $state<Set<string> | null>(null);
 
   const allTools = $derived(Array.from(new Set(timeline.records.map((r) => r.tool))).sort());
-  // When stacked is on and the user hasn't picked any tool, show all of them.
-  const activeTools = $derived(
-    stacked ? allTools.filter((t) => enabledTools.size === 0 || enabledTools.has(t)) : [],
-  );
+  const activeTools = $derived.by(() => {
+    if (!stacked) return [];
+    const sel = enabledTools;
+    return sel === null ? allTools : allTools.filter((t) => sel.has(t));
+  });
 
   // Re-bucket on every tick so the current minute keeps catching live calls
   // (B17 — current minute is the LAST bucket, never dropped).
@@ -27,7 +32,7 @@
   const spec = $derived(rateChartSpec(timeline.records, nowS, windowMinutes, stacked, activeTools));
 
   function showAll() {
-    enabledTools = new Set(allTools);
+    enabledTools = null;
   }
   function disableAll() {
     enabledTools = new Set();

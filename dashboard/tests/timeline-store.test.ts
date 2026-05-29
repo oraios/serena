@@ -141,4 +141,25 @@ describe('timeline store', () => {
     // newCursor=50, cursor=10, length=5 → 50-10-5 = 35
     expect(store.pausedGap).toBe(35);
   });
+
+  it('does NOT raise pausedGap from the GLOBAL max_seq when a tool filter is active', async () => {
+    // max_seq is global across all tools; with a filter the returned records are
+    // a subset, so a delta beyond the filtered batch is normal, not a gap.
+    let phase = 0;
+    stubFetchRoutes({
+      '/get_tool_call_timeline': () => {
+        phase++;
+        if (phase === 1) return { records: [record(10, 'mine')], max_seq: 10 };
+        // Other tools advanced max_seq to 50, but only one 'mine' record arrived.
+        return { records: [record(40, 'mine')], max_seq: 50 };
+      },
+    });
+    localStorage.setItem('serena.timeline.v1', JSON.stringify({ filter: 'mine' }));
+    const store = createTimelineStore();
+    expect(store.filter).toBe('mine');
+    await store.poll();
+    await store.poll();
+    // Pre-fix this would have reported 50-10-1 = 39 phantom skipped calls.
+    expect(store.pausedGap).toBeNull();
+  });
 });

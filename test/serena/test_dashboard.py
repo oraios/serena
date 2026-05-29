@@ -246,3 +246,19 @@ def test_queued_executions_route_returns_extended_payload(make_dashboard_with_st
     assert body["status"] == "success"
     assert body["queued_executions"][0]["display_name"] == "foo"
     assert body["queued_executions"][0]["duration_ms"] is not None
+
+
+def test_cancel_unknown_task_returns_friendly_message_not_python_error(make_dashboard_with_stats):
+    """An already-finished/unknown task hits the not-found branch. Regression for
+    `html.escape(task_id)` raising "'int' object has no attribute 'replace'" on the
+    int id, which turned the benign was_cancelled=False response into status=error.
+    """
+    dashboard, client = make_dashboard_with_stats()
+    # _DummyAgent.get_current_tasks() returns [] -> always the not-found branch.
+    r = client.post("/cancel_task_execution", json={"task_id": 12345})
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["status"] == "success"
+    assert body["was_cancelled"] is False
+    assert "12345" in body["message"]
+    assert "replace" not in body["message"]

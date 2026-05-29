@@ -625,7 +625,7 @@ class SerenaAgent:
 
         token_count_estimator = RegisteredTokenCountEstimator[self.serena_config.token_count_estimator]
         log.info(f"Will record tool usage statistics with token count estimator: {token_count_estimator.name}.")
-        self._tool_usage_stats = ToolUsageStats(token_count_estimator)
+        self._tool_usage_stats: ToolUsageStats | None = ToolUsageStats(token_count_estimator)
 
         # log fundamental information
         log.info(

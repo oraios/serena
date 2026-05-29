@@ -119,7 +119,17 @@ export function createTimelineStore() {
           limit: BATCH_LIMIT,
         });
         const newCursor = resp.max_seq ?? cursor;
-        if (cursor !== null && newCursor !== null && newCursor - cursor > resp.records.length) {
+        // `max_seq` is the GLOBAL seq counter across all tools, while `records`
+        // is filtered to `filter`. Comparing the two only makes sense with no
+        // tool filter — otherwise every other tool's call inflates the delta and
+        // raises a bogus "calls while paused" banner. With no filter, a positive
+        // delta beyond the batch means the BATCH_LIMIT actually truncated.
+        if (
+          filter === null &&
+          cursor !== null &&
+          newCursor !== null &&
+          newCursor - cursor > resp.records.length
+        ) {
           const skipped = newCursor - cursor - resp.records.length;
           if (skipped > 0) pausedGap = skipped;
         }

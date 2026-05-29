@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -487,4 +488,181 @@ def test_diagnostics_summary_file_scope_skips_unsupported_file(make_dashboard_wi
     (root / "notes.md").write_text("# hi\n")
     r = client.get("/code/diagnostics_summary?path=notes.md")
     assert r.status_code == 200
-    assert r.get_json()["files"] == []
+    body = r.get_json()
+    assert body["files"] == []
+    assert body["skipped_unsupported"] == 1
+
+
+# -----------------------------------------------------------------------------
+# Per-file LSP routing in dir/project scope (multi-language correctness)
+# -----------------------------------------------------------------------------
+
+
+class _FakeRoutingManager:
+    """Routes each path to a per-extension language server, mirroring
+    LanguageServerManager.get_language_server in a multi-language project.
+
+    Falls back to a default server for unknown extensions, exactly like the real
+    manager — the dashboard's _ls_handles_file guard is what then filters files
+    that no server actually understands.
+    """
+
+    def __init__(self, by_ext, default=None):
+        self._by_ext = by_ext  # {".py": ls_py, ".ts": ls_ts}
+        self._default = default if default is not None else next(iter(by_ext.values()))
+
+    def get_language_server(self, rel):
+        if os.path.isdir(rel):
+            raise ValueError(f"directory: {rel}")
+        ext = os.path.splitext(rel)[1]
+        return self._by_ext.get(ext, self._default)
+
+    def iter_language_servers(self):
+        seen: set[int] = set()
+        for ls in self._by_ext.values():
+            if id(ls) not in seen:
+                seen.add(id(ls))
+                yield ls
+
+
+def test_diagnostics_summary_project_scope_routes_each_file_to_correct_server(make_dashboard_with_project):
+    """In a multi-language project each file must be diagnosed by the server that
+    handles its type: .py by the Python server, .ts by the TypeScript server.
+    """
+    diag_py = {
+        "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 1}},
+        "severity": 1,
+        "message": "python diag",
+        "source": "pyright",
+    }
+    diag_ts = {
+        "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 1}},
+        "severity": 1,
+        "message": "typescript diag",
+        "source": "tsserver",
+    }
+    # Trap: the Python server *also* has a (wrong) diagnostic keyed under b.ts.
+    # If routing were broken and b.ts were sent to the Python server, this trap
+    # message would surface instead of "typescript diag".
+    trap = {
+        "range": {"start": {"line": 9, "character": 0}, "end": {"line": 9, "character": 1}},
+        "severity": 1,
+        "message": "WRONG SERVER",
+        "source": "pyright",
+    }
+    ls_py = _FakeLS(
+        diagnostics_map={"a.py": [diag_py], "b.ts": [trap]},
+        ignored_paths={"b.ts"},  # Python server does not handle .ts
+    )
+    ls_ts = _FakeLS(
+        diagnostics_map={"b.ts": [diag_ts]},
+        ignored_paths={"a.py"},  # TS server does not handle .py
+    )
+    mgr = _FakeRoutingManager({".py": ls_py, ".ts": ls_ts})
+    _, client, root = make_dashboard_with_project(ls_manager=mgr)
+    (root / "a.py").write_text("x=1\n")
+    (root / "b.ts").write_text("const x = 1\n")
+    r = client.get("/code/diagnostics_summary")
+    assert r.status_code == 200
+    files = {f["path"]: f for f in r.get_json()["files"]}
+    assert set(files) == {"a.py", "b.ts"}
+    assert files["a.py"]["diagnostics"][0]["message"] == "python diag"
+    # Correct routing => the TS server's diag, never the Python server's trap.
+    assert files["b.ts"]["diagnostics"][0]["message"] == "typescript diag"
+
+
+def test_diagnostics_summary_project_scope_skips_unsupported_file(make_dashboard_with_project):
+    """A file whose type no started server handles (e.g. Markdown in a Python-only
+    project) must be skipped, not linted by the default server.
+    """
+    diag = {
+        "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 1}},
+        "severity": 1,
+        "message": "real python diag",
+        "source": "pyright",
+    }
+    trap = {
+        "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 1}},
+        "severity": 1,
+        "message": "WRONG SERVER",
+        "source": "pyright",
+    }
+    # Single Python server: handles a.py, but notes.md is unsupported. The manager
+    # would still hand back this server for notes.md (fallback), so the guard must
+    # drop it.
+    ls = _FakeLS(diagnostics_map={"a.py": [diag], "notes.md": [trap]}, ignored_paths={"notes.md"})
+    _, client, root = make_dashboard_with_project(ls_manager=_FakeManager(ls=ls))
+    (root / "a.py").write_text("x=1\n")
+    (root / "notes.md").write_text("# hi\n")
+    r = client.get("/code/diagnostics_summary")
+    assert r.status_code == 200
+    body = r.get_json()
+    paths = {f["path"] for f in body["files"]}
+    assert paths == {"a.py"}
+    assert body["skipped_unsupported"] == 1
+
+
+# -----------------------------------------------------------------------------
+# Per-server grouping + round-robin scan (fair wall-clock budgeting)
+# -----------------------------------------------------------------------------
+
+
+def test_group_paths_by_language_server_groups_and_counts_skipped():
+    from serena.dashboard_code import _group_paths_by_language_server
+
+    ls_py = _FakeLS(ignored_paths={"b.ts", "notes.md"})
+    ls_ts = _FakeLS(ignored_paths={"a.py", "c.py", "notes.md"})
+    mgr = _FakeRoutingManager({".py": ls_py, ".ts": ls_ts})
+    dashboard_api = SimpleNamespace(_agent=SimpleNamespace(get_language_server_manager=lambda: mgr))
+
+    groups, skipped = _group_paths_by_language_server(dashboard_api, ["a.py", "b.ts", "c.py", "notes.md"])
+
+    # Two groups (Python, TypeScript) in first-seen order; .md routed nowhere.
+    assert skipped == 1
+    assert [ls for ls, _paths in groups] == [ls_py, ls_ts]
+    by_ls = {id(ls): paths for ls, paths in groups}
+    assert by_ls[id(ls_py)] == ["a.py", "c.py"]
+    assert by_ls[id(ls_ts)] == ["b.ts"]
+
+
+def test_scan_groups_round_robin_interleaves_servers():
+    from serena.dashboard_code import _scan_groups_round_robin
+
+    def _diag(msg):
+        return {
+            "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 1}},
+            "severity": 1,
+            "message": msg,
+            "source": "x",
+        }
+
+    # Each server returns one diagnostic per file (keyed by path) so we can read
+    # back the scan order from the result list.
+    ls_a = _FakeLS(diagnostics_map={"a1.py": [_diag("a1")], "a2.py": [_diag("a2")]})
+    ls_b = _FakeLS(diagnostics_map={"b1.ts": [_diag("b1")]})
+    groups = [(ls_a, ["a1.py", "a2.py"]), (ls_b, ["b1.ts"])]
+
+    files, truncated = _scan_groups_round_robin(groups, use_pull=False, min_severity=4, deadline=time.monotonic() + 30)
+
+    assert truncated is False
+    order = [f.path for f in files]
+    # Round 1 takes one from each server (a1, b1) before round 2 drains a2 — so
+    # the second server is reached before the first server's queue is exhausted.
+    assert order == ["a1.py", "b1.ts", "a2.py"]
+
+
+def test_scan_groups_round_robin_truncates_at_deadline():
+    from serena.dashboard_code import _scan_groups_round_robin
+
+    diag = {
+        "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 1}},
+        "severity": 1,
+        "message": "m",
+        "source": "x",
+    }
+    ls = _FakeLS(diagnostics_map={"a.py": [diag], "b.py": [diag]})
+    groups = [(ls, ["a.py", "b.py"])]
+    # Deadline already in the past => nothing scanned, truncated True.
+    files, truncated = _scan_groups_round_robin(groups, use_pull=False, min_severity=4, deadline=time.monotonic() - 1)
+    assert files == []
+    assert truncated is True

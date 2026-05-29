@@ -14,7 +14,11 @@
   --chart-3: #7fb77e;
   --chart-4: #d88c8c;
   --chart-5: #b39ddb;
-  --chart-6: #e0a458;
+  /* chart-6 was #e0a458, near-identical to --accent (#eaa45d) — recoloured to a
+     distinct teal so an 8th-tool legend doesn't show two oranges. */
+  --chart-6: #4db6ac;
+  --chart-7: #e57aa8;
+  --chart-8: #a1887f;
   --chart-grid: #dddddd;
   --text-on-accent: #ffffff;
   --btn-disabled: #adb5bd;

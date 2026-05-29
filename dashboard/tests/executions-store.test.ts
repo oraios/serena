@@ -12,6 +12,15 @@ describe('executions store: cancel', () => {
     expect(store.cancelError).toBe('');
   });
 
+  it('does NOT record an already-finished task (was_cancelled=false)', async () => {
+    stubFetchJson(okBody({ was_cancelled: false, message: 'not found, already finished' }));
+    const store = createExecutionsStore();
+    const r = await store.cancel(exec({ task_id: 9, name: 't', is_running: false }));
+    expect(r.ok).toBe(true);
+    expect(store.cancelled).toEqual([]);
+    expect(store.cancelError).toBe('');
+  });
+
   it('sets cancelError and does not record on failure', async () => {
     stubFetchJson(errBody('too late'));
     const store = createExecutionsStore();

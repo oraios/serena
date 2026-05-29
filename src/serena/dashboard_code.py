@@ -15,7 +15,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import unquote, urlparse
 
 from flask import request
@@ -230,6 +230,11 @@ class _FileDiagnostics(BaseModel):
 class _ResponseDiagnosticsSummary(BaseModel):
     files: list[_FileDiagnostics]
     truncated: bool
+    # Count of in-scope files no started language server handles (e.g. Markdown,
+    # JSON, lockfiles in a Python-only project). They are skipped rather than
+    # linted by the wrong server; surfacing the count lets the UI distinguish
+    # "clean" from "not analyzed". Defaults to 0 so the field is backward-compatible.
+    skipped_unsupported: int = 0
 
 
 _FileSymbol.model_rebuild()
@@ -271,7 +276,7 @@ def _convert_lsp_symbol(s: Any, _depth: int = 0) -> _FileSymbol:
     return _FileSymbol(
         name=name,
         kind=kind_label,
-        range=rng,
+        range=cast("_Range", rng),
         children=[_convert_lsp_symbol(c, _depth + 1) for c in children] if children else None,
     )
 
@@ -295,7 +300,7 @@ def _convert_workspace_match(m: Any, project_root_real: Path) -> _WorkspaceMatch
         name=name,
         kind=kind_label,
         path=rel,
-        range=rng or {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}},
+        range=cast("_Range", rng or {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}}),
     )
 
 
@@ -393,6 +398,65 @@ def _diagnostics_for_file(ls: Any, rel: str, use_pull: bool, min_severity: int) 
     if not diags:
         return None, False
     return _FileDiagnostics(path=rel, diagnostics=diags), truncated
+
+
+def _group_paths_by_language_server(
+    dashboard_api: "SerenaDashboardAPI", candidate_paths: list[str]
+) -> tuple[list[tuple[Any, list[str]]], int]:
+    """Route each candidate file to the language server that handles its type.
+
+    Returns ``(groups, skipped_unsupported)`` where ``groups`` is a list of
+    ``(language_server, paths)`` in first-seen order and ``skipped_unsupported``
+    counts files no started server understands (Markdown/JSON/lockfiles/… in a
+    Python-only project, or any type with no matching server). Grouping lets the
+    scan round-robin across servers so one slow language can't starve the others'
+    files of the wall-clock budget.
+    """
+    groups: dict[int, tuple[Any, list[str]]] = {}
+    order: list[int] = []
+    skipped_unsupported = 0
+    for rel in candidate_paths:
+        ls = _get_language_server_for_path(dashboard_api, rel)
+        if ls is None or not _ls_handles_file(ls, rel):
+            skipped_unsupported += 1
+            continue
+        key = id(ls)
+        if key not in groups:
+            groups[key] = (ls, [])
+            order.append(key)
+        groups[key][1].append(rel)
+    return [groups[k] for k in order], skipped_unsupported
+
+
+def _scan_groups_round_robin(
+    groups: list[tuple[Any, list[str]]], use_pull: bool, min_severity: int, deadline: float
+) -> tuple[list[_FileDiagnostics], bool]:
+    """Scan per-server file groups round-robin until done or the deadline passes.
+
+    Taking one file from each server per round (rather than draining one server
+    fully before the next) gives every language a fair share of the shared
+    wall-clock budget; if the deadline hits mid-scan, the remaining files in
+    every group are dropped and ``truncated`` is True.
+    """
+    files: list[_FileDiagnostics] = []
+    truncated = False
+    cursors = [0] * len(groups)
+    remaining = sum(len(paths) for _ls, paths in groups)
+    while remaining > 0:
+        for gi, (ls, paths) in enumerate(groups):
+            if cursors[gi] >= len(paths):
+                continue
+            if time.monotonic() >= deadline:
+                return files, True
+            rel = paths[cursors[gi]]
+            cursors[gi] += 1
+            remaining -= 1
+            file_diags, trunc = _diagnostics_for_file(ls, rel, use_pull, min_severity)
+            if trunc:
+                truncated = True
+            if file_diags is not None:
+                files.append(file_diags)
+    return files, truncated
 
 
 # --------------------------------------------------------------------------- #
@@ -560,6 +624,8 @@ def register_code_routes(dashboard_api: "SerenaDashboardAPI") -> None:
             ignore = None
 
         truncated = False
+        skipped_unsupported = 0
+        deadline = time.monotonic() + _DIAGNOSTICS_WALL_CLOCK_BUDGET_S
         if mode == "file":
             rel0 = os.path.relpath(resolved, root_real)
             # Diagnose with the server that actually handles THIS file's language
@@ -569,23 +635,19 @@ def register_code_routes(dashboard_api: "SerenaDashboardAPI") -> None:
             # type with no matching server simply has no diagnostics.
             ls = _get_language_server_for_path(dashboard_api, rel0)
             if ls is None or not _ls_handles_file(ls, rel0):
-                return _ResponseDiagnosticsSummary(files=[], truncated=False).model_dump()
-            candidate_paths = [rel0]
-            use_pull = True
+                return _ResponseDiagnosticsSummary(files=[], truncated=False, skipped_unsupported=1).model_dump()
+            file_diags, truncated = _diagnostics_for_file(ls, rel0, use_pull=True, min_severity=min_severity)
+            result_files = [file_diags] if file_diags is not None else []
         else:  # "dir" or "project"
             candidate_paths, truncated = _collect_candidate_files(root_real, resolved, ignore, file_limit)
-            use_pull = False
+            # Route EACH file to the server that handles its type, group by server,
+            # then scan round-robin so a multi-language project diagnoses .py with
+            # Pyright, .ts with the TS server, etc. — and one slow language can't
+            # exhaust the wall-clock budget before the others are reached. Files no
+            # started server understands are counted (skipped_unsupported), not
+            # linted with the wrong server.
+            groups, skipped_unsupported = _group_paths_by_language_server(dashboard_api, candidate_paths)
+            result_files, scan_truncated = _scan_groups_round_robin(groups, use_pull=False, min_severity=min_severity, deadline=deadline)
+            truncated = truncated or scan_truncated
 
-        files: list[_FileDiagnostics] = []
-        deadline = time.monotonic() + _DIAGNOSTICS_WALL_CLOCK_BUDGET_S
-        for rel in candidate_paths:
-            if mode != "file" and time.monotonic() >= deadline:
-                truncated = True
-                break
-            file_diags, trunc = _diagnostics_for_file(ls, rel, use_pull, min_severity)
-            if trunc:
-                truncated = True
-            if file_diags is not None:
-                files.append(file_diags)
-
-        return _ResponseDiagnosticsSummary(files=files, truncated=truncated).model_dump()
+        return _ResponseDiagnosticsSummary(files=result_files, truncated=truncated, skipped_unsupported=skipped_unsupported).model_dump()

@@ -30,10 +30,12 @@ export function createCodeStore() {
   let searchError = $state<string | null>(null);
   let middlePane = $state<'symbols' | 'search' | 'diagnostics'>('symbols');
   let searchEpoch = 0;
+  let diagEpoch = 0;
   let diagFiles = $state<FileDiagnostics[]>([]);
   let diagLoading = $state(false);
   let diagError = $state<string | null>(null);
   let diagTruncated = $state(false);
+  let diagSkippedUnsupported = $state(0);
   let diagLastRefreshAt = $state<number | null>(null);
   let diagScope = $state<DiagScope>({ kind: 'project', path: null });
   let diagScopePinned = $state(false);
@@ -105,6 +107,9 @@ export function createCodeStore() {
     },
     get diag_truncated() {
       return diagTruncated;
+    },
+    get diag_skipped_unsupported() {
+      return diagSkippedUnsupported;
     },
     get diag_last_refresh_at() {
       return diagLastRefreshAt;
@@ -231,6 +236,9 @@ export function createCodeStore() {
     async search(q: string) {
       searchQuery = q;
       if (q.trim().length < 2) {
+        // Bump the epoch so any request still in flight from a prior keystroke
+        // can't resolve and repopulate the results we're clearing here.
+        ++searchEpoch;
         searchResults = [];
         searchLoading = false;
         searchError = null;
@@ -255,6 +263,11 @@ export function createCodeStore() {
     },
     async refreshDiagnostics(file_limit = 1000) {
       const scope = diagScope;
+      // Guard against overlapping refreshes (e.g. two quick per-row runs, or a
+      // selection-sync refresh racing a manual one): only the latest request is
+      // allowed to write results, so a slow earlier call can't land its data
+      // under a newer scope.
+      const myEpoch = ++diagEpoch;
       diagLoading = true;
       diagError = null;
       try {
@@ -262,15 +275,17 @@ export function createCodeStore() {
           file_limit,
           scope.kind === 'project' ? undefined : (scope.path ?? undefined),
         );
+        if (myEpoch !== diagEpoch) return;
         diagFiles = resp.files;
         diagTruncated = resp.truncated;
+        diagSkippedUnsupported = resp.skipped_unsupported ?? 0;
         diagLastRefreshAt = Date.now();
         diagLastScope = scope;
       } catch (e) {
-        diagError = e instanceof Error ? e.message : String(e);
+        if (myEpoch === diagEpoch) diagError = e instanceof Error ? e.message : String(e);
         // Previous diagFiles stay visible per spec §7.2.
       } finally {
-        diagLoading = false;
+        if (myEpoch === diagEpoch) diagLoading = false;
       }
     },
     async runDiagnosticsForPath(path: string, kind: 'file' | 'directory') {

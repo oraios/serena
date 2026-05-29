@@ -4,8 +4,29 @@ import {
   escapeHtml,
   highlightTools,
   formatRelativeTime,
+  formatNumber,
+  formatTokens,
+  formatDurationMs,
   prettyArgs,
 } from '../src/lib/format';
+
+describe('numeric formatters', () => {
+  it('formats finite values', () => {
+    expect(formatNumber(1234567)).toBe('1,234,567');
+    expect(formatTokens(5678)).toBe('5.7k');
+    expect(formatTokens(1_234_000)).toBe('1.23M');
+    expect(formatDurationMs(0.5)).toBe('<1 ms');
+    expect(formatDurationMs(1500)).toBe('1.5 s');
+  });
+
+  it('degrades non-finite input to an em dash instead of "NaN"/"NaNM"/"NaN h"', () => {
+    for (const bad of [NaN, Infinity, -Infinity]) {
+      expect(formatNumber(bad)).toBe('—');
+      expect(formatTokens(bad)).toBe('—');
+      expect(formatDurationMs(bad)).toBe('—');
+    }
+  });
+});
 
 describe('format', () => {
   it('detects log level from the line prefix', () => {

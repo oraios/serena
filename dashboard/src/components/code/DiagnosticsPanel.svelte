@@ -182,6 +182,14 @@
     </div>
   {/if}
 
+  {#if code.diag_skipped_unsupported > 0 && !code.diag_loading}
+    <div class="skipped" role="note">
+      {code.diag_skipped_unsupported}
+      {code.diag_skipped_unsupported === 1 ? 'file was' : 'files were'} not analyzed — no language server
+      is running for {code.diag_skipped_unsupported === 1 ? 'its type' : 'their types'}.
+    </div>
+  {/if}
+
   {#if code.diag_files.length === 0 && !code.diag_loading && !code.diag_error}
     {#if code.diag_last_scope}
       <p class="empty">
@@ -330,6 +338,15 @@
     border-radius: var(--radius);
     padding: var(--space-2);
     margin-bottom: var(--space-2);
+  }
+  .skipped {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: var(--space-1) var(--space-2);
+    margin-bottom: var(--space-2);
+    color: var(--text-secondary);
+    font-size: 0.85em;
   }
   .error-card {
     border-color: var(--log-error);

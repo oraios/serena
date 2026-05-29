@@ -26,15 +26,40 @@ and fail CI's `prettier --check`). `prebuild` (`scripts/clean-assets.mjs`) clear
 
 ## Architecture rules
 
-- Components are small, single-purpose: props in, events out (`on*` callback
-  props, not `createEventDispatcher`), scoped CSS. Compose `common/` primitives
-  (`Card`, `Button`, `Modal`, `Spinner`, `Combobox`, `Collapsible`) — don't
-  re-implement their markup.
+- Components are small, single-purpose: a typed `interface Props` +
+  `let {...} = $props()`, props in / events out (`on*` callback props, **not**
+  `createEventDispatcher`), scoped CSS. Compose `common/` primitives (`Button`,
+  `Card`, `Collapsible`, `Combobox`, `FilterDropdown`, `Icon`, `Modal`,
+  `Popover`, `Spinner`) — don't re-implement their markup.
+- **Derive, don't sync.** Compute reactive values with `$derived`; reserve
+  `$effect` for true side effects (DOM, Chart.js, subscriptions, autoscroll).
+  Never use `$effect` to copy one piece of state into another — that's a
+  `$derived`.
+- Icons: import a `@lucide/svelte` component and pass it to `Icon`
+  (`<Icon icon={Foo} label="…" />`); the `label` toggles `role="img"`/`aria-label`
+  vs `aria-hidden`, so a11y stays centralized. No raw inline `<svg>`, no bare
+  lucide component in markup.
 - Colors come from `src/styles/tokens.css` (light + `[data-theme='dark']`).
   Never hardcode hex; use `var(--token)`.
+- Pass markup into a component as **snippets** (`children` typed `Snippet`,
+  rendered with `{@render children()}`) — never the deprecated `<slot>`.
 - Charts go **only** through `src/components/stats/ChartPanel.svelte`.
 - Never `fetch` from a component — all network goes through `src/lib/api/`.
 - Never reintroduce jQuery.
+
+## Recipes
+
+- **Backend-backed feature:** type in `api/types.ts` → typed fn in
+  `api/endpoints.ts` (+ add the route to `API_ROUTES` in `vite.config.ts`) →
+  store under `stores/*.svelte.ts` → component → Vitest test → `npm run build` &
+  commit output.
+- **Modal:** extend `ModalState` (`stores/modal.svelte.ts`) → add a case in
+  `ModalHost.svelte` → build the component (wrap `ConfirmModal` if confirm-style;
+  `createModalAction()` if it mutates).
+- **Chart:** add a pure `ChartSpec` builder in `charts.ts`, render via
+  `ChartPanel` — never import `chart.js` elsewhere.
+- **Common primitive:** add to `components/common/`, drive variants by props,
+  expose content as snippets, style with `var(--token)` only.
 
 ## State: runes stores (`src/lib/stores/*.svelte.ts`)
 
@@ -58,6 +83,14 @@ export const x = createXStore(); // import the singleton; factory exists for tes
 
 Never expose the `$state` variable directly — only getters, so reads stay
 reactive and writes funnel through methods.
+
+- Reactive `Set`/`Map` use `SvelteSet`/`SvelteMap` from `svelte/reactivity` (see
+  `expanded` in `code.svelte.ts`) — plain `Set`/`Map` mutations don't trigger
+  updates.
+- Guard overlapping async writes with a plain (non-reactive) **epoch counter**:
+  bump + snapshot it before the `await`, then drop the result if the snapshot is
+  stale (see `searchEpoch`/`diagEpoch` in `code.svelte.ts`). Stops a slow earlier
+  request from clobbering a newer one.
 
 ## API layer (`src/lib/api/`)
 

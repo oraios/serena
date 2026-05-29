@@ -211,4 +211,8 @@ export interface FileDiagnostics {
 export interface ResponseDiagnosticsSummary {
   files: FileDiagnostics[];
   truncated: boolean;
+  // Count of in-scope files no language server handles (e.g. Markdown/JSON in a
+  // Python-only project). Skipped rather than mis-linted; optional for backward
+  // compatibility with older backends that omit it.
+  skipped_unsupported?: number;
 }

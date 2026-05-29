@@ -1,3 +1,5 @@
+from typing import Any
+
 from serena.analytics import ToolUsageStats
 
 
@@ -63,7 +65,7 @@ def test_tool_call_record_is_frozen():
     import pytest as _pytest
 
     with _pytest.raises(dataclasses.FrozenInstanceError):
-        rec.seq = 2  # type: ignore[misc]
+        rec.seq = 2  # type: ignore[misc, union-attr]
 
 
 def test_record_tool_call_safely_handles_analytics_exception(monkeypatch, caplog):
@@ -155,7 +157,7 @@ def test_apply_ex_records_exactly_once_on_exception(monkeypatch):
 
     # Stub issue_task to run the callable inline (bypasses TaskExecutor).
     def _inline_issue_task(fn, name=""):
-        result_holder = {}
+        result_holder: dict[str, Any] = {}
 
         class _FakeFuture:
             def result(self, timeout=None):

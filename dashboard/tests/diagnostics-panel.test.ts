@@ -40,6 +40,26 @@ describe('DiagnosticsPanel', () => {
     expect(queryByText('boom')).not.toBeNull();
     expect(queryByText('meh')).toBeNull();
   });
+
+  it('notes when files were skipped because no language server handles their type', async () => {
+    stubFetchRoutes({
+      '/code/diagnostics_summary': () => ({ files: [], truncated: false, skipped_unsupported: 3 }),
+    });
+    code.setDiagScope({ kind: 'project', path: null });
+    await code.refreshDiagnostics(1000);
+    const { getByText } = render(DiagnosticsPanel);
+    expect(getByText(/3 files were not analyzed/i)).toBeDefined();
+  });
+
+  it('shows no skip note when every file was analyzed', async () => {
+    stubFetchRoutes({
+      '/code/diagnostics_summary': () => ({ files: [], truncated: false, skipped_unsupported: 0 }),
+    });
+    code.setDiagScope({ kind: 'project', path: null });
+    await code.refreshDiagnostics(1000);
+    const { queryByText } = render(DiagnosticsPanel);
+    expect(queryByText(/not analyzed/i)).toBeNull();
+  });
 });
 
 describe('DiagnosticsPanel — scope selector', () => {

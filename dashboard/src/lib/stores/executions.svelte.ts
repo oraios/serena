@@ -38,6 +38,11 @@ export function createExecutionsStore() {
           cancelError = res.message ?? 'Failed to cancel execution';
           return res;
         }
+        // `was_cancelled === false` means the task had already finished — nothing
+        // was abandoned, so don't list it under "Cancelled Executions".
+        if (res.data?.was_cancelled === false) {
+          return res;
+        }
         // Dedupe: a queued item can be cancelled again before the next poll removes
         // it, so guard against recording the same task twice (duplicate {#each} key).
         if (!cancelled.some((c) => c.task_id === execution.task_id)) {

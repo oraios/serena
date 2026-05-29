@@ -47,11 +47,13 @@ const numberFormatter = new Intl.NumberFormat('en-US');
 // rendering identical across browsers and CI; numbers are the user-facing
 // stat totals (Tool Calls, tokens) where commas read naturally.
 export function formatNumber(n: number): string {
+  if (!Number.isFinite(n)) return '—';
   return numberFormatter.format(n);
 }
 
 // Human-readable duration. Crosses ms → s → m → h as the magnitude grows.
 export function formatDurationMs(ms: number): string {
+  if (!Number.isFinite(ms)) return '—';
   if (ms < 1) return '<1 ms';
   if (ms < 1000) return `${Math.round(ms)} ms`;
   const s = ms / 1000;
@@ -64,6 +66,7 @@ export function formatDurationMs(ms: number): string {
 
 // Token totals: 5,678 → "5.7k", 1_234_000 → "1.23M".
 export function formatTokens(n: number): string {
+  if (!Number.isFinite(n)) return '—';
   if (n < 1000) return String(n);
   if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`;
   return `${(n / 1_000_000).toFixed(2)}M`;

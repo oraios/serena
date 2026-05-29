@@ -2,6 +2,7 @@ import type { ChartConfiguration } from 'chart.js';
 import type { Context as DataLabelsContext } from 'chartjs-plugin-datalabels';
 import type { ToolStats, ToolStatEntry, ToolCallRecord } from './api/types';
 import type { SortKey } from './stores/stats.svelte';
+import { formatTokens } from './format';
 
 export type ChartSpec =
   | ChartConfiguration<'pie'>
@@ -45,7 +46,9 @@ export function pieSpec(stats: ToolStats, key: keyof ToolStatEntry): ChartConfig
           },
           color: '#ffffff',
           font: { weight: 'bold' },
-          formatter: (v) => v,
+          // Compact so token pies don't print long unseparated integers on a
+          // slice; small call counts (<1000) pass through unchanged.
+          formatter: (v) => formatTokens(v as number),
         },
       },
     },

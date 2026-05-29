@@ -497,7 +497,10 @@ class SerenaDashboardAPI:
                 return {
                     "status": "success",
                     "was_cancelled": False,
-                    "message": f"Task with id {escape(request_data.get('task_id'))} not found, maybe execution was already finished",
+                    # task_id is a validated int (RequestCancelTaskExecution), so it
+                    # carries no markup — interpolate directly. html.escape() would
+                    # raise "'int' object has no attribute 'replace'" on a non-str.
+                    "message": f"Task with id {request_cancel_task.task_id} not found, maybe execution was already finished",
                 }
             except Exception as e:
                 return {"status": "error", "message": str(e), "was_cancelled": False}

@@ -1,3 +1,9 @@
+<script module lang="ts">
+  // Per-instance counter for unique title ids (so aria-labelledby resolves even
+  // with multiple modals mounted across a session).
+  let modalUid = 0;
+</script>
+
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { onDestroy } from 'svelte';
@@ -17,6 +23,7 @@
 
   let contentEl = $state<HTMLDivElement | null>(null);
   let previouslyFocused: HTMLElement | null = null;
+  const titleId = `modal-title-${modalUid++}`;
 
   // Move focus into the dialog when it opens, and restore it to the trigger on close,
   // so keyboard/screen-reader users land inside the modal instead of behind it.
@@ -41,10 +48,14 @@
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
     const activeEl = document.activeElement;
-    if (e.shiftKey && activeEl === first) {
+    // Initial focus sits on the dialog container (tabindex=-1), which is NOT in
+    // the focusable list. Treat "focus not within the list" as a boundary too,
+    // otherwise the very first Shift+Tab escapes the trap to the page behind.
+    const withinList = Array.prototype.indexOf.call(focusable, activeEl) !== -1;
+    if (e.shiftKey && (activeEl === first || !withinList)) {
       e.preventDefault();
       last.focus();
-    } else if (!e.shiftKey && activeEl === last) {
+    } else if (!e.shiftKey && (activeEl === last || !withinList)) {
       e.preventDefault();
       first.focus();
     }
@@ -59,6 +70,7 @@
       class="modal-content"
       role="dialog"
       aria-modal="true"
+      aria-labelledby={title ? titleId : undefined}
       tabindex="-1"
       bind:this={contentEl}
       onclick={(e) => e.stopPropagation()}
@@ -71,7 +83,7 @@
     >
       <button type="button" class="modal-close" aria-label="Close" onclick={onclose}>&times;</button
       >
-      {#if title}<h3>{title}</h3>{/if}
+      {#if title}<h3 id={titleId}>{title}</h3>{/if}
       {#if error}<p class="modal-error" role="alert">{error}</p>{/if}
       {@render children()}
     </div>

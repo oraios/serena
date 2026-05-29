@@ -37,7 +37,7 @@
   {/if}
   {#if code.search_results.length > 0}
     <ul class="results">
-      {#each code.search_results as m (m.path + ':' + m.name + ':' + m.range.start.line)}
+      {#each code.search_results as m (m.path + ':' + m.name + ':' + m.range.start.line + ':' + m.range.start.character)}
         <li>
           <button type="button" onclick={() => selectMatch(m.path)} class="match">
             <span class="kind">{m.kind}</span>
