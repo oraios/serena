@@ -1,27 +1,45 @@
 export type Theme = 'light' | 'dark';
+export type ThemePref = 'system' | 'light' | 'dark';
 const KEY = 'serena-dashboard-theme';
 
 export function createThemeStore() {
+  let preference = $state<ThemePref>('system');
   let current = $state<Theme>('light');
 
-  function apply(t: Theme) {
-    current = t;
-    document.documentElement.setAttribute('data-theme', t);
+  function systemTheme(): Theme {
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  function apply() {
+    current = preference === 'system' ? systemTheme() : preference;
+    document.documentElement.setAttribute('data-theme', current);
   }
 
   return {
+    // Resolved theme actually in effect ('light' | 'dark').
     get current() {
       return current;
     },
+    // User's selection ('system' | 'light' | 'dark').
+    get preference() {
+      return preference;
+    },
     init() {
-      const stored = localStorage.getItem(KEY) as Theme | null;
-      const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
-      apply(stored ?? (prefersDark ? 'dark' : 'light'));
+      const stored = localStorage.getItem(KEY) as ThemePref | null;
+      preference = stored ?? 'system';
+      apply();
+      // Track OS changes while following the system preference.
+      window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
+        if (preference === 'system') apply();
+      });
+    },
+    set(pref: ThemePref) {
+      preference = pref;
+      apply();
+      localStorage.setItem(KEY, pref);
     },
     toggle() {
-      const next: Theme = current === 'dark' ? 'light' : 'dark';
-      apply(next);
-      localStorage.setItem(KEY, next);
+      this.set(current === 'dark' ? 'light' : 'dark');
     },
   };
 }

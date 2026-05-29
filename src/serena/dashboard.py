@@ -162,6 +162,8 @@ class ToolCallRecordResponse(BaseModel):
     output_preview: str
     input_truncated: bool
     output_truncated: bool
+    input_tokens: int
+    output_tokens: int
 
 
 class ResponseToolCallTimeline(BaseModel):
@@ -342,6 +344,8 @@ class SerenaDashboardAPI:
                         output_preview=r.output_preview,
                         input_truncated=r.input_truncated,
                         output_truncated=r.output_truncated,
+                        input_tokens=r.input_tokens,
+                        output_tokens=r.output_tokens,
                     )
                     for r in records
                 ],
@@ -497,15 +501,6 @@ class SerenaDashboardAPI:
                 }
             except Exception as e:
                 return {"status": "error", "message": str(e), "was_cancelled": False}
-
-        @self._app.route("/last_execution", methods=["GET"])
-        def get_last_execution() -> dict[str, Any]:
-            try:
-                last_execution_info = self._agent.get_last_executed_task()
-                response = QueuedExecution.from_task_info(last_execution_info).model_dump() if last_execution_info is not None else None
-                return {"last_execution": response, "status": "success"}
-            except Exception as e:
-                return {"status": "error", "message": str(e)}
 
         @self._app.route("/fetch_unread_news", methods=["GET"])
         def fetch_unread_news() -> dict[str, dict[str, str] | str]:

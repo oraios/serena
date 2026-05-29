@@ -1,4 +1,7 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
+  import { ChevronDown, X, Check } from '@lucide/svelte';
+
   interface Option {
     value: string;
     label: string;
@@ -95,10 +98,10 @@
         aria-label="Clear filter"
         class="clear"
         onclick={clear}
-        onkeydown={(e) => e.key === 'Enter' && clear(e)}>×</span
+        onkeydown={(e) => e.key === 'Enter' && clear(e)}><Icon icon={X} size={12} /></span
       >
     {/if}
-    <span class="chev" aria-hidden="true">▾</span>
+    <span class="chev" aria-hidden="true"><Icon icon={ChevronDown} size={12} /></span>
   </button>
 
   {#if open}
@@ -120,7 +123,9 @@
             onclick={() => selectAt(i)}
             onkeydown={(e) => e.key === 'Enter' && selectAt(i)}
           >
-            <span class="check">{o.value === value ? '✓' : ''}</span>
+            <span class="check"
+              >{#if o.value === value}<Icon icon={Check} size={12} />{/if}</span
+            >
             <span>{o.label}</span>
           </li>
         {/each}

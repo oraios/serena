@@ -125,10 +125,6 @@ export interface ResponseQueuedExecutions {
   queued_executions: QueuedExecution[];
   status: string;
 }
-export interface ResponseLastExecution {
-  last_execution: QueuedExecution | null;
-  status: string;
-}
 export interface ResponseCancelExecution {
   status: string;
   was_cancelled: boolean;
@@ -162,6 +158,8 @@ export interface ToolCallRecord {
   output_preview: string;
   input_truncated: boolean;
   output_truncated: boolean;
+  input_tokens: number;
+  output_tokens: number;
 }
 export interface ResponseToolCallTimeline {
   records: ToolCallRecord[];

@@ -8,7 +8,6 @@ import type {
   ResponseGetMemory,
   ResponseGetSerenaConfig,
   ResponseQueuedExecutions,
-  ResponseLastExecution,
   ResponseCancelExecution,
   ResponseNews,
   StatusResponse,
@@ -51,7 +50,6 @@ export const fetchQueuedExecutions = () =>
   getJson<ResponseQueuedExecutions>('/queued_task_executions');
 export const cancelExecution = (task_id: number) =>
   postJson<ResponseCancelExecution>('/cancel_task_execution', { task_id });
-export const fetchLastExecution = () => getJson<ResponseLastExecution>('/last_execution');
 export const fetchUnreadNews = () => getJson<ResponseNews>('/fetch_unread_news');
 export const markNewsRead = (news_snippet_id: string) =>
   postJson<StatusResponse>('/mark_news_snippet_as_read', { news_snippet_id });
@@ -81,5 +79,13 @@ export const fetchCodeWorkspaceSymbolSearch = (q: string, limit = 50) =>
     `/code/workspace_symbol_search?q=${encodeURIComponent(q)}&limit=${limit}`,
   );
 
-export const fetchCodeDiagnosticsSummary = (file_limit = 1000) =>
-  getJson<ResponseDiagnosticsSummary>(`/code/diagnostics_summary?file_limit=${file_limit}`);
+export const fetchCodeDiagnosticsSummary = (
+  file_limit = 1000,
+  path?: string,
+  min_severity?: number,
+) => {
+  const qs = new URLSearchParams({ file_limit: String(file_limit) });
+  if (path) qs.set('path', path);
+  if (min_severity !== undefined) qs.set('min_severity', String(min_severity));
+  return getJson<ResponseDiagnosticsSummary>(`/code/diagnostics_summary?${qs}`);
+};

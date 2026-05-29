@@ -2,6 +2,8 @@
   import { theme } from '$lib/stores/theme.svelte';
   import ThemeToggle from './ThemeToggle.svelte';
   import BannerCarousel from '../banners/BannerCarousel.svelte';
+  import Icon from '../common/Icon.svelte';
+  import { Power } from '@lucide/svelte';
   import type { View } from '$lib/pollers';
   let {
     active,
@@ -28,7 +30,7 @@
         title="Shutdown Server"
         onclick={() => onshutdown()}
       >
-        <span class="icon" aria-hidden="true">⏻</span>
+        <span class="icon" aria-hidden="true"><Icon icon={Power} size={14} /></span>
       </button>
     </div>
     <div class="header-tabs" role="tablist">
@@ -38,6 +40,13 @@
         class:active={active === 'overview'}
         aria-current={active === 'overview' ? 'page' : undefined}
         onclick={() => onnavigate('overview')}>Overview</button
+      >
+      <button
+        type="button"
+        class="header-tab"
+        class:active={active === 'code'}
+        aria-current={active === 'code' ? 'page' : undefined}
+        onclick={() => onnavigate('code')}>Code</button
       >
       <button
         type="button"
@@ -52,13 +61,6 @@
         class:active={active === 'stats'}
         aria-current={active === 'stats' ? 'page' : undefined}
         onclick={() => onnavigate('stats')}>Stats</button
-      >
-      <button
-        type="button"
-        class="header-tab"
-        class:active={active === 'code'}
-        aria-current={active === 'code' ? 'page' : undefined}
-        onclick={() => onnavigate('code')}>Code</button
       >
     </div>
   </nav>

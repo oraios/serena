@@ -2,6 +2,8 @@
   import type { ResponseConfigOverview } from '$lib/api/types';
   import Collapsible from '../common/Collapsible.svelte';
   import Button from '../common/Button.svelte';
+  import Icon from '../common/Icon.svelte';
+  import { X } from '@lucide/svelte';
   let {
     data,
     onaddlanguage,
@@ -50,7 +52,7 @@
                 <button
                   class="lang-remove"
                   aria-label="Remove {lang}"
-                  onclick={() => onremovelanguage(lang)}>×</button
+                  onclick={() => onremovelanguage(lang)}><Icon icon={X} size={12} /></button
                 >
               {/if}
             </span>
@@ -96,7 +98,7 @@
               class="memory-remove"
               aria-label="Delete memory {m}"
               title="Delete memory"
-              onclick={() => ondeletememory(m)}>×</button
+              onclick={() => ondeletememory(m)}><Icon icon={X} size={12} /></button
             >
           </div>
         {/each}

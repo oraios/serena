@@ -7,9 +7,6 @@
   import ListPanel from './ListPanel.svelte';
   import ProjectsPanel from './ProjectsPanel.svelte';
   import Spinner from '../common/Spinner.svelte';
-  import ExecutionsQueue from './ExecutionsQueue.svelte';
-  import LastExecution from './LastExecution.svelte';
-  import CancelledExecutions from './CancelledExecutions.svelte';
   import NewsSection from './NewsSection.svelte';
   import SummaryCards from './SummaryCards.svelte';
   import Timeline from './Timeline.svelte';
@@ -49,7 +46,6 @@
   <Spinner />
 {:else}
   <SummaryCards totals={d.tool_stats_totals} />
-  <Timeline store={timeline} {toolNames} />
   <div class="overview-container">
     <div class="overview-left">
       <NewsSection />
@@ -67,21 +63,7 @@
       <Card title="Tool Usage">
         <ToolUsageBars stats={d.tool_stats_summary} />
       </Card>
-      <Card title="Executions Queue">
-        <ExecutionsQueue
-          items={executions.queued}
-          cancelError={executions.cancelError}
-          {oncancelexecution}
-        />
-      </Card>
-      {#if executions.cancelled.length}
-        <Card title="Cancelled Executions">
-          <CancelledExecutions items={executions.cancelled} />
-        </Card>
-      {/if}
-      <Card title="Last Execution">
-        <LastExecution execution={executions.last} />
-      </Card>
+      <Timeline store={timeline} {executions} {toolNames} {oncancelexecution} />
     </div>
     <div class="overview-right">
       <ProjectsPanel projects={d.registered_projects} />

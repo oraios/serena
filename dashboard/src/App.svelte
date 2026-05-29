@@ -30,14 +30,12 @@
 
   const configPoller = createPoller(() => safe(config.poll()), 1000);
   const queuedPoller = createPoller(() => safe(executions.pollQueued()), 1000);
-  const lastPoller = createPoller(() => safe(executions.pollLast()), 1000);
   const logsPoller = createPoller(() => safe(logs.poll()), 1000);
   const timelinePoller = createPoller(() => safe(timeline.poll()), 1000);
 
   const pollers: Record<PollerName, Poller> = {
     config: configPoller,
     queued: queuedPoller,
-    last: lastPoller,
     logs: logsPoller,
     timeline: timelinePoller,
   };

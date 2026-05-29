@@ -129,6 +129,8 @@ function rec(started_at: number, tool = 't'): ToolCallRecord {
     output_preview: '',
     input_truncated: false,
     output_truncated: false,
+    input_tokens: 0,
+    output_tokens: 0,
   };
 }
 

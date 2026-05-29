@@ -278,3 +278,6 @@ zz-misc/
 vue-implementation/
 
 news/news.json
+
+# Playwright MCP session artifacts (screenshots, console logs, page snapshots)
+.playwright-mcp/

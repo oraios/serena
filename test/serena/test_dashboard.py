@@ -54,9 +54,6 @@ class _DummyAgent:
     def get_current_tasks(self):
         return []
 
-    def get_last_executed_task(self):
-        return None
-
     def get_context(self):
         return _DummyContext()
 

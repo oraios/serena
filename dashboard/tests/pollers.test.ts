@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { pollersForView } from '../src/lib/pollers';
 
 describe('pollersForView', () => {
-  it('overview polls config, queued, last, and timeline', () => {
-    expect(pollersForView('overview')).toEqual(['config', 'queued', 'last', 'timeline']);
+  it('overview polls config, queued, and timeline', () => {
+    expect(pollersForView('overview')).toEqual(['config', 'queued', 'timeline']);
   });
   it('logs polls only logs', () => {
     expect(pollersForView('logs')).toEqual(['logs']);

@@ -1,10 +1,9 @@
-import { fetchQueuedExecutions, fetchLastExecution, cancelExecution } from '$lib/api/endpoints';
+import { fetchQueuedExecutions, cancelExecution } from '$lib/api/endpoints';
 import { runMutation } from '$lib/api/mutation';
 import type { QueuedExecution } from '$lib/api/types';
 
 export function createExecutionsStore() {
   let queued = $state<QueuedExecution[]>([]);
-  let last = $state<QueuedExecution | null>(null);
   // Client-side list of cancelled/abandoned tasks for the Cancelled Executions panel
   // (legacy behaviour: there is no backend endpoint for this).
   let cancelled = $state<QueuedExecution[]>([]);
@@ -17,9 +16,6 @@ export function createExecutionsStore() {
     get queued() {
       return queued;
     },
-    get last() {
-      return last;
-    },
     get cancelled() {
       return cancelled;
     },
@@ -31,13 +27,6 @@ export function createExecutionsStore() {
     },
     async pollQueued() {
       queued = (await fetchQueuedExecutions()).queued_executions;
-    },
-    async pollLast() {
-      // Only surface user-facing (logged) executions. The backend runs internal tasks
-      // (e.g. _get_config_overview every second) with logged=False; without this filter
-      // the "Last Execution" panel would almost always show an internal task. Matches legacy.
-      const latest = (await fetchLastExecution()).last_execution;
-      last = latest && latest.logged ? latest : null;
     },
     async cancel(execution: QueuedExecution) {
       if (inFlight.has(execution.task_id)) return { ok: false };

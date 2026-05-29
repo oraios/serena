@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Icon from '../common/Icon.svelte';
+  import { Copy, Check } from '@lucide/svelte';
   let { lines, onclear }: { lines: string[]; onclear: () => void } = $props();
   let copied = $state(false);
   const disabled = $derived(lines.length === 0);
@@ -26,7 +28,7 @@
 
 <div class="log-action-buttons">
   <button class="log-action-btn" {disabled} onclick={copy} title="Copy logs"
-    >{copied ? '✓ copied' : 'copy logs'}</button
+    ><Icon icon={copied ? Check : Copy} size={12} /> {copied ? 'copied' : 'copy logs'}</button
   >
   <button class="log-action-btn" {disabled} onclick={save} title="Save logs to file"
     >save logs</button

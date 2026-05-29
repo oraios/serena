@@ -69,6 +69,99 @@ export function formatTokens(n: number): string {
   return `${(n / 1_000_000).toFixed(2)}M`;
 }
 
+// Compact, live-refreshable relative timestamp: "just now", "12s ago", "5m ago",
+// "3h ago", "2d ago". `thenEpochSec` is epoch *seconds* (matching the backend's
+// started_at); `nowEpochMs` is epoch *milliseconds* (Date.now()). Non-finite or
+// future timestamps degrade to '' / "just now" rather than throwing.
+export function formatRelativeTime(thenEpochSec: number, nowEpochMs: number): string {
+  if (!Number.isFinite(thenEpochSec)) return '';
+  const diffSec = Math.round(nowEpochMs / 1000 - thenEpochSec);
+  if (diffSec < 5) return 'just now';
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const m = Math.floor(diffSec / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
+
+// Best-effort: turn a Python literal (what `str(kwargs)` produces — single-quoted
+// strings, None/True/False, escaped apostrophes) into a JSON string. Returns null
+// when the source contains anything we can't faithfully represent (bare names like
+// a `<Foo object>` repr, tuples, sets), so the caller can fall back to the raw text.
+// A character scanner — not a regex swap — so apostrophes inside string values
+// (`{'msg': "it's"}`) survive.
+function pythonLiteralToJson(src: string): string | null {
+  let out = '';
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    if (c === "'" || c === '"') {
+      const quote = c;
+      i++;
+      let content = '';
+      while (i < src.length && src[i] !== quote) {
+        if (src[i] === '\\') {
+          const next = src[i + 1];
+          if (next === quote) content += quote;
+          else if (next === '\\') content += '\\';
+          else if (next === 'n') content += '\n';
+          else if (next === 't') content += '\t';
+          else if (next === 'r') content += '\r';
+          else content += next ?? '';
+          i += 2;
+        } else {
+          content += src[i];
+          i++;
+        }
+      }
+      i++; // skip closing quote
+      out += JSON.stringify(content); // re-emit as a valid JSON double-quoted string
+    } else if (/[A-Za-z_]/.test(c)) {
+      let word = '';
+      while (i < src.length && /[A-Za-z0-9_]/.test(src[i])) {
+        word += src[i];
+        i++;
+      }
+      if (word === 'None') out += 'null';
+      else if (word === 'True') out += 'true';
+      else if (word === 'False') out += 'false';
+      else return null; // unknown bare identifier — can't represent as JSON
+    } else {
+      out += c;
+      i++;
+    }
+  }
+  return out;
+}
+
+function tryStructured(s: string): unknown | undefined {
+  try {
+    const v = JSON.parse(s);
+    // Only treat objects/arrays as "structured" — leave plain text/numbers/bools as-is
+    // so a tool's textual output isn't reinterpreted (e.g. "42" → 42).
+    return v && typeof v === 'object' ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// Pretty-print a tool-call input/output preview when it is structured (JSON, or a
+// Python dict/list repr); otherwise return it unchanged. Pure and never throws —
+// safe to call in a `$derived`.
+export function prettyArgs(raw: string): string {
+  const trimmed = raw.trim();
+  const direct = tryStructured(trimmed);
+  if (direct !== undefined) return JSON.stringify(direct, null, 2);
+  const coerced = pythonLiteralToJson(trimmed);
+  if (coerced != null) {
+    const parsed = tryStructured(coerced);
+    if (parsed !== undefined) return JSON.stringify(parsed, null, 2);
+  }
+  return raw;
+}
+
 // Inclusive-linear nearest-rank percentile (B24): floor((q/100) * (n-1)).
 // `percentile([1..100], 95)` → sorted[94] = 95. Empty input → 0. q is clamped
 // to [0, 100] so out-of-range quantiles don't blow up the index.

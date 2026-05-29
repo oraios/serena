@@ -1,4 +1,7 @@
 <script lang="ts">
+  import Icon from './Icon.svelte';
+  import { ChevronDown } from '@lucide/svelte';
+
   let {
     options,
     value = '',
@@ -52,7 +55,7 @@
     autocomplete="off"
     spellcheck="false"
   />
-  <span class="combobox-caret" aria-hidden="true">▾</span>
+  <span class="combobox-caret" aria-hidden="true"><Icon icon={ChevronDown} size={12} /></span>
   {#if openList}
     {#if filtered.length}
       <ul class="combobox-options" role="listbox">

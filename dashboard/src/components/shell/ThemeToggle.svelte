@@ -1,18 +1,30 @@
 <script lang="ts">
-  import { theme } from '$lib/stores/theme.svelte';
-  const tooltip = $derived(
-    theme.current === 'dark' ? 'Switch to light theme' : 'Switch to dark theme',
-  );
+  import { theme, type ThemePref } from '$lib/stores/theme.svelte';
+  import Icon from '../common/Icon.svelte';
+  import { Monitor, Sun, Moon } from '@lucide/svelte';
+
+  const order: ThemePref[] = ['system', 'light', 'dark'];
+  const meta: Record<ThemePref, { label: string; icon: typeof Sun }> = {
+    system: { label: 'System', icon: Monitor },
+    light: { label: 'Light', icon: Sun },
+    dark: { label: 'Dark', icon: Moon },
+  };
+
+  const next = $derived(order[(order.indexOf(theme.preference) + 1) % order.length]);
+
+  function cycle() {
+    theme.set(next);
+  }
 </script>
 
 <button
   class="theme-toggle"
   type="button"
-  aria-label={tooltip}
-  title={tooltip}
-  onclick={() => theme.toggle()}
+  aria-label={`Theme: ${meta[theme.preference].label}. Switch to ${meta[next].label}`}
+  title={`Theme: ${meta[theme.preference].label} (click for ${meta[next].label})`}
+  onclick={cycle}
 >
-  <span class="icon" aria-hidden="true">{theme.current === 'dark' ? '☀' : '🌙'}</span>
+  <Icon icon={meta[theme.preference].icon} size={18} />
 </button>
 
 <style>
@@ -32,9 +44,5 @@
   }
   .theme-toggle:hover {
     background: var(--bg-card);
-  }
-  .icon {
-    font-size: 18px;
-    line-height: 1;
   }
 </style>

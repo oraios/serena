@@ -31,7 +31,6 @@ class TaskExecutor:
         self._task_executor_thread.start()
         self._task_executor_task_index = 1
         self._task_executor_current_task: TaskExecutor.Task | None = None
-        self._task_executor_last_executed_task_info: TaskExecutor.TaskInfo | None = None
         self._task_completion_callback = task_completion_callback
 
     class Task(ToStringMixin, Generic[T]):
@@ -142,8 +141,6 @@ class TaskExecutor:
             task.wait_until_done(timeout=task.timeout)
             with self._task_executor_lock:
                 self._task_executor_current_task = None
-                if task.logged:
-                    self._task_executor_last_executed_task_info = self.TaskInfo.from_task(task, is_running=False)
 
             # call the task completion callback if provided
             if self._task_completion_callback is not None:
@@ -257,12 +254,3 @@ class TaskExecutor:
         """
         task_obj = self.issue_task(task, name=name, logged=logged, timeout=timeout)
         return task_obj.result()
-
-    def get_last_executed_task(self) -> TaskInfo | None:
-        """
-        Gets information about the last executed task.
-
-        :return: TaskInfo of the last executed task, or None if no task has been executed yet.
-        """
-        with self._task_executor_lock:
-            return self._task_executor_last_executed_task_info

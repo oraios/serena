@@ -1,7 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { stubFetchRoutes } from './helpers';
 import { createTimelineStore } from '../src/lib/stores/timeline.svelte';
 import type { ToolCallRecord } from '../src/lib/api/types';
+
+beforeEach(() => localStorage.clear());
 
 function record(seq: number, tool = 't'): ToolCallRecord {
   return {
@@ -15,6 +17,8 @@ function record(seq: number, tool = 't'): ToolCallRecord {
     output_preview: '',
     input_truncated: false,
     output_truncated: false,
+    input_tokens: 0,
+    output_tokens: 0,
   };
 }
 
@@ -55,6 +59,8 @@ describe('timeline store', () => {
                 output_preview: '',
                 input_truncated: false,
                 output_truncated: false,
+                input_tokens: 0,
+                output_tokens: 0,
               },
             ],
             max_seq: 5,

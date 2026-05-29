@@ -4,6 +4,17 @@ import { afterEach, vi } from 'vitest';
 // Restore stubs/spies after every test so individual files don't each repeat this.
 afterEach(() => vi.restoreAllMocks());
 
+// jsdom has no ResizeObserver; Svelte's `bind:offsetHeight`/`bind:clientHeight`
+// install one. Provide a no-op stub so components that measure their own size
+// (e.g. FileSymbols' sticky-header offset) can mount under test.
+if (!('ResizeObserver' in globalThis)) {
+  (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
 // Node 26 exposes an experimental (undefined) localStorage/sessionStorage that shadows
 // jsdom's implementations. Vitest's populateGlobal skips keys already present on the
 // Node global, so we must manually install jsdom's Storage objects after env setup.

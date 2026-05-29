@@ -2,6 +2,8 @@
   import { onMount, untrack } from 'svelte';
   import Modal from '../common/Modal.svelte';
   import Button from '../common/Button.svelte';
+  import Icon from '../common/Icon.svelte';
+  import { Check, Pencil } from '@lucide/svelte';
   import { getMemory, saveMemory, renameMemory } from '$lib/api/endpoints';
   import { isValidMemoryName } from '$lib/validation';
   import { runMutation } from '$lib/api/mutation';
@@ -73,7 +75,7 @@
         title="Confirm rename"
         aria-label="Confirm rename"
         disabled={renameAction.busy}
-        onclick={applyRename}>✓</button
+        onclick={applyRename}><Icon icon={Check} size={14} label="Confirm rename" /></button
       >
     {:else}
       <span class="memory-name-display">{currentName}</span>
@@ -85,7 +87,7 @@
         onclick={() => {
           renaming = true;
           renameValue = currentName;
-        }}>✎</button
+        }}><Icon icon={Pencil} size={14} label="Rename" /></button
       >
     {/if}
   </h3>

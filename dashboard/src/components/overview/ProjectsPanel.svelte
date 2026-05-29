@@ -6,7 +6,7 @@
 </script>
 
 <Card>
-  <Collapsible title="Registered Projects ({projects.length})" open={true}>
+  <Collapsible title="Registered Projects ({projects.length})" open={false}>
     {#if projects.length}
       <ul class="projects">
         {#each projects as p (p.path)}

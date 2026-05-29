@@ -1,5 +1,7 @@
 <script lang="ts">
   import { code } from '$lib/stores/code.svelte';
+  import Icon from '../common/Icon.svelte';
+  import { Search } from '@lucide/svelte';
 
   let value = $state(code.search_query);
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -18,13 +20,10 @@
 </script>
 
 <div class="root">
-  <input
-    type="search"
-    placeholder="Search workspace symbols…"
-    {value}
-    oninput={onInput}
-    class="input"
-  />
+  <label class="input-wrap">
+    <Icon icon={Search} size={14} />
+    <input type="search" placeholder="Search workspace symbols…" {value} oninput={onInput} />
+  </label>
   {#if code.search_error}
     <div class="error-banner">
       <strong>Search failed.</strong>
@@ -58,18 +57,27 @@
     height: 100%;
     padding: var(--space-2);
   }
-  .input {
-    width: 100%;
+  .input-wrap {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     padding: var(--space-2);
     background: var(--bg-elevated);
     border: 1px solid var(--border);
     border-radius: var(--radius);
+    color: var(--text-secondary);
+  }
+  .input-wrap:focus-within {
+    border-color: var(--accent);
+    color: var(--text-primary);
+  }
+  .input-wrap input {
+    flex: 1;
+    background: transparent;
+    border: 0;
+    outline: none;
     color: var(--text-primary);
     font-family: inherit;
-  }
-  .input:focus {
-    outline: none;
-    border-color: var(--accent);
   }
   .status {
     color: var(--text-secondary);

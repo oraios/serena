@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from serena.dashboard_code import LSPNotReady, resolve_project_path
-
 
 # -----------------------------------------------------------------------------
 # Task 19 — path resolve + LSPNotReady
@@ -91,9 +89,6 @@ class _DummyAgent:
     def get_current_tasks(self):
         return []
 
-    def get_last_executed_task(self):
-        return None
-
     def execute_task(self, fn, *, logged=None, name=None):
         return fn()
 
@@ -174,11 +169,26 @@ def test_code_list_dir_respects_gitignore(make_dashboard_with_project):
 
 
 class _FakeLS:
-    def __init__(self, doc_symbols=None, raise_exc=None, ws_symbols=None, diagnostics_map=None):
+    def __init__(
+        self,
+        doc_symbols=None,
+        raise_exc=None,
+        ws_symbols=None,
+        diagnostics_map=None,
+        pull_diagnostics_map=None,
+        ignored_paths=None,
+    ):
         self._doc_symbols = doc_symbols
         self._raise = raise_exc
         self._ws_symbols = ws_symbols
         self._diagnostics_map = diagnostics_map or {}
+        self._pull_diagnostics_map = pull_diagnostics_map or {}
+        # Relative paths this server does NOT handle (unsupported file type),
+        # mirroring SolidLanguageServer.is_ignored_path(ignore_unsupported_files=True).
+        self._ignored_paths = set(ignored_paths or [])
+
+    def is_ignored_path(self, rel, ignore_unsupported_files=True):
+        return rel in self._ignored_paths
 
     def request_document_symbols(self, rel):
         if self._raise:
@@ -194,6 +204,11 @@ class _FakeLS:
         if self._raise:
             raise self._raise
         return self._diagnostics_map.get(rel)
+
+    def request_text_document_diagnostics(self, rel, **_kw):
+        if self._raise:
+            raise self._raise
+        return self._pull_diagnostics_map.get(rel)
 
 
 class _FakeManager:
@@ -326,18 +341,13 @@ def test_code_diagnostics_summary_503_when_no_project(tmp_path):
         def get_current_tasks(self):
             return []
 
-        def get_last_executed_task(self):
-            return None
-
         def execute_task(self, fn, *, logged=None, name=None):
             return fn()
 
         def get_language_backend(self):
             return SimpleNamespace(is_jetbrains=lambda: False)
 
-    dashboard = SerenaDashboardAPI(
-        memory_log_handler=_DummyMemLog(), tool_names=[], agent=_AgentNoProject(), tool_usage_stats=None
-    )
+    dashboard = SerenaDashboardAPI(memory_log_handler=_DummyMemLog(), tool_names=[], agent=_AgentNoProject(), tool_usage_stats=None)
     client = dashboard._app.test_client()
     r = client.get("/code/diagnostics_summary")
     assert r.status_code == 503
@@ -384,3 +394,97 @@ def test_code_diagnostics_summary_truncates_long_message(make_dashboard_with_pro
     files = {f["path"]: f for f in body["files"]}
     msg = files["a.py"]["diagnostics"][0]["message"]
     assert len(msg) <= 4096
+
+
+# -----------------------------------------------------------------------------
+# Scoped diagnostics — path = file (pull) / directory (subtree) / project
+# -----------------------------------------------------------------------------
+
+
+def test_diagnostics_summary_file_scope_uses_pull(make_dashboard_with_project):
+    diag = {
+        "range": {"start": {"line": 2, "character": 1}, "end": {"line": 2, "character": 4}},
+        "severity": 1,
+        "message": "pull-only diag",
+        "source": "pyright",
+    }
+    # Published map is empty; only the pull map has the diagnostic. If the file
+    # scope returns it, the pull path was used.
+    mgr = _FakeManager(ls=_FakeLS(pull_diagnostics_map={"a.py": [diag]}))
+    _, client, root = make_dashboard_with_project(ls_manager=mgr)
+    (root / "a.py").write_text("x=1\n")
+    r = client.get("/code/diagnostics_summary?path=a.py")
+    assert r.status_code == 200
+    body = r.get_json()
+    files = {f["path"]: f for f in body["files"]}
+    assert "a.py" in files
+    assert files["a.py"]["diagnostics"][0]["message"] == "pull-only diag"
+    assert files["a.py"]["diagnostics"][0]["severity"] == "error"
+
+
+def test_diagnostics_summary_directory_scope_limits_to_subtree(make_dashboard_with_project):
+    diag = {
+        "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 1}},
+        "severity": 2,
+        "message": "w",
+        "source": "x",
+    }
+    mgr = _FakeManager(ls=_FakeLS(diagnostics_map={"pkg/inside.py": [diag], "outside.py": [diag]}))
+    _, client, root = make_dashboard_with_project(ls_manager=mgr)
+    (root / "pkg").mkdir()
+    (root / "pkg" / "inside.py").write_text("x=1\n")
+    (root / "outside.py").write_text("x=1\n")
+    r = client.get("/code/diagnostics_summary?path=pkg")
+    assert r.status_code == 200
+    paths = {f["path"] for f in r.get_json()["files"]}
+    assert "pkg/inside.py" in paths
+    assert "outside.py" not in paths
+
+
+def test_diagnostics_summary_path_traversal_rejected(make_dashboard_with_project):
+    mgr = _FakeManager(ls=_FakeLS())
+    _, client, _root = make_dashboard_with_project(ls_manager=mgr)
+    r = client.get("/code/diagnostics_summary?path=../etc")
+    assert r.status_code == 400
+
+
+def test_diagnostics_summary_missing_path_404(make_dashboard_with_project):
+    mgr = _FakeManager(ls=_FakeLS())
+    _, client, _root = make_dashboard_with_project(ls_manager=mgr)
+    r = client.get("/code/diagnostics_summary?path=nope.py")
+    assert r.status_code == 404
+
+
+def test_diagnostics_summary_min_severity_filters_published(make_dashboard_with_project):
+    warn = {
+        "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 1}},
+        "severity": 2,
+        "message": "just a warning",
+        "source": "x",
+    }
+    mgr = _FakeManager(ls=_FakeLS(diagnostics_map={"a.py": [warn]}))
+    _, client, root = make_dashboard_with_project(ls_manager=mgr)
+    (root / "a.py").write_text("x=1\n")
+    # min_severity=1 => errors only => the warning is filtered out => no files.
+    r = client.get("/code/diagnostics_summary?min_severity=1")
+    assert r.status_code == 200
+    assert r.get_json()["files"] == []
+
+
+def test_diagnostics_summary_file_scope_skips_unsupported_file(make_dashboard_with_project):
+    diag = {
+        "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 1}},
+        "severity": 1,
+        "message": "should not surface",
+        "source": "pyright",
+    }
+    # The manager hands back its default server for any path, but that server does
+    # not handle Markdown (is_ignored_path -> True). File scope must NOT lint the
+    # file with the wrong server; it returns no diagnostics. (Were the diagnostic
+    # to surface, it would prove the wrong-server linting bug.)
+    ls = _FakeLS(pull_diagnostics_map={"notes.md": [diag]}, ignored_paths={"notes.md"})
+    _, client, root = make_dashboard_with_project(ls_manager=_FakeManager(ls=ls))
+    (root / "notes.md").write_text("# hi\n")
+    r = client.get("/code/diagnostics_summary?path=notes.md")
+    assert r.status_code == 200
+    assert r.get_json()["files"] == []

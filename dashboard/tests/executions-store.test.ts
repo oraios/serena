@@ -39,28 +39,3 @@ describe('executions store: cancel', () => {
     expect(store.cancelError).toBe('');
   });
 });
-
-describe('executions store: last execution', () => {
-  it('keeps the last execution when it is logged', async () => {
-    const last = exec({ name: 'real-task', logged: true });
-    stubFetchJson({ last_execution: last, status: 'success' });
-    const store = createExecutionsStore();
-    await store.pollLast();
-    expect(store.last?.name).toBe('real-task');
-  });
-
-  it('hides the last execution when it is an unlogged internal task', async () => {
-    const last = exec({ name: '_get_config_overview', logged: false });
-    stubFetchJson({ last_execution: last, status: 'success' });
-    const store = createExecutionsStore();
-    await store.pollLast();
-    expect(store.last).toBeNull();
-  });
-
-  it('is null when the backend reports no last execution', async () => {
-    stubFetchJson({ last_execution: null, status: 'success' });
-    const store = createExecutionsStore();
-    await store.pollLast();
-    expect(store.last).toBeNull();
-  });
-});

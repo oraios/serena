@@ -26,7 +26,6 @@ const API_ROUTES = [
   '/save_serena_config',
   '/queued_task_executions',
   '/cancel_task_execution',
-  '/last_execution',
   '/fetch_unread_news',
   '/mark_news_snippet_as_read',
   '/heartbeat',

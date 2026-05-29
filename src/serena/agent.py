@@ -822,14 +822,6 @@ class SerenaAgent:
         """
         return self._task_executor.get_current_tasks()
 
-    def get_last_executed_task(self) -> TaskExecutor.TaskInfo | None:
-        """
-        Gets the last executed task.
-
-        :return: the last executed task info or None if no task has been executed yet
-        """
-        return self._task_executor.get_last_executed_task()
-
     def get_language_server_manager(self) -> LanguageServerManager | None:
         if self._active_project is not None:
             return self._active_project.language_server_manager
@@ -891,7 +883,7 @@ class SerenaAgent:
                 error_message=error_message,
                 now=time.time(),
             )
-        except Exception as e:  # noqa: BLE001 — instrumentation MUST NOT break agent
+        except Exception as e:
             log.warning(f"Failed to record tool call analytics for '{tool_name}': {e}", exc_info=e)
 
     def get_dashboard_url(self) -> str | None:

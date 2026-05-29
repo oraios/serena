@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { detectLevel, escapeHtml, highlightTools } from '../src/lib/format';
+import {
+  detectLevel,
+  escapeHtml,
+  highlightTools,
+  formatRelativeTime,
+  prettyArgs,
+} from '../src/lib/format';
 
 describe('format', () => {
   it('detects log level from the line prefix', () => {
@@ -35,5 +41,48 @@ describe('format', () => {
   it('highlights each occurrence of overlapping names in one pass', () => {
     const html = highlightTools('find_symbol find_symbol', ['find_symbol']);
     expect(html.match(/<span class="tool-name">find_symbol<\/span>/g)?.length).toBe(2);
+  });
+});
+
+describe('formatRelativeTime', () => {
+  const NOW = 1_000_000 * 1000; // epoch ms at 1,000,000 s
+  it('returns "just now" within 5s and empty for non-finite', () => {
+    expect(formatRelativeTime(1_000_000, NOW)).toBe('just now');
+    expect(formatRelativeTime(999_998, NOW)).toBe('just now');
+    expect(formatRelativeTime(Number.POSITIVE_INFINITY, NOW)).toBe('');
+    expect(formatRelativeTime(NaN, NOW)).toBe('');
+  });
+  it('crosses s → m → h → d boundaries', () => {
+    expect(formatRelativeTime(1_000_000 - 30, NOW)).toBe('30s ago');
+    expect(formatRelativeTime(1_000_000 - 120, NOW)).toBe('2m ago');
+    expect(formatRelativeTime(1_000_000 - 2 * 3600, NOW)).toBe('2h ago');
+    expect(formatRelativeTime(1_000_000 - 3 * 86400, NOW)).toBe('3d ago');
+  });
+  it('clamps a future timestamp to "just now"', () => {
+    expect(formatRelativeTime(1_000_100, NOW)).toBe('just now');
+  });
+});
+
+describe('prettyArgs', () => {
+  it('pretty-prints a Python dict repr (single quotes, None/True/False)', () => {
+    const out = prettyArgs("{'relative_path': 'src/foo.py', 'flag': True, 'x': None}");
+    expect(out).toBe('{\n  "relative_path": "src/foo.py",\n  "flag": true,\n  "x": null\n}');
+  });
+  it('preserves apostrophes inside double-quoted values', () => {
+    const out = prettyArgs(`{'msg': "it's fine"}`);
+    expect(JSON.parse(out)).toEqual({ msg: "it's fine" });
+  });
+  it('pretty-prints already-valid JSON objects and arrays', () => {
+    expect(prettyArgs('{"a":1}')).toBe('{\n  "a": 1\n}');
+    expect(prettyArgs('[1,2]')).toBe('[\n  1,\n  2\n]');
+  });
+  it('leaves plain text untouched (not reinterpreted)', () => {
+    expect(prettyArgs('Symbol read successfully')).toBe('Symbol read successfully');
+    expect(prettyArgs('42')).toBe('42');
+  });
+  it('falls back to raw on unrepresentable reprs (objects, tuples)', () => {
+    const repr = '<Foo object at 0x1>';
+    expect(prettyArgs(repr)).toBe(repr);
+    expect(prettyArgs("(1, 2, 'a')")).toBe("(1, 2, 'a')");
   });
 });

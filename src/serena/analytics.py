@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 from abc import ABC, abstractmethod
 from collections import defaultdict, deque
 from copy import copy
@@ -145,6 +144,8 @@ class ToolCallRecord:
     output_preview: str
     input_truncated: bool
     output_truncated: bool
+    input_tokens: int
+    output_tokens: int
 
 
 class ToolUsageStats:
@@ -195,12 +196,8 @@ class ToolUsageStats:
             self.input_tokens += input_tokens
             self.output_tokens += output_tokens
             self.total_duration_ms += duration_ms
-            self.min_duration_ms = (
-                duration_ms if self.min_duration_ms is None else min(self.min_duration_ms, duration_ms)
-            )
-            self.max_duration_ms = (
-                duration_ms if self.max_duration_ms is None else max(self.max_duration_ms, duration_ms)
-            )
+            self.min_duration_ms = duration_ms if self.min_duration_ms is None else min(self.min_duration_ms, duration_ms)
+            self.max_duration_ms = duration_ms if self.max_duration_ms is None else max(self.max_duration_ms, duration_ms)
             self.last_called_at = now
 
     def _estimate_token_count(self, text: str) -> int:
@@ -253,6 +250,8 @@ class ToolUsageStats:
                     output_preview=output_preview,
                     input_truncated=input_truncated,
                     output_truncated=output_truncated,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
                 )
             )
 

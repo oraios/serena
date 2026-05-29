@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import Icon from './Icon.svelte';
+  import { ChevronDown } from '@lucide/svelte';
   let {
     title,
     open = false,
@@ -17,7 +19,7 @@
   <h2 class="collapsible-header">
     <button type="button" class="collapsible-trigger" onclick={toggle} aria-expanded={expanded}>
       <span class="collapsible-title">{title}</span>
-      <span class="toggle-icon" class:open={expanded}>▼</span>
+      <span class="toggle-icon" class:open={expanded}><Icon icon={ChevronDown} size={12} /></span>
     </button>
   </h2>
   {#if expanded}

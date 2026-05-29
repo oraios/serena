@@ -1,6 +1,6 @@
 {
   "name": "serena-dashboard",
-  "version": "0.0.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -32,6 +32,7 @@
     "vitest": "^2.1.0"
   },
   "dependencies": {
+    "@lucide/svelte": "^1.17.0",
     "chart.js": "^4.5.1",
     "chartjs-plugin-datalabels": "^2.2.0"
   }
