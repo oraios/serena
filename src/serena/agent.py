@@ -438,7 +438,7 @@ class DashboardManager:
         dashboard_host = host_listen_address
         if dashboard_host == "0.0.0.0":
             dashboard_host = "localhost"
-        self.url = f"http://{dashboard_host}:{port}/dashboard/index.html"
+        self.url = f"http://{dashboard_host}:{port}/dashboard/"
 
         # handle startup
         match self._mode:

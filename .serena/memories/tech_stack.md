@@ -8,3 +8,4 @@
 - Dev deps: `ruff` (lint+format), `mypy` (strict), `pytest` (+ `pytest-xdist`, `pytest-timeout`, `syrupy` snapshots), `sphinx`/`jupyter-book` for docs.
 - Optional extras: `agno` (Agno agent integration), `google` (gemini).
 - LSP client core lives under `src/solidlsp/`; one subdir per supported language server under `language_servers/`.
+- Dashboard frontend: a separate **Svelte 5 + TypeScript + Vite** project under `dashboard/` (its own npm world). Its build output is committed to `src/serena/resources/dashboard/` and shipped in the wheel; Python-only contributors need no Node.

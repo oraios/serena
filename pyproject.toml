@@ -165,6 +165,8 @@ _jb_generate_config = "jupyter-book config sphinx docs/"
 doc-clean = "rm -rf docs/_build docs/03_api"
 doc-generate-files = ["_autogen_docs", "_jb_generate_toc", "_jb_generate_config"]
 doc-build = ["doc-clean", "doc-generate-files", "_sphinx_build"]
+# dashboard
+build-dashboard = "npm --prefix dashboard ci && npm --prefix dashboard run build"
 
 [tool.ruff]
 target-version = "py311"
