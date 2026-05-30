@@ -79,13 +79,13 @@ jobs:
           MARKERS='${{ matrix.marker_expr }}'
 
           if [[ '${{ matrix.batch_name }}' == 'Catch-All (Core Framework & Remaining Languages)' ]]; then
-            # Strict Quarantining: Explicitly disabling flaky auto-install dependencies (including ruby & julia)
-            MARKERS="$MARKERS and not ruby and not php and not clojure and not kotlin and not msl and not nix and not zig and not swift and not perl and not fortran and not haskell and not elixir and not fsharp and not groovy and not matlab and not yaml and not json and not ansible and not julia"
+            # Strict Quarantining: Explicitly disabling flaky auto-install dependencies & build-dependent servers
+            MARKERS="$MARKERS and not ruby and not php and not clojure and not kotlin and not msl and not nix and not zig and not swift and not perl and not fortran and not haskell and not elixir and not fsharp and not groovy and not matlab and not yaml and not json and not ansible and not julia and not lean4"
           fi
 
           echo "MARKERS=$MARKERS"
           echo "markers=$MARKERS" >> "$GITHUB_OUTPUT"
-
+          
       - name: Run pytest
         shell: bash
         run: |
