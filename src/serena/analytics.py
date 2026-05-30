@@ -116,20 +116,7 @@ class RegisteredTokenCountEstimator(Enum):
         return estimator_instance
 
 
-_INPUT_OUTPUT_PREVIEW_BYTES = 8 * 1024
 _RECORD_BUFFER_SIZE = 2000
-
-
-def _truncate_preview(text: str) -> tuple[str, bool]:
-    """
-    Truncate text so its UTF-8 byte length is at most _INPUT_OUTPUT_PREVIEW_BYTES.
-    Returns (possibly-truncated text, was_truncated).
-    """
-    encoded = text.encode("utf-8")
-    if len(encoded) <= _INPUT_OUTPUT_PREVIEW_BYTES:
-        return text, False
-    truncated = encoded[:_INPUT_OUTPUT_PREVIEW_BYTES].decode("utf-8", errors="ignore")
-    return truncated, True
 
 
 @dataclass(frozen=True)
@@ -142,8 +129,6 @@ class ToolCallRecord:
     error_message: str | None
     input_preview: str
     output_preview: str
-    input_truncated: bool
-    output_truncated: bool
     input_tokens: int
     output_tokens: int
 
@@ -226,8 +211,6 @@ class ToolUsageStats:
         """
         input_tokens = self._estimate_token_count(input_str)
         output_tokens = self._estimate_token_count(output_str)
-        input_preview, input_truncated = _truncate_preview(input_str)
-        output_preview, output_truncated = _truncate_preview(output_str)
         with self._tool_stats_lock:
             self._seq_counter += 1
             seq = self._seq_counter
@@ -246,10 +229,8 @@ class ToolUsageStats:
                     duration_ms=duration_ms,
                     success=success,
                     error_message=error_message,
-                    input_preview=input_preview,
-                    output_preview=output_preview,
-                    input_truncated=input_truncated,
-                    output_truncated=output_truncated,
+                    input_preview=input_str,
+                    output_preview=output_str,
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
                 )

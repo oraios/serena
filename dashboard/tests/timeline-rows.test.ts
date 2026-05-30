@@ -12,8 +12,6 @@ function rec(seq: number, tool: string, started_at: number, success = true): Too
     error_message: null,
     input_preview: '',
     output_preview: '',
-    input_truncated: false,
-    output_truncated: false,
     input_tokens: 0,
     output_tokens: 0,
   };

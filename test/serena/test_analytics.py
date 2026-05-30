@@ -27,20 +27,27 @@ def test_entry_update_on_call_tracks_timing_and_errors():
     assert e.last_called_at == 1001.0
 
 
-from serena.analytics import _INPUT_OUTPUT_PREVIEW_BYTES, ToolCallRecord, _truncate_preview
+from serena.analytics import ToolCallRecord
 
 
-def test_truncate_preview_short_input_returns_as_is():
-    text, truncated = _truncate_preview("hello")
-    assert text == "hello"
-    assert truncated is False
-
-
-def test_truncate_preview_long_input_truncates_to_cap():
-    long = "x" * (_INPUT_OUTPUT_PREVIEW_BYTES + 1000)
-    text, truncated = _truncate_preview(long)
-    assert len(text.encode("utf-8")) <= _INPUT_OUTPUT_PREVIEW_BYTES
-    assert truncated is True
+def test_record_call_stores_input_and_output_in_full():
+    """Inputs and outputs are stored untruncated (the dashboard renders them in full)."""
+    stats = ToolUsageStats()
+    big_input = "i" * (64 * 1024)
+    big_output = "o" * (128 * 1024)
+    stats.record_call(
+        tool_name="read_file",
+        input_str=big_input,
+        output_str=big_output,
+        duration_ms=1.0,
+        success=True,
+        error_message=None,
+        now=1000.0,
+    )
+    records, _ = stats.get_records_since(since_seq=None, tool=None, limit=10)
+    assert len(records) == 1
+    assert records[0].input_preview == big_input
+    assert records[0].output_preview == big_output
 
 
 def test_tool_call_record_is_frozen():
@@ -53,8 +60,6 @@ def test_tool_call_record_is_frozen():
         error_message=None,
         input_preview="a",
         output_preview="b",
-        input_truncated=False,
-        output_truncated=False,
         input_tokens=3,
         output_tokens=4,
     )

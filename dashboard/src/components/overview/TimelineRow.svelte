@@ -167,9 +167,6 @@
               {showFullInput ? 'Show less' : 'Show full'}
             </button>
           {/if}
-          {#if record.input_truncated}
-            <div class="note">(server-truncated at 8 KB)</div>
-          {/if}
         </div>
         <div class="block">
           <div class="block-head">
@@ -191,9 +188,6 @@
             <button type="button" class="link" onclick={() => (showFullOutput = !showFullOutput)}>
               {showFullOutput ? 'Show less' : 'Show full'}
             </button>
-          {/if}
-          {#if record.output_truncated}
-            <div class="note">(server-truncated at 8 KB)</div>
           {/if}
         </div>
       </div>
@@ -390,10 +384,6 @@
     color: var(--accent);
     cursor: pointer;
     padding: 0;
-  }
-  .note {
-    color: var(--text-muted);
-    font-size: 0.85em;
   }
   .err {
     color: var(--log-error);

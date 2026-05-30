@@ -14,8 +14,6 @@ function historyRow(over: Partial<ToolCallRecord> = {}): TimelineDisplayRow {
     error_message: null,
     input_preview: "{'relative_path': 'src/foo.py', 'flag': True}",
     output_preview: 'file contents here',
-    input_truncated: false,
-    output_truncated: false,
     input_tokens: 1234,
     output_tokens: 340,
     ...over,

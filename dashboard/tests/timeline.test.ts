@@ -15,8 +15,6 @@ function rec(seq: number, tool = 'read_file', success = true): ToolCallRecord {
     error_message: success ? null : 'Err',
     input_preview: `in${seq}`,
     output_preview: `out${seq}`,
-    input_truncated: false,
-    output_truncated: false,
     input_tokens: seq * 10,
     output_tokens: seq * 20,
   };

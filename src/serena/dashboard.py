@@ -160,8 +160,6 @@ class ToolCallRecordResponse(BaseModel):
     error_message: str | None
     input_preview: str
     output_preview: str
-    input_truncated: bool
-    output_truncated: bool
     input_tokens: int
     output_tokens: int
 
@@ -342,8 +340,6 @@ class SerenaDashboardAPI:
                         error_message=r.error_message,
                         input_preview=r.input_preview,
                         output_preview=r.output_preview,
-                        input_truncated=r.input_truncated,
-                        output_truncated=r.output_truncated,
                         input_tokens=r.input_tokens,
                         output_tokens=r.output_tokens,
                     )

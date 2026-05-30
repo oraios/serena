@@ -293,7 +293,7 @@ def _convert_workspace_match(m: Any, project_root_real: Path) -> _WorkspaceMatch
     rng = _maybe(location, "range") if location is not None else None
     file_path = unquote(urlparse(uri).path) if uri else ""
     try:
-        rel = str(Path(file_path).relative_to(project_root_real)) if file_path else ""
+        rel = str(Path(file_path).relative_to(project_root_real)).replace(os.sep, "/") if file_path else ""
     except Exception:
         rel = file_path
     return _WorkspaceMatch(

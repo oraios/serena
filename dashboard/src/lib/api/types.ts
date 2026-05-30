@@ -156,8 +156,6 @@ export interface ToolCallRecord {
   error_message: string | null;
   input_preview: string;
   output_preview: string;
-  input_truncated: boolean;
-  output_truncated: boolean;
   input_tokens: number;
   output_tokens: number;
 }
