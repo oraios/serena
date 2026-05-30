@@ -325,7 +325,7 @@ def _collect_candidate_files(root_real: str, walk_root: str, ignore: Any, file_l
         for fn in filenames:
             if fn.startswith("."):
                 continue
-            rel = os.path.relpath(os.path.join(dirpath, fn), root_real)
+            rel = os.path.relpath(os.path.join(dirpath, fn), root_real).replace(os.sep, "/")
             if ignore is not None and ignore.should_ignore(rel):
                 continue
             if len(candidate_paths) >= file_limit:
@@ -503,7 +503,7 @@ def register_code_routes(dashboard_api: "SerenaDashboardAPI") -> None:
                     is_dir = de.is_dir(follow_symlinks=False)
                     is_file = de.is_file(follow_symlinks=False)
                     abs_path = de.path
-                    rel = os.path.relpath(abs_path, root)
+                    rel = os.path.relpath(abs_path, root).replace(os.sep, "/")
                     if ignore is not None:
                         # GitignoreParser.should_ignore handles directory/file disambiguation
                         # internally by appending '/' for directories.
@@ -537,7 +537,7 @@ def register_code_routes(dashboard_api: "SerenaDashboardAPI") -> None:
             return _err(400, str(e))
         except FileNotFoundError:
             return _err(404, "file not found")
-        rel = os.path.relpath(resolved, str(Path(root).resolve()))
+        rel = os.path.relpath(resolved, str(Path(root).resolve())).replace(os.sep, "/")
         ls = _get_language_server_for_path(dashboard_api, rel)
         if ls is None:
             return _err(503, "Language server not ready", "ls_not_ready")
@@ -627,7 +627,7 @@ def register_code_routes(dashboard_api: "SerenaDashboardAPI") -> None:
         skipped_unsupported = 0
         deadline = time.monotonic() + _DIAGNOSTICS_WALL_CLOCK_BUDGET_S
         if mode == "file":
-            rel0 = os.path.relpath(resolved, root_real)
+            rel0 = os.path.relpath(resolved, root_real).replace(os.sep, "/")
             # Diagnose with the server that actually handles THIS file's language
             # (mirrors /code/file_symbols), not the first server. Otherwise a
             # non-Python file (Markdown, JSON, .svelte, .ts in a Python-first
