@@ -22,6 +22,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     and other JDK types reported as "cannot be resolved") for projects whose source/target level
     exceeds the bundled JDK 21 JRE JDT-LS registers by default; configured runtimes extend rather
     than replace that bundled default. #1478
+  - `gopls`: Fix `replace_symbol_body` corrupting single `type`/`var`/`const` declarations by
+    duplicating the leading keyword (e.g. `type Foo` becoming `type type Foo`). gopls reports the
+    symbol range of such declarations starting at the identifier rather than the keyword (unlike
+    `func` declarations); the range is now extended to include the keyword so the body and the
+    replacement range stay consistent.
 
 * Tools:
   - Fix: `search_for_pattern` marked one line too many as matched whenever a match ended with a line
