@@ -9,6 +9,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     at the Yarn-generated SDK.
   - `SvelteLanguageServer`: Fix diagnostics requests for TypeScript/JavaScript files incorrectly being
     processed by the Svelte LS instead of the TypeScript LS.
+  - `gopls`: Fix `replace_symbol_body` corrupting single `type`/`var`/`const` declarations by
+    duplicating the leading keyword (e.g. `type Foo` becoming `type type Foo`). gopls reports the
+    symbol range of such declarations starting at the identifier rather than the keyword (unlike
+    `func` declarations); the range is now extended to include the keyword so the body and the
+    replacement range stay consistent.
 
 * Dashboard:
   - Make list of trusted hosts configurable, fixing host validation introduced in v1.5.2 allowing only
