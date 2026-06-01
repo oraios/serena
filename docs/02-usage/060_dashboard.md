@@ -25,7 +25,7 @@ The dashboard is a web application, which is opened in one of three ways:
   * via a tray manager that aggregates multiple instances (on supported platforms) 
   * via your default web browser (supported on all platforms)
 
-Configure your preferred interface via the setting `web_dashoard_interface` in [Serena's global configuration file](global-config) (see below).
+Configure your preferred interface via the setting `web_dashboard_interface` in [Serena's global configuration file](global-config) (see below).
 
 By default, the dashboard can be accessed at `http://localhost:24282/dashboard/index.html`,
 but a higher port may be used if the default port is unavailable/multiple instances are running.

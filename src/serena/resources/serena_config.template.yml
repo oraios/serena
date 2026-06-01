@@ -61,6 +61,8 @@ web_dashboard_open_on_launch: True
 #      opening the dashboard in browser tabs when selected from the tray menu.
 #      This is EXPERIMENTAL. It is tested on Windows only. We will establish macOS support, but it is yet untested.
 #      On Linux, this cannot be universally supported, but it may work in some desktop environments.
+#      On NixOS, when using the package from flake.nix, both modern AppIndicator trays as well as
+#      older Xorg-/XEmbed-based trays should be supported.
 # See https://oraios.github.io/serena/02-usage/060_dashboard.html
 web_dashboard_interface:
 
