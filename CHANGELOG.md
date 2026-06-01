@@ -8,9 +8,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     and `workspace/configuration` pulls. Enables Yarn PnP setups with `typescript.tsdk` pointing
     at the Yarn-generated SDK.
 
-* Dashboard: 
-  - Fix: Host validation required a local host regardless of the listen address (regression introduced in v1.5.2),
-    preventing remote connections
+* Dashboard:
+  - Make list of trusted hosts configurable, fixing host validation introduced in v1.5.2 allowing only
+    default local hostnames, effectively preventing remote connections
 
 # v1.5.3 (2026-05-26)
 
