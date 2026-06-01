@@ -16,7 +16,12 @@ T = TypeVar("T")
 
 
 class TaskExecutor:
-    def __init__(self, name: str):
+    def __init__(self, name: str, task_completion_callback: Callable[[], None] | None = None):
+        """
+        :param name: the name of the task executor, used for logging purposes
+        :param task_completion_callback: an optional callback function that will be called after each task completion
+            (regardless of success, failure, or cancellation)
+        """
         self._task_executor_lock = threading.Lock()
         self._task_executor_queue: list[TaskExecutor.Task] = []
         self._task_executor_thread = Thread(target=self._process_task_queue, name=name, daemon=True)
@@ -24,6 +29,7 @@ class TaskExecutor:
         self._task_executor_task_index = 1
         self._task_executor_current_task: TaskExecutor.Task | None = None
         self._task_executor_last_executed_task_info: TaskExecutor.TaskInfo | None = None
+        self._task_completion_callback = task_completion_callback
 
     class Task(ToStringMixin, Generic[T]):
         def __init__(self, function: Callable[[], T], name: str, logged: bool = True, timeout: float | None = None):
@@ -129,6 +135,13 @@ class TaskExecutor:
                 self._task_executor_current_task = None
                 if task.logged:
                     self._task_executor_last_executed_task_info = self.TaskInfo.from_task(task, is_running=False)
+
+            # call the task completion callback if provided
+            if self._task_completion_callback is not None:
+                try:
+                    self._task_completion_callback()
+                except Exception as e:
+                    log.error(f"Error in task completion callback after executing {task.name}: {e}", exc_info=e)
 
     @dataclass
     class TaskInfo:

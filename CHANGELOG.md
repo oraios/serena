@@ -13,6 +13,9 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Dashboard:
   - Make list of trusted hosts configurable, fixing host validation introduced in v1.5.2 allowing only
     default local hostnames, effectively preventing remote connections
+  - Decouple configuration computation from the agent's task queue by introducing events for agent config/status updates.
+    This allows the dashboard to display the configuration while the project provided at startup is still initialising. #1064
+  - Fix empty executions queue displaying "Loading..."
 
 # v1.5.3 (2026-05-26)
 
