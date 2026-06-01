@@ -197,11 +197,16 @@ class SerenaDashboardAPI:
         tool_names: list[str],
         agent: "SerenaAgent",
         tool_usage_stats: ToolUsageStats | None = None,
+        host: str = "127.0.0.1",
+        trusted_hosts: list[str] | None = None,
     ) -> None:
         self._memory_log_handler = memory_log_handler
         self._tool_names = tool_names
         self._agent = agent
+        self._host = host
         self._app = Flask(__name__)
+        if trusted_hosts:
+            self._app.config["TRUSTED_HOSTS"] = trusted_hosts
         self._tool_usage_stats = tool_usage_stats
         self._loaded_news: dict[str, str] = {}
         self._news_ready = threading.Event()
@@ -777,7 +782,7 @@ class SerenaDashboardAPI:
 
         raise RuntimeError(f"No free ports found starting from {start_port}")
 
-    def run(self, host: str, port: int) -> int:
+    def run(self, port: int) -> int:
         """
         Runs the dashboard on the given host and port and returns the port number.
         """
@@ -785,14 +790,13 @@ class SerenaDashboardAPI:
         from flask import cli
 
         cli.show_server_banner = lambda *args, **kwargs: None
-
-        self._app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
+        self._app.run(host=self._host, port=port, debug=False, use_reloader=False, threaded=True)
         return port
 
-    def run_in_thread(self, host: str) -> tuple[threading.Thread, int]:
-        port = self._find_first_free_port(self.BASE_PORT, host)
-        log.info("Starting dashboard (listen_address=%s, port=%d)", host, port)
-        thread = threading.Thread(target=lambda: self.run(host=host, port=port), daemon=True)
+    def run_in_thread(self) -> tuple[threading.Thread, int]:
+        port = self._find_first_free_port(self.BASE_PORT, self._host)
+        log.info("Starting dashboard (listen_address=%s, port=%d)", self._host, port)
+        thread = threading.Thread(target=lambda: self.run(port=port), daemon=True)
         thread.start()
         return thread, port
 

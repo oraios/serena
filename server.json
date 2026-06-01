@@ -1,0 +1,46 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.oraios/serena",
+  "title": "Serena MCP: the IDE for your agent",
+  "description": "A powerful toolkit for coding, providing semantic retrieval and editing capabilities.",
+  "version": "1.5.3",
+  "repository": {
+    "source": "github",
+    "url": "https://github.com/oraios/serena"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "serena-agent",
+      "version": "1.5.3",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeHint": "uvx",
+      "runtimeArguments": [
+        {
+          "description": "Select the python version",
+          "name": "-p",
+          "value": "3.13",
+          "type": "named"
+        },
+        {
+          "type": "positional",
+          "value": "start-mcp-server"
+        },
+        {
+          "type": "positional",
+          "value": "--project-from-cwd",
+          "isRequired": false
+        },
+        {
+          "type": "named",
+          "name": "--context",
+          "isRequired": false,
+          "default": "desktop-app",
+          "description": "The name of a markdown file representing Serena's execution context, typically related to the executing client.  Allowed values are: agent, antigravity, chatgpt, claude-code, codex, context.template, copilot-cli, desktop-app, ide, jb-ai-assistant, jb-copilot-plugin, junie, oaicompat-agent, vscode "
+        }
+      ]
+    }
+  ]
+}

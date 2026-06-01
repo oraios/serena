@@ -663,19 +663,26 @@ class SerenaAgent:
         # create the dashboard backend (if enabled), which will register callback.
         dashboard_api: SerenaDashboardAPI | None = None
         if self.serena_config.web_dashboard:
-            dashboard_api = SerenaDashboardAPI(get_memory_log_handler(), tool_names, agent=self, tool_usage_stats=self._tool_usage_stats)
+            dashboard_api = SerenaDashboardAPI(
+                get_memory_log_handler(),
+                tool_names,
+                agent=self,
+                tool_usage_stats=self._tool_usage_stats,
+                host=self.serena_config.web_dashboard_listen_address,
+                trusted_hosts=self.serena_config.web_dashboard_trusted_hosts,
+            )
 
         # propagate the initial config/state to listeners, particularly to the dashboard API.
         # Note: The only ongoing task can be the LS initialisation, which does not change the config
         # This is executed before starting the dashboard thread to ensure that the dashboard
-        # has the correct initial state before can requests come in.
+        # has the correct initial state before requests can come in.
         self._on_config_changed()
 
         # start the dashboard backend thread and the dashboard frontend manager (if enabled).
         # This should be the last thing to happen in the initialization since the dashboard
         # may access various parts of the agent
         if dashboard_api:
-            dashboard_thread, port = dashboard_api.run_in_thread(host=self.serena_config.web_dashboard_listen_address)
+            dashboard_thread, port = dashboard_api.run_in_thread()
             self._dashboard_manager = DashboardManager(
                 port,
                 self.serena_config.web_dashboard_listen_address,

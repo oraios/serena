@@ -272,6 +272,8 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
 
     #: file suffixes for source-like files where symbolic tools are usually more
     #: appropriate than repeated raw reads. Lowercase and extension-only.
+    #: Note: ``search_for_pattern`` is always available regardless of extension and
+    #: is a better alternative to repeated raw reads for any structured file type.
     _CODE_FILE_EXTENSIONS: frozenset[str] = frozenset(
         (
             ".al",
@@ -289,14 +291,19 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             ".fs",
             ".fsx",
             ".go",
+            ".graphql",
+            ".gql",
             ".groovy",
             ".h",
+            ".hcl",
             ".hpp",
             ".hs",
             ".html",
             ".java",
             ".jl",
             ".js",
+            ".json",
+            ".jsonc",
             ".jsx",
             ".kt",
             ".kts",
@@ -305,6 +312,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             ".m",
             ".matlab",
             ".php",
+            ".proto",
             ".ps1",
             ".py",
             ".r",
@@ -313,11 +321,17 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             ".scala",
             ".sh",
             ".sol",
+            ".sql",
             ".svelte",
             ".swift",
+            ".tf",
+            ".tfvars",
+            ".toml",
             ".ts",
             ".tsx",
             ".vue",
+            ".yaml",
+            ".yml",
             ".zig",
         )
     )

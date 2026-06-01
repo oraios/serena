@@ -10,12 +10,11 @@ You can pass the following entries in ``ls_specific_settings["python_ty"]``:
 import logging
 import os
 import pathlib
-import shutil
 from typing import cast
 
 from typing_extensions import override
 
-from solidlsp.ls import LanguageServerDependencyProvider, SolidLanguageServer
+from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderUvx, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
@@ -44,28 +43,15 @@ class TyLanguageServer(SolidLanguageServer):
         )
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
-        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
-
-    class DependencyProvider(LanguageServerDependencyProvider):
-        def create_launch_command(self) -> list[str]:
-            # respecting an explicit override
-            ls_path = self._custom_settings.get("ls_path")
-            if ls_path is not None:
-                return [ls_path, "server"]
-
-            ty_version = self._custom_settings.get("ty_version", TY_VERSION)
-
-            # preferring uvx for on-demand execution
-            uvx_path = os.environ.get("UVX") or shutil.which("uvx")
-            if uvx_path is not None:
-                return [uvx_path, "--from", f"ty=={ty_version}", "ty", "server"]
-
-            # falling back to uv's uvx-compatible subcommand when only `uv` is available
-            uv_path = shutil.which("uv")
-            if uv_path is not None:
-                return [uv_path, "x", "--from", f"ty=={ty_version}", "ty", "server"]
-
-            raise RuntimeError("Could not find 'uvx' or 'uv' in PATH.\nInstall uv or provide ls_specific_settings.python_ty.ls_path.")
+        return LanguageServerDependencyProviderUvx(
+            self._custom_settings,
+            self._ls_resources_dir,
+            package="ty",
+            entrypoint="ty",
+            default_version=TY_VERSION,
+            version_setting_key="ty_version",
+            extra_args=("server",),
+        )
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:

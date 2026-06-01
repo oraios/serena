@@ -226,7 +226,7 @@ To achieve this, Serena offers multiple levels of (composable) configuration:
 **Install Serena**. Serena is installed via uv as follows:
 
 ```bash
-uv tool install -p 3.13 serena-agent@latest --prerelease=allow
+uv tool install -p 3.13 serena-agent
 ```
 
 After successful installation, the command `serena` should be available in your shell.
@@ -261,3 +261,5 @@ Please refer to the [user guide](https://oraios.github.io/serena/02-usage/000_in
 A significant part of Serena, especially support for various languages, was contributed by the open source community.
 We are very grateful for the many contributors who made this possible and who played an important role in making Serena
 what it is today.
+
+<!-- mcp-name: io.github.oraios/serena -->
