@@ -7,6 +7,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     The dict is forwarded to vtsls via `initializationOptions`, `workspace/didChangeConfiguration`,
     and `workspace/configuration` pulls. Enables Yarn PnP setups with `typescript.tsdk` pointing
     at the Yarn-generated SDK.
+  - `SvelteLanguageServer`: Fix diagnostics requests for TypeScript/JavaScript files incorrectly being
+    processed by the Svelte LS instead of the TypeScript LS.
 
 * Dashboard:
   - Make list of trusted hosts configurable, fixing host validation introduced in v1.5.2 allowing only
