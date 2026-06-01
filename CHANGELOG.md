@@ -12,6 +12,11 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Host validation required a local host regardless of the listen address (regression introduced in v1.5.2),
     preventing remote connections
 
+* JetBrains:
+  - Add new tool `jet_brains_find_unused_code`: reports code symbols (classes, methods, fields, ...) declared in a
+    file that have no references in the project — likely-dead code (usage-based heuristic via the IDE's reference
+    search). Requires Serena JetBrains plugin version 2023.2.17+.
+
 # v1.5.3 (2026-05-26)
 
 Add meta-data for the GitHub MCP registry

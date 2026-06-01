@@ -668,3 +668,45 @@ class JetBrainsListInspectionsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptio
             )
         result = self._to_json(response_dict)
         return self._limit_length(result, max_answer_chars)
+
+
+class JetBrainsFindUnusedCodeTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, ToolMarkerBeta):
+    """
+    Finds likely-unused code symbols (classes, methods, fields, ...) in a file using the JetBrains backend
+    """
+
+    symbol_dict_grouper = JetBrainsSymbolDictGrouper(["relative_path", "type"], ["type"], collapse_singleton=True)
+
+    def apply(
+        self,
+        relative_path: str,
+        include_quick_info: bool = False,
+        max_answer_chars: int = -1,
+    ) -> str:
+        """
+        Finds code symbols (classes, methods, fields, etc.) declared in the given file that have no references
+        anywhere in the project, i.e. code that is likely unused and may be safe to remove.
+        This is a usage-based heuristic computed via the IDE's reference search: entry points (e.g. main methods,
+        public API that is consumed outside the project) and reflective/framework usages are NOT accounted for, and
+        transitively dead code (a private member used only by other dead code) is not reported. Review results
+        before deleting anything.
+
+        :param relative_path: the relative path to the file to analyze for unused code.
+        :param include_quick_info: whether to include quick info (typically the signature) for each unused symbol.
+        :param max_answer_chars: max characters for the result (-1 for default). If exceeded, no content/a shortened
+            result is returned.
+        :return: the unused symbols grouped by file and type; a message stating that none were found if the file has
+            no unused symbols.
+        """
+        relative_path = self._sanitize_input_param(relative_path)
+        with JetBrainsPluginClient.from_project(self.project) as client:
+            response_dict = client.find_unused_code(
+                relative_path=relative_path,
+                include_quick_info=include_quick_info,
+            )
+        symbols = response_dict["symbols"]
+        if not symbols:
+            return f"No unused code symbols found in {relative_path}."
+        grouped = self.symbol_dict_grouper.group(symbols)
+        result = self._to_json(grouped)
+        return self._limit_length(result, max_answer_chars)

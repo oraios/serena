@@ -6,6 +6,8 @@ prompt: |
     * `jet_brains_find_referencing_symbols` replaces `find_referencing_symbols`
     * `jet_brains_get_symbols_overview` replaces `get_symbols_overview`
     * `jet_brains_rename` replaces `rename_symbol`
+  In addition, `jet_brains_find_unused_code` reports code symbols in a file that have no references in the
+  project (a usage-based heuristic for finding likely-dead code).
 excluded_tools:
   - find_symbol
   - find_referencing_symbols
@@ -32,3 +34,4 @@ included_optional_tools:
   - serena_info
   - jet_brains_run_inspections
   - jet_brains_list_inspections
+  - jet_brains_find_unused_code
