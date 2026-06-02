@@ -84,7 +84,7 @@ language_backend: JetBrains
 
 Note that the file might not exist yet if you never executed Serena before.
 
-**Per-Server Instance Configuration**.
+**Per-Instance Configuration**.
 The configuration setting in the global config file can be overridden on a
 per-instance basis by providing the arguments `--language-backend JetBrains` when
 launching the Serena MCP server.
@@ -121,8 +121,12 @@ You will also notice that your client will use the JetBrains-specific tools like
 
 Having installed the plugin in your IDE and having configured Serena to use the JetBrains backend,
 the general workflow is simple:
+
 1. Open the project you want to work on in your JetBrains IDE.  
-   Note that the project must be appropriately set up in your IDE, i.e. symbol lookups for all relevant programming languages and frameworks should work in the IDE.
+   Note that the project must be appropriately set up in your IDE, i.e. symbol lookups for all relevant programming languages and frameworks should work in the IDE.  
+
+   You can optionally make Serena open an IDE instance for your project root folder automatically upon project activation, allowing you to skip this step for a project that was previously set up correctly.
+   To enable this, configure `jetbrains_launch_command` in [Serena's global configuration file](global-config) appropriately.
 2. Activate the project's root folder as a project in Serena (see [Project Creation](project-creation-indexing) and [Project Activation](project-activation)).
 3. Start using Serena's tools as usual.
 
