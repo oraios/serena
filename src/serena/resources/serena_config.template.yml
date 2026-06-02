@@ -80,6 +80,13 @@ web_dashboard_trusted_hosts:
 # address where JetBrains plugin servers are running (only relevant when using the JetBrains language backend)
 jetbrains_plugin_server_address: 127.0.0.1
 
+# command used to launch a JetBrains IDE on demand (only relevant when using the JetBrains language backend)
+# If this is non-empty and, at project activation, the Serena JetBrains Plugin server instance corresponding
+# to the project is not found, use this command to spawn a new instance.
+# Specifically, if this is <cmd>, then `<cmd> <projectDir>` is launched.
+# Provide the full path to the executable/script (e.g., "/usr/bin/idea" or "C:/Users/bob/AppData/Local/JetBrains/Toolbox/scripts/idea.cmd").
+jetbrains_launch_command:
+
 # the minimum log level for the GUI log window and the dashboard (10 = debug, 20 = info, 30 = warning, 40 = error)
 log_level: 20
 

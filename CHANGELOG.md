@@ -11,6 +11,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     processed by the Svelte LS instead of the TypeScript LS.
   - Improve quoting of arguments in shell executions
 
+* JetBrains:
+  - Add configuration option `jetbrains_launch_command`, allowing Serena to spawn IDE instances automatically
+    upon project activation
+
 * Dashboard:
   - Make list of trusted hosts configurable, fixing host validation introduced in v1.5.2 allowing only
     default local hostnames, effectively preventing remote connections
