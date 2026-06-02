@@ -9,6 +9,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     at the Yarn-generated SDK.
   - `SvelteLanguageServer`: Fix diagnostics requests for TypeScript/JavaScript files incorrectly being
     processed by the Svelte LS instead of the TypeScript LS.
+  - Improve quoting of arguments in shell executions
 
 * Dashboard:
   - Make list of trusted hosts configurable, fixing host validation introduced in v1.5.2 allowing only

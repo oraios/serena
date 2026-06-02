@@ -10,7 +10,7 @@ from dataclasses import dataclass, replace
 from typing import Any, cast
 
 from solidlsp.ls_utils import FileUtils, PlatformUtils
-from solidlsp.util.subprocess_util import subprocess_kwargs
+from solidlsp.util import subprocess_util
 
 log = logging.getLogger(__name__)
 
@@ -101,18 +101,13 @@ class RuntimeDependencyCollection:
 
     @staticmethod
     def _run_command(command: str | list[str], cwd: str) -> None:
-        kwargs = subprocess_kwargs()
+        kwargs = subprocess_util.subprocess_kwargs()
         if not PlatformUtils.get_platform_id().is_windows():
             import pwd
 
             kwargs["user"] = pwd.getpwuid(os.getuid()).pw_name  # type: ignore
 
-        is_windows = platform.system() == "Windows"
-        if not isinstance(command, str) and not is_windows:
-            # Since we are using the shell, we need to convert the command list to a single string
-            # on Linux/macOS
-            command = " ".join(command)
-
+        command = subprocess_util.convert_shell_cmd(command)
         log.info("Running command %s in '%s'", f"'{command}'" if isinstance(command, str) else command, cwd)
 
         completed_process = subprocess.run(

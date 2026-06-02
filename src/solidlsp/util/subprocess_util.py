@@ -19,19 +19,19 @@ def subprocess_kwargs() -> dict:
     return kwargs
 
 
-def quote_arg(arg: str) -> str:
+def convert_shell_cmd(cmd: str | list[str]) -> str | list[str]:
     """
-    Quotes a shell argument to prevent interpretation of metacharacters.
+    Converts a command (specified as a list or string) to a format supported by subprocess calls with shell=True on the current platform.
+    List format must be converted to string format on POSIX systems, quoting arguments appropriately,
+    while it can be used as-is on Windows.
 
-    Uses :func:`shlex.quote` on POSIX systems for proper escaping of all
-    shell-special characters. On Windows, wraps arguments containing spaces
-    in double quotes (Windows shell does not interpret single-quoted strings).
+    :param cmd: the command to convert, specified as a list of arguments
+    :return: a suitable representation of the command for subprocess calls on the current platform
     """
-    if platform.system() == "Windows":
-        if " " not in arg:
-            return arg
-        return f'"{arg}"'
-    return shlex.quote(arg)
+    if isinstance(cmd, list) and platform.system() != "Windows":
+        return " ".join(shlex.quote(arg) for arg in cmd)
+    else:
+        return cmd
 
 
 def _signal_process_tree(process: subprocess.Popen[bytes], terminate: bool = True) -> None:
