@@ -17,6 +17,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     This allows the dashboard to display the configuration while the project provided at startup is still initialising. #1064
   - Fix empty executions queue displaying "Loading..."
   - Tray manager: Add NixOS-support for AppIndicator-based trays (e.g., most Wayland-trays) to the package in flake.nix.
+  - Fix: Wait for the subprocess that opens the browser window, preventing zombie processes #1488 
 
 # v1.5.3 (2026-05-26)
 
