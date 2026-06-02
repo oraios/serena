@@ -53,7 +53,6 @@ class QueryProjectTool(Tool, ToolMarkerOptional, ToolMarkerDoesNotRequireActiveP
         :param tool_params_json: the parameters to pass to the tool, encoded as a JSON string
         """
         tool = self.agent.get_tool_by_name(tool_name)
-        assert tool.is_active(), f"Tool {tool_name} is not active."
         assert tool.is_readonly(), f"Tool {tool_name} is not read-only and cannot be executed in another project."
         if self._is_project_server_required(tool):
             client = ProjectServerClient()
