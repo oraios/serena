@@ -61,14 +61,31 @@ web_dashboard_open_on_launch: True
 #      opening the dashboard in browser tabs when selected from the tray menu.
 #      This is EXPERIMENTAL. It is tested on Windows only. We will establish macOS support, but it is yet untested.
 #      On Linux, this cannot be universally supported, but it may work in some desktop environments.
+#      On NixOS, when using the package from flake.nix, both modern AppIndicator trays as well as
+#      older Xorg-/XEmbed-based trays should be supported.
 # See https://oraios.github.io/serena/02-usage/060_dashboard.html
 web_dashboard_interface:
 
 # the address the web dashboard will listen on (bind address).
 web_dashboard_listen_address: 127.0.0.1
 
+# trusted hosts used to access the web dashboard.
+# By default, only allow access via local addresses for security reasons.
+# If you want to allow access from remote machines, add the hostname used to access the dashboard to this list.
+# If the list is empty/undefined, all hosts are trusted.
+web_dashboard_trusted_hosts:
+  - 127.0.0.1
+  - localhost
+
 # address where JetBrains plugin servers are running (only relevant when using the JetBrains language backend)
 jetbrains_plugin_server_address: 127.0.0.1
+
+# command used to launch a JetBrains IDE on demand (only relevant when using the JetBrains language backend)
+# If this is non-empty and, at project activation, the Serena JetBrains Plugin server instance corresponding
+# to the project is not found, use this command to spawn a new instance.
+# Specifically, if this is <cmd>, then `<cmd> <projectDir>` is launched.
+# Provide the full path to the executable/script (e.g., "/usr/bin/idea" or "C:/Users/bob/AppData/Local/JetBrains/Toolbox/scripts/idea.cmd").
+jetbrains_launch_command:
 
 # the minimum log level for the GUI log window and the dashboard (10 = debug, 20 = info, 30 = warning, 40 = error)
 log_level: 20

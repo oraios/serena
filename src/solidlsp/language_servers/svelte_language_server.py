@@ -648,6 +648,19 @@ class SvelteLanguageServer(SolidLanguageServer):
         return super().request_definition(relative_file_path, line, column)
 
     @override
+    def request_text_document_diagnostics(
+        self,
+        relative_file_path: str,
+        start_line: int = 0,
+        end_line: int = -1,
+        min_severity: int = 4,
+    ) -> list[ls_types.Diagnostic]:
+        if _is_ts_file(relative_file_path) and self._ts_server is not None:
+            with self._ts_server.open_file(relative_file_path):
+                return self._ts_server.request_text_document_diagnostics(relative_file_path, start_line, end_line, min_severity)
+        return super().request_text_document_diagnostics(relative_file_path, start_line, end_line, min_severity)
+
+    @override
     def _get_language_id_for_file(self, relative_file_path: str) -> str:
         ext = os.path.splitext(relative_file_path)[1].lower()
         if ext in TS_EXT:

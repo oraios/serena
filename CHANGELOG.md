@@ -7,14 +7,26 @@ Status of the `main` branch. Changes prior to the next official version change w
     The dict is forwarded to vtsls via `initializationOptions`, `workspace/didChangeConfiguration`,
     and `workspace/configuration` pulls. Enables Yarn PnP setups with `typescript.tsdk` pointing
     at the Yarn-generated SDK.
+  - `SvelteLanguageServer`: Fix diagnostics requests for TypeScript/JavaScript files incorrectly being
+    processed by the Svelte LS instead of the TypeScript LS.
+  - Improve quoting of arguments in shell executions
   - `typescript` / `typescript_vts`: No longer ignore directories named `coverage`. This was intended to skip
     coverage-report output, but matched by bare dirname and so also hid legitimate source directories named
     `coverage` (e.g. `src/routes/coverage/`) from symbol tools. Generated report dirs are already covered by
     gitignore. Fixes #1523.
 
-* Dashboard: 
-  - Fix: Host validation required a local host regardless of the listen address (regression introduced in v1.5.2),
-    preventing remote connections
+* JetBrains:
+  - Add configuration option `jetbrains_launch_command`, allowing Serena to spawn IDE instances automatically
+    upon project activation
+
+* Dashboard:
+  - Make list of trusted hosts configurable, fixing host validation introduced in v1.5.2 allowing only
+    default local hostnames, effectively preventing remote connections
+  - Decouple configuration computation from the agent's task queue by introducing events for agent config/status updates.
+    This allows the dashboard to display the configuration while the project provided at startup is still initialising. #1064
+  - Fix empty executions queue displaying "Loading..."
+  - Tray manager: Add NixOS-support for AppIndicator-based trays (e.g., most Wayland-trays) to the package in flake.nix.
+  - Fix: Wait for the subprocess that opens the browser window, preventing zombie processes #1488 
 
 # v1.5.3 (2026-05-26)
 

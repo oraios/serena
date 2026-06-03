@@ -720,7 +720,12 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
     web_dashboard_open_on_launch: bool = True
     web_dashboard_interface: str | None = None
     web_dashboard_listen_address: str = "127.0.0.1"
+    web_dashboard_trusted_hosts: list[str] = field(default_factory=lambda: ["127.0.0.1", "localhost"])
     jetbrains_plugin_server_address: str = "127.0.0.1"
+    jetbrains_launch_command: str | None = None
+    """
+    JetBrains IDE launch command, which can be used to auto-start an IDE instance on demand.
+    """
     tool_timeout: float = DEFAULT_TOOL_TIMEOUT
 
     token_count_estimator: str = RegisteredTokenCountEstimator.CHAR_COUNT.name

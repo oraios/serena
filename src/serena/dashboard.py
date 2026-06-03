@@ -198,21 +198,26 @@ class SerenaDashboardAPI:
         agent: "SerenaAgent",
         tool_usage_stats: ToolUsageStats | None = None,
         host: str = "127.0.0.1",
+        trusted_hosts: list[str] | None = None,
     ) -> None:
         self._memory_log_handler = memory_log_handler
         self._tool_names = tool_names
         self._agent = agent
         self._host = host
         self._app = Flask(__name__)
-        local_hosts = ["127.0.0.1", "localhost"]
-        if self._host in local_hosts:
-            self._app.config["TRUSTED_HOSTS"] = local_hosts
+        if trusted_hosts:
+            self._app.config["TRUSTED_HOSTS"] = trusted_hosts
         self._tool_usage_stats = tool_usage_stats
         self._loaded_news: dict[str, str] = {}
         self._news_ready = threading.Event()
         self._setup_routes()
         self._read_news = ReadNews.load()
-        # Fetch remote news in background on startup (non-blocking)
+
+        # register callback for config changes
+        self._current_config_overview: dict[str, Any] | None = None
+        self._agent.register_config_changed_callback(self._on_agent_config_changed)
+
+        # fetch remote news in background on startup (non-blocking)
         threading.Thread(target=self._fetch_news, daemon=True).start()
 
     @property
@@ -277,8 +282,10 @@ class SerenaDashboardAPI:
 
         @self._app.route("/get_config_overview", methods=["GET"])
         def get_config_overview() -> dict[str, Any]:
-            result = self._agent.execute_task(self._get_config_overview, logged=False)
-            return result.model_dump()
+            result = self._current_config_overview
+            if result is None:
+                raise ValueError("Config overview not yet available")
+            return result
 
         @self._app.route("/shutdown", methods=["PUT"])
         def shutdown() -> dict[str, str]:
@@ -473,7 +480,7 @@ class SerenaDashboardAPI:
         if self._tool_usage_stats is not None:
             self._tool_usage_stats.clear()
 
-    def _get_config_overview(self) -> ResponseConfigOverview:
+    def _compute_config_overview(self) -> ResponseConfigOverview:
         from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
         from serena.tools.tools_base import Tool
 
@@ -600,6 +607,9 @@ class SerenaDashboardAPI:
             current_client=Tool.get_last_tool_call_client_str(),
             serena_version=self._agent.version,
         )
+
+    def _on_agent_config_changed(self) -> None:
+        self._current_config_overview = self._compute_config_overview().model_dump()
 
     def _get_available_languages(self) -> ResponseAvailableLanguages:
         from solidlsp.ls_config import Language
@@ -803,13 +813,14 @@ def open_url_in_browser(url: str, use_subprocess: bool = False) -> None:
     if use_subprocess:
         # Use a subprocess to avoid any output from webbrowser.open being written to stdout
         try:
-            subprocess.Popen(
+            p = subprocess.Popen(
                 [sys.executable, "-c", f"import webbrowser; webbrowser.open({url!r})"],
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 start_new_session=False,
             )
+            threading.Thread(target=p.wait, daemon=True).start()
         except Exception as e:
             # Subprocess creation can fail in rare cases (e.g. on some Linux systems; possibly subprocess/glibc bug)
             # See #1363

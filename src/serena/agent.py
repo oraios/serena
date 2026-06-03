@@ -7,6 +7,7 @@ import multiprocessing
 import os
 import platform
 import signal
+import subprocess
 import threading
 from collections import defaultdict
 from collections.abc import Callable, Iterator, Sequence
@@ -40,6 +41,7 @@ from serena.config.serena_config import (
     ToolInclusionDefinition,
 )
 from serena.dashboard import SerenaDashboardAPI, SerenaDashboardTrayManager, SerenaDashboardViewer, open_url_in_browser
+from serena.jetbrains import jetbrains_plugin_client
 from serena.ls_manager import LanguageServerManager
 from serena.memories.memory_manager import MemoryManager
 from serena.project import Project
@@ -60,6 +62,7 @@ from serena.util.gui import system_has_usable_display
 from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import Language
+from solidlsp.util import subprocess_util
 
 if TYPE_CHECKING:
     from serena.gui_log_viewer import GuiLogViewer
@@ -544,6 +547,7 @@ class SerenaAgent:
         self._project_prompt_status = ProjectPromptProvisionStatus()
         self._session_mode_selection_definition = modes
         self.version = serena_version()
+        self._config_changed_callbacks: list[Callable[[], None]] = []
 
         # obtain serena configuration using the decoupled factory function
         self.serena_config = serena_config or SerenaConfig.from_config_file()
@@ -633,7 +637,7 @@ class SerenaAgent:
 
         # create executor for starting the language server and running tools in another thread
         # This executor is used to achieve linear task execution
-        self._task_executor = TaskExecutor("SerenaAgentTaskExecutor")
+        self._task_executor = TaskExecutor("SerenaAgentTaskExecutor", self._task_completion_callback)
 
         # Initialize the prompt factory
         self.prompt_factory = SerenaPromptFactory()
@@ -659,17 +663,29 @@ class SerenaAgent:
         self._active_tools: AvailableTools
         self._update_active_tools()
 
-        # start the dashboard (web frontend), registering its log handler
-        # should be the last thing to happen in the initialization since the dashboard
-        # may access various parts of the agent
+        # create the dashboard backend (if enabled), which will register callback.
+        dashboard_api: SerenaDashboardAPI | None = None
         if self.serena_config.web_dashboard:
-            self._dashboard_thread, port = SerenaDashboardAPI(
+            dashboard_api = SerenaDashboardAPI(
                 get_memory_log_handler(),
                 tool_names,
                 agent=self,
                 tool_usage_stats=self._tool_usage_stats,
                 host=self.serena_config.web_dashboard_listen_address,
-            ).run_in_thread()
+                trusted_hosts=self.serena_config.web_dashboard_trusted_hosts,
+            )
+
+        # propagate the initial config/state to listeners, particularly to the dashboard API.
+        # Note: The only ongoing task can be the LS initialisation, which does not change the config
+        # This is executed before starting the dashboard thread to ensure that the dashboard
+        # has the correct initial state before requests can come in.
+        self._on_config_changed()
+
+        # start the dashboard backend thread and the dashboard frontend manager (if enabled).
+        # This should be the last thing to happen in the initialization since the dashboard
+        # may access various parts of the agent
+        if dashboard_api:
+            dashboard_thread, port = dashboard_api.run_in_thread()
             self._dashboard_manager = DashboardManager(
                 port,
                 self.serena_config.web_dashboard_listen_address,
@@ -1076,6 +1092,27 @@ class SerenaAgent:
         """
         return self._task_executor.execute_task(task, name=name, logged=logged, timeout=timeout)
 
+    def _task_completion_callback(self) -> None:
+        """
+        Called after every task completion. Tasks potentially change the agent's state/configuration.
+        """
+        self._on_config_changed()
+
+    def _on_config_changed(self) -> None:
+        for callback in self._config_changed_callbacks:
+            try:
+                callback()
+            except Exception as e:
+                log.error(f"Error in config changed callback {callback}: {e}", exc_info=e)
+
+    def register_config_changed_callback(self, callback: Callable[[], None]) -> None:
+        """
+        Registers a callback to be called when the agent configuration has (potentially) changed.
+
+        :param callback: the callback function to register
+        """
+        self._config_changed_callbacks.append(callback)
+
     def is_using_language_server(self) -> bool:
         """
         :return: whether this agent uses language server-based code analysis
@@ -1130,6 +1167,25 @@ class SerenaAgent:
         # initialize the language server in the background (if in language server mode)
         if self.get_language_backend().is_lsp():
             self.issue_task(init_language_server_manager)
+
+        def init_jetbrains_ide() -> None:
+            assert self.serena_config.jetbrains_launch_command is not None
+            try:
+                client = jetbrains_plugin_client.JetBrainsPluginClient.from_project(project, log_warning=False)
+                log.info("Found Serena JetBrains Plugin server: %s", client)
+            except jetbrains_plugin_client.ServerNotFoundError:
+                log.info("Serena JetBrains Plugin server not found for project %s", project.project_name)
+                if self.serena_config.jetbrains_launch_command:
+                    cmd = subprocess_util.convert_shell_cmd([self.serena_config.jetbrains_launch_command, project.project_root])
+                    log.info("Launching IDE with command: %s", cmd)
+                    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+                    stdout, stderr = p.communicate()
+                    if p.returncode != 0:
+                        log.error(f"Failed to launch JetBrains IDE: {stderr.decode('utf-8')}")
+
+        # for JetBrains mode, search for plugin server and spawn IDE if not found and enabled
+        if self.get_language_backend().is_jetbrains():
+            self.issue_task(init_jetbrains_ide)
 
         if self._project_activation_callback is not None:
             self._project_activation_callback()
