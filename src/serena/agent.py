@@ -1169,7 +1169,6 @@ class SerenaAgent:
             self.issue_task(init_language_server_manager)
 
         def init_jetbrains_ide() -> None:
-            assert self.serena_config.jetbrains_launch_command is not None
             try:
                 client = jetbrains_plugin_client.JetBrainsPluginClient.from_project(project, log_warning=False)
                 log.info("Found Serena JetBrains Plugin server: %s", client)
