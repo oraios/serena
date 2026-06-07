@@ -92,7 +92,9 @@ Some useful options include:
 
   * `--project <path|name>`: specify the project to work on by name or path.
   * `--project-from-cwd`: auto-detect the project from current working directory     
-    (looking for a directory containing `.serena/project.yml` or `.git` in parent directories and activating the containing directory as the project root, if any).
+    (walking up the parent directories and activating the nearest one that contains either `.serena/project.yml`
+    or `.git`, if any). The nearest boundary wins, so a git worktree nested under another Serena project resolves
+    to the worktree itself rather than the ancestor project.
     This option is intended for CLI-based agents like Claude Code, Gemini and Codex, which are typically started from within the project directory
     and which do not change directories during their operation.
   * `--language-backend JetBrains`: use the Serena JetBrains Plugin as the language backend (overriding the default backend configured in the central configuration)
