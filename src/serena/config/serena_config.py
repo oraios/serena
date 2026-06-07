@@ -1035,10 +1035,10 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
 
     def add_registered_project(self, registered_project: RegisteredProject) -> None:
         """
-        Adds a registered project, saving the configuration file.
+        Adds a registered project, persisting only the updated project list (see :meth:`_persist_projects`).
         """
         self.projects.append(registered_project)
-        self.save()
+        self._persist_projects()
 
     def add_project_from_path(self, project_root: Path | str) -> "Project":
         """
@@ -1083,7 +1083,23 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
                 break
         else:
             raise ValueError(f"Project '{project_name}' not found in Serena configuration; valid project names: {self.project_names}")
-        self.save()
+        self._persist_projects()
+
+    def _persist_projects(self) -> None:
+        """
+        Persist ONLY the registered-projects list, leaving every other setting at its on-disk value.
+
+        Project (de)registration can happen while a session is running with transient runtime overrides applied
+        to this in-memory instance (e.g. ``start-mcp-server --language-backend`` / ``--log-level``). A full
+        :meth:`save` would write those overrides back to the global config, silently clobbering the user's
+        settings. Instead we re-load the persisted config, copy in the current project list, and save that — so
+        only ``projects`` is ever mutated on disk.
+        """
+        if self.config_file_path is None:
+            return
+        persisted = SerenaConfig.from_config_file()
+        persisted.projects = list(self.projects)
+        persisted.save()
 
     def save(self) -> None:
         """

@@ -8,6 +8,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     or a `.git`, including worktree/submodule pointer files), instead of preferring an ancestor's
     `.serena/project.yml` over a closer `.git`. This previously bound CLI agents (Claude Code, Codex,
     Gemini) launched from inside a worktree to the parent repo, causing stale reads and misdirected edits.
+  - Fix: some CLI flags on start-mcp-server modified the global config (notably, language-backend). 
 
 * Language Servers:
   - `typescript_vts`: Add `initialization_options` setting in `ls_specific_settings.typescript_vts`.
