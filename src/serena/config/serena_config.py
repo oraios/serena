@@ -957,7 +957,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         # re-save the configuration file if any migrations were performed
         if num_migrations > 0:
             log.info("Legacy configuration was migrated; re-saving configuration file")
-            instance.save()
+            instance._save()
 
         return instance
 
@@ -984,6 +984,20 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         except Exception as e:
             log.error(f"Error migrating configuration file: {e}")
             return None
+
+    @classmethod
+    def init(cls, language_backend: LanguageBackend) -> "SerenaConfig":
+        """
+        Supports the config initialisation CLI command, allowing the user to configure fundamental settings before
+        the first launch.
+
+        :param language_backend: the language backend to use
+        :return: the created SerenaConfig instance
+        """
+        config = cls.from_config_file()
+        config.language_backend = language_backend
+        config._save()
+        return config
 
     @cached_property
     def project_paths(self) -> list[str]:
@@ -1035,14 +1049,14 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
 
     def add_registered_project(self, registered_project: RegisteredProject) -> None:
         """
-        Adds a registered project, persisting only the updated project list (see :meth:`_persist_projects`).
+        Adds a registered project, persisting the updated project list
         """
         self.projects.append(registered_project)
         self._persist_projects()
 
     def add_project_from_path(self, project_root: Path | str) -> "Project":
         """
-        Add a new project to the Serena configuration from a given path, auto-generating the project
+        Adds a new project to the Serena configuration from a given path, auto-generating the project
         with defaults if it does not exist.
         Will raise a FileExistsError if a project already exists at the path.
 
@@ -1087,7 +1101,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
 
     def _persist_projects(self) -> None:
         """
-        Persist ONLY the registered-projects list, leaving every other setting at its on-disk value.
+        Persists ONLY the registered-projects list, leaving every other setting at its on-disk value.
 
         Project (de)registration can happen while a session is running with transient runtime overrides applied
         to this in-memory instance (e.g. ``start-mcp-server --language-backend`` / ``--log-level``). A full
@@ -1099,11 +1113,15 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
             return
         persisted = SerenaConfig.from_config_file()
         persisted.projects = list(self.projects)
-        persisted.save()
+        persisted._save()
 
-    def save(self) -> None:
+    def _save(self) -> None:
         """
-        Saves the configuration to the file from which it was loaded (if any)
+        Saves the full configuration to the file from which it was loaded (if any)
+
+        NOTE: This method is private, because it is not usually safe to save a configuration instance used
+          at runtime, because it often contains transient overrides (e.g. specified through the CLI)
+          that should never be persisted back to the configuration file.
         """
         if self.config_file_path is None:
             return
