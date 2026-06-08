@@ -30,6 +30,12 @@ class TestSvelteLanguageServer:
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Game"), "Game class not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "words"), "words export not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "count"), "count export not found in symbol tree"
+        # GAME_VERSION is defined *only* in a .ts file (game.ts); it is merely imported elsewhere.
+        # It therefore guards against the regression where .ts document symbols are not routed to the
+        # companion TS server (unlike game/Game/words/count, which also appear in .svelte files).
+        assert SymbolUtils.symbol_tree_contains_name(symbols, "GAME_VERSION"), (
+            "GAME_VERSION (defined only in a .ts file) not found in symbol tree"
+        )
 
     @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
     def test_document_symbols_inside_svelte_file(self, language_server: SolidLanguageServer) -> None:
@@ -39,6 +45,30 @@ class TestSvelteLanguageServer:
 
         assert "offset" in symbol_names
         assert "modulo" in symbol_names
+
+    @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
+    def test_document_symbols_inside_typescript_file(self, language_server: SolidLanguageServer) -> None:
+        # document symbols of a plain .ts file must be served by the companion TS server, not the
+        # base svelte LS (which only provides documentSymbol for .svelte files); see issue #1552.
+        file_path = os.path.join("src", "lib", "game.ts")
+        symbol_names = {symbol["name"] for symbol in language_server.request_document_symbols(file_path).iter_symbols()}
+
+        # top-level symbols
+        assert "GAME_VERSION" in symbol_names, symbol_names
+        assert "Game" in symbol_names, symbol_names
+        # members nested inside the Game class
+        assert "enter" in symbol_names, symbol_names
+        assert "toString" in symbol_names, symbol_names
+
+    @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
+    def test_overview_of_typescript_file(self, language_server: SolidLanguageServer) -> None:
+        # get_symbols_overview on a .ts file must not be empty in svelte-only mode (issue #1552).
+        file_path = os.path.join("src", "lib", "game.ts")
+        overview = language_server.request_overview(file_path)
+
+        top_level_names = {symbol["name"] for symbols in overview.values() for symbol in symbols}
+        assert "GAME_VERSION" in top_level_names, overview
+        assert "Game" in top_level_names, overview
 
     @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
     def test_definition_from_component_import_to_svelte_file(self, language_server: SolidLanguageServer) -> None:

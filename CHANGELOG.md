@@ -18,6 +18,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     at the Yarn-generated SDK.
   - `SvelteLanguageServer`: Fix diagnostics requests for TypeScript/JavaScript files incorrectly being
     processed by the Svelte LS instead of the TypeScript LS.
+  - `SvelteLanguageServer`: Fix document-symbol requests for TypeScript/JavaScript files returning empty
+    results in svelte-only mode (`languages: [svelte]`). They are now routed to the companion TS server,
+    so symbols defined in plain `.ts`/`.js` files are again discoverable via `find_symbol`/
+    `get_symbols_overview`, and `find_referencing_symbols` no longer fails to locate `.ts`/`.js` symbols. #1552
   - Improve quoting of arguments in shell executions
 
 * JetBrains:
