@@ -184,9 +184,7 @@ class TopLevelCommands(AutoRegisteringGroup):
     )
     def init(language_backend: Literal["LSP", "JetBrains"] = "LSP") -> None:
         click.echo(f"\nSerena version: {serena_version()}\n")
-        serena_config = SerenaConfig.from_config_file()
-        serena_config.language_backend = LanguageBackend(language_backend)
-        serena_config.save()
+        serena_config = SerenaConfig.init(language_backend=LanguageBackend(language_backend))
         click.echo(f"Configuration file: {serena_config.config_file_path}")
         click.echo(f"Language backend: {language_backend}")
 
