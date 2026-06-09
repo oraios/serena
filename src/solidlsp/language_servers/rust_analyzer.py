@@ -213,9 +213,9 @@ class RustAnalyzer(SolidLanguageServer):
     @override
     def _get_published_diagnostics_wait_timeout(self, pull_diagnostics_failed: bool) -> float:
         timeout = super()._get_published_diagnostics_wait_timeout(pull_diagnostics_failed)
-        if platform.system() == "Windows":
-            return max(timeout, 8.0)
-        return timeout
+        # Rust diagnostics are often published asynchronously after the pull-diagnostics request,
+        # so keep a wider fallback wait window across all platforms.
+        return max(timeout, 8.0)
 
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
