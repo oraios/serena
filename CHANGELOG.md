@@ -10,6 +10,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     Gemini) launched from inside a worktree to the parent repo, causing stale reads and misdirected edits.
   - Fix: CLI flags on `start-mcp-server` could incorrectly be saved to the global configuration file if the
     list of projects was modified (triggering a save of the configuration with transient overrides applied)
+  - Fix: context or mode argument referencing a known name (e.g. `--context anitgravity`) could result in   
+    incorrect file access if a corresponding local file existed (e.g. `./antigravity` binary);
+    file access is now guarded with path detection (file ending or path separator must be present)
 
 * Language Servers:
   - `typescript_vts`: Add `initialization_options` setting in `ls_specific_settings.typescript_vts`.
