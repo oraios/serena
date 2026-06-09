@@ -530,6 +530,17 @@ class TestRustAnalyzerDiagnosticsTimeout:
 
         assert timeout >= 8.0
 
+    @pytest.mark.rust
+    def test_non_windows_uses_default_diagnostics_wait_timeout(self):
+        from solidlsp.language_servers.rust_analyzer import RustAnalyzer
+
+        analyzer = RustAnalyzer.__new__(RustAnalyzer)
+
+        with patch("solidlsp.language_servers.rust_analyzer.platform.system", return_value="Linux"):
+            timeout = analyzer._get_published_diagnostics_wait_timeout(False)
+
+        assert timeout == 2.5
+
 
 class TestRustAnalyzerDetectionIntegration:
     """
