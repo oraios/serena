@@ -518,6 +518,19 @@ class TestRustAnalyzerDetection:
         assert "searched locations" in error_message.lower()  # Should show what was checked
 
 
+class TestRustAnalyzerDiagnosticsTimeout:
+    @pytest.mark.rust
+    def test_windows_uses_longer_diagnostics_wait_timeout(self):
+        from solidlsp.language_servers.rust_analyzer import RustAnalyzer
+
+        analyzer = RustAnalyzer.__new__(RustAnalyzer)
+
+        with patch("platform.system", return_value="Windows"):
+            timeout = analyzer._get_published_diagnostics_wait_timeout(False)
+
+        assert timeout >= 8.0
+
+
 class TestRustAnalyzerDetectionIntegration:
     """
     Integration tests that verify detection works on the current system.

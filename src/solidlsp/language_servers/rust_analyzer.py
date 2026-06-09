@@ -210,6 +210,13 @@ class RustAnalyzer(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["target"]
 
+    @override
+    def _get_published_diagnostics_wait_timeout(self, pull_diagnostics_failed: bool) -> float:
+        timeout = super()._get_published_diagnostics_wait_timeout(pull_diagnostics_failed)
+        if platform.system() == "Windows":
+            return max(timeout, 8.0)
+        return timeout
+
     @staticmethod
     def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
         """
