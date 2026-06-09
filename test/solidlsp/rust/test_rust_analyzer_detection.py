@@ -525,7 +525,7 @@ class TestRustAnalyzerDiagnosticsTimeout:
 
         analyzer = RustAnalyzer.__new__(RustAnalyzer)
 
-        with patch("platform.system", return_value="Windows"):
+        with patch("solidlsp.language_servers.rust_analyzer.platform.system", return_value="Windows"):
             timeout = analyzer._get_published_diagnostics_wait_timeout(False)
 
         assert timeout >= 8.0
