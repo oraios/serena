@@ -82,15 +82,19 @@ def resolve_project_path(project_root: str, path: str) -> str:
         raise ValueError(f"path contains NUL byte: {path!r}")
     if os.path.isabs(path):
         raise ValueError(f"absolute path not allowed: {path!r}")
-    root_real = Path(project_root).resolve()
-    candidate = (root_real / path).resolve()
-    try:
-        candidate.relative_to(root_real)
-    except ValueError as e:
-        raise ValueError(f"path escapes project root: {path!r}") from e
-    if not candidate.exists():
-        raise FileNotFoundError(str(candidate))
-    return str(candidate)
+    # Normalize with os.path.realpath (resolves symlinks + ".." segments), then
+    # confirm containment with startswith. This realpath()+startswith() form is
+    # both the remediation the CodeQL py/path-injection docs prescribe and the
+    # only sanitizer pattern that query actually models, so it clears the alert
+    # while genuinely guarding traversal. The trailing os.sep stops a sibling
+    # like "<root>-evil" from matching the "<root>" prefix.
+    root_real = os.path.realpath(project_root)
+    candidate = os.path.realpath(os.path.join(root_real, path))
+    if candidate != root_real and not candidate.startswith(root_real + os.sep):
+        raise ValueError(f"path escapes project root: {path!r}")
+    if not os.path.exists(candidate):
+        raise FileNotFoundError(candidate)
+    return candidate
 
 
 def _err(status: int, message: str, code: str | None = None) -> tuple[dict[str, Any], int]:
@@ -481,7 +485,8 @@ def register_code_routes(dashboard_api: "SerenaDashboardAPI") -> None:
             else:
                 resolved = resolve_project_path(root, path)
         except ValueError as e:
-            return _err(400, str(e))
+            log.warning("list_dir rejected path %r: %s", path, e)
+            return _err(400, "invalid path")
         except FileNotFoundError:
             return _err(404, "directory not found")
         if not os.path.isdir(resolved):
@@ -534,7 +539,8 @@ def register_code_routes(dashboard_api: "SerenaDashboardAPI") -> None:
         try:
             resolved = resolve_project_path(root, path)
         except ValueError as e:
-            return _err(400, str(e))
+            log.warning("file_symbols rejected path %r: %s", path, e)
+            return _err(400, "invalid path")
         except FileNotFoundError:
             return _err(404, "file not found")
         rel = os.path.relpath(resolved, str(Path(root).resolve())).replace(os.sep, "/")
@@ -544,10 +550,11 @@ def register_code_routes(dashboard_api: "SerenaDashboardAPI") -> None:
         try:
             doc_syms = ls.request_document_symbols(rel)
         except TimeoutError as e:
-            return _err(504, str(e), "ls_timeout")
+            log.debug("LSP document symbols timed out for %s: %s", rel, e)
+            return _err(504, "language server timed out", "ls_timeout")
         except Exception as e:
             log.error("LSP document symbols failed for %s: %s", rel, e, exc_info=e)
-            return _err(502, str(e), "ls_error")
+            return _err(502, "language server error", "ls_error")
         # doc_syms may be a DocumentSymbols object (.root_symbols) or a raw list.
         roots = getattr(doc_syms, "root_symbols", None)
         if roots is None:
@@ -569,10 +576,11 @@ def register_code_routes(dashboard_api: "SerenaDashboardAPI") -> None:
         try:
             raw = ls.request_workspace_symbol(q)  # singular — confirmed in solidlsp/ls.py
         except TimeoutError as e:
-            return _err(504, str(e), "ls_timeout")
+            log.debug("LSP workspace symbol timed out for %r: %s", q, e)
+            return _err(504, "language server timed out", "ls_timeout")
         except Exception as e:
             log.error("LSP workspace symbol failed for %r: %s", q, e, exc_info=e)
-            return _err(502, str(e), "ls_error")
+            return _err(502, "language server error", "ls_error")
         if not raw:
             return _ResponseWorkspaceSymbolSearch(matches=[]).model_dump()
         raw = raw[:limit]
@@ -604,7 +612,8 @@ def register_code_routes(dashboard_api: "SerenaDashboardAPI") -> None:
             try:
                 resolved = resolve_project_path(root, path)
             except ValueError as e:
-                return _err(400, str(e))
+                log.warning("diagnostics_summary rejected path %r: %s", path, e)
+                return _err(400, "invalid path")
             except FileNotFoundError:
                 return _err(404, "path not found")
             if os.path.isfile(resolved):

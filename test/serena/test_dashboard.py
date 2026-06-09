@@ -201,7 +201,7 @@ def test_config_overview_includes_tool_stats_totals(make_dashboard_with_stats):
         error_message="Err: nope",
         now=1001.0,
     )
-    response = dashboard._get_config_overview()
+    response = dashboard._compute_config_overview()
     totals = response.tool_stats_totals
     assert totals["num_calls"] == 2
     assert totals["num_errors"] == 1

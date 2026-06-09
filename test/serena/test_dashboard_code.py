@@ -81,6 +81,9 @@ class _DummyAgent:
         self._all_tools: dict = {}
         self.serena_config = SimpleNamespace(projects=[])
 
+    def register_config_changed_callback(self, callback):
+        pass
+
     def get_active_project(self):
         return self._project
 
@@ -332,6 +335,9 @@ def test_code_diagnostics_summary_503_when_no_project(tmp_path):
         version = "v"
         _all_tools: dict = {}
         serena_config = SimpleNamespace(projects=[])
+
+        def register_config_changed_callback(self, callback):
+            pass
 
         def get_active_project(self):
             return None
