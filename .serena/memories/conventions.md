@@ -22,5 +22,13 @@
 - Language-server tests are pytest-marker-gated (one marker per language; see `pyproject.toml` `[tool.pytest.ini_options].markers`). Default `poe test` runs unmarked tests + whatever `PYTEST_MARKERS` selects.
 - Snapshot tests use **syrupy** with custom `--snapshot-patch-pycharm-diff` plugin (auto-added via `addopts`).
 
+## Tool descriptions (LLM-facing)
+- To change how a tool is described to the model, edit the Tool class's `apply()` **docstring** (in
+  `src/serena/tools/*.py`) — `make_mcp_tool` parses the docstring body + `:param:` lines into the MCP tool
+  description/schema. Do NOT use `tool_description_overrides` in context ymls (e.g. `claude-code.yml`); the
+  docstring is the single source of truth and overrides drift. Keep `:param:` lines accurate.
+
 ## Memories
 - Follow `mem:memory_maintenance` for any new/updated memory in `.serena/memories/`.
+- Durable knowledge goes in memories/docs (not the assistant's auto-memory); see the monorepo top-level
+  `CLAUDE.md` for the cross-repo conventions (no benchmark-tuning of agent-facing strings, etc.).
