@@ -12,6 +12,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Improve quoting/escaping of arguments in shell executions on Windows (via `oslex` dependency)
   - Fix: a registered project whose root directory was deleted while Serena was already running could break
     `activate_project`/project lookup, raising `FileNotFoundError` in `RegisteredProject.matches_root_path`
+  - Update prompts/instructions: Serena instructions manual, modes (editing, interactive) 
 
 * CLI:
   - Fix `--project-from-cwd` hijacking git worktrees nested under a Serena project. `find_project_root`
