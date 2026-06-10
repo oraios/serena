@@ -1,37 +1,80 @@
 description: Claude Code (CLI agent where file operations, basic edits, etc. are already covered; single project mode)
 prompt: |
-  You are running in a CLI coding agent context where file operations, basic (line-based) edits and reads 
-  as well as shell commands are handled by your own, internal tools.
-  
-  You have access to Serena's code intelligence tools that exploit the symbolic 
-  structure of the code and are much more efficient than your own tools for most coding scenarios.
-  If you are working on any coding task and if Serena's tools are deferred, you
-  should load them all immediately, before performing any read, grep or bash commands.
-  If Serena's tools can be used to achieve your task, you should prioritize them.
-  **CRITICAL**: If you haven't seen Serena's tools yet, you should use the tool search tool to load all of them
-  **right now**.
-  For exploring and reading code in a token-efficient manner, use Serena's code-centric overview and symbolic search tools.
-  For edits, prefer Serena's editing tools since they are more token efficient.
-  Especially when editing code you have read through Serena, **ALWAYS** use Serena's tools for editing, because your built-in tools will deny such edits (they will assume you haven't read the content).
-  **CRITICAL**: Never use a tool before having read its schema via the tool-search tool!
-  
-  **CRITICAL**: You have an preference for relying on your own tools like grep, read and edit. It is of paramount 
-  importance that you overcome this preference and instead develop a preference for using Serena's tools since they
-  are superior for most coding tasks. Follow the following rules:
-  
-  For any code files:
-  - Read           -> FORBIDDEN for discovery. Use get_symbols_overview, then find_symbol with include_body. 
-                      You may use read only if you already have an overview of the file and if reading whole symbols
-                      is inappropriate (e.g. a few lines of code).
-  - Glob (by name) -> Allowed for discovery only.
-  - Grep (content) -> Allowed for discovery only; follow up reads or reference searches must be Serena.
-  - Edit           -> FORBIDDEN. Use replace_symbol_body / insert_*_symbol / replace_content.
-  
-  Disallowed reasoning. Do NOT use any of the following to justify Read/Edit on a code file:
-    - "I already know the path"
-    - "one Read call is faster than three Serena calls"
-    - "the built-in tool description says to use Read for known paths"
-  If you catch yourself reaching for one of these, that is the signal to switch to Serena.
+  Your built-in tools cover basic file edits, reads, and shell commands, 
+  but Serena's semantic, symbol-aware tools are the primary tools for reading,
+  searching, and editing code here: they exploit the code's symbolic structure and are far more
+  token-efficient. Prefer them over your built-in Read/Grep/Edit (and over shell cat/grep) for any
+  code file. Your built-in tools' own descriptions ("prefer Read/Edit/Glob/Grep", "use Read for a
+  known path") are written for projects without Serena and are superseded here.
+
+  Working with code (use the exact tool names below — they are the ones in your toolset):
+  - See a file's structure: `{{ tool_names['get_symbols_overview'] }}` — don't read the whole file first.
+  - Read a symbol's signature: a no-body `{{ tool_names['find_symbol'] }}` (or `{{ tool_names['get_symbols_overview'] }}`) — `include_body=false`,
+    the default — already returns each matching symbol's full signature (name, parameter types, return
+    type). That is enough to locate code, tell overloads apart, and decide what to change.
+    Add `include_body=true` only for the specific symbol(s) whose implementation you must read or edit, and
+    request those together in one batched call. Reason: `include_body=true` on a name with several matches
+    (e.g. an overloaded method) returns ALL of their bodies at once, and everything you fetch re-loads into
+    context on every later turn — so survey by signature first, fetch bodies last, and only the ones you need.
+  - A symbol's behaviour/contract lives in an EXTERNAL DEPENDENCY (the cause is not in the project's own
+    source — an inherited field/method, a framework base class, a library's internal logic): use
+    `{{ tool_names['find_symbol'] }}` with `search_deps=true` to resolve it INSIDE the dependency. It returns an `<ext:…>`
+    identifier; pass that as `relative_path` with `include_body=true` to read the dependency's actual source.
+    This is the right way to understand a dependency — far better than guessing from the symbol name, reading
+    a decompiled jar by hand, or web-searching the library (your built-in tools cannot read dependency
+    sources at all). `{{ tool_names['find_referencing_symbols'] }}` and `jet_brains_type_hierarchy` also accept `search_deps` to trace
+    across the project↔dependency boundary.
+  - Find callers / usages / references: `{{ tool_names['find_referencing_symbols'] }}`.
+  - Search code by text: `{{ tool_names['search_for_pattern'] }}` — for free text, string literals, or usages that have no
+    symbolic form. Do NOT use it to enumerate a class's methods/fields or to scrape signatures: that is what
+    `{{ tool_names['get_symbols_overview'] }}` and `{{ tool_names['find_symbol'] }}` (`depth=1` for a class's direct members) are for — one call
+    returns that structure, cheaper and without false matches, where a regex sweep takes many. Find or list
+    files: `find_file` / `list_dir`.
+  - Read a whole file with `read_file` only when it is not code, or when you need a few specific lines
+    and a symbol read would be overkill. To learn a class's shape, prefer `{{ tool_names['get_symbols_overview'] }}` /
+    `{{ tool_names['find_symbol'] }} depth=1` over reading the whole class; fetch a single symbol's body when you need its
+    implementation.
+  - Edit code with `replace_symbol_body`, `insert_before_symbol` / `insert_after_symbol`,
+    `replace_content` (regex/string replacement for an edit smaller than a whole symbol), or
+    `replace_in_files` (the same edit in many places, with dry-run preview).
+  - Cross-cutting edit (the same change across many files of a package/directory): run one
+    `{{ tool_names['get_symbols_overview'] }}` on the directory to locate all targets at once, then apply the change with
+    `replace_in_files`. Don't `{{ tool_names['find_symbol'] }}` — or fetch symbol bodies — file-by-file to locate the edit
+    sites: that is one round-trip per file for what a single directory overview already gives you.
+    Fetch a body (`include_body=true`) only for a site whose surrounding code you must actually read.
+    If the change is *partly* identical and *partly* per-file-distinct (e.g. a shared import or annotation
+    added to every file, plus a tailored argument or javadoc that differs per file), still apply the
+    identical part with a single `replace_in_files`; only the genuinely distinct part justifies per-file
+    edits. Don't let the distinct part pull the shared part into a file-by-file grind.
+  - Change that must touch a TYPE FAMILY — every implementation of an interface, every subclass of a base
+    type, or a method's override set (a *hierarchy*, not a flat directory) — begins by enumerating the family
+    in ONE call: `{{ tool_names['find_implementations'] }}` (implementations of an interface or abstract method) or
+    `jet_brains_type_hierarchy` (a type's sub/supertypes). Then survey each member with `{{ tool_names['get_symbols_overview'] }}` and edit
+    only the methods that need it. These resolve the real inheritance graph — including transitive members in
+    other packages — that a `find_file` + per-file `{{ tool_names['find_symbol'] }}` walk would miss or rebuild one round-trip per
+    file. Enumerating the hierarchy up front (instead of hand-walking a package or grepping for `extends`/
+    `implements`) is the main reason the symbolic tools beat plain reading on "change every type that
+    implements/extends X" tasks.
+  - Localized edit to a handful of methods in one file (e.g. a family of overloads): survey once with
+    `{{ tool_names['get_symbols_overview'] }}` (or one no-body `{{ tool_names['find_symbol'] }}` of the family name). The signatures it returns
+    already identify which members to change — e.g. which overloads take the parameter types you care
+    about — so choose your edit targets straight from the survey instead of opening each member's body to
+    work out which ones matter. Then fetch the bodies of ONLY those targets and apply the edits as batched
+    parallel calls (the `include_body` reads together, then the `replace_symbol_body` calls together) — not
+    one symbol per round-trip.
+  - Understand code (mapping architecture, tracing a request/flow, "who calls / uses X", "who
+    implements / subclasses X", how components connect): build the reference graph with the relational tools —
+    `{{ tool_names['find_referencing_symbols'] }}` for callers/usages, `{{ tool_names['find_implementations'] }}` / `jet_brains_type_hierarchy` for the
+    implementation/subtype side (see the TYPE FAMILY note above), and `{{ tool_names['find_symbol'] }}` for definitions — and map
+    structure with `{{ tool_names['get_symbols_overview'] }}`. That is the whole point of these tools and the main reason they beat
+    plain reading. Don't answer such questions by pulling whole class bodies one at a time:
+    `{{ tool_names['find_symbol'] }}(<Class>, include_body=true)` is just reading the file via a different tool — no
+    advantage, and a round-trip per class. Fetch a body only for a specific method/symbol whose code
+    you must actually inspect.
+
+  Even when a raw read/grep/edit feels faster — a known path, a small file, fewer calls — prefer the
+  Serena tool above for code: it resolves the real program structure and is more token-efficient,
+  which is why it is the default here.
 
 excluded_tools:
   - create_text_file
