@@ -465,6 +465,27 @@ Supported settings:
 |---|---|---|
 | `expert_version` | `v0.1.0-rc.6` | Override the Expert version Serena downloads when it does not use an `expert` executable already found in PATH. |
 
+#### Elixir (Dexter)
+
+As an alternative to Expert, Serena supports [Dexter](https://github.com/remoteoss/dexter), a fast Elixir LSP
+optimized for large codebases. Set the project language to `elixir_dexter` to use it. The `dexter` binary
+must be installed and available on PATH (e.g. via `brew install dexter-lsp`), or be configured via `ls_path`.
+
+Supported settings (under `ls_specific_settings.elixir_dexter`):
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | `null` | Path to the `dexter` executable, used instead of looking up `dexter` on PATH. |
+| `initialization_options` | `{}` | Dict forwarded to Dexter via LSP `initializationOptions` (e.g. `followDelegates`, `stdlibPath`, `debug`). |
+
+Example (in `.serena/project.yml` or `serena_config.yml`):
+
+```yaml
+ls_specific_settings:
+  elixir_dexter:
+    ls_path: "/path/to/dexter"
+```
+
 #### Elm
 
 Serena uses `@elm-tooling/elm-language-server` for Elm support.

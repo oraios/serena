@@ -40,6 +40,7 @@ class LanguageParamRequest:
 
 _LANGUAGE_REPO_ALIASES: dict[Language, Language] = {
     Language.CPP_CCLS: Language.CPP,
+    Language.ELIXIR_DEXTER: Language.ELIXIR,
     Language.PHP_PHPACTOR: Language.PHP,
     Language.PYTHON_JEDI: Language.PYTHON,
     Language.PYTHON_TY: Language.PYTHON,

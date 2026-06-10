@@ -63,7 +63,9 @@ Some languages require additional installations or setup steps, as noted.
 * **CUE**
 * **Dart**
 * **Elixir**  
-  (requires Elixir installation; Expert language server is downloaded automatically)
+  (by default, uses the Expert language server (language `elixir`), which requires an Elixir installation and is downloaded automatically;
+  we also support [Dexter](https://github.com/remoteoss/dexter) (language `elixir_dexter`), a fast Elixir LSP optimized for large codebases,
+  which requires the `dexter` binary to be installed and available on PATH, or `ls_path` to be set under `ls_specific_settings.elixir_dexter`)
 * **Elm**  
   (requires Elm compiler)
 * **Erlang**  
