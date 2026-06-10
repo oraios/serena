@@ -26,6 +26,7 @@ from serena.tools import (
     GetDiagnosticsForFileTool,
     InitialInstructionsTool,
     ReplaceContentTool,
+    ReplaceInFilesTool,
     ReplaceSymbolBodyTool,
     SafeDeleteSymbol,
     Tool,
@@ -1170,6 +1171,57 @@ class TestSerenaAgent:
             assert result == SUCCESS_RESULT
             new_content = read_project_file(serena_agent.get_active_project(), relative_path)
             assert repl in new_content
+
+    @pytest.mark.parametrize(
+        "serena_agent",
+        [
+            pytest.param(Language.PYTHON, marks=get_pytest_markers(Language.PYTHON), id="python_replace_in_files"),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_replace_in_files_dry_run_then_selective_apply(self, serena_agent: SerenaAgent):
+        """A dry run lists every occurrence as a diff with an id and modifies nothing; a follow-up call
+        restricted to one of the ids replaces exactly that occurrence.
+        """
+        relative_path = os.path.join("test_repo", "models.py")
+        needle = "name: str | None = None"
+        repl = "name: str | None = MARKER_DEFAULT"
+        tool = serena_agent.get_tool(ReplaceInFilesTool)
+        with project_file_modification_context(serena_agent, relative_path):
+            original_content = read_project_file(serena_agent.get_active_project(), relative_path)
+            assert original_content.count(needle) >= 2
+
+            listing = tool.apply(needle=needle, repl=repl, mode="literal", relative_path=relative_path, dry_run=True)
+            assert "DRY RUN" in listing
+            occurrence_ids = re.findall(r"\[([^\[\]]+:\d+@[0-9a-f]{6})\]", listing)
+            assert len(occurrence_ids) == original_content.count(needle)
+            assert read_project_file(serena_agent.get_active_project(), relative_path) == original_content
+
+            result = tool.apply(needle=needle, repl=repl, mode="literal", relative_path=relative_path, occurrence_ids=[occurrence_ids[0]])
+            assert "Replaced 1 occurrence(s) in 1 file(s)" in result
+            new_content = read_project_file(serena_agent.get_active_project(), relative_path)
+            assert new_content.count("MARKER_DEFAULT") == 1
+
+    @pytest.mark.parametrize(
+        "serena_agent",
+        [
+            pytest.param(Language.PYTHON, marks=get_pytest_markers(Language.PYTHON), id="python_replace_in_files_guard"),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_replace_in_files_expected_count_guard_returns_listing(self, serena_agent: SerenaAgent):
+        """A blind call with a wrong expected_count must change nothing and return the prospective
+        changes (the failed guard doubles as a dry run).
+        """
+        relative_path = os.path.join("test_repo", "models.py")
+        needle = "name: str | None = None"
+        tool = serena_agent.get_tool(ReplaceInFilesTool)
+        with project_file_modification_context(serena_agent, relative_path):
+            original_content = read_project_file(serena_agent.get_active_project(), relative_path)
+            with pytest.raises(ValueError, match="NO changes were applied") as exc_info:
+                tool.apply(needle=needle, repl="X", mode="literal", relative_path=relative_path, expected_count=1)
+            assert re.search(r"\[[^\[\]]+:\d+@[0-9a-f]{6}\]", str(exc_info.value))  # the listing with ids is included
+            assert read_project_file(serena_agent.get_active_project(), relative_path) == original_content
 
     @pytest.mark.parametrize(
         "serena_agent",
