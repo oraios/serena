@@ -100,3 +100,8 @@ the language server is restarted.
 - Clangd official documentation: https://clangd.llvm.org/
 - Clangd project setup: https://clangd.llvm.org/installation#project-setup
 - CCLS repository: https://github.com/MaskRay/ccls
+
+## Unreal Engine projects
+
+For Unreal Engine 5 projects (reflection macros, UnrealBuildTool), see the
+[Unreal Engine Setup Guide](unreal_engine_setup_guide_for_serena.md).

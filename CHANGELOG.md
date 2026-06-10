@@ -22,6 +22,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Make tool call errors surface explicitly as errors at the MCP protocol level
 
 * Language Servers:
+  - C/C++ (clangd): add Unreal Engine 5 fixture and tests verifying that reflection-macro
+    code (`UCLASS`, `UFUNCTION`, `UPROPERTY`, `GENERATED_BODY`) yields correct symbols,
+    references, definitions, and rename edits in hand-written sources (never in
+    UHT-generated files); add an Unreal Engine setup guide.
   - `typescript_vts`: Add `initialization_options` setting in `ls_specific_settings.typescript_vts`.
     The dict is forwarded to vtsls via `initializationOptions`, `workspace/didChangeConfiguration`,
     and `workspace/configuration` pulls. Enables Yarn PnP setups with `typescript.tsdk` pointing

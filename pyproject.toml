@@ -367,4 +367,4 @@ markers = [
 skip = '.git*,*.svg,*.lock,*.min.*,*test_memories_manager.py'
 check-hidden = true
 ignore-regex = '\.\w+'
-ignore-words-list = 'paket,EDN,als'
+ignore-words-list = 'paket,EDN,als,ue'
