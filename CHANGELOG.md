@@ -14,6 +14,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     incorrect file access if a corresponding local file existed (e.g. `./antigravity` binary);
     file access is now guarded with path detection (file ending or path separator must be present)
   - Allow `query_project` tool to access read-only tools that are not enabled in the current configuration
+  - Fix: JetBrains mode prompt was not provided to agents; The mode is now treated as a (background) base mode 
+    in `ActiveModes` which reduces the surface for issues pertaining to custom handling of modes.
 
 * Language Servers:
   - `typescript_vts`: Add `initialization_options` setting in `ls_specific_settings.typescript_vts`.
