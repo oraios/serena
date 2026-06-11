@@ -16,6 +16,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Allow `query_project` tool to access read-only tools that are not enabled in the current configuration
   - Fix: JetBrains mode prompt was not provided to agents; The mode is now treated as a (background) base mode 
     in `ActiveModes` which reduces the surface for issues pertaining to custom handling of modes.
+  - Improve quoting/escaping of arguments in shell executions on Windows (via `oslex` dependency)
 
 * Language Servers:
   - `typescript_vts`: Add `initialization_options` setting in `ls_specific_settings.typescript_vts`.
@@ -42,6 +43,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix empty executions queue displaying "Loading..."
   - Tray manager: Add NixOS-support for AppIndicator-based trays (e.g., most Wayland-trays) to the package in flake.nix.
   - Fix: Wait for the subprocess that opens the browser window, preventing zombie processes #1488 
+
+Dependencies:
+  - Add dependency `oslex`
 
 # v1.5.3 (2026-05-26)
 

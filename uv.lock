@@ -1467,6 +1467,15 @@ wheels = [
 ]
 
 [[package]]
+name = "mslex"
+version = "1.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e0/97/7022667073c99a0fe028f2e34b9bf76b49a611afd21b02527fbfd92d4cd5/mslex-1.3.0.tar.gz", hash = "sha256:641c887d1d3db610eee2af37a8e5abda3f70b3006cdfd2d0d29dc0d1ae28a85d", size = 11583, upload-time = "2024-10-16T13:16:18.523Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/64/f2/66bd65ca0139675a0d7b18f0bada6e12b51a984e41a76dbe44761bf1b3ee/mslex-1.3.0-py3-none-any.whl", hash = "sha256:c7074b347201b3466fc077c5692fbce9b5f62a63a51f537a53fbbd02eff2eea4", size = 7820, upload-time = "2024-10-16T13:16:17.566Z" },
+]
+
+[[package]]
 name = "mypy"
 version = "1.17.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1592,6 +1601,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/83/f8/51569ac65d696c8ecbee95938f89d4abf00f47d58d48f6fbabfe8f0baefe/nest_asyncio-1.6.0.tar.gz", hash = "sha256:6f172d5449aca15afd6c646851f4e31e02c598d553a667e38cafa997cfec55fe", size = 7418, upload-time = "2024-01-21T14:25:19.227Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a0/c4/c2971a3ba4c6103a3d10c4b0f24f461ddc027f0f09763220cf35ca1401b3/nest_asyncio-1.6.0-py3-none-any.whl", hash = "sha256:87af6efd6b5e897c81050477ef65c62e2b2f35d51703cae01aff2905b1852e1c", size = 5195, upload-time = "2024-01-21T14:25:17.223Z" },
+]
+
+[[package]]
+name = "oslex"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mslex" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/24/19/b74ea9590378a35014acf72f221e84c5980aa7531d1852ef961764e7d3a6/oslex-2.0.0.tar.gz", hash = "sha256:30d9f4a7201bdce3ab7d9cfc0f9ee9e18c423b2b1d1668141b0dd3594b368ffe", size = 23942, upload-time = "2026-05-10T21:22:36.627Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b1/d1/3c0bad919598c4216944934db565ed9834ad5b792e1b5e67e911bb2976d2/oslex-2.0.0-py3-none-any.whl", hash = "sha256:f1c2944072aafcb06b6ee8a6c018d9ebb8a7f43d7cf0b6630b4f5d7be45f6ae4", size = 5905, upload-time = "2026-05-10T21:22:37.514Z" },
 ]
 
 [[package]]
@@ -2827,6 +2848,7 @@ dependencies = [
     { name = "joblib" },
     { name = "lsprotocol" },
     { name = "mcp" },
+    { name = "oslex" },
     { name = "overrides" },
     { name = "pathspec" },
     { name = "psutil" },
@@ -2900,6 +2922,7 @@ requires-dist = [
     { name = "lsprotocol", specifier = "==2025.0.0" },
     { name = "mcp", specifier = "==1.27.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==1.17.0" },
+    { name = "oslex", specifier = "==2.0.0" },
     { name = "overrides", specifier = "==7.7.0" },
     { name = "pathspec", specifier = "==0.12.1" },
     { name = "poethepoet", marker = "extra == 'dev'", specifier = "==0.36.0" },
