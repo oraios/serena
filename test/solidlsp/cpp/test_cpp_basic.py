@@ -15,7 +15,6 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
 from test.conftest import get_repo_path, language_tests_enabled, start_ls_context
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
@@ -147,18 +146,7 @@ int use_add() {
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []
         for s in all_symbols:
-            # The UE fixture contains routine C++ shapes the original fixture lacked:
-            # files with dotted names (AbilityActor.generated.h -> File symbol
-            # "AbilityActor.generated", same allowance as the Kotlin/HLSL tests),
-            # out-of-line method definitions, which clangd reports with qualified
-            # names (e.g. UAbilityComponent::TriggerAbility), and conversion
-            # operators, whose canonical names contain a space (operator bool).
-            if has_malformed_name(
-                s,
-                period_allowed=s["kind"] == SymbolKind.File,
-                colon_allowed=s["kind"] in (SymbolKind.Method, SymbolKind.Constructor),
-                whitespace_allowed=s["name"].startswith("operator "),
-            ):
+            if has_malformed_name(s):
                 malformed_symbols.append(s)
         if malformed_symbols:
             pytest.fail(
