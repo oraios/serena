@@ -17,6 +17,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: JetBrains mode prompt was not provided to agents; The mode is now treated as a (background) base mode 
     in `ActiveModes` which reduces the surface for issues pertaining to custom handling of modes.
   - Improve quoting/escaping of arguments in shell executions on Windows (via `oslex` dependency)
+  - Add tool parameter alias support, adding `name_path` as an alias for `name_path_pattern` in `find_symbol` tools
 
 * Language Servers:
   - `typescript_vts`: Add `initialization_options` setting in `ls_specific_settings.typescript_vts`.

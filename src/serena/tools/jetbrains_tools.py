@@ -122,6 +122,10 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         result = self._to_json(grouped_symbols)
         return self._limit_length(result, max_answer_chars, shortened_result_factories=[create_shortened_result])
 
+    @classmethod
+    def get_param_aliases(cls) -> dict[str, str]:
+        return {"name_path": "name_path_pattern"}
+
 
 class JetBrainsMoveTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMarkerBeta):
     """
