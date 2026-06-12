@@ -14,8 +14,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     incorrect file access if a corresponding local file existed (e.g. `./antigravity` binary);
     file access is now guarded with path detection (file ending or path separator must be present)
   - Allow `query_project` tool to access read-only tools that are not enabled in the current configuration
-  - Fix: JetBrains mode prompt was not provided to agents; The mode is now treated as a (background) base mode 
-    in `ActiveModes` which reduces the surface for issues pertaining to custom handling of modes.
+  - Adjust prompt generation mechanism to use newly introduced tool name mapping `tool_names`, allowing
+    prompts to directly use tool names that match the active language backend (and removing the need
+    for additional prompts that explain tool name differences)
   - Improve quoting/escaping of arguments in shell executions on Windows (via `oslex` dependency)
   - Add tool parameter alias support, adding `name_path` as an alias for `name_path_pattern` in `find_symbol` tools
 
