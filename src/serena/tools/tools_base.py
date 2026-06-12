@@ -306,6 +306,14 @@ class Tool(Component):
     def is_symbolic(self) -> bool:
         return issubclass(self.__class__, ToolMarkerSymbolicRead) or issubclass(self.__class__, ToolMarkerSymbolicEdit)
 
+    @classmethod
+    def get_param_aliases(cls) -> dict[str, str]:
+        """
+        :return: a mapping of parameter aliases for the apply method, where the key is the alias and the value is the actual parameter name.
+            This can be used to define alternative parameter names for the same parameter.
+        """
+        return {}
+
     def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, mcp_ctx: Context | None = None, **kwargs) -> str:  # type: ignore
         """
         Applies the tool with logging and exception handling, using the given keyword arguments
