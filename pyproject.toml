@@ -284,6 +284,7 @@ ignore = [
   "UP042",    # wants str,Enum -> StrEnum (breaking change)
   "PLW0108",  # unnecessary lambda (style preference)
   "PLC0207",  # split vs rsplit optimization (style preference)
+  "RSE102",   # wants to force use of raise with class instead of instance (style preference)
 ]
 unfixable = ["F841", "F601", "F602", "B018"]
 extend-fixable = ["F401", "B905", "W291"]

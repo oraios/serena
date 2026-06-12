@@ -647,6 +647,9 @@ class SerenaAgent:
         else:
             log.info(f"Using language backend from global configuration: {self._language_backend.name}")
 
+        # create the tool names mapping for prompts
+        self._prompt_tool_names_mapping = self._create_prompt_tool_names_mapping(self._language_backend)
+
         # create executor for starting the language server and running tools in another thread
         # This executor is used to achieve linear task execution
         self._task_executor = TaskExecutor("SerenaAgentTaskExecutor", self._task_completion_callback)
@@ -927,9 +930,35 @@ class SerenaAgent:
         """
         return self._active_modes
 
+    @staticmethod
+    def _create_prompt_tool_names_mapping(language_backend: LanguageBackend) -> dict[str, str]:
+        """
+        Creates a mapping from tool names to new tool names, which take into consideration
+
+           * legacy tool names, where the name was changed and
+           * LSP tools which are functionally replaced by other tools due to the active language backend
+             (e.g. "find_symbol" being replaced by "jet_brains_find_symbol" in JetBrains mode).
+
+        The mapping is intended to be used for the generation of prompts, such that prompts can
+        refer to tool names as `{{ tool_names["find_symbol"] }}`, and the mapping will ensure that
+        the correct tool name is used in the prompt based on the active language backend.
+
+        :return: the mapping from tool names to new tool names
+        """
+        result = dict(ToolSet.LEGACY_TOOL_NAME_MAPPING)
+        class_replacements = language_backend.get_lsp_tool_class_replacements()
+        for tool_class in ToolRegistry().get_all_tool_classes():
+            new_tool_class: type[Tool] = class_replacements.get(tool_class, tool_class)
+            result[tool_class.get_name_from_cls()] = new_tool_class.get_name_from_cls()
+        return result
+
     def _format_prompt(self, prompt_template: str) -> str:
         template = JinjaTemplate(prompt_template)
-        return template.render(available_tools=self._exposed_tools.tool_names, available_markers=self._exposed_tools.tool_marker_names)
+        return template.render(
+            available_tools=self._exposed_tools.tool_names,
+            available_markers=self._exposed_tools.tool_marker_names,
+            tool_names=self._prompt_tool_names_mapping,
+        )
 
     def create_connection_prompt(self) -> str:
         """
@@ -969,6 +998,7 @@ class SerenaAgent:
             available_tools=available_tools.tool_names,
             available_markers=available_markers,
             global_memories_list=global_memories_str,
+            tool_names=self._prompt_tool_names_mapping,
         )
 
         # provide the project activation message if it hasn't yet been provided
