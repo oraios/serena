@@ -24,6 +24,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Tools:
   - New tool: `replace_in_files`
+  - `get_symbols_overview`, `jet_brains_get_symbols_overview`: Improved default for `depth` parameter
   - Add tool parameter alias support, adding `name_path` as an alias for `name_path_pattern` in `find_symbol` tools
   - Allow `query_project` tool to access read-only tools that are not enabled in the current configuration
   - Make tool call errors surface explicitly as errors at the MCP protocol level
