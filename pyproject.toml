@@ -92,7 +92,7 @@ dev = [
   "pytest-timeout==2.4.0",
   # Transitive dev deps pinned for security (dependabot alerts).
   # Exact pins because uvx installs from git, ignoring the lock file.
-  "tornado==6.5.5",
+  "tornado==6.5.6",
   "wheel==0.46.3",
   "pyasn1==0.6.3",
   "PyJWT==2.12.0",
