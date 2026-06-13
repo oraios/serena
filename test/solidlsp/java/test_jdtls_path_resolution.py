@@ -393,9 +393,12 @@ class TestComputeWorkspaceHash:
     (default vscode-java VSIX bump or upstream install change) lands in a separate
     ws_dir and avoids stale OSGi configs from the previous version blocking startup.
 
+    Workspace-affecting Java settings are also mixed into the hash so stale Maven /
+    Gradle import caches are not silently reused after config changes.
+
     Backwards-compatibility carve-out: legacy default-mode users on
     INITIAL_VSCODE_JAVA_VERSION keep the original ``md5(repository_root_path)`` format,
-    so existing JDTLS workspaces and project caches are reused without a one-time reindex.
+    as long as they have not opted into tracked workspace-affecting settings.
     """
 
     REPO = "/home/me/projects/widgets"
@@ -451,3 +454,25 @@ class TestComputeWorkspaceHash:
         h1 = EclipseJDTLS.DependencyProvider._compute_workspace_hash("/a/repo", self.DEFAULT_LAUNCHER, empty_settings)
         h2 = EclipseJDTLS.DependencyProvider._compute_workspace_hash("/b/repo", self.DEFAULT_LAUNCHER, empty_settings)
         assert h1 != h2
+
+    def test_workspace_affecting_settings_change_hash(self) -> None:
+        base_settings = SolidLSPSettings.CustomLSSettings({"maven_user_settings": "/tmp/maven-a.xml"})
+        changed_settings = SolidLSPSettings.CustomLSSettings({"maven_user_settings": "/tmp/maven-b.xml"})
+
+        h1 = EclipseJDTLS.DependencyProvider._compute_workspace_hash(self.REPO, self.DEFAULT_LAUNCHER, base_settings)
+        h2 = EclipseJDTLS.DependencyProvider._compute_workspace_hash(self.REPO, self.DEFAULT_LAUNCHER, changed_settings)
+
+        assert h1 != h2
+
+    def test_legacy_initial_mode_still_invalidates_when_workspace_settings_change(self) -> None:
+        settings = SolidLSPSettings.CustomLSSettings(
+            {
+                "vscode_java_version": self._initial_settings().get("vscode_java_version"),
+                "gradle_user_home": "/tmp/gradle-home",
+            }
+        )
+
+        legacy_hash = EclipseJDTLS.DependencyProvider._compute_workspace_hash(self.REPO, self.DEFAULT_LAUNCHER, self._initial_settings())
+        configured_hash = EclipseJDTLS.DependencyProvider._compute_workspace_hash(self.REPO, self.DEFAULT_LAUNCHER, settings)
+
+        assert configured_hash != legacy_hash
