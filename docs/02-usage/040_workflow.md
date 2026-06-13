@@ -69,6 +69,18 @@ You can specify local overrides for the settings in a `project.local.yml` file i
 (which, by default, is ignored by git). 
 Any keys defined therein will override the respective key in `project.yml`.
 
+For large C# / Roslyn repositories, `ignored_paths` is often the easiest way to keep nested examples,
+worktrees, and build output directories out of project discovery. Use normal gitignore-style patterns,
+but **quote any entry that starts with `*`**, for example:
+
+```yaml
+ignored_paths:
+  - "examples/**"
+  - ".worktrees/**"
+  - "**/bin/**"
+  - "**/obj/**"
+```
+
 (additional-workspace-folders)=
 #### Additional Workspace Folders (Cross-Package References)
 
