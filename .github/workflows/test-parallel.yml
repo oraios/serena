@@ -16,7 +16,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/oraios/serena-maximal:latest
+      image: ghcr.io/${{ github.repository }}-maximal:latest
 
     strategy:
       fail-fast: false
