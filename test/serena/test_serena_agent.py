@@ -24,6 +24,7 @@ from serena.tools import (
     FindReferencingSymbolsTool,
     FindSymbolTool,
     GetDiagnosticsForFileTool,
+    GetSymbolsOverviewTool,
     InitialInstructionsTool,
     ReplaceContentTool,
     ReplaceInFilesTool,
@@ -1333,6 +1334,60 @@ class TestSerenaAgent:
             assert case.name_path not in file_content, (
                 f"Expected symbol {case.name_path} to be removed from {case.relative_path}, but it still appears in the file content"
             )
+
+    @pytest.mark.parametrize(
+        "serena_agent",
+        [
+            pytest.param(Language.PYTHON, marks=get_pytest_markers(Language.PYTHON), id="python_directory_overview"),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_get_symbols_overview_directory_returns_per_file_symbols(self, serena_agent: SerenaAgent):
+        """
+        Tests that get_symbols_overview accepts a directory path and returns
+        symbols grouped by file (Issue #1412).
+        """
+        overview_tool = serena_agent.get_tool(GetSymbolsOverviewTool)
+        result = overview_tool.apply(relative_path="test_repo", depth=0)
+        result_dict = json.loads(result)
+        assert isinstance(result_dict, dict), f"Expected dict result for directory, got: {type(result_dict)}"
+        assert len(result_dict) > 0, "Expected at least one file in directory overview"
+        for file_path in result_dict:
+            assert file_path.endswith(".py"), f"Expected Python file path, got: {file_path}"
+
+    @pytest.mark.parametrize(
+        "serena_agent",
+        [
+            pytest.param(Language.PYTHON, marks=get_pytest_markers(Language.PYTHON), id="python_file_overview_unchanged"),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_get_symbols_overview_file_returns_same_format(self, serena_agent: SerenaAgent):
+        """
+        Regression test: get_symbols_overview with a file path should return
+        the same grouped format as before (list of symbol dicts by kind).
+        """
+        overview_tool = serena_agent.get_tool(GetSymbolsOverviewTool)
+        result = overview_tool.apply(relative_path="test_repo/services.py", depth=0)
+        result_dict = json.loads(result)
+        assert isinstance(result_dict, dict), f"Expected dict result, got: {type(result_dict)}"
+        assert "test_repo/services.py" not in result_dict, "Single file result should not be wrapped in per-file mapping"
+
+    @pytest.mark.parametrize(
+        "serena_agent",
+        [
+            pytest.param(Language.PYTHON, marks=get_pytest_markers(Language.PYTHON), id="python_directory_exceeds_max_files"),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_get_symbols_overview_directory_raises_when_exceeds_max_files(self, serena_agent: SerenaAgent):
+        """
+        Tests that giving a directory with more analyzable files than max_files
+        raises ValueError with guidance to narrow the path (Issue #1412 maintainer feedback).
+        """
+        overview_tool = serena_agent.get_tool(GetSymbolsOverviewTool)
+        with pytest.raises(ValueError, match="max_files=1"):
+            overview_tool.apply(relative_path="test_repo", depth=0, max_files=1)
 
 
 class TestPromptProvision:
