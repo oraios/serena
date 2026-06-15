@@ -1,0 +1,164 @@
+# Base stage with common dependencies
+FROM python:3.11-slim AS base
+SHELL ["/bin/bash", "-c"]
+
+# Set environment variables to make Python print directly to the terminal and avoid .pyc files.
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Install system dependencies required for package manager and build tools.
+# Notes:
+# - python3-venv: makes venv/ensurepip reliable
+# - locales + libicu: required for dotnet to run on slim images
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    ca-certificates \
+    curl \
+    build-essential \
+    git \
+    ssh \
+    sudo \
+    wget \
+    zip \
+    unzip \
+    sed \
+    python3-venv \
+    locales \
+    libicu-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure UTF-8 locale (helps dotnet and some language servers)
+RUN sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen \
+    && locale-gen
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
+# Install pipx
+RUN python3 -m pip install --no-cache-dir pipx \
+    && pipx ensurepath
+
+# Install nodejs via NVM
+ENV NVM_VERSION=0.40.3
+ENV NODE_VERSION=22.18.0
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v${NVM_VERSION}/install.sh | bash
+ENV NVM_DIR=/root/.nvm
+RUN . "$NVM_DIR/nvm.sh" && nvm install ${NODE_VERSION} \
+ && . "$NVM_DIR/nvm.sh" && nvm use v${NODE_VERSION} \
+ && . "$NVM_DIR/nvm.sh" && nvm alias default v${NODE_VERSION}
+ENV PATH="${NVM_DIR}/versions/node/v${NODE_VERSION}/bin/:${PATH}"
+
+# Add local bin to the path
+ENV PATH="${PATH}:/root/.local/bin"
+
+# Install uv (available as `uv` binary)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install Rust and rustup for rust-analyzer support (minimal profile)
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo
+ENV PATH="${CARGO_HOME}/bin:${PATH}"
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+    --default-toolchain stable \
+    --profile minimal \
+    && rustup component add rust-analyzer
+
+# ==============================================================================
+# MAXIMAL ADDITIONS (For Catch-All CI Testing)
+# ==============================================================================
+
+# 1. Install Ruby, Java (JDK & JRE), Scala, Haxe, Nix, and Clangd (C++) via apt
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ruby-full \
+    default-jre \
+    default-jdk \
+    scala \
+    haxe \
+    nix-bin \
+    clangd \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Ruby language server (needed for ruby tests)
+RUN gem install ruby-lsp
+
+# 1.25 Install Lean 4 via elan (required for lean4 tests)
+ENV ELAN_HOME=/root/.elan
+ENV PATH="${ELAN_HOME}/bin:${PATH}"
+RUN curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y \
+    && elan default stable \
+    && lean --version
+
+# 1.5 Install Julia officially via pre-compiled binaries
+RUN curl -L -o /tmp/julia.tar.gz https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-1.10.4-linux-x86_64.tar.gz \
+    && mkdir -p /opt/julia \
+    && tar zxf /tmp/julia.tar.gz -C /opt/julia --strip-components=1 \
+    && ln -s /opt/julia/bin/julia /usr/local/bin/julia \
+    && rm /tmp/julia.tar.gz
+
+# 2. Install PowerShell (pwsh)
+RUN curl -L -o /tmp/powershell.tar.gz https://github.com/PowerShell/PowerShell/releases/download/v7.4.2/powershell-7.4.2-linux-x64.tar.gz \
+    && mkdir -p /opt/microsoft/powershell/7 \
+    && tar zxf /tmp/powershell.tar.gz -C /opt/microsoft/powershell/7 \
+    && chmod +x /opt/microsoft/powershell/7/pwsh \
+    && ln -s /opt/microsoft/powershell/7/pwsh /usr/bin/pwsh \
+    && rm /tmp/powershell.tar.gz
+
+# 3. Install .NET (stable, for Roslyn language server)
+ENV DOTNET_ROOT=/root/.dotnet
+ENV PATH="${DOTNET_ROOT}:${PATH}"
+RUN curl -sSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
+    && chmod +x /tmp/dotnet-install.sh \
+    && /tmp/dotnet-install.sh --channel 10.0 --install-dir "${DOTNET_ROOT}" \
+    && /tmp/dotnet-install.sh --channel 10.0 --runtime dotnet --install-dir "${DOTNET_ROOT}" \
+    && ln -sf "${DOTNET_ROOT}/dotnet" /usr/bin/dotnet \
+    && rm -f /tmp/dotnet-install.sh
+    
+# 4. Install Go and gopls globally in system paths
+ENV GO_VERSION=1.22.3
+RUN curl -L -o /tmp/go.tar.gz https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz \
+    && tar -C /usr/local -xzf /tmp/go.tar.gz \
+    && rm /tmp/go.tar.gz
+ENV PATH="/usr/local/go/bin:${PATH}"
+RUN go install golang.org/x/tools/gopls@latest \
+    && mv /root/go/bin/gopls /usr/local/bin/gopls
+
+# 5. Install Terraform
+ENV TERRAFORM_VERSION=1.8.4
+RUN curl -L -o /tmp/terraform.zip https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip \
+    && unzip /tmp/terraform.zip -d /usr/local/bin/ \
+    && rm /tmp/terraform.zip
+
+# 6. Install JS Ecosystem Language Servers (Typescript, Vue, Bash, HTML/CSS)
+RUN npm install -g \
+    typescript \
+    typescript-language-server \
+    @vue/language-server \
+    bash-language-server \
+    vscode-langservers-extracted
+
+# 7. Install Java Language Server (jdtls) snapshot with global system binary wrapper
+RUN wget https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz -O /tmp/jdtls.tar.gz \
+    && mkdir -p /opt/jdtls \
+    && tar -xzf /tmp/jdtls.tar.gz -C /opt/jdtls \
+    && rm /tmp/jdtls.tar.gz \
+    && printf '#!/bin/bash\njava -Declipse.application=org.eclipse.jdt.ls.core.id1 -Dosgi.bundles.defaultStartLevel=4 -Declipse.product=org.eclipse.jdt.ls.core.product -noverify -Xmx1G -jar /opt/jdtls/plugins/org.eclipse.equinox.launcher_*.jar -configuration /opt/jdtls/config_linux -data /tmp/workspace "$@"\n' > /usr/local/bin/jdtls \
+    && chmod +x /usr/local/bin/jdtls
+
+# ==============================================================================
+# END MAXIMAL ADDITIONS
+# ==============================================================================
+
+# Set the working directory
+WORKDIR /workspaces/serena
+
+# Copy all files for development
+COPY . /workspaces/serena/
+
+# Create Serena configuration
+ENV SERENA_HOME=/workspaces/serena/config
+RUN mkdir -p "$SERENA_HOME" \
+ && cp src/serena/resources/serena_config.template.yml "$SERENA_HOME/serena_config.yml" \
+ && sed -i 's/^gui_log_window: .*/gui_log_window: False/' "$SERENA_HOME/serena_config.yml" \
+ && sed -i 's/^web_dashboard_listen_address: .*/web_dashboard_listen_address: 0.0.0.0/' "$SERENA_HOME/serena_config.yml" \
+ && sed -i 's/^web_dashboard_open_on_launch: .*/web_dashboard_open_on_launch: False/' "$SERENA_HOME/serena_config.yml"
+
+CMD ["/bin/bash"]
