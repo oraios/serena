@@ -559,6 +559,12 @@ class SolidLanguageServer(ABC):
         default language identifier to be passed to the language server in `textDocument/didOpen` notifications.
         """
         self.open_file_buffers: dict[str, LSPFileBuffer] = {}
+        # Guards the bookkeeping of open_file_buffers and the document-symbol caches so that the
+        # language server may be safely driven from multiple threads (e.g. parallel `project index`).
+        # Re-entrant because open_file()'s context body can re-enter via nested document requests.
+        # NOTE: held only around in-process dict bookkeeping, never across a language-server round-trip,
+        # so it does not serialize the actual (latency-bound) LSP requests.
+        self._state_lock = threading.RLock()
         self.language = self.get_language_enum_instance()
         """
         identifies the language server (not to be confused with the language id passed to the language server)
@@ -1299,36 +1305,54 @@ class SolidLanguageServer(ABC):
             absolute_file_path = absolute_file_path.resolve()
         uri = absolute_file_path.as_uri()
 
-        if uri in self.open_file_buffers:
-            fb = self.open_file_buffers[uri]
-            assert fb.uri == uri
-            assert fb.ref_count >= 1
+        # Acquire/create the buffer and bump its ref-count under the state lock — an atomic
+        # check-then-act on the shared open_file_buffers dict. The lock guards ONLY in-process dict
+        # bookkeeping; it is NEVER held across a language-server round-trip (didOpen/didClose I/O),
+        # so concurrent requests for OTHER files aren't serialized and there is no
+        # _state_lock <-> _stdin_lock ordering hazard. A newly created buffer is constructed with
+        # open_in_ls=False (I/O-free under the lock); the actual didOpen, if requested, is sent
+        # below via ensure_open_in_ls() AFTER the lock is released.
+        with self._state_lock:
+            if uri in self.open_file_buffers:
+                fb = self.open_file_buffers[uri]
+                assert fb.uri == uri
+                assert fb.ref_count >= 1
+                fb.ref_count += 1
+            else:
+                version = 0
+                language_id = self._get_language_id_for_file(relative_file_path)
+                fb = LSPFileBuffer(
+                    abs_path=absolute_file_path,
+                    uri=uri,
+                    encoding=self._encoding,
+                    version=version,
+                    language_id=language_id,
+                    ref_count=1,
+                    language_server=self,
+                    open_in_ls=False,
+                )
+                self.open_file_buffers[uri] = fb
 
-            fb.ref_count += 1
+        try:
+            # didOpen (if requested) happens OUTSIDE the state lock. ensure_open_in_ls() is
+            # idempotent, so it is correct whether the buffer was just created or already existed.
             if open_in_ls:
                 fb.ensure_open_in_ls()
             yield fb
-            fb.ref_count -= 1
-        else:
-            version = 0
-            language_id = self._get_language_id_for_file(relative_file_path)
-            fb = LSPFileBuffer(
-                abs_path=absolute_file_path,
-                uri=uri,
-                encoding=self._encoding,
-                version=version,
-                language_id=language_id,
-                ref_count=1,
-                language_server=self,
-                open_in_ls=open_in_ls,
-            )
-            self.open_file_buffers[uri] = fb
-            yield fb
-            fb.ref_count -= 1
-
-        if self.open_file_buffers[uri].ref_count == 0:
-            self.open_file_buffers[uri].close()
-            del self.open_file_buffers[uri]
+        finally:
+            # Decide teardown under the lock (atomic ref-count decrement + dict removal), but
+            # perform the actual fb.close() (which sends didClose I/O) OUTSIDE the lock so the
+            # lock is never held across language-server I/O.
+            fb_to_close = None
+            with self._state_lock:
+                fb.ref_count -= 1
+                if fb.ref_count == 0:
+                    # Another thread may have already re-created/removed the entry; guard the delete.
+                    if self.open_file_buffers.get(uri) is fb:
+                        del self.open_file_buffers[uri]
+                    fb_to_close = fb
+            if fb_to_close is not None:
+                fb_to_close.close()
 
     @contextmanager
     def _open_file_context(
@@ -1875,8 +1899,9 @@ class SolidLanguageServer(ABC):
             # has not yet finished indexing or building the project (e.g. Lean 4 before `lake build`),
             # and caching it would permanently serve stale data even after the project is ready.
             if response:
-                self._raw_document_symbols_cache[cache_key] = (fd.content_hash, response)
-                self._raw_document_symbols_cache_is_modified = True
+                with self._state_lock:
+                    self._raw_document_symbols_cache[cache_key] = (fd.content_hash, response)
+                    self._raw_document_symbols_cache_is_modified = True
 
             return response
 
@@ -2028,8 +2053,9 @@ class SolidLanguageServer(ABC):
 
             # update cache
             log.debug("Updating cached document symbols for %s", relative_file_path)
-            self._document_symbols_cache[cache_key] = (file_data.content_hash, document_symbols)
-            self._document_symbols_cache_is_modified = True
+            with self._state_lock:
+                self._document_symbols_cache[cache_key] = (file_data.content_hash, document_symbols)
+                self._document_symbols_cache_is_modified = True
 
             return document_symbols
 
