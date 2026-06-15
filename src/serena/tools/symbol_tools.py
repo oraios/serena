@@ -35,25 +35,38 @@ class RestartLanguageServerTool(Tool, ToolMarkerOptional):
 
 class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
     """
-    Gets an overview of the top-level symbols defined in a given file.
+    Gets an overview of the top-level symbols defined in a given file or directory.
     """
 
     symbol_dict_grouper = LanguageServerSymbolDictGrouper(["kind"], ["kind"], collapse_singleton=True)
 
-    def apply(self, relative_path: str, depth: int = 0, max_answer_chars: int = -1) -> str:
+    def apply(self, relative_path: str, depth: int = 0, max_answer_chars: int = -1, max_files: int = 20) -> str:
         """
-        Use this tool to get a high-level understanding of the code symbols in a file.
+        Use this tool to get a high-level understanding of the code symbols in a file or directory.
         This should be the first tool to call when you want to understand a new file, unless you already know
         what you are looking for.
+        When given a directory path, returns top-level symbols for every analyzable file in the directory.
 
-        :param relative_path: the relative path to the file to get the overview of
+        :param relative_path: the relative path to the file or directory to get the overview of
         :param depth: depth up to which descendants of top-level symbols shall be retrieved
             (e.g. 1 retrieves immediate children). Default 0.
         :param max_answer_chars: if the overview is longer than this number of characters,
             no content will be returned. -1 means the default value from the config will be used.
             Don't adjust unless there is really no other way to get the content required for the task.
+        :param max_files: only used when relative_path is a directory. If the directory contains more
+            analyzable files than this limit, the tool raises ValueError instead of returning a partial
+            overview — narrow the path to a subdirectory, or learn the layout from memories first.
+            Default 20. Don't increase unless you really need a broad sweep and accept the token cost.
         :return: a JSON object containing symbols grouped by kind in a compact format.
+            For directories, returns a mapping of file paths to their grouped symbols.
         """
+        file_path = os.path.join(self.project.project_root, relative_path)
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File or directory {relative_path} does not exist in the project.")
+
+        if os.path.isdir(file_path):
+            return self._apply_directory(relative_path, depth=depth, max_answer_chars=max_answer_chars, max_files=max_files)
+
         result = self.get_symbol_overview(relative_path, depth=depth)
 
         # capture kind names and depth-0 snapshots before grouping, which mutates the dicts
@@ -82,6 +95,49 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
 
         return self._limit_length(result_json_str, max_answer_chars, shortened_result_factories=shortened_results)
 
+    def _apply_directory(self, relative_path: str, depth: int = 0, max_answer_chars: int = -1, max_files: int = 20) -> str:
+        symbol_retriever = self.create_language_server_symbol_retriever()
+        path_to_symbols = symbol_retriever.get_symbol_overview(relative_path)
+
+        total_files = len(path_to_symbols)
+        if total_files > max_files:
+            sample = list(path_to_symbols.keys())[:5]
+            raise ValueError(
+                f"Directory {relative_path} contains {total_files} analyzable files, which exceeds "
+                f"max_files={max_files}. Narrow the path to a more specific subdirectory, or learn the "
+                f"repository layout from memories before asking for a broad overview. "
+                f"Sample files found: {sample}"
+            )
+
+        def child_inclusion_predicate(s: LanguageServerSymbol) -> bool:
+            return not s.is_low_level()
+
+        per_file_result = {}
+        file_count = 0
+        for file_rel_path, symbols in path_to_symbols.items():
+            symbol_dicts = []
+            for symbol in symbols:
+                symbol_dicts.append(
+                    symbol.to_dict(
+                        name_path=False,
+                        name=True,
+                        depth=depth,
+                        kind=True,
+                        relative_path=False,
+                        location=False,
+                        child_inclusion_predicate=child_inclusion_predicate,
+                    )
+                )
+            per_file_result[file_rel_path] = self.symbol_dict_grouper.group(symbol_dicts)
+            file_count += 1
+
+        result_json_str = self._to_json(per_file_result)
+
+        def make_file_counts() -> str:
+            return f"Analyzed {file_count} files in directory {relative_path}"
+
+        return self._limit_length(result_json_str, max_answer_chars, shortened_result_factories=[make_file_counts])
+
     def get_symbol_overview(self, relative_path: str, depth: int = 0) -> list[LanguageServerSymbol.OutputDict]:
         """
         :param relative_path: relative path to a source file
@@ -90,8 +146,6 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
         """
         symbol_retriever = self.create_language_server_symbol_retriever()
 
-        # The symbol overview is capable of working with both files and directories,
-        # but we want to ensure that the user provides a file path.
         file_path = os.path.join(self.project.project_root, relative_path)
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File or directory {relative_path} does not exist in the project.")
