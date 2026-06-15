@@ -15,6 +15,7 @@ import serena.jetbrains.jetbrains_types as jb
 from solidlsp import SolidLanguageServer, ls_types
 from solidlsp.ls import LSPFileBuffer
 from solidlsp.ls import ReferenceInSymbol as LSPReferenceInSymbol
+from solidlsp.ls_config import Language
 from solidlsp.ls_types import Position, SymbolKind, UnifiedSymbolInformation
 from solidlsp.ls_utils import TextUtils
 
@@ -738,10 +739,15 @@ class LanguageServerSymbolRetriever:
         exclude_kinds: Sequence[SymbolKind] | None = None,
         substring_matching: bool = False,
         within_relative_path: str | None = None,
+        exclude_languages: "frozenset[Language] | set[Language]" = frozenset(),
     ) -> list[LanguageServerSymbol]:
         """
         Finds all symbols that match the given name path pattern (see class :class:`NamePathMatcher` for details),
         optionally limited to a specific file and filtered by kind.
+
+        :param exclude_languages: when no specific file is targeted (whole-project search), language servers
+            for these languages are skipped (used by the per-language tool-disabling mechanism to scope the
+            search to non-excluded languages). Ignored when ``within_relative_path`` pins a single file.
         """
         symbols: list[LanguageServerSymbol] = []
         if within_relative_path and os.path.isfile(os.path.join(self.project.project_root, within_relative_path)):
@@ -752,7 +758,7 @@ class LanguageServerSymbolRetriever:
             """
             lang_servers: Iterable[SolidLanguageServer] = [self._ls_manager.get_language_server(within_relative_path)]
         else:
-            lang_servers = self._ls_manager.iter_language_servers()
+            lang_servers = self._ls_manager.iter_language_servers(exclude_languages=exclude_languages)
         for lang_server in lang_servers:
             symbol_roots = lang_server.request_full_symbol_tree(within_relative_path=within_relative_path)
             for root in symbol_roots:

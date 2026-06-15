@@ -191,6 +191,61 @@ When a project is loaded, Serena uses the following fallback logic:
 
 This ensures backward compatibility: existing projects that already have a `.serena` folder in the project root will continue to work, even after changing the `project_serena_folder_location` setting.
 
+(excluded-tools-by-language)=
+### Disabling Tools per Language
+
+In a project that uses multiple languages, you may want to disable a specific tool for *one* language while
+keeping it available for the others. A common motivation is an unreliable language server: if the symbol
+information produced for one language is imprecise, you can disable Serena's symbolic tools for that language
+(so the agent does not act on bad data) while continuing to use them for the languages where they are
+trustworthy.
+
+This is configured per project via the `excluded_tools_by_language` key in `project.yml` (and overridable in
+`project.local.yml`). It maps a configured language (a key of the `languages` list) to a list of tool names
+to disable for that language:
+
+```yaml
+languages: [typescript, haxe, python]
+
+excluded_tools_by_language:
+  haxe:
+    - find_symbol
+    - replace_symbol_body
+    - find_referencing_symbols
+  python:
+    - replace_content
+```
+
+**Semantics.** Disabling tool `T` for language `L` makes `T` behave as if `L`'s files did not exist:
+
+- **File-pinned calls are refused.** A call that targets a specific `L` file (e.g.
+  `replace_symbol_body` on a `.hx` file) returns an explanatory error instead of executing, suggesting
+  text-based alternatives.
+- **Whole-project / search calls are transparently scoped.** `find_symbol` (without a `relative_path`) and
+  `search_for_pattern` run against the *non-`L`* languages only. When `L` files were actually present in the
+  search scope and skipped, a short one-line coverage note is appended to the result, e.g.
+  `⚠ Coverage: skipped 12 haxe file(s) (tool disabled for haxe).` — so the agent does not mistake a partial
+  result for a complete one. No note is added when nothing was skipped.
+- **Language-agnostic tools are unaffected.** Tools that do not operate on source files (e.g. `read_memory`,
+  `execute_shell_command`) are never affected; listing one here has no effect and logs a warning at load time.
+
+In addition, the agent is informed about the disabled tools upfront (in the project activation message) and via
+a caveat appended to each affected tool's description, so it can plan to use fallbacks such as
+`search_for_pattern` or `read_file`.
+
+**Notes and limitations.**
+
+- Tool names and language keys are validated when the project is loaded; an unknown tool name, an invalid
+  language, or a language that is not among the project's configured `languages` is a hard error (to catch
+  typos early).
+- File-type resolution uses each configured language's source-file extensions. If two configured languages
+  share an extension, a file matching either of them is treated as belonging to both; a file-pinned call is
+  refused if the tool is disabled for *any* matching language (conservative behaviour).
+- Disabling `find_referencing_symbols` for `L` removes references *anchored in* `L` files; cross-language
+  references were already limited by the single-language-server model and are not affected here.
+- Under the **JetBrains backend**, only the file-pinned refusal and the `search_for_pattern` scoping apply;
+  whole-project JetBrains symbol search is not scoped per language in this version.
+
 (ls-specific-settings)=
 ### Language Server-Specific Settings
 

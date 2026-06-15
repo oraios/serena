@@ -12,6 +12,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Literal
 
+from serena.project import _filter_out_languages
 from serena.tools import SUCCESS_RESULT, EditedFileContext, EditingToolWithDiagnostics, Tool, ToolMarkerOptional
 from serena.util.file_system import scan_directory
 from serena.util.text_utils import (
@@ -599,6 +600,10 @@ class SearchForPatternTool(Tool):
         if not os.path.exists(abs_path):
             raise FileNotFoundError(f"Relative path {relative_path} does not exist.")
 
+        # per-language tool disabling (Behaviour 2): scope the search to exclude files of languages
+        # for which this tool is disabled, appending a coverage note if any were skipped
+        scoping = self.get_language_scoping(relative_path=relative_path)
+
         if restrict_search_to_code_files:
             matches = self.project.search_source_files_for_pattern(
                 pattern=substring_pattern,
@@ -608,6 +613,7 @@ class SearchForPatternTool(Tool):
                 paths_include_glob=paths_include_glob.strip(),
                 paths_exclude_glob=paths_exclude_glob.strip(),
                 multiline=multiline,
+                exclude_languages=scoping.excluded_languages,
             )
         else:
             if os.path.isfile(abs_path):
@@ -620,6 +626,8 @@ class SearchForPatternTool(Tool):
                     is_ignored_file=self.project.is_ignored_path,
                     relative_to=self.get_project_root(),
                 )
+            if scoping.excluded_languages:
+                rel_paths_to_search = _filter_out_languages(rel_paths_to_search, scoping.excluded_languages)
             # TODO (maybe): not super efficient to walk through the files again and filter if glob patterns are provided
             #   but it probably never matters and this version required no further refactoring
             matches = search_files(
@@ -659,6 +667,9 @@ class SearchForPatternTool(Tool):
             return f"Found {len(matches)} matches in {len(match_lines_by_file)} files."
 
         result = self._to_json(file_to_matches)
-        return self._limit_length(
+        limited = self._limit_length(
             result, max_answer_chars, shortened_result_factories=[make_lines_only, make_per_file_counts, make_summary]
         )
+        if scoping.coverage_note:
+            return f"{scoping.coverage_note}\n{limited}"
+        return limited
