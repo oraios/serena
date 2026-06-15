@@ -229,8 +229,19 @@ class LanguageServerManager:
             log.info(f"Stopping language server for language {ls.language} ...")
             ls.stop(shutdown_timeout=timeout)
 
-    def iter_language_servers(self) -> Iterator[SolidLanguageServer]:
-        for ls in self._language_servers.values():
+    def iter_language_servers(
+        self, exclude_languages: "frozenset[Language] | set[Language]" = frozenset()
+    ) -> Iterator[SolidLanguageServer]:
+        """
+        Iterates over the managed language servers.
+
+        :param exclude_languages: languages whose language servers shall be skipped. This is used by the
+            per-language tool-disabling mechanism to transparently scope whole-project symbol searches.
+        :return: an iterator over the (functional) language servers, excluding those for ``exclude_languages``
+        """
+        for language, ls in self._language_servers.items():
+            if language in exclude_languages:
+                continue
             yield self._ensure_functional_ls(ls)
 
     def stop_all(self, save_cache: bool = False, timeout: float = 2.0) -> None:

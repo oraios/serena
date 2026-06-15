@@ -70,7 +70,9 @@ class SerenaFastMCPTool(FastMCPTool):
 
         # Mount the tool description as a combination of the docstring description and
         # the return value description, if it exists.
-        overridden_description = tool.agent.get_context().tool_description_overrides.get(func_name, None)
+        # Uses the agent's resolver so that, in addition to the context's static override, a
+        # per-language tool-disabling caveat is appended when applicable (see excluded_tools_by_language).
+        overridden_description = tool.agent.get_tool_description_override(func_name)
 
         if overridden_description is not None:
             func_doc = overridden_description

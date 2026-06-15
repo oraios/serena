@@ -3,24 +3,27 @@ project_name: "serena"
 
 
 # list of languages for which language servers are started; choose from:
-#   al                  ansible             bash                clojure             cpp
-#   cpp_ccls            crystal             csharp              csharp_omnisharp    dart
-#   elixir              elm                 erlang              fortran             fsharp
-#   go                  groovy              haskell             haxe                hlsl
-#   java                json                julia               kotlin              lean4
-#   lua                 luau                markdown            matlab              msl
-#   nix                 ocaml               pascal              perl                php
-#   php_phpactor        powershell          python              python_jedi         python_ty
-#   r                   rego                ruby                ruby_solargraph     rust
-#   scala               solidity            swift               systemverilog       terraform
-#   toml                typescript          typescript_vts      vue                 yaml
-#   zig
+#   al                  angular             ansible             bash                clojure
+#   cpp                 cpp_ccls            crystal             csharp              csharp_omnisharp
+#   dart                elixir              elm                 erlang              fortran
+#   fsharp              go                  groovy              haskell             haxe
+#   hlsl                html                java                json                julia
+#   kotlin              lean4               lua                 luau                markdown
+#   matlab              msl                 nix                 ocaml               pascal
+#   perl                php                 php_phpactor        powershell          python
+#   python_jedi         python_ty           r                   rego                ruby
+#   ruby_solargraph     rust                scala               scss                solidity
+#   svelte              swift               systemverilog       terraform           toml
+#   typescript          typescript_vts      vue                 yaml                zig
 #   (This list may be outdated. For the current list, see values of Language enum here:
 #   https://github.com/oraios/serena/blob/main/src/solidlsp/ls_config.py
 #   For some languages, there are alternative language servers, e.g. csharp_omnisharp, ruby_solargraph.)
 # Note:
 #   - For C, use cpp
 #   - For JavaScript, use typescript
+#   - For Angular projects, use angular (subsumes typescript+html; requires `npm install` in the project root)
+#   - For Svelte projects, use svelte (subsumes typescript/javascript for .svelte projects; requires npm)
+#   - For SCSS / Sass / plain CSS, use scss (some-sass-language-server handles all three)
 #   - For Free Pascal/Lazarus, use pascal
 # Special requirements:
 #   Some languages require additional setup/installations.
@@ -155,3 +158,21 @@ added_modes:
 #     - ../sibling-package
 #     - ../shared-lib
 additional_workspace_folders: []
+
+# Per-language tool disabling: maps a configured language (a key of `languages` above) to a list of
+# tool names that shall be disabled *for that language only*.
+# Disabling tool T for language L makes T behave as if L's files did not exist:
+#   - calls that pin an L file (e.g. replace_symbol_body on a .hx file) are refused with an explanation,
+#   - whole-project / search calls (find_symbol without a path, search_for_pattern) are transparently
+#     scoped to the non-L languages and a short coverage note is appended when L files were skipped,
+#   - language-agnostic tools (e.g. read_memory) are unaffected (configuring one logs a warning).
+# This is useful when a particular language server produces unreliable symbol information, so you want
+# symbolic tools restricted to the languages where they are trustworthy while keeping text-based tools.
+# Find the list of tools here: https://oraios.github.io/serena/01-about/035_tools.html
+# Example:
+#   excluded_tools_by_language:
+#     haxe:
+#       - find_symbol
+#       - replace_symbol_body
+#       - find_referencing_symbols
+excluded_tools_by_language: {}

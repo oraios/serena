@@ -598,6 +598,10 @@ class SearchForPatternTool(Tool):
         if not os.path.exists(abs_path):
             raise FileNotFoundError(f"Relative path {relative_path} does not exist.")
 
+        # per-language tool disabling (Behaviour 2): scope the search to exclude files of languages
+        # for which this tool is disabled, appending a coverage note if any were skipped
+        scoping = self.get_language_scoping(relative_path=relative_path)
+
         matches = self.project.search_project_files_for_pattern(
             pattern=substring_pattern,
             relative_path=relative_path,
@@ -607,6 +611,7 @@ class SearchForPatternTool(Tool):
             paths_exclude_glob=paths_exclude_glob.strip(),
             multiline=multiline,
             code_files_only=restrict_search_to_code_files,
+            exclude_languages=scoping.excluded_languages,
         )
 
         # group matches by file
@@ -634,6 +639,9 @@ class SearchForPatternTool(Tool):
             return f"Found {len(matches)} matches in {len(match_lines_by_file)} files."
 
         result = self._to_json(file_to_matches)
-        return self._limit_length(
+        limited = self._limit_length(
             result, max_answer_chars, shortened_result_factories=[make_lines_only, make_per_file_counts, make_summary]
         )
+        if scoping.coverage_note:
+            return f"{scoping.coverage_note}\n{limited}"
+        return limited

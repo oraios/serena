@@ -20,6 +20,13 @@ class MockAgent:
     def get_context() -> SerenaAgentContext:
         return SerenaAgentContext.load_default()
 
+    def get_active_project(self):
+        return None
+
+    def get_tool_description_override(self, tool_name: str) -> str | None:
+        # mirror SerenaAgent.get_tool_description_override for the no-active-project case
+        return self.get_context().tool_description_overrides.get(tool_name, None)
+
 
 class BaseMockTool(Tool):
     """A mock Tool class for testing."""

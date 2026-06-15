@@ -1,5 +1,6 @@
 import inspect
 import json
+import os
 from abc import ABC
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -13,13 +14,14 @@ from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metada
 from sensai.util import logging
 from sensai.util.string import dict_string
 
-from serena.config.serena_config import LanguageBackend
+from serena.config.serena_config import LanguageBackend, languages_for_path
 from serena.memories.memory_manager import MemoryManager
 from serena.project import Project
 from serena.prompt_factory import PromptFactory
 from serena.util.class_decorators import singleton
 from serena.util.inspection import iter_subclasses
 from serena.util.ls_diagnostics import DiagnosticsDiff, EditedFilePath, PublishedDiagnosticsSnapshot
+from solidlsp.ls_config import Language
 from solidlsp.ls_exceptions import SolidLSPException
 
 if TYPE_CHECKING:
@@ -30,6 +32,35 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 T = TypeVar("T")
 SUCCESS_RESULT = "OK"
+
+
+@dataclass
+class LanguageScoping:
+    """
+    Result of resolving per-language tool disabling for a whole-project/search tool call
+    (see :meth:`Tool.get_language_scoping`).
+    """
+
+    excluded_languages: frozenset[Language]
+    """the languages for which the tool is disabled (their files are skipped in the search)"""
+    coverage_note: str | None
+    """a short, one-line note to append to the result when files of an excluded language were actually
+    skipped within the search scope; ``None`` if nothing was skipped (in which case no note should be emitted)"""
+
+
+def _format_coverage_note(skipped_counts: dict[Language, int]) -> str | None:
+    """
+    Formats the per-call coverage note for the per-language tool-disabling mechanism.
+
+    :param skipped_counts: mapping from language to the number of in-scope source files that were skipped
+    :return: a terse one-line note, or ``None`` if no files were skipped
+    """
+    parts = [(lang.value, count) for lang, count in sorted(skipped_counts.items(), key=lambda item: item[0].value) if count > 0]
+    if not parts:
+        return None
+    files_str = ", ".join(f"{count} {lang}" for lang, count in parts)
+    langs_str = ", ".join(lang for lang, _ in parts)
+    return f"⚠ Coverage: skipped {files_str} file(s) (tool disabled for {langs_str})."
 
 
 class Component(ABC):
@@ -327,6 +358,75 @@ class Tool(Component):
         """
         return {}
 
+    def get_target_relative_paths(self, kwargs: dict[str, Any]) -> list[str] | None:
+        """
+        Determines the source files a given tool call concretely targets (pins).
+
+        This is used by the per-language tool-disabling mechanism (see
+        :attr:`serena.config.serena_config.ProjectConfig.excluded_tools_by_language`):
+        if a call pins a file belonging to a language for which the tool is disabled, the
+        call is refused.
+
+        :param kwargs: the keyword arguments of the tool call
+        :return: the list of project-relative paths that the call concretely targets (pins),
+            or ``None`` if the call does not pin specific files (e.g. whole-project / search calls,
+            or language-agnostic tools). Directories are not considered pinned files.
+        """
+        rp = kwargs.get("relative_path")
+        if isinstance(rp, str) and rp.strip():
+            rp = rp.strip()
+            if os.path.isfile(os.path.join(self.get_project_root(), rp)):
+                return [rp]
+        return None
+
+    def _check_language_exclusion(self, kwargs: dict[str, Any]) -> str | None:
+        """
+        Implements Behaviour 1 of the per-language tool-disabling mechanism: refuses a call that
+        pins a file belonging to a language for which this tool is disabled.
+
+        :param kwargs: the keyword arguments of the tool call
+        :return: an explanatory error message if the call must be refused, else ``None``
+        """
+        project = self.agent.get_active_project()
+        if project is None:
+            return None
+        excluded_langs = project.project_config.excluded_languages_for_tool(self.get_name())
+        if not excluded_langs:
+            return None
+        target_paths = self.get_target_relative_paths(kwargs)
+        if not target_paths:
+            return None
+        for rp in target_paths:
+            hit = languages_for_path(rp, project.project_config.languages) & excluded_langs
+            if hit:
+                lang_list = ", ".join(sorted(lang.value for lang in hit))
+                hit_lang = sorted(hit, key=lambda lang: lang.value)[0].value
+                return (
+                    f"Error: Tool '{self.get_name()}' is disabled for {lang_list} in this project; "
+                    f"'{rp}' is a {hit_lang} file. Inspect {hit_lang} code with text-based tools "
+                    f"(e.g. search_for_pattern) or read_file instead."
+                )
+        return None
+
+    def get_language_scoping(self, relative_path: str = "") -> "LanguageScoping":
+        """
+        Implements Behaviour 2 of the per-language tool-disabling mechanism for whole-project/search
+        tools: determines the languages for which this tool is disabled and a coverage note describing
+        the files that will be skipped.
+
+        :param relative_path: the search scope (a file or directory), or an empty string for the whole project
+        :return: a :class:`LanguageScoping` carrying the excluded languages and a coverage note (the note
+            is non-``None`` only when in-scope files of an excluded language were actually present and skipped)
+        """
+        project = self.agent.get_active_project()
+        if project is None:
+            return LanguageScoping(excluded_languages=frozenset(), coverage_note=None)
+        excluded_langs = project.project_config.excluded_languages_for_tool(self.get_name())
+        if not excluded_langs:
+            return LanguageScoping(excluded_languages=frozenset(), coverage_note=None)
+        skipped_counts = project.count_source_files_for_languages(excluded_langs, relative_path=relative_path)
+        return LanguageScoping(excluded_languages=frozenset(excluded_langs), coverage_note=_format_coverage_note(skipped_counts))
+
     def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, mcp_ctx: Context | None = None, **kwargs) -> str:
         """
         Applies the tool with logging and exception handling, using the given keyword arguments.
@@ -370,6 +470,13 @@ class Tool(Component):
                             "No active project. Ask the user to provide the project path or to select a project from this list of known projects: "
                             + f"{self.agent.serena_config.project_names}"
                         )
+
+                # per-language tool disabling (Behaviour 1): refuse calls that pin a file of a
+                # language for which this tool is disabled
+                language_exclusion_error = self._check_language_exclusion(kwargs)
+                if language_exclusion_error is not None:
+                    log.info(language_exclusion_error)
+                    return language_exclusion_error
 
                 # construct apply kwargs, adding session_id if the tool is session-aware
                 apply_kwargs = dict(kwargs)
