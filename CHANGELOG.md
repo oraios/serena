@@ -16,6 +16,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     a general code execution environment for all Serena operations.
     This has several significant advantages over regular tool executions.  
     Please refer to our [documentation](https://oraios.github.io/serena/01-about/035_tools.html) for details.
+  - Add: `get_symbols_overview` accepts directory paths, returning the symbol overview for every
+    analyzable file in the directory grouped by file; a `max_files` safeguard (default 20) raises
+    an error instead of returning a partial overview when the directory contains too many files (#1412)
   - Add `auth_secret` to `serena_config.yml` for authenticating communication between Serena components
     and services. When missing, null, or empty, a random UUID is generated and persisted; existing values
     are preserved
