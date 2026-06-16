@@ -191,7 +191,7 @@ class MemoryManager:
         self._check_not_ignored(name)
         memory_file_path = self.get_memory_file_path(name)
         if not memory_file_path.exists():
-            return f"Memory file {name} not found, consider creating it with the `write_memory` tool if you need it."
+            raise FileNotFoundError(f"Memory named '{name}' not found")
         with open(memory_file_path, encoding=self._encoding) as f:
             return f.read()
 
