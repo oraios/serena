@@ -32,6 +32,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     results in svelte-only mode (`languages: [svelte]`). They are now routed to the companion TS server,
     so symbols defined in plain `.ts`/`.js` files are again discoverable via `find_symbol`/
     `get_symbols_overview`, and `find_referencing_symbols` no longer fails to locate `.ts`/`.js` symbols. #1552
+  - `JuliaLanguageServer`: Fix the stdio MCP server exiting right after `initialize` ("tools fetch failed")
+    when `julia` is enabled. The runtime probe/install subprocesses now run with `stdin=subprocess.DEVNULL`,
+    so they can no longer inherit and clobber Serena's stdin, which is the JSON-RPC pipe under the stdio
+    transport. #1577
   - Improve quoting of arguments in shell executions
 
 * JetBrains:
