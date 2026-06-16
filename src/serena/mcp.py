@@ -11,6 +11,7 @@ from typing import Any, Literal, cast
 
 import docstring_parser
 from mcp.server.fastmcp import server
+from mcp.server.fastmcp.exceptions import ToolError
 from mcp.server.fastmcp.server import Context, FastMCP, Settings
 from mcp.server.fastmcp.tools.base import Tool as FastMCPTool
 from mcp.server.session import ServerSessionT
@@ -26,7 +27,7 @@ from serena.agent import (
 from serena.config.context_mode import SerenaAgentContext
 from serena.config.serena_config import LanguageBackend, ModeSelectionDefinition
 from serena.constants import DEFAULT_CONTEXT, SERENA_LOG_FORMAT
-from serena.tools import Tool
+from serena.tools import Tool, ToolCallError
 from serena.util.exception import show_fatal_exception_safe
 from serena.util.logging import MemoryLogHandler
 
@@ -94,7 +95,10 @@ class SerenaFastMCPTool(FastMCPTool):
                 properties["description"] = param_desc[0].upper() + param_desc[1:]
 
         def execute_fn(**kwargs) -> str:  # type: ignore
-            return tool.apply_ex(log_call=True, catch_exceptions=True, **kwargs)
+            try:
+                return tool.apply_ex(log_call=True, catch_exceptions=False, **kwargs)
+            except ToolCallError as e:
+                raise ToolError(e.get_error_message()) from e
 
         # Generate human-readable title from snake_case tool name
         tool_title = " ".join(word.capitalize() for word in func_name.split("_"))
