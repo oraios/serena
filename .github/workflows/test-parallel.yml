@@ -3,7 +3,6 @@ name: Parallel Matrix CI
 on:
   push:
     branches:
-      - feature/parallel-ci-workflows
       - main
   pull_request:
     branches:
