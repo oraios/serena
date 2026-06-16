@@ -126,6 +126,19 @@ class ApplyMethodProtocol(Protocol):
         pass
 
 
+class ToolCallError(Exception):
+    """
+    Represents an error raised during a tool call execution
+    """
+
+    def __init__(self, error_message: str):
+        super().__init__(error_message)
+        self._error_message = error_message
+
+    def get_error_message(self) -> str:
+        return self._error_message
+
+
 class Tool(Component):
     # NOTE: each tool should implement the apply method, which is then used in
     # the central method of the Tool class `apply_ex`.
@@ -316,8 +329,14 @@ class Tool(Component):
 
     def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, mcp_ctx: Context | None = None, **kwargs) -> str:  # type: ignore
         """
-        Applies the tool with logging and exception handling, using the given keyword arguments
+        Applies the tool with logging and exception handling, using the given keyword arguments.
+        This method either returns a string result or raises a ToolCallError in case of an error during tool application
+        (but if `catch_exception is enabled, it will return the error message as a string instead of raising the exception).
+
+        :param log_call: whether to log the tool call and its result
+        :param catch_exceptions: whether to catch exceptions and return their messages as strings, instead of raising a ToolCallError
         """
+        # obtain session ID and client info
         session_id = "global"
         if mcp_ctx is not None:
             try:
@@ -337,18 +356,18 @@ class Tool(Component):
 
             try:
                 if not self.is_active():
-                    return f"Error: Tool '{self.get_name_from_cls()}' is not active. Active tools: {self.agent.get_active_tool_names()}"
-            except Exception as e:
-                return f"RuntimeError while checking if tool {self.get_name_from_cls()} is active: {e}"
+                    raise ToolCallError(
+                        f"Tool '{self.get_name_from_cls()}' is not active. Active tools: {self.agent.get_active_tool_names()}"
+                    )
 
-            if log_call:
-                self._log_tool_application(inspect.currentframe(), session_id)
-            try:
+                if log_call:
+                    self._log_tool_application(inspect.currentframe(), session_id)
+
                 # check whether the tool requires an active project and language server
                 if not isinstance(self, ToolMarkerDoesNotRequireActiveProject):
                     if self.agent.get_active_project() is None:
-                        return (
-                            "Error: No active project. Ask the user to provide the project path or to select a project from this list of known projects: "
+                        raise ToolCallError(
+                            "No active project. Ask the user to provide the project path or to select a project from this list of known projects: "
                             + f"{self.agent.serena_config.project_names}"
                         )
 
@@ -380,12 +399,12 @@ class Tool(Component):
                 # record tool usage
                 self.agent.record_tool_usage(apply_kwargs, result, self)
 
+            except ToolCallError:
+                raise
             except Exception as e:
-                if not catch_exceptions:
-                    raise
-                msg = f"Error executing tool: {e.__class__.__name__} - {e}"
-                log.error(f"Error executing tool: {e}", exc_info=e)
-                result = msg
+                msg = f"{e.__class__.__name__}: {e}"
+                log.error(msg, exc_info=e)
+                raise ToolCallError(msg)
 
             if log_call:
                 log.info(f"Result: {result}")
@@ -400,13 +419,20 @@ class Tool(Component):
             return result
 
         # execute the tool in the agent's task executor, with timeout
+        tool_call_error: ToolCallError
         try:
             task_exec = self.agent.issue_task(task, name=self.__class__.__name__)
             return task_exec.result(timeout=self.agent.serena_config.tool_timeout)
-        except Exception as e:  # typically TimeoutError (other exceptions caught in task)
-            msg = f"Error: {e.__class__.__name__} - {e}"
+        except ToolCallError as e:
+            tool_call_error = e
+        except Exception as e:  # typically TimeoutError (other exceptions caught and forwarded as ToolCallError in the task)
+            msg = f"{e.__class__.__name__}: {e}"
             log.error(msg)
-            return msg
+            tool_call_error = ToolCallError(msg)
+        if catch_exceptions:
+            return tool_call_error.get_error_message()
+        else:
+            raise tool_call_error
 
     @staticmethod
     def _to_json(x: Any) -> str:

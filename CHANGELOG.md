@@ -19,6 +19,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     for additional prompts that explain tool name differences)
   - Improve quoting/escaping of arguments in shell executions on Windows (via `oslex` dependency)
   - Add tool parameter alias support, adding `name_path` as an alias for `name_path_pattern` in `find_symbol` tools
+  - Make tool call errors surface explicitly as errors at the MCP protocol level
 
 * Language Servers:
   - `typescript_vts`: Add `initialization_options` setting in `ls_specific_settings.typescript_vts`.
