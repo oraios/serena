@@ -58,7 +58,9 @@ class _DummyAgent:
         return _DummyContext()
 
     def get_active_modes(self):
-        return []
+        # mirror the real SerenaAgent.get_active_modes(), which returns an ActiveModes
+        # instance exposing get_modes(); dashboard._compute_config_overview() calls it
+        return SimpleNamespace(get_modes=lambda include_background_base_modes=False: [])
 
     def get_active_tool_names(self):
         return []
