@@ -69,9 +69,10 @@ class CreateTextFileTool(EditingToolWithDiagnostics):
             if will_overwrite_existing:
                 self.project.validate_relative_path(relative_path, require_not_ignored=True)
             else:
-                assert abs_path.is_relative_to(self.get_project_root()), (
-                    f"Cannot create file outside of the project directory, got {relative_path=}"
-                )
+                # Use the always-on containment guard rather than a bare `assert`, which is
+                # compiled out under `python -O` / PYTHONOPTIMIZE and would otherwise leave the
+                # new-file branch with no path-containment check.
+                self.project.validate_relative_path(relative_path)
 
             # writing the file
             abs_path.parent.mkdir(parents=True, exist_ok=True)
