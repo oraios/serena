@@ -108,6 +108,10 @@ class ClangdLanguageServer(SolidLanguageServer):
         ]
         return super().is_ignored_dirname(dirname) or dirname in ignored_dirs
 
+    def _is_unreal_engine_project(self) -> bool:
+        """:return: whether the repository root contains an Unreal Engine ``.uproject`` file."""
+        return any(pathlib.Path(self.repository_root_path).glob("*.uproject"))
+
     def _prepare_compile_commands(self) -> str | None:
         """
         Prepare clangd compilation database with absolute directory paths.
@@ -128,7 +132,16 @@ class ClangdLanguageServer(SolidLanguageServer):
         compile_db_path = os.path.join(self.repository_root_path, "compile_commands.json")
 
         if not os.path.exists(compile_db_path):
-            # No compile_commands.json, nothing to do
+            # No compile_commands.json. For Unreal Engine projects, surface the setup guide
+            # instead of failing silently (clangd needs the DB to resolve engine code).
+            if self._is_unreal_engine_project():
+                log.warning(
+                    "No compile_commands.json found at %s, but this looks like an Unreal Engine "
+                    "project (.uproject present). clangd needs a compilation database to resolve "
+                    "engine headers and macros. See docs/03-special-guides/"
+                    "unreal_engine_setup_guide_for_serena.md to generate one.",
+                    self.repository_root_path,
+                )
             return None
 
         try:

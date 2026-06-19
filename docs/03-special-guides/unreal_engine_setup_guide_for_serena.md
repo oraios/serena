@@ -21,7 +21,9 @@ file by default; this guide shows how to obtain it.
 ---
 ## Getting a compilation database
 
-Pick one of the following routes.
+If clangd starts in a project that has a `.uproject` file but no `compile_commands.json`,
+Serena logs a warning that points back to this guide. Pick one of the following routes to
+create the database.
 
 ### Route 1: VSCode project files (no extra installs)
 
@@ -47,14 +49,18 @@ toolchain installed on Windows.
 ## Recommended project configuration
 
 Generated reflection code (`*.gen.cpp`, `*.generated.h`) legitimately references your
-functions, so symbol results can include hits inside `Intermediate/`. Exclude UE's
-build artifacts in your project's `.serena/project.yml`:
+functions, so symbol results can include hits inside `Intermediate/`. UE's build
+artifacts are therefore excluded from indexing in your project's `.serena/project.yml`:
 
     ignored_paths:
       - "Intermediate"
       - "Saved"
       - "Binaries"
       - "DerivedDataCache"
+
+When Serena generates the configuration for a project that has a `.uproject` file at its
+root, it adds these entries automatically. Add them by hand only when editing an existing
+`.serena/project.yml`.
 
 ---
 ## Known behavior

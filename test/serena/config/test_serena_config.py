@@ -9,6 +9,7 @@ import pytest
 from serena.agent import SerenaAgent
 from serena.config.serena_config import (
     DEFAULT_PROJECT_SERENA_FOLDER_LOCATION,
+    UNREAL_ENGINE_IGNORED_PATHS,
     LanguageBackend,
     ProjectConfig,
     RegisteredProject,
@@ -137,6 +138,61 @@ class TestProjectConfigAutogenerate:
 
         assert config.project_name == custom_name
         assert config.languages == [Language.TYPESCRIPT]
+
+
+class TestProjectConfigAutogenerateUnreal:
+    """Autogeneration of the Unreal Engine ignored_paths preset (see #1566)."""
+
+    def setup_method(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.serena_config = create_default_serena_config()
+        self.project_path = Path(self.test_dir)
+
+    def teardown_method(self):
+        shutil.rmtree(self.test_dir)
+
+    def test_ue_cpp_project_applies_preset(self):
+        """A C++ project with a .uproject gets the UE build/cache dirs in ignored_paths."""
+        (self.project_path / "MyGame.uproject").write_text("{}")
+        config = ProjectConfig.autogenerate(self.project_path, self.serena_config, languages=[Language.CPP], save_to_disk=False)
+        assert set(UNREAL_ENGINE_IGNORED_PATHS).issubset(set(config.ignored_paths))
+
+    def test_ue_cpp_detected_from_sources_applies_preset(self):
+        """The preset also applies when C++ is auto-detected from source files."""
+        (self.project_path / "main.cpp").write_text("int main() { return 0; }\n")
+        (self.project_path / "MyGame.uproject").write_text("{}")
+        config = ProjectConfig.autogenerate(self.project_path, self.serena_config, save_to_disk=False)
+        assert Language.CPP in config.languages
+        assert set(UNREAL_ENGINE_IGNORED_PATHS).issubset(set(config.ignored_paths))
+
+    def test_uproject_without_cpp_no_preset(self):
+        """A .uproject without any C++ source does not trigger the preset."""
+        (self.project_path / "main.py").write_text("print('hi')\n")
+        (self.project_path / "MyGame.uproject").write_text("{}")
+        config = ProjectConfig.autogenerate(self.project_path, self.serena_config, save_to_disk=False)
+        assert config.languages == [Language.PYTHON]
+        assert config.ignored_paths == []
+
+    def test_cpp_without_uproject_no_preset(self):
+        """A C++ project without a .uproject is left untouched."""
+        config = ProjectConfig.autogenerate(self.project_path, self.serena_config, languages=[Language.CPP], save_to_disk=False)
+        assert config.ignored_paths == []
+
+    def test_ue_preset_persists_to_disk_and_reload(self):
+        """The preset is written to project.yml as valid YAML and survives a reload."""
+        (self.project_path / "MyGame.uproject").write_text("{}")
+        ProjectConfig.autogenerate(self.project_path, self.serena_config, languages=[Language.CPP], save_to_disk=True)
+        reloaded = ProjectConfig.load(self.project_path, self.serena_config)
+        assert set(UNREAL_ENGINE_IGNORED_PATHS).issubset(set(reloaded.ignored_paths))
+
+    def test_existing_config_is_not_modified(self):
+        """Loading an existing project.yml never injects the preset, even for a UE project."""
+        (self.project_path / "MyGame.uproject").write_text("{}")
+        yml_path = Path(self.serena_config.get_project_yml_location(str(self.project_path)))
+        yml_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(PROJECT_TEMPLATE_FILE, yml_path)
+        config = ProjectConfig.load(self.project_path, self.serena_config)
+        assert config.ignored_paths == []
 
 
 class TestProjectConfig:
