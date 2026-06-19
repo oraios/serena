@@ -1022,6 +1022,19 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         config._save()
         return config
 
+    def with_headless_mode_overrides(self) -> "SerenaConfig":
+        """
+        Modifies this instance to apply overrides for headless mode, where any GUI/user interaction-based features are disabled.
+        This is intended to be applied for cases where a `SerenaConfig` instance is needed to instantiate a `SerenaAgent` instance
+        while the user is not expected to interact with the system (e.g. a CLI command or a test).
+
+        :return: the instance with overrides applied for headless mode
+        """
+        self.gui_log_window = False
+        self.web_dashboard = False
+        self.jetbrains_launch_command = None
+        return self
+
     @cached_property
     def project_paths(self) -> list[str]:
         return sorted(str(project.project_root) for project in self.projects)

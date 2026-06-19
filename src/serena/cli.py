@@ -429,8 +429,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         modes_selection_def: ModeSelectionDefinition | None = None
         if modes:
             modes_selection_def = ModeSelectionDefinition(default_modes=modes)
-        serena_config = SerenaConfig.from_config_file()
-        serena_config.web_dashboard = False
+        serena_config = SerenaConfig.from_config_file().with_headless_mode_overrides()
         print(serena_config.default_modes)
         print(serena_config.base_modes)
 
@@ -928,10 +927,8 @@ class ProjectCommands(AutoRegisteringGroup):
 
         logging.configure(level=logging.INFO)
         project_path = os.path.abspath(project)
-        serena_config = SerenaConfig.from_config_file()
+        serena_config = SerenaConfig.from_config_file().with_headless_mode_overrides()
         serena_config.language_backend = LanguageBackend.LSP
-        serena_config.gui_log_window = False
-        serena_config.web_dashboard = False
         proj = Project.load(project_path, serena_config=serena_config)
 
         # Create log file with timestamp
@@ -1113,7 +1110,7 @@ class ToolCommands(AutoRegisteringGroup):
 
         agent = SerenaAgent(
             project=None,
-            serena_config=SerenaConfig(web_dashboard=False, log_level=logging.INFO),
+            serena_config=SerenaConfig(log_level=logging.INFO).with_headless_mode_overrides(),
             context=serena_context,
         )
         tool = agent.get_tool_by_name(tool_name)
