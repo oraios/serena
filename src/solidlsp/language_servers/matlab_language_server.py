@@ -457,6 +457,14 @@ class MatlabLanguageServer(SolidLanguageServer):
         self.server.on_request("workspace/configuration", workspace_configuration_handler)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
+        # The MathWorks server sends server->client "refresh" requests (e.g. after
+        # documentSymbol). If the client replies MethodNotFound, the node server treats
+        # the rejected promise as fatal and exits, killing the LSP on every symbol query.
+        # Acknowledge them with a null result so the server stays alive.
+        self.server.on_request("workspace/semanticTokens/refresh", do_nothing)
+        self.server.on_request("workspace/inlayHint/refresh", do_nothing)
+        self.server.on_request("workspace/diagnostic/refresh", do_nothing)
+        self.server.on_request("workspace/codeLens/refresh", do_nothing)
 
         log.info("Starting MATLAB server process")
         self.server.start()
