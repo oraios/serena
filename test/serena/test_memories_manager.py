@@ -269,6 +269,40 @@ def _write(manager: MemoryManager, name: str, content: str) -> None:
     manager.save_memory(name, content, is_tool_context=False)
 
 
+class TestListMemoriesFollowsSymlinks:
+    """Regression: memories reachable only through a directory symlink (e.g. a monorepo whose
+    ``.serena/memories`` symlinks each submodule's memory folder, making them addressable as
+    ``<submodule>/<name>``) must be listed and readable. ``Path.rglob`` does not descend into
+    symlinked directories before Python 3.13, which silently hid them from ``list_memories``.
+    """
+
+    def test_lists_and_reads_memories_behind_directory_symlink(self, tmp_path) -> None:
+        project_dir = tmp_path / "project" / ".serena"
+        manager = MemoryManager(serena_data_folder=project_dir)
+        _write(manager, "own_memory", "# local")
+
+        # a sibling submodule with its own (possibly nested) memories
+        submodule_memories = tmp_path / "submodule" / ".serena" / "memories"
+        (submodule_memories / "nested").mkdir(parents=True)
+        (submodule_memories / "sub_a.md").write_text("# a", encoding="utf-8")
+        (submodule_memories / "nested" / "sub_b.md").write_text("# b", encoding="utf-8")
+
+        # symlink the submodule's memory dir into the project's memories folder
+        link = project_dir / "memories" / "submodule"
+        try:
+            link.symlink_to(submodule_memories, target_is_directory=True)
+        except (OSError, NotImplementedError) as e:
+            pytest.skip(f"cannot create directory symlinks on this platform/permissions: {e}")
+
+        listed = manager.list_memories().get_full_list()
+        assert "own_memory" in listed
+        assert "submodule/sub_a" in listed
+        assert "submodule/nested/sub_b" in listed
+        # the listed names must round-trip through the read path (which resolves the symlink)
+        assert manager.load_memory("submodule/sub_a") == "# a"
+        assert manager.load_memory("submodule/nested/sub_b") == "# b"
+
+
 class TestValidateReferentialIntegrity:
     def test_clean_report_when_all_references_resolve(self, fs_manager: MemoryManager) -> None:
         _write(fs_manager, "auth", "# auth notes")

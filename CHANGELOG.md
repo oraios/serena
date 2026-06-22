@@ -72,7 +72,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Tray manager: Add NixOS-support for AppIndicator-based trays (e.g., most Wayland-trays) to the package in flake.nix.
   - Fix: Wait for the subprocess that opens the browser window, preventing zombie processes #1488 
 
-Dependencies:
+* Memories:
+  - Make memory iteration follow symbolic links 
+
+* Dependencies:
   - Add dependency `oslex`
 
 # v1.5.3 (2026-05-26)
