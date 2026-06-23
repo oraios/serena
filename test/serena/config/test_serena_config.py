@@ -569,6 +569,51 @@ class TestSerenaConfigFromConfigFileRobustness:
         )
 
 
+class TestGetRegisteredProjectWithDanglingProject:
+    """A registered project whose root directory was deleted (e.g. a removed git
+    worktree) must not break lookup/activation of other, valid projects.
+
+    Reproduces the bug where ``get_registered_project`` iterates over every
+    registered project and ``RegisteredProject.matches_root_path`` raises
+    ``FileNotFoundError`` for the dangling project, aborting the whole lookup.
+    """
+
+    def setup_method(self):
+        self.test_dir = Path(tempfile.mkdtemp())
+
+    def teardown_method(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def _make_project_dir(self, name: str) -> Path:
+        project_dir = self.test_dir / name
+        (project_dir / SERENA_MANAGED_DIR_NAME).mkdir(parents=True)
+        (project_dir / SERENA_MANAGED_DIR_NAME / "project.yml").write_text(
+            f'project_name: "{name}"\nlanguages: ["python"]\n'
+        )
+        return project_dir
+
+    def test_dangling_project_does_not_break_lookup_of_valid_project(self):
+        config = create_default_serena_config()
+        dangling_dir = self._make_project_dir("dangling_project")
+        valid_dir = self._make_project_dir("valid_project")
+
+        # Register the dangling project FIRST so the path-matching loop hits the
+        # deleted directory before reaching the valid project.
+        config.projects = [
+            RegisteredProject.from_project_root(dangling_dir, serena_config=config),
+            RegisteredProject.from_project_root(valid_dir, serena_config=config),
+        ]
+
+        # Delete the dangling project's directory out from under Serena.
+        shutil.rmtree(dangling_dir)
+
+        # Looking up the valid project by path must succeed, not raise
+        # FileNotFoundError on the deleted dangling project's path.
+        result = config.get_registered_project(str(valid_dir))
+        assert result is not None
+        assert result.project_name == "valid_project"
+
+
 class TestMemoriesManagerCustomPath:
     """Tests for MemoriesManager with a custom serena data folder."""
 
