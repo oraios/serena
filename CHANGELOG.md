@@ -26,11 +26,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     code (`UCLASS`, `UFUNCTION`, `UPROPERTY`, `GENERATED_BODY`) yields correct symbols,
     references, definitions, and rename edits in hand-written sources (never in
     UHT-generated files); add an Unreal Engine setup guide.
-  - C/C++ (clangd): detect Unreal Engine projects by a `.uproject` file at the project
-    root and apply a default `ignored_paths` preset (`Binaries`, `DerivedDataCache`,
-    `Intermediate`, `Saved`) when autogenerating their configuration. When clangd starts
-    in such a project without a `compile_commands.json`, Serena logs a warning that points
-    to the Unreal Engine setup guide. #1566
+  - C/C++ (clangd, ccls): detect Unreal Engine projects by a `.uproject` file at the project
+    root and skip the engine build/cache directories (`Binaries`, `DerivedDataCache`,
+    `Intermediate`, `Saved`) during indexing. clangd fails with a pointer to the Unreal Engine
+    setup guide when started in such a project without a `compile_commands.json`. #1566
   - `typescript_vts`: Add `initialization_options` setting in `ls_specific_settings.typescript_vts`.
     The dict is forwarded to vtsls via `initializationOptions`, `workspace/didChangeConfiguration`,
     and `workspace/configuration` pulls. Enables Yarn PnP setups with `typescript.tsdk` pointing

@@ -11,17 +11,18 @@ from overrides import override
 
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, ProcessLaunchInfo, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
-from .common import RuntimeDependency, RuntimeDependencyCollection
+from .common import RuntimeDependency, RuntimeDependencyCollection, UnrealEngineIgnoreMixin, is_unreal_engine_project
 
 log = logging.getLogger(__name__)
 
 CLANGD_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
 
 
-class ClangdLanguageServer(SolidLanguageServer):
+class ClangdLanguageServer(UnrealEngineIgnoreMixin, SolidLanguageServer):
     """
     Provides C/C++ specific instantiation of the LanguageServer class. Contains various configurations and settings specific to C/C++.
     As the project gets bigger in size, building index will take time. Try running clangd multiple times to ensure index is built properly.
@@ -103,14 +104,9 @@ class ClangdLanguageServer(SolidLanguageServer):
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
-        ignored_dirs = [
-            ".ccls-cache",
-        ]
-        return super().is_ignored_dirname(dirname) or dirname in ignored_dirs
-
-    def _is_unreal_engine_project(self) -> bool:
-        """:return: whether the repository root contains an Unreal Engine ``.uproject`` file."""
-        return any(pathlib.Path(self.repository_root_path).glob("*.uproject"))
+        if super().is_ignored_dirname(dirname) or dirname == ".ccls-cache":
+            return True
+        return dirname in self._unreal_engine_ignored_dirnames
 
     def _prepare_compile_commands(self) -> str | None:
         """
@@ -132,15 +128,13 @@ class ClangdLanguageServer(SolidLanguageServer):
         compile_db_path = os.path.join(self.repository_root_path, "compile_commands.json")
 
         if not os.path.exists(compile_db_path):
-            # No compile_commands.json. For Unreal Engine projects, surface the setup guide
-            # instead of failing silently (clangd needs the DB to resolve engine code).
-            if self._is_unreal_engine_project():
-                log.warning(
-                    "No compile_commands.json found at %s, but this looks like an Unreal Engine "
-                    "project (.uproject present). clangd needs a compilation database to resolve "
+            # clangd can't resolve UE engine headers without the database; fail with guidance.
+            if is_unreal_engine_project(self.repository_root_path):
+                raise SolidLSPException(
+                    f"No compile_commands.json found at {self.repository_root_path}, but this looks like an "
+                    "Unreal Engine project (.uproject present). clangd needs a compilation database to resolve "
                     "engine headers and macros. See docs/03-special-guides/"
-                    "unreal_engine_setup_guide_for_serena.md to generate one.",
-                    self.repository_root_path,
+                    "unreal_engine_setup_guide_for_serena.md to generate one."
                 )
             return None
 

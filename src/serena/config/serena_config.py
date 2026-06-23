@@ -297,15 +297,6 @@ Uses $projectDir and $projectFolderName as placeholders.
 """
 
 
-UNREAL_ENGINE_IGNORED_PATHS = ["Binaries", "DerivedDataCache", "Intermediate", "Saved"]
-"""
-Build and cache directories created by Unreal Engine. Applied to a C++ project's
-``ignored_paths`` at autogeneration time when a ``.uproject`` file is present, so that
-symbol indexing skips generated artifacts. Matched gitignore-style, so the bare names
-also cover per-plugin and per-module copies (e.g. ``Plugins/Foo/Intermediate``).
-"""
-
-
 @dataclass(kw_only=True)
 class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
     project_name: str
@@ -408,19 +399,6 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
             config_with_comments, _ = cls._load_yaml_dict(PROJECT_TEMPLATE_FILE)
             config_with_comments["project_name"] = project_name
             config_with_comments["languages"] = languages_to_use
-
-            # Apply the UE ignored_paths preset for C++ projects with a .uproject (#1566);
-            # only at autogeneration time, so an existing project.yml is never modified.
-            cpp_language_values = {Language.CPP.value, Language.CPP_CCLS.value}
-            if any(lang in cpp_language_values for lang in languages_to_use) and any(project_root.glob("*.uproject")):
-                ue_ignored = config_with_comments.get("ignored_paths")
-                if ue_ignored is None:
-                    ue_ignored = []
-                    config_with_comments["ignored_paths"] = ue_ignored
-                for path in UNREAL_ENGINE_IGNORED_PATHS:
-                    if path not in ue_ignored:
-                        ue_ignored.append(path)
-                log.info("Detected Unreal Engine project (.uproject present); applying UE ignored_paths preset.")
 
             if save_to_disk:
                 project_yml_path = serena_config.get_project_yml_location(str(project_root))
