@@ -22,6 +22,7 @@ class HookClient(Enum):
     """The client application that triggered the hook."""
 
     CLAUDE_CODE = "claude-code"
+    CODEBUDDY = "codebuddy"
     VSCODE = "vscode"
     CODEX = "codex"
 
@@ -361,7 +362,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             self._file_path = str(file_path).strip() or None
 
     def is_grep_call(self) -> bool:
-        if self._client == HookClient.CLAUDE_CODE:
+        if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
             return self._tool_name == "grep" or "search_for_pattern" in self._tool_name
         if self._client == HookClient.CODEX and self._is_shell_command_call():
             return self._command_name in self._GREP_SHELL_COMMANDS
@@ -369,7 +370,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         return "grep" in self._tool_name
 
     def is_read_call(self) -> bool:
-        if self._client == HookClient.CLAUDE_CODE:
+        if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
             return self._tool_name == "read" or "read_file" in self._tool_name
         if self._client == HookClient.CODEX and self._is_shell_command_call():
             return self._command_name in self._READ_SHELL_COMMANDS

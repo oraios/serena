@@ -525,6 +525,93 @@ You will have to prompt Antigravity's agent to "Activate the current project usi
 Unlike VSCode, Antigravity does not currently support including the working directory in the MCP configuration.
 Also, the current client will be shown as `none` in Serena's dashboard (Antigravity currently does not fully support the MCP specifications). This is not a problem, all tools will work as expected.
 
+## CodeBuddy
+
+Serena provides native support for CodeBuddy, a CLI coding agent that shares a similar architecture with Claude Code.
+To set up the Serena MCP server for CodeBuddy, simply run:
+
+    serena setup codebuddy
+
+### Manual Setup
+
+**Global Configuration**. To add the Serena MCP server for all your projects, use the user-level configuration of CodeBuddy and the `--project-from-cwd` flag:
+
+```bash
+codebuddy mcp add --scope user serena -- serena start-mcp-server --context codebuddy --project-from-cwd
+```
+
+**Project-Level Configuration**. To add the Serena MCP server for a single project only:
+
+```bash
+codebuddy mcp add serena -- serena start-mcp-server --context codebuddy --project "$(pwd)"
+```
+
+Confirm that CodeBuddy is connected to Serena by running the `/mcp` command and reconnecting if necessary.
+
+### Hooks
+
+CodeBuddy supports the same hook system as Claude Code. To set up hooks, add the following to your CodeBuddy settings file (`.codebuddy/settings.json` in your project directory, or `~/.codebuddy/settings.json` globally):
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "serena-hooks remind --client=codebuddy"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "serena-hooks auto-approve --client=codebuddy"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "serena-hooks activate --client=codebuddy"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "serena-hooks cleanup --client=codebuddy"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Hook Descriptions
+
+- **`remind`**: Remind the agent to use Serena's tools instead of built-in `grep` and `read` tools.
+- **`activate`**: Prompt the agent to activate the project at session start and read Serena's instructions.
+- **`cleanup`**: Clean up hook session data when the session ends.
+- **`auto-approve`**: Auto-approve Serena tool calls whenever CodeBuddy is in a permissive
+  permission mode (`acceptEdits` or `auto`), so blanket approvals cover Serena's destructive
+  tools (e.g. `replace_symbol_body`, `rename_symbol`) instead of prompting on every call.
+
 ## Other Clients
 
 For other clients, follow the [general instructions](#clients-general-instructions) above to set up Serena as an MCP server.
@@ -536,8 +623,9 @@ There are many terminal-based coding assistants that support MCP servers, such a
  * [Gemini-CLI](https://github.com/google-gemini/gemini-cli), 
  * [Qwen3-Coder](https://github.com/QwenLM/Qwen3-Coder),
  * [rovodev](https://community.atlassian.com/forums/Rovo-for-Software-Teams-Beta/Introducing-Rovo-Dev-CLI-AI-Powered-Development-in-your-terminal/ba-p/3043623),
- * [OpenHands CLI](https://docs.all-hands.dev/usage/how-to/cli-mode) and
- * [opencode](https://github.com/sst/opencode).
+ * [OpenHands CLI](https://docs.all-hands.dev/usage/how-to/cli-mode),
+ * [opencode](https://github.com/sst/opencode) and
+ * [CodeBuddy-Code](https://www.codebuddy.cn/cli/).
 
 They generally benefit from the symbolic tools provided by Serena. You might want to customize some aspects of Serena
 by writing your own context, modes or prompts to adjust it to the client's respective internal capabilities (and your general workflow).
