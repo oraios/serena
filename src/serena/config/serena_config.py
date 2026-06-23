@@ -705,9 +705,14 @@ class RegisteredProject(ToStringMixin):
         Check if the given path matches the project root path.
 
         :param path: the path to check
-        :return: True if the path matches the project root, False otherwise
+        :return: True if the path matches the project root, False otherwise (including the case
+            where this project's root directory no longer exists, e.g. a removed git worktree)
         """
-        return self.project_root.samefile(Path(path).resolve())
+        try:
+            return self.project_root.samefile(Path(path).resolve())
+        except OSError:
+            # typically raised if the path does not exist (e.g., a removed git worktree)
+            return False
 
     def get_project_instance(self, serena_config: "SerenaConfig") -> "Project":
         """
