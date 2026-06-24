@@ -39,6 +39,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     so they can no longer inherit and clobber Serena's stdin, which is the JSON-RPC pipe under the stdio
     transport. #1577
   - Improve quoting of arguments in shell executions
+  - `typescript` / `typescript_vts`: No longer ignore directories named `coverage`. This was intended to skip
+    coverage-report output, but matched by bare dirname and so also hid legitimate source directories named
+    `coverage` (e.g. `src/routes/coverage/`) from symbol tools. Generated report dirs are already covered by
+    gitignore. Fixes #1523.
 
 * JetBrains:
   - Add configuration option `jetbrains_launch_command`, allowing Serena to spawn IDE instances automatically
