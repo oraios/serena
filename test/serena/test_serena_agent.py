@@ -758,7 +758,7 @@ SAFE_DELETE_SUCCEEDS_CASES = [
 
 @pytest.fixture
 def serena_config():
-    config = SerenaConfig(gui_log_window=False, web_dashboard=False, log_level=logging.ERROR)
+    config = SerenaConfig(log_level=logging.ERROR).with_headless_mode_overrides()
 
     # Create test projects for all supported languages
     test_projects = []
@@ -867,7 +867,7 @@ class TestSerenaAgent:
           * an invalid project path is specified at startup
         All cases must not raise an exception.
         """
-        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False)
+        serena_config = SerenaConfig().with_headless_mode_overrides()
         SerenaAgent(project=project, serena_config=serena_config)
 
     def _symbol_matches_expected_name(self, symbol: dict, expected_name: str) -> bool:
