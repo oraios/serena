@@ -324,7 +324,12 @@ class LanguageServerDependencyProviderSinglePath(LanguageServerDependencyProvide
             core_path = path
         else:
             core_path = self._get_or_install_core_dependency()
-        return self._create_launch_command(core_path)
+        ls_args: list[str] | None = self._custom_settings.get("ls_args", None)
+        if ls_args is not None:
+            return [core_path] + ls_args
+        cmd = self._create_launch_command(core_path)
+        ls_extra_args: list[str] = self._custom_settings.get("ls_extra_args", [])
+        return cmd + ls_extra_args
 
     @abstractmethod
     def _create_launch_command(self, core_path: str) -> list[str]:
