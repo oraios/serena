@@ -160,7 +160,12 @@ class LanguageServerManager:
         return None
 
     def get_language_server(self, relative_path: str) -> SolidLanguageServer:
-        """:param relative_path: relative path to a file"""
+        """Routes a file to the appropriate language server based on file extension.
+
+        When multiple language servers are configured, finds the first one whose
+        language supports the given file's extension. Falls back to the default
+        language server if no match is found.
+        """
         ls: SolidLanguageServer | None = None
         if len(self._language_servers) > 1:
             if os.path.isdir(relative_path):
