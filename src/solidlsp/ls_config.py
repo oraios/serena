@@ -350,6 +350,11 @@ class Language(str, Enum):
                     # OpenCL
                     ".cl",
                     ".clcpp",
+                    # Arduino sketch: not in clang's extension table, but it is C++.
+                    # Routing it here lets clangd serve symbols; the project must
+                    # tell clangd it is C++ (a .clangd with CompileFlags Add: [-xc++],
+                    # or a compile DB), since the clang driver can't infer a job from .ino.
+                    ".ino",
                     case_sensitive=False,
                 )
             case self.CPP_CCLS:
@@ -375,6 +380,8 @@ class Language(str, Enum):
                     # Objective-C
                     ".m",
                     ".mm",
+                    # Arduino sketch (C++); see note in the CPP case above.
+                    ".ino",
                     case_sensitive=False,
                 )
             case self.KOTLIN:
