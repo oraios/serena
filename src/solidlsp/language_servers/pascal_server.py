@@ -177,6 +177,12 @@ class PascalLanguageServer(SolidLanguageServer):
         )
         self.server_ready = threading.Event()
 
+        # Generic pass-through of LSP initializationOptions, mirroring how editor
+        # LSP clients (Sublime LSP, VSCode) let users forward arbitrary options to
+        # pasls -- e.g. fpcOptions for third-party unit/include search paths such
+        # as mORMot. Configured via ls_specific_settings["pascal"]["initializationOptions"].
+        self._init_options_override: dict = pascal_settings.get("initializationOptions", {}) or {}
+
     # ============== Metadata Directory Management ==============
 
     @classmethod
@@ -777,8 +783,7 @@ class PascalLanguageServer(SolidLanguageServer):
         log.info(f"Using pasls at: {pasls_executable_path}")
         return quote_windows_path(pasls_executable_path)
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
         """
         Returns the initialize params for the Pascal Language Server.
 
@@ -812,6 +817,13 @@ class PascalLanguageServer(SolidLanguageServer):
                 "showSyntaxErrors": True,
             }
         )
+
+        # User-provided initializationOptions take precedence and may carry
+        # arbitrary pasls options (e.g. fpcOptions for extra unit/include search
+        # paths). This makes Serena forward initializationOptions like other LSP
+        # clients (Sublime LSP, VSCode) instead of only a hard-coded subset.
+        if self._init_options_override:
+            initialization_options.update(self._init_options_override)
 
         initialize_params = {
             "locale": "en",
