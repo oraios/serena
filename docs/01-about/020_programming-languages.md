@@ -97,6 +97,10 @@ Some languages require additional installations or setup steps, as noted.
 * **Julia**
 * **Kotlin**  
   (uses the pre-alpha [official kotlin LS](https://github.com/Kotlin/kotlin-lsp), some issues may appear)
+* **LaTeX**  
+  (experimental; must be explicitly enabled via language `latex`; uses [texlab](https://github.com/latex-lsp/texlab),
+  auto-downloaded as a SHA-256-verified prebuilt binary; supports `.tex`, `.bib`, `.sty`, and `.cls` files; texlab is
+  GPL-3.0 and runs as a separate downloaded process)
 * **Lean 4**  
   (requires `lean` and `lake` installed via [elan](https://github.com/leanprover/elan); uses the built-in Lean 4 LSP;
   the project must be a Lake project with `lake build` run before use)
