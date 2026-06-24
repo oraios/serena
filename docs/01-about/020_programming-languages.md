@@ -117,7 +117,8 @@ Some languages require additional installations or setup steps, as noted.
   (requires installation of Perl::LanguageServer)
 * **PHP**  
   (by default, uses the Intelephense language server (language `php`), set `INTELEPHENSE_LICENSE_KEY` environment variable for premium features;
-  we also support [Phpactor](https://github.com/phpactor/phpactor) (language `php_phpactor`), which requires PHP 8.1+)
+  we also support [Phpactor](https://github.com/phpactor/phpactor) (language `php_phpactor`), which requires PHP 8.1+;
+  and the experimental [PHPantom](https://github.com/PHPantom-dev/phpantom_lsp) backend (language `php_phpantom`)
 * **Python**
 * **R**  
   (requires installation of the `languageserver` R package)

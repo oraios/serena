@@ -28,6 +28,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     The dict is forwarded to vtsls via `initializationOptions`, `workspace/didChangeConfiguration`,
     and `workspace/configuration` pulls. Enables Yarn PnP setups with `typescript.tsdk` pointing
     at the Yarn-generated SDK.
+  - Add experimental PHP backend `php_phpantom` using `PHPantom-dev/phpantom_lsp`.
   - `SvelteLanguageServer`: Fix diagnostics requests for TypeScript/JavaScript files incorrectly being
     processed by the Svelte LS instead of the TypeScript LS.
   - `SvelteLanguageServer`: Fix document-symbol requests for TypeScript/JavaScript files returning empty

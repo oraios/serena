@@ -41,6 +41,7 @@ class LanguageParamRequest:
 _LANGUAGE_REPO_ALIASES: dict[Language, Language] = {
     Language.CPP_CCLS: Language.CPP,
     Language.PHP_PHPACTOR: Language.PHP,
+    Language.PHP_PHPANTOM: Language.PHP,
     Language.PYTHON_JEDI: Language.PYTHON,
     Language.PYTHON_TY: Language.PYTHON,
     Language.RUBY_SOLARGRAPH: Language.RUBY,
@@ -259,6 +260,7 @@ _LANGUAGE_PYTEST_MARKERS: dict[Language, list[MarkDecorator | Mark]] = {
     Language.MSL: [pytest.mark.msl],
     Language.PHP: [pytest.mark.php],
     Language.PHP_PHPACTOR: [pytest.mark.php],
+    Language.PHP_PHPANTOM: [pytest.mark.php],
     Language.POWERSHELL: [pytest.mark.powershell],
     Language.PYTHON: [pytest.mark.python],
     Language.PYTHON_JEDI: [pytest.mark.python],
@@ -318,6 +320,7 @@ def _determine_disabled_languages() -> list[Language]:
     php_tests_enabled = _sh.which("php") is not None
     if not php_tests_enabled:
         result.append(Language.PHP_PHPACTOR)
+        result.append(Language.PHP_PHPANTOM)
 
     al_tests_enabled = True
     if not al_tests_enabled:
