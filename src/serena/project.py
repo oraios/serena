@@ -268,7 +268,7 @@ class Project(ToStringMixin):
         path = os.path.normpath(path)
 
         try:
-            return os.path.commonpath([self.project_root, path]) == self.project_root
+            return os.path.commonpath([self.project_root, path]) == os.path.normpath(self.project_root)
         except ValueError:
             # occurs, in particular, if paths are on different drives on Windows
             return False
@@ -295,7 +295,10 @@ class Project(ToStringMixin):
         :param require_not_ignored: if True, the path must not be ignored according to the project's ignore settings
         """
         if not self.is_path_in_project(relative_path):
-            raise ValueError(f"{relative_path=} points to path outside of the repository root; cannot access for safety reasons")
+            raise ValueError(
+                f"{relative_path=} points to path outside of the repository root "
+                f"(project root: {self.project_root}); please use a path relative to the project root"
+            )
 
         if require_not_ignored:
             if self.is_ignored_path(relative_path):
