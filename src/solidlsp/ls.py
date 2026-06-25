@@ -1258,8 +1258,10 @@ class SolidLanguageServer(ABC):
     @contextmanager
     def start_server_context(self) -> Iterator["SolidLanguageServer"]:
         self.start()
-        yield self
-        self.stop()
+        try:
+            yield self
+        finally:
+            self.stop()
 
     @abstractmethod
     def _start_server(self) -> None:
@@ -1307,8 +1309,6 @@ class SolidLanguageServer(ABC):
             fb.ref_count += 1
             if open_in_ls:
                 fb.ensure_open_in_ls()
-            yield fb
-            fb.ref_count -= 1
         else:
             version = 0
             language_id = self._get_language_id_for_file(relative_file_path)
@@ -1323,12 +1323,14 @@ class SolidLanguageServer(ABC):
                 open_in_ls=open_in_ls,
             )
             self.open_file_buffers[uri] = fb
-            yield fb
-            fb.ref_count -= 1
 
-        if self.open_file_buffers[uri].ref_count == 0:
-            self.open_file_buffers[uri].close()
-            del self.open_file_buffers[uri]
+        try:
+            yield fb
+        finally:
+            fb.ref_count -= 1
+            if fb.ref_count == 0:
+                fb.close()
+                del self.open_file_buffers[uri]
 
     @contextmanager
     def _open_file_context(
