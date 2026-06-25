@@ -55,7 +55,8 @@ Some languages require additional installations or setup steps, as noted.
 * **C/C++**  
   (by default, uses the clangd language server (language `cpp`) but we also support ccls (language `cpp_ccls`);
   for best results, provide a `compile_commands.json` at the repository root;
-  see the [C/C++ Setup Guide](../03-special-guides/cpp_setup) for details.)
+  see the [C/C++ Setup Guide](../03-special-guides/cpp_setup) for details;
+  for Unreal Engine 5 projects, see the [Unreal Engine Setup Guide](../03-special-guides/unreal_engine_setup_guide_for_serena).)
 * **Clojure**
 * **Crystal**  
   (requires [Crystalline](https://github.com/elbywan/crystalline) language server to be installed and available on PATH;
