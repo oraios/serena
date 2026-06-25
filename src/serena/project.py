@@ -285,17 +285,15 @@ class Project(ToStringMixin):
 
     def validate_relative_path(self, relative_path: str, require_not_ignored: bool = False) -> None:
         """
-        Validates that the given relative path is safe to read or edit,
-        meaning it's inside the project directory and not ignored.
-
-        Non-existent paths are allowed (not considered ignored) to support
-        editing tools that create new files.
+        Validates that the given relative path is within the project directory
+        (and, optionally, not ignored according to the project's ignore settings),
+        raising a ValueError if the validation fails.
 
         :param relative_path: the path to validate, relative to the project root
         :param require_not_ignored: if True, the path must not be ignored according to the project's ignore settings
         """
         if not self.is_path_in_project(relative_path):
-            raise ValueError(f"{relative_path=} points to path outside of the repository root; cannot access for safety reasons")
+            raise ValueError(f"{relative_path=} points outside the project root ({self.project_root})")
 
         if require_not_ignored:
             if self.is_ignored_path(relative_path):
