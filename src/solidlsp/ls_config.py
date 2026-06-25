@@ -21,6 +21,11 @@ class FilenameMatcher:
         self._file_extensions = list(set(file_extensions)) if case_sensitive else list(set(ext.lower() for ext in file_extensions))
         self._case_sensitive = case_sensitive
 
+    @property
+    def file_extensions(self) -> list[str]:
+        """:return: the relevant file extensions (or filename suffixes), sorted alphabetically"""
+        return sorted(self._file_extensions)
+
     def is_relevant_filename(self, fn: str) -> bool:
         if not self._case_sensitive:
             fn = fn.lower()
@@ -520,6 +525,10 @@ class Language(str, Enum):
                 return FilenameMatcher(*path_patterns)
             case _:
                 raise ValueError(f"Unhandled language: {self}")
+
+    def get_source_file_extensions(self) -> list[str]:
+        """:return: the source file extensions (or filename suffixes) associated with the language, sorted alphabetically"""
+        return self.get_source_fn_matcher().file_extensions
 
     def get_ls_class(self) -> type["SolidLanguageServer"]:
         match self:

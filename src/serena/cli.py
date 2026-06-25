@@ -1512,11 +1512,39 @@ class PromptCommands(AutoRegisteringGroup):
     @staticmethod
     @click.command(
         "print-cc-system-prompt-override",
-        help="To be used specifically in Claude Code as value for `--system-prompt`",
+        help="To be used specifically in Claude Code as value for `--system-prompt`. "
+        "The tool mapping reflects the configured language backend; pass --project to apply a "
+        "project's backend override (e.g. JetBrains), otherwise the global configuration is used.",
         context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
     )
-    def print_cc_system_prompt_override() -> None:
-        click.echo(SerenaPromptFactory().create_cc_system_prompt_override())
+    @click.option(
+        "--project",
+        "project",
+        type=click.Path(exists=True, file_okay=False),
+        default=None,
+        help="project directory whose configured language backend should determine the tool mapping",
+    )
+    def print_cc_system_prompt_override(project: str | None) -> None:
+        from serena.agent import SerenaAgent
+
+        serena_config = SerenaConfig.from_config_file()
+
+        # resolve the effective language backend: project override (if any) takes precedence over the global one
+        language_backend = serena_config.language_backend
+        if project is not None:
+            try:
+                project_config = ProjectConfig.load(os.path.abspath(project), serena_config)
+            except FileNotFoundError:
+                project_config = None
+            if project_config is not None and project_config.language_backend is not None:
+                language_backend = project_config.language_backend
+
+        click.echo(
+            SerenaPromptFactory().create_cc_system_prompt_override(
+                jetbrains_backend=language_backend.is_jetbrains(),
+                tool_names=SerenaAgent.create_prompt_tool_names_mapping(language_backend),
+            )
+        )
 
 
 _mode = ModeCommands()

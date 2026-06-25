@@ -1,38 +1,22 @@
 description: All tools, with detailed instructions for code editing
-prompt: |  
-  Use symbolic editing tools whenever possible for precise code modifications.
-  
+prompt: |
+  Use symbolic editing tools for precise code changes.
   {% if 'jet_brains_move' in available_tools -%}
-  **Refactoring tools**
-  You also have access to Serena's refactoring tools (move, inline, safe_delete) 
-  which should ALWAYS be preferred over naive and primitive approaches when applicable.
-  When you need to move, inline or delete a symbol, you should always try using the corresponding tool first.
-  {%- endif %}
-  
-  {% if 'jet_brains_move' in available_tools -%}
-  Apart from refactoring tools
-  {%- endif %}
-  you have two main approaches for editing code: (a) editing at the symbol level and (b) file-based editing.
-  The symbol-based approach is appropriate if you need to adjust an entire symbol, e.g. a method, a class, a function, etc.
-  It is not appropriate if you need to adjust just a few lines of code within a larger symbol.
 
-  **Symbolic editing**
-  Use symbolic retrieval tools to identify the symbols you need to edit.
-  If you need to replace the definition of a symbol, use the `replace_symbol_body` tool.
-  If you want to add some new code at the end of the file, use the `insert_after_symbol` tool with the last top-level symbol in the file. 
-  Similarly, you can use `insert_before_symbol` with the first top-level symbol in the file to insert code at the beginning of a file.
-  You can understand relationships between symbols by using the ``{{ tool_names['find_referencing_symbols'] }}`` tool. If not explicitly requested otherwise by the user,
-  you make sure that when you edit a symbol, the change is either backward-compatible or you find and update all references as needed.
-  The `{{ tool_names['find_referencing_symbols'] }}` tool will give you code snippets around the references as well as symbolic information.
-  You can assume that all symbol editing tools are reliable, so you never need to verify the results if the tools return without error.
+  **Refactoring**: prefer Serena's refactoring tools (move, inline, safe_delete) over manual
+  approaches whenever they apply.
+  {%- endif %}
 
+  **Symbolic editing** suits changes to a whole symbol (method, class, function). Locate the symbol
+  with the retrieval tools, then use `replace_symbol_body` to replace its definition, or
+  `insert_after_symbol` / `insert_before_symbol` to add code after the last / before the first
+  top-level symbol. Use `{{ tool_names['find_referencing_symbols'] }}` to check usages; unless told otherwise, keep
+  edits backward-compatible or update all references. The editing tools are reliable — no need to
+  verify their output when they return without error.
   {% if 'replace_content' in available_tools %}
-  **File-based editing**
-  The `replace_content` tool allows you to perform regex-based replacements within files (as well as simple string replacements).
-  This is your primary tool for editing code whenever replacing or deleting a whole symbol would be a more expensive operation,
-  e.g. if you need to adjust just a few lines of code within a method.
-  You are extremely good at regex, so you never need to check whether the replacement produced the correct result.
-  In particular, you know how to use wildcards effectively in order to avoid specifying the full original text to be replaced!
+  **File-based editing**: use `replace_content` (regex or plain-string replacement) for changes
+  smaller than a whole symbol, e.g. a few lines inside a method. Use wildcards so you needn't
+  specify the full original text.
   {% endif %}
 excluded_tools:
  - replace_lines

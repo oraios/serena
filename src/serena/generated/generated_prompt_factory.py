@@ -49,5 +49,5 @@ class PromptFactory(PromptFactoryBase):
     def get_cc_system_prompt_override_template_string(self) -> str:
         return self.get_prompt_template_string("cc_system_prompt_override")
 
-    def create_cc_system_prompt_override(self) -> str:
+    def create_cc_system_prompt_override(self, *, jetbrains_backend: Any, tool_names: Any) -> str:
         return self._render_prompt("cc_system_prompt_override", locals())

@@ -648,7 +648,7 @@ class SerenaAgent:
             log.info(f"Using language backend from global configuration: {self._language_backend.name}")
 
         # create the tool names mapping for prompts
-        self._prompt_tool_names_mapping = self._create_prompt_tool_names_mapping(self._language_backend)
+        self._prompt_tool_names_mapping = self.create_prompt_tool_names_mapping(self._language_backend)
 
         # create executor for starting the language server and running tools in another thread
         # This executor is used to achieve linear task execution
@@ -931,7 +931,7 @@ class SerenaAgent:
         return self._active_modes
 
     @staticmethod
-    def _create_prompt_tool_names_mapping(language_backend: LanguageBackend) -> dict[str, str]:
+    def create_prompt_tool_names_mapping(language_backend: LanguageBackend) -> dict[str, str]:
         """
         Creates a mapping from tool names to new tool names, which take into consideration
 
@@ -1029,9 +1029,11 @@ class SerenaAgent:
         else:
             msg = f"The project with name '{proj.project_name}' at {proj.project_root} is activated."
         if self._language_backend == LanguageBackend.LSP:
-            languages_str = ", ".join([lang.value for lang in proj.project_config.languages])
+            languages_str = ", ".join(lang.value for lang in proj.project_config.languages)
+            file_types = sorted({ext for lang in proj.project_config.languages for ext in lang.get_source_file_extensions()})
             msg += f"\nProgramming languages: {languages_str}."
-        msg += f"File encoding: {proj.project_config.encoding}."
+            msg += f"\nSupported file types: {', '.join(file_types)}."
+        msg += f"\nFile encoding: {proj.project_config.encoding}."
 
         # add list of memories (if memories are enabled)
         include_memories = self._active_tools.contains_tool_class(ReadMemoryTool)
