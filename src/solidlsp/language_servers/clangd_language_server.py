@@ -111,6 +111,27 @@ class ClangdLanguageServer(SolidLanguageServer):
             or (is_unreal_engine_project(self.repository_root_path) and dirname in UE_IGNORED_DIRNAMES)
         )
 
+    def _raise_if_unreal_without_compile_db(self) -> None:
+        """Raise if this is an Unreal Engine project without a usable compilation database.
+
+        clangd cannot resolve engine headers or macros without one. Non-UE projects return
+        without raising, since clangd works without a database there.
+        """
+        if not is_unreal_engine_project(self.repository_root_path):
+            return
+        raise SolidLSPException(
+            f"No usable compile_commands.json at {self.repository_root_path}, but this looks like an "
+            "Unreal Engine project (.uproject present). clangd needs a non-empty compilation database "
+            "to resolve engine headers and macros.\n\n"
+            "Generate one from the engine's <Engine>\\Binaries\\DotNET\\UnrealBuildTool\\ directory:\n"
+            '  UnrealBuildTool.exe -mode=GenerateClangDatabase -project="<Proj>.uproject" '
+            '<Proj>Editor Win64 Development -OutputDir="<projectDir>"\n'
+            "Without a clang toolchain, append -Compiler=VisualStudio2022 to build an MSVC database instead.\n\n"
+            "Build the editor target once first so the generated headers exist. After creating the "
+            "database, reconnect or restart Serena's MCP so the language server re-checks for it.\n"
+            "See docs/03-special-guides/unreal_engine_setup_guide_for_serena.md for details."
+        )
+
     def _prepare_compile_commands(self) -> str | None:
         """
         Prepare clangd compilation database with absolute directory paths.
@@ -132,13 +153,7 @@ class ClangdLanguageServer(SolidLanguageServer):
 
         if not os.path.exists(compile_db_path):
             # clangd can't resolve UE engine headers without the database; fail with guidance.
-            if is_unreal_engine_project(self.repository_root_path):
-                raise SolidLSPException(
-                    f"No compile_commands.json found at {self.repository_root_path}, but this looks like an "
-                    "Unreal Engine project (.uproject present). clangd needs a compilation database to resolve "
-                    "engine headers and macros. See docs/03-special-guides/"
-                    "unreal_engine_setup_guide_for_serena.md to generate one."
-                )
+            self._raise_if_unreal_without_compile_db()
             return None
 
         try:
@@ -146,6 +161,8 @@ class ClangdLanguageServer(SolidLanguageServer):
                 compile_commands = json.load(f)
 
             if not compile_commands:
+                # An empty [] database is treated like a missing one.
+                self._raise_if_unreal_without_compile_db()
                 return None
 
             # Check if any entries have relative directory paths

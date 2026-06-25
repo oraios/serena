@@ -43,6 +43,21 @@ def test_missing_compile_commands_returns_none_for_non_unreal_project(tmp_path):
     assert server._prepare_compile_commands() is None
 
 
+def test_empty_compile_commands_raises_for_unreal_project(tmp_path):
+    (tmp_path / "MyGame.uproject").write_text("{}")
+    (tmp_path / "compile_commands.json").write_text("[]")
+    server = _make_clangd(tmp_path)
+
+    with pytest.raises(SolidLSPException, match="Unreal Engine"):
+        server._prepare_compile_commands()
+
+
+def test_empty_compile_commands_returns_none_for_non_unreal_project(tmp_path):
+    (tmp_path / "compile_commands.json").write_text("[]")
+    server = _make_clangd(tmp_path)
+    assert server._prepare_compile_commands() is None
+
+
 @pytest.mark.parametrize("make_server", [_make_clangd, _make_ccls])
 def test_unreal_dirs_ignored_only_for_unreal_project(make_server, tmp_path):
     non_ue = make_server(tmp_path)
