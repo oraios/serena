@@ -337,6 +337,7 @@ markers = [
   "fsharp: language server running for F#",
   "rego: language server running for Rego",
   "markdown: language server running for Markdown",
+  "latex: language server running for LaTeX",
   "julia: Julia language server tests",
   "fortran: language server running for Fortran",
   "haskell: Haskell language server tests",

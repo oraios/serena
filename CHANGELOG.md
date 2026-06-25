@@ -39,6 +39,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     so they can no longer inherit and clobber Serena's stdin, which is the JSON-RPC pipe under the stdio
     transport. #1577
   - Improve quoting of arguments in shell executions
+  - Add **LaTeX** support (experimental) via [texlab](https://github.com/latex-lsp/texlab). Auto-downloads a
+    SHA-256-verified prebuilt texlab binary (osx-arm64/x64, linux-arm64/x64, win-x64); covers `.tex`, `.bib`,
+    `.sty`, and `.cls` files. Provides sectioning document symbols (including beamer frames), label/citation
+    definitions, and `\ref`/`\cite` references. Must be explicitly enabled via language `latex`. texlab is
+    GPL-3.0 and runs as a separate downloaded process.
 
 * JetBrains:
   - Add configuration option `jetbrains_launch_command`, allowing Serena to spawn IDE instances automatically
