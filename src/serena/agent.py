@@ -1201,16 +1201,35 @@ class SerenaAgent:
         if update_active_tools:
             self._update_active_tools()
 
-        def init_language_server_manager() -> None:
-            # start the language server
+        def init_project_services():
+            self._init_active_project_language_backend()
+
+        # initialise the project's language backend in the background
+        self.issue_task(init_project_services)
+
+        if self._project_activation_callback is not None:
+            self._project_activation_callback()
+
+        # notify the dashboard manager of the project change (if applicable)
+        if self._dashboard_manager:
+            self._dashboard_manager.update_active_project(self._active_project)
+
+        return True
+
+    def _init_active_project_language_backend(self):
+        """
+        Initialises the active project's language backend
+        """
+        project = self._active_project
+        assert project is not None
+
+        # for LSP mode, start the language server manager
+        if self.get_language_backend().is_lsp():
             with LogTime("Language server initialization", logger=log):
                 self.reset_language_server_manager()
 
-        # initialize the language server in the background (if in language server mode)
-        if self.get_language_backend().is_lsp():
-            self.issue_task(init_language_server_manager)
-
-        def init_jetbrains_ide() -> None:
+        # for JetBrains mode, search for plugin server and spawn IDE (if not found and launch command provided)
+        elif self.get_language_backend().is_jetbrains():
             try:
                 client = jetbrains_plugin_client.JetBrainsPluginClient.from_project(project, log_warning=False)
                 log.info("Found Serena JetBrains Plugin server: %s", client)
@@ -1223,19 +1242,6 @@ class SerenaAgent:
                     stdout, stderr = p.communicate()
                     if p.returncode != 0:
                         log.error(f"Failed to launch JetBrains IDE: {stderr.decode('utf-8')}")
-
-        # for JetBrains mode, search for plugin server and spawn IDE if not found and enabled
-        if self.get_language_backend().is_jetbrains():
-            self.issue_task(init_jetbrains_ide)
-
-        if self._project_activation_callback is not None:
-            self._project_activation_callback()
-
-        # notify the dashboard manager of the project change (if applicable)
-        if self._dashboard_manager:
-            self._dashboard_manager.update_active_project(self._active_project)
-
-        return True
 
     def activate_project_from_path_or_name(
         self, project_root_or_name: str, update_active_modes: bool = True, update_active_tools: bool = True
