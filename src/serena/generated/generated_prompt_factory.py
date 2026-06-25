@@ -42,6 +42,7 @@ class PromptFactory(PromptFactoryBase):
         context_system_prompt: Any,
         global_memories_list: Any,
         mode_system_prompts: Any,
+        tool_names: Any,
     ) -> str:
         return self._render_prompt("system_prompt", locals())
 

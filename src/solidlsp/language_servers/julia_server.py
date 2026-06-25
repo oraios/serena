@@ -78,10 +78,14 @@ class JuliaLanguageServer(SolidLanguageServer):
                 f"Checked locations: {common_locations}"
             )
 
-        # Check if LanguageServer.jl is installed
+        # Check if LanguageServer.jl is installed.
+        # stdin=DEVNULL: when Serena runs over the stdio MCP transport, the JSON-RPC
+        # channel *is* the process stdin/stdout. Without this, the Julia child inherits
+        # Serena's stdin (the MCP pipe) and clobbers it, killing the server right after
+        # initialize ("tools fetch failed"). See https://github.com/oraios/serena/issues/1577
         check_cmd = [julia_path, "-e", "using LanguageServer"]
         try:
-            result = subprocess.run(check_cmd, check=False, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(check_cmd, check=False, capture_output=True, text=True, timeout=10, stdin=subprocess.DEVNULL)
             if result.returncode != 0:
                 # LanguageServer.jl not found, install it
                 JuliaLanguageServer._install_language_server(julia_path)
@@ -99,7 +103,9 @@ class JuliaLanguageServer(SolidLanguageServer):
         install_cmd = [julia_path, "-e", 'using Pkg; Pkg.add("LanguageServer")']
 
         try:
-            result = subprocess.run(install_cmd, check=False, capture_output=True, text=True, timeout=300)  # 5 minutes for installation
+            result = subprocess.run(
+                install_cmd, check=False, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL
+            )  # 5 minutes for installation
 
             if result.returncode == 0:
                 log.info("LanguageServer.jl installed successfully!")

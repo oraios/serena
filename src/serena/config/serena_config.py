@@ -42,6 +42,7 @@ from ..util.dataclass import get_dataclass_default
 
 if TYPE_CHECKING:
     from ..project import Project
+    from ..tools.tools_base import Tool
 
 log = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -216,6 +217,28 @@ class LanguageBackend(Enum):
 
     def is_jetbrains(self) -> bool:
         return self == LanguageBackend.JETBRAINS
+
+    def get_lsp_tool_class_replacements(self) -> "dict[type[Tool], type[Tool]]":
+        """
+        :return: mapping from LSP tool classes to replacement tool classes (functional replacements)
+        """
+        match self:
+            case LanguageBackend.LSP:
+                return {}
+            case LanguageBackend.JETBRAINS:
+                from ..tools import jetbrains_tools, symbol_tools
+
+                return {
+                    symbol_tools.FindSymbolTool: jetbrains_tools.JetBrainsFindSymbolTool,
+                    symbol_tools.GetSymbolsOverviewTool: jetbrains_tools.JetBrainsGetSymbolsOverviewTool,
+                    symbol_tools.FindReferencingSymbolsTool: jetbrains_tools.JetBrainsFindReferencingSymbolsTool,
+                    symbol_tools.FindImplementationsTool: jetbrains_tools.JetBrainsFindImplementationsTool,
+                    symbol_tools.FindDeclarationTool: jetbrains_tools.JetBrainsFindDeclarationTool,
+                    symbol_tools.RenameSymbolTool: jetbrains_tools.JetBrainsRenameTool,
+                    symbol_tools.SafeDeleteSymbol: jetbrains_tools.JetBrainsSafeDeleteTool,
+                }
+            case _:
+                raise NotImplementedError()
 
 
 class LineEnding(Enum):
@@ -682,9 +705,14 @@ class RegisteredProject(ToStringMixin):
         Check if the given path matches the project root path.
 
         :param path: the path to check
-        :return: True if the path matches the project root, False otherwise
+        :return: True if the path matches the project root, False otherwise (including the case
+            where this project's root directory no longer exists, e.g. a removed git worktree)
         """
-        return self.project_root.samefile(Path(path).resolve())
+        try:
+            return self.project_root.samefile(Path(path).resolve())
+        except OSError:
+            # typically raised if the path does not exist (e.g., a removed git worktree)
+            return False
 
     def get_project_instance(self, serena_config: "SerenaConfig") -> "Project":
         """
@@ -998,6 +1026,19 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         config.language_backend = language_backend
         config._save()
         return config
+
+    def with_headless_mode_overrides(self) -> "SerenaConfig":
+        """
+        Modifies this instance to apply overrides for headless mode, where any GUI/user interaction-based features are disabled.
+        This is intended to be applied for cases where a `SerenaConfig` instance is needed to instantiate a `SerenaAgent` instance
+        while the user is not expected to interact with the system (e.g. a CLI command or a test).
+
+        :return: the instance with overrides applied for headless mode
+        """
+        self.gui_log_window = False
+        self.web_dashboard = False
+        self.jetbrains_launch_command = None
+        return self
 
     @cached_property
     def project_paths(self) -> list[str]:

@@ -9,12 +9,14 @@ from typing import Any, cast
 
 from overrides import override
 
+from solidlsp.language_servers.common import UE_IGNORED_DIRNAMES
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, ProcessLaunchInfo, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
-from .common import RuntimeDependency, RuntimeDependencyCollection
+from .common import RuntimeDependency, RuntimeDependencyCollection, is_unreal_engine_project
 
 log = logging.getLogger(__name__)
 
@@ -103,10 +105,11 @@ class ClangdLanguageServer(SolidLanguageServer):
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
-        ignored_dirs = [
-            ".ccls-cache",
-        ]
-        return super().is_ignored_dirname(dirname) or dirname in ignored_dirs
+        return (
+            super().is_ignored_dirname(dirname)
+            or dirname == ".ccls-cache"
+            or (is_unreal_engine_project(self.repository_root_path) and dirname in UE_IGNORED_DIRNAMES)
+        )
 
     def _prepare_compile_commands(self) -> str | None:
         """
@@ -128,7 +131,14 @@ class ClangdLanguageServer(SolidLanguageServer):
         compile_db_path = os.path.join(self.repository_root_path, "compile_commands.json")
 
         if not os.path.exists(compile_db_path):
-            # No compile_commands.json, nothing to do
+            # clangd can't resolve UE engine headers without the database; fail with guidance.
+            if is_unreal_engine_project(self.repository_root_path):
+                raise SolidLSPException(
+                    f"No compile_commands.json found at {self.repository_root_path}, but this looks like an "
+                    "Unreal Engine project (.uproject present). clangd needs a compilation database to resolve "
+                    "engine headers and macros. See docs/03-special-guides/"
+                    "unreal_engine_setup_guide_for_serena.md to generate one."
+                )
             return None
 
         try:

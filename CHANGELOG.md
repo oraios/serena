@@ -10,8 +10,28 @@ Status of the `main` branch. Changes prior to the next official version change w
     Gemini) launched from inside a worktree to the parent repo, causing stale reads and misdirected edits.
   - Fix: CLI flags on `start-mcp-server` could incorrectly be saved to the global configuration file if the
     list of projects was modified (triggering a save of the configuration with transient overrides applied)
+  - Fix: context or mode argument referencing a known name (e.g. `--context anitgravity`) could result in   
+    incorrect file access if a corresponding local file existed (e.g. `./antigravity` binary);
+    file access is now guarded with path detection (file ending or path separator must be present)
+  - Allow `query_project` tool to access read-only tools that are not enabled in the current configuration
+  - Adjust prompt generation mechanism to use newly introduced tool name mapping `tool_names`, allowing
+    prompts to directly use tool names that match the active language backend (and removing the need
+    for additional prompts that explain tool name differences)
+  - Improve quoting/escaping of arguments in shell executions on Windows (via `oslex` dependency)
+  - Add tool parameter alias support, adding `name_path` as an alias for `name_path_pattern` in `find_symbol` tools
+  - Make tool call errors surface explicitly as errors at the MCP protocol level
+  - Fix: a registered project whose root directory was deleted while Serena was already running could break
+    `activate_project`/project lookup, raising `FileNotFoundError` in `RegisteredProject.matches_root_path`
 
 * Language Servers:
+  - C/C++ (clangd): add Unreal Engine 5 fixture and tests verifying that reflection-macro
+    code (`UCLASS`, `UFUNCTION`, `UPROPERTY`, `GENERATED_BODY`) yields correct symbols,
+    references, definitions, and rename edits in hand-written sources (never in
+    UHT-generated files); add an Unreal Engine setup guide.
+  - C/C++ (clangd, ccls): detect Unreal Engine projects by a `.uproject` file at the project
+    root and skip the engine build/cache directories (`Binaries`, `DerivedDataCache`,
+    `Intermediate`, `Saved`) during indexing. clangd fails with a pointer to the Unreal Engine
+    setup guide when started in such a project without a `compile_commands.json`. #1566
   - `typescript_vts`: Add `initialization_options` setting in `ls_specific_settings.typescript_vts`.
     The dict is forwarded to vtsls via `initializationOptions`, `workspace/didChangeConfiguration`,
     and `workspace/configuration` pulls. Enables Yarn PnP setups with `typescript.tsdk` pointing
@@ -22,7 +42,16 @@ Status of the `main` branch. Changes prior to the next official version change w
     results in svelte-only mode (`languages: [svelte]`). They are now routed to the companion TS server,
     so symbols defined in plain `.ts`/`.js` files are again discoverable via `find_symbol`/
     `get_symbols_overview`, and `find_referencing_symbols` no longer fails to locate `.ts`/`.js` symbols. #1552
+  - `JuliaLanguageServer`: Fix the stdio MCP server exiting right after `initialize` ("tools fetch failed")
+    when `julia` is enabled. The runtime probe/install subprocesses now run with `stdin=subprocess.DEVNULL`,
+    so they can no longer inherit and clobber Serena's stdin, which is the JSON-RPC pipe under the stdio
+    transport. #1577
   - Improve quoting of arguments in shell executions
+  - Add **LaTeX** support (experimental) via [texlab](https://github.com/latex-lsp/texlab). Auto-downloads a
+    SHA-256-verified prebuilt texlab binary (osx-arm64/x64, linux-arm64/x64, win-x64); covers `.tex`, `.bib`,
+    `.sty`, and `.cls` files. Provides sectioning document symbols (including beamer frames), label/citation
+    definitions, and `\ref`/`\cite` references. Must be explicitly enabled via language `latex`. texlab is
+    GPL-3.0 and runs as a separate downloaded process.
 
 * JetBrains:
   - Add configuration option `jetbrains_launch_command`, allowing Serena to spawn IDE instances automatically
@@ -36,6 +65,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix empty executions queue displaying "Loading..."
   - Tray manager: Add NixOS-support for AppIndicator-based trays (e.g., most Wayland-trays) to the package in flake.nix.
   - Fix: Wait for the subprocess that opens the browser window, preventing zombie processes #1488 
+
+Dependencies:
+  - Add dependency `oslex`
 
 # v1.5.3 (2026-05-26)
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import pathlib
 import platform
 import shutil
 import subprocess
@@ -216,3 +217,13 @@ def quote_windows_path(path: str) -> str:
             return path
         return f'"{path}"'
     return path
+
+
+UE_IGNORED_DIRNAMES = frozenset({"Binaries", "DerivedDataCache", "Intermediate", "Saved"})
+"""Unreal Engine build and cache directories. Matched per directory name, so per-plugin and
+per-module copies (e.g. ``Plugins/Foo/Intermediate``) are covered too."""
+
+
+def is_unreal_engine_project(repository_root_path: str) -> bool:
+    """:return: whether the repository root contains an Unreal Engine ``.uproject`` file."""
+    return any(pathlib.Path(repository_root_path).glob("*.uproject"))

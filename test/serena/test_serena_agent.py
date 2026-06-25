@@ -517,6 +517,9 @@ FIND_SYMBOL_REFERENCES_CASES = [
     FindSymbolCase(
         language=Language.RUST, id="rust_add_function", symbol_name="add", expected_kind="Function", expected_file="lib.rs"
     ).to_pytest_param(),
+    FindSymbolCase(
+        language=Language.LATEX, id="latex_methods_section", symbol_name="Methods", expected_kind="Module", expected_file="main.tex"
+    ).to_pytest_param(),
 ]
 
 FIND_REFERENCE_CASES = [
@@ -597,6 +600,13 @@ FIND_REFERENCE_CASES = [
     ).to_pytest_param(
         pytest.mark.xfail(reason="F# language server is unreliable"),  # See issue #1040
     ),
+    FindReferenceCase(
+        language=Language.LATEX,
+        id="latex_background_refs",
+        symbol_name="Background",
+        definition_file="sections/background.tex",
+        reference_file="main.tex",
+    ).to_pytest_param(),
 ]
 
 FIND_DEFINING_SYMBOL_REGEX_ERROR_CASES = [
@@ -758,7 +768,7 @@ SAFE_DELETE_SUCCEEDS_CASES = [
 
 @pytest.fixture
 def serena_config():
-    config = SerenaConfig(gui_log_window=False, web_dashboard=False, log_level=logging.ERROR)
+    config = SerenaConfig(log_level=logging.ERROR).with_headless_mode_overrides()
 
     # Create test projects for all supported languages
     test_projects = []
@@ -779,6 +789,7 @@ def serena_config():
         Language.HAXE,
         Language.LEAN4,
         Language.MSL,
+        Language.LATEX,
     ]:
         repo_path = get_repo_path(language)
         if repo_path.exists():
@@ -867,7 +878,7 @@ class TestSerenaAgent:
           * an invalid project path is specified at startup
         All cases must not raise an exception.
         """
-        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False)
+        serena_config = SerenaConfig().with_headless_mode_overrides()
         SerenaAgent(project=project, serena_config=serena_config)
 
     def _symbol_matches_expected_name(self, symbol: dict, expected_name: str) -> bool:

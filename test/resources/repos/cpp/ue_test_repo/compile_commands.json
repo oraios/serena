@@ -1,0 +1,22 @@
+[
+  {
+    "directory": ".",
+    "command": "clang++ -std=c++20 -DTESTGAME_API= -I Stubs -I Source/TestGame -I Intermediate/TestGame/UHT -c Source/TestGame/AbilityComponent.cpp",
+    "file": "Source/TestGame/AbilityComponent.cpp"
+  },
+  {
+    "directory": ".",
+    "command": "clang++ -std=c++20 -DTESTGAME_API= -I Stubs -I Source/TestGame -I Intermediate/TestGame/UHT -c Source/TestGame/AbilityActor.cpp",
+    "file": "Source/TestGame/AbilityActor.cpp"
+  },
+  {
+    "directory": ".",
+    "command": "clang++ -std=c++20 -DTESTGAME_API= -I Stubs -I Source/TestGame -I Intermediate/TestGame/UHT -c Source/TestGame/GameCharacter.cpp",
+    "file": "Source/TestGame/GameCharacter.cpp"
+  },
+  {
+    "directory": ".",
+    "command": "clang++ -std=c++20 -DTESTGAME_API= -I Stubs -I Source/TestGame -I Intermediate/TestGame/UHT -c Source/TestGame/TestGameModule.cpp",
+    "file": "Source/TestGame/TestGameModule.cpp"
+  }
+]
