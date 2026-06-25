@@ -36,7 +36,7 @@ class Project(ToStringMixin):
         is_newly_created: bool = False,
     ):
         assert serena_config is not None
-        self.project_root = project_root
+        self.project_root = os.path.normpath(project_root)
         self.project_config = project_config
         self.serena_config = serena_config
         self._serena_data_folder = serena_config.get_project_serena_folder(self.project_root)
@@ -268,7 +268,7 @@ class Project(ToStringMixin):
         path = os.path.normpath(path)
 
         try:
-            return os.path.commonpath([self.project_root, path]) == os.path.normpath(self.project_root)
+            return os.path.commonpath([self.project_root, path]) == self.project_root
         except ValueError:
             # occurs, in particular, if paths are on different drives on Windows
             return False
