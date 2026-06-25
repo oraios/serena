@@ -694,6 +694,13 @@ class RustAnalyzer(SolidLanguageServer):
         }
         return cast(InitializeParams, initialize_params)
 
+    @override
+    def _get_published_diagnostics_wait_timeout(self, pull_diagnostics_failed: bool) -> float:
+        timeout = super()._get_published_diagnostics_wait_timeout(pull_diagnostics_failed)
+        # Rust diagnostics are often published asynchronously after the pull-diagnostics request,
+        # so keep a wider fallback wait window across all platforms.
+        return max(timeout, 4.0)
+
     def _start_server(self) -> None:
         """
         Starts the Rust Analyzer Language Server
