@@ -281,18 +281,18 @@ class Tool(Component):
     def _limit_length(
         self,
         result: str,
-        max_answer_chars: int,
+        max_answer_chars: int | None,
         shortened_result_factories: list[Callable[[], str]] | None = None,
     ) -> str:
         """Limit the length of the result string, optionally trying progressively shorter versions.
 
         :param result: the full result string
-        :param max_answer_chars: maximum allowed characters. -1 means use the default from config.
+        :param max_answer_chars: maximum allowed characters. -1 or None means use the default from config.
         :param shortened_result_factories: optional list of closures, each producing a progressively shorter
             version of the result. They are tried in order until one fits within ``max_answer_chars``.
         :return: the result string, potentially replaced by a shortened version
         """
-        if max_answer_chars == -1:
+        if max_answer_chars is None or max_answer_chars == -1:
             max_answer_chars = self.agent.serena_config.default_max_tool_answer_chars
         if max_answer_chars <= 0:
             raise ValueError(f"Must be positive or the default (-1), got: {max_answer_chars=}")
