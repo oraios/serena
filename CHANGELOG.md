@@ -66,6 +66,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Tray manager: Add NixOS-support for AppIndicator-based trays (e.g., most Wayland-trays) to the package in flake.nix.
   - Fix: Wait for the subprocess that opens the browser window, preventing zombie processes #1488 
 
+* Hooks:
+  - Handle tool_input passed as string gracefully instead of failing (Copilot CLI sends strings).
+
 Dependencies:
   - Add dependency `oslex`
 
