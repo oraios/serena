@@ -36,6 +36,7 @@ from typing import Any, cast
 
 from overrides import override
 
+from solidlsp.language_servers.common import UE_IGNORED_DIRNAMES, is_unreal_engine_project
 from solidlsp.ls import (
     LanguageServerDependencyProvider,
     LanguageServerDependencyProviderSinglePath,
@@ -45,12 +46,10 @@ from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
-from .common import UnrealEngineIgnoreMixin
-
 log = logging.getLogger(__name__)
 
 
-class CCLS(UnrealEngineIgnoreMixin, SolidLanguageServer):
+class CCLS(SolidLanguageServer):
     """
     C/C++ language server implementation using ccls.
 
@@ -73,9 +72,11 @@ class CCLS(UnrealEngineIgnoreMixin, SolidLanguageServer):
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
-        if super().is_ignored_dirname(dirname) or dirname == ".ccls-cache":
-            return True
-        return dirname in self._unreal_engine_ignored_dirnames
+        return (
+            super().is_ignored_dirname(dirname)
+            or dirname == ".ccls-cache"
+            or (is_unreal_engine_project(self.repository_root_path) and dirname in UE_IGNORED_DIRNAMES)
+        )
 
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
         def _get_or_install_core_dependency(self) -> str:

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import functools
 import logging
 import os
 import pathlib
@@ -15,28 +14,6 @@ from solidlsp.ls_utils import FileUtils, PlatformUtils
 from solidlsp.util import subprocess_util
 
 log = logging.getLogger(__name__)
-
-
-UNREAL_ENGINE_IGNORED_DIRNAMES = frozenset({"Binaries", "DerivedDataCache", "Intermediate", "Saved"})
-"""Unreal Engine build and cache directories. Matched per directory name, so per-plugin and
-per-module copies (e.g. ``Plugins/Foo/Intermediate``) are covered too."""
-
-
-def is_unreal_engine_project(repository_root_path: str) -> bool:
-    """:return: whether the repository root contains an Unreal Engine ``.uproject`` file."""
-    return any(pathlib.Path(repository_root_path).glob("*.uproject"))
-
-
-class UnrealEngineIgnoreMixin:
-    """Mixin for the clangd and ccls servers: skip UE build directories when a ``.uproject`` is present."""
-
-    repository_root_path: str
-
-    @functools.cached_property
-    def _unreal_engine_ignored_dirnames(self) -> frozenset[str]:
-        if is_unreal_engine_project(self.repository_root_path):
-            return UNREAL_ENGINE_IGNORED_DIRNAMES
-        return frozenset()
 
 
 @dataclass(kw_only=True)
@@ -240,3 +217,13 @@ def quote_windows_path(path: str) -> str:
             return path
         return f'"{path}"'
     return path
+
+
+UE_IGNORED_DIRNAMES = frozenset({"Binaries", "DerivedDataCache", "Intermediate", "Saved"})
+"""Unreal Engine build and cache directories. Matched per directory name, so per-plugin and
+per-module copies (e.g. ``Plugins/Foo/Intermediate``) are covered too."""
+
+
+def is_unreal_engine_project(repository_root_path: str) -> bool:
+    """:return: whether the repository root contains an Unreal Engine ``.uproject`` file."""
+    return any(pathlib.Path(repository_root_path).glob("*.uproject"))

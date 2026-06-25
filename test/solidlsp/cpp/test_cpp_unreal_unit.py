@@ -8,7 +8,7 @@ import pytest
 
 from solidlsp.language_servers.ccls_language_server import CCLS
 from solidlsp.language_servers.clangd_language_server import ClangdLanguageServer
-from solidlsp.language_servers.common import UNREAL_ENGINE_IGNORED_DIRNAMES, is_unreal_engine_project
+from solidlsp.language_servers.common import UE_IGNORED_DIRNAMES, is_unreal_engine_project
 from solidlsp.ls_exceptions import SolidLSPException
 
 
@@ -46,14 +46,14 @@ def test_missing_compile_commands_returns_none_for_non_unreal_project(tmp_path):
 @pytest.mark.parametrize("make_server", [_make_clangd, _make_ccls])
 def test_unreal_dirs_ignored_only_for_unreal_project(make_server, tmp_path):
     non_ue = make_server(tmp_path)
-    for dirname in UNREAL_ENGINE_IGNORED_DIRNAMES:
+    for dirname in UE_IGNORED_DIRNAMES:
         assert not non_ue.is_ignored_dirname(dirname), f"{dirname} should not be pruned without a .uproject"
 
     ue_root = tmp_path / "ue"
     ue_root.mkdir()
     (ue_root / "MyGame.uproject").write_text("{}")
     ue = make_server(ue_root)
-    for dirname in UNREAL_ENGINE_IGNORED_DIRNAMES:
+    for dirname in UE_IGNORED_DIRNAMES:
         assert ue.is_ignored_dirname(dirname), f"{dirname} should be pruned for a UE project"
 
     assert non_ue.is_ignored_dirname(".ccls-cache")

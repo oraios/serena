@@ -9,20 +9,21 @@ from typing import Any, cast
 
 from overrides import override
 
+from solidlsp.language_servers.common import UE_IGNORED_DIRNAMES
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, ProcessLaunchInfo, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
-from .common import RuntimeDependency, RuntimeDependencyCollection, UnrealEngineIgnoreMixin, is_unreal_engine_project
+from .common import RuntimeDependency, RuntimeDependencyCollection, is_unreal_engine_project
 
 log = logging.getLogger(__name__)
 
 CLANGD_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
 
 
-class ClangdLanguageServer(UnrealEngineIgnoreMixin, SolidLanguageServer):
+class ClangdLanguageServer(SolidLanguageServer):
     """
     Provides C/C++ specific instantiation of the LanguageServer class. Contains various configurations and settings specific to C/C++.
     As the project gets bigger in size, building index will take time. Try running clangd multiple times to ensure index is built properly.
@@ -104,9 +105,11 @@ class ClangdLanguageServer(UnrealEngineIgnoreMixin, SolidLanguageServer):
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
-        if super().is_ignored_dirname(dirname) or dirname == ".ccls-cache":
-            return True
-        return dirname in self._unreal_engine_ignored_dirnames
+        return (
+            super().is_ignored_dirname(dirname)
+            or dirname == ".ccls-cache"
+            or (is_unreal_engine_project(self.repository_root_path) and dirname in UE_IGNORED_DIRNAMES)
+        )
 
     def _prepare_compile_commands(self) -> str | None:
         """
