@@ -32,6 +32,7 @@ from serena.constants import (
     SERENA_MANAGED_DIR_NAME,
 )
 from serena.util.inspection import determine_programming_language_composition
+from serena.util.text_utils import glob_match
 from serena.util.yaml import YamlCommentNormalisation, load_yaml, normalise_yaml_comments, save_yaml, transfer_yaml_comments
 from solidlsp.ls_config import Language
 
@@ -785,7 +786,16 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
       - "/projects-metadata/$projectFolderName/.serena" (stores data in a central location)
     """
 
+    trusted_project_path_patterns: list[str] = field(default_factory=lambda: ["**"])
+    """
+    list of glob patterns for project root directories that are considered trusted.
+    The default "**" considers all project roots as trusted, which is necessary for backward compatibility.
+    The default will apply if a user does not yet have the setting, while new users will get the value
+    defined in the configuration template file. 
+    """
+
     # settings with overridden defaults
+
     language_backend: LanguageBackend = LanguageBackend.LSP
     """
     the language backend to use for code understanding features
@@ -799,6 +809,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
     If the budget is exceeded, Serena stops issuing further requests and returns partial info results.
     0 disables the budget (no early stopping). Negative values are invalid.
     """
+
     # *** fields that are NOT mapped to/from the configuration file ***
 
     _loaded_commented_yaml: CommentedMap | None = None
@@ -1273,3 +1284,16 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         from serena.tools import JetBrainsPluginClient
 
         JetBrainsPluginClient.set_server_address(self.jetbrains_plugin_server_address)
+
+    def is_trusted_project_path(self, project_root: str | Path) -> bool:
+        """
+        Checks if the given project root path matches any of the trusted project root patterns.
+
+        :param project_root: the path to the project root directory
+        :return: True if the project root is trusted, False otherwise
+        """
+        project_root_str = str(project_root)
+        for pattern in self.trusted_project_path_patterns:
+            if glob_match(pattern, project_root_str):
+                return True
+        return False
