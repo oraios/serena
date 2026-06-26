@@ -54,8 +54,8 @@ ignore_all_files_in_gitignore: true
 
 # advanced configuration option allowing to configure language server-specific options.
 # Maps the language key to the options.
-# Have a look at the docstring of the constructors of the LS implementations within solidlsp (e.g., for C# or PHP) to see which options are available.
-# No documentation on options means no options are available.
+# The settings are considered only if the project is trusted (see global configuration to define trusted projects).
+# See https://oraios.github.io/serena/02-usage/050_configuration.html#language-server-specific-settings
 ls_specific_settings: {}
 
 # list of additional workspace folder paths for cross-package reference support (e.g. in monorepos).
