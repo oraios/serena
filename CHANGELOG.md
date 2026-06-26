@@ -3,6 +3,8 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - Add notion of trusted projects via new global configuration setting `trusted_project_path_patterns`.
+    Existing users are advised to edit this setting.
   - Fix `--project-from-cwd` hijacking git worktrees nested under a Serena project. `find_project_root`
     now walks up in a single pass so the nearest project boundary wins (either a `.serena/project.yml`
     or a `.git`, including worktree/submodule pointer files), instead of preferring an ancestor's

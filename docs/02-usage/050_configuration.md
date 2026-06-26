@@ -27,10 +27,11 @@ Some of the configurable settings include:
     this can also be [overridden per project](per-project-language-backend)
   * UI settings affecting the [Serena Dashboard and GUI tool](060_dashboard.md)
   * the set of tools to enable/disable by default
-  * the set of modes to use by default
+  * the set of [modes](modes) to use by default
   * tool execution parameters (timeout, max. answer length)
   * global ignore rules
   * logging settings
+  * the set of trusted project paths
   * advanced settings specific to individual language servers (see [below](ls-specific-settings))
 
 The global configuration settings apply to all projects.

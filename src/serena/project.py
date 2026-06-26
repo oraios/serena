@@ -146,6 +146,14 @@ class Project(ToStringMixin):
     def path_to_project_yml(self) -> str:
         return self.serena_config.get_project_yml_location(self.project_root)
 
+    def is_trusted(self) -> bool:
+        """
+        Checks whether the project is trusted, based on the global configuration.
+
+        :return: True if the project is trusted, False otherwise
+        """
+        return self.serena_config.is_trusted_project_path(self.project_root)
+
     def read_file(self, relative_path: str) -> str:
         """
         Reads a file relative to the project root.
