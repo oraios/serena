@@ -505,9 +505,19 @@ class RustAnalyzer(SolidLanguageServer):
                 "showUnlinkedFileNotification": True,
                 "showDependenciesExplorer": True,
                 "assist": {"emitMustUse": False, "expressionFillDefault": "todo"},
-                "cachePriming": {"enable": True, "numThreads": 0},
+                # rustback lightweight patch: serena's symbol tools don't need
+                # rust-analyzer's eager whole-workspace+deps cache priming, nor a
+                # re-index on every cargo metadata / target/ change. On large,
+                # actively-built Rust workspaces these drove rust-analyzer to
+                # 40+ GB RSS and re-indexed on every external `cargo build`.
+                # Disabling them keeps symbol navigation working at a fraction of
+                # the memory. NOTE: checkOnSave is intentionally left enabled below
+                # because serena's get_diagnostics_for_file relies on flycheck
+                # (`cargo check`) for Rust diagnostics. (Upstream: expose these as
+                # a config knob / a "lightweight" RA profile.)
+                "cachePriming": {"enable": False, "numThreads": 0},
                 "cargo": {
-                    "autoreload": True,
+                    "autoreload": False,
                     "buildScripts": {
                         "enable": True,
                         "invocationLocation": "workspace",
@@ -683,6 +693,13 @@ class RustAnalyzer(SolidLanguageServer):
             ],
         }
         return cast(InitializeParams, initialize_params)
+
+    @override
+    def _get_published_diagnostics_wait_timeout(self, pull_diagnostics_failed: bool) -> float:
+        timeout = super()._get_published_diagnostics_wait_timeout(pull_diagnostics_failed)
+        # Rust diagnostics are often published asynchronously after the pull-diagnostics request,
+        # so keep a wider fallback wait window across all platforms.
+        return max(timeout, 4.0)
 
     def _start_server(self) -> None:
         """

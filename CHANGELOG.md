@@ -57,6 +57,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     `.sty`, and `.cls` files. Provides sectioning document symbols (including beamer frames), label/citation
     definitions, and `\ref`/`\cite` references. Must be explicitly enabled via language `latex`. texlab is
     GPL-3.0 and runs as a separate downloaded process.
+  - Set `autoreload=False` to rust-analyzer initialization options, significantly reducing memory usage. 
 
 * JetBrains:
   - Add configuration option `jetbrains_launch_command`, allowing Serena to spawn IDE instances automatically
