@@ -1,5 +1,6 @@
 import inspect
 import json
+import time
 from abc import ABC
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -354,15 +355,28 @@ class Tool(Component):
         def task() -> str:
             apply_fn = self.get_apply_fn()
 
+            if not self.is_active():
+                raise ToolCallError(
+                    f"Tool '{self.get_name_from_cls()}' is not active. Active tools: {self.agent.get_active_tool_names()}"
+                )
+
+            if log_call:
+                self._log_tool_application(inspect.currentframe(), session_id)
+
+            # construct apply kwargs, adding session_id if the tool is session-aware
+            apply_kwargs = dict(kwargs)
+            if self._is_session_aware:
+                apply_kwargs["session_id"] = session_id
+
+            # tool-usage analytics instrumentation (dashboard): every applied tool call is
+            # recorded, including failures, via the finally block below
+            tool_name = self.get_name()
+            input_str = str(apply_kwargs)
+            result: str = ""
+            success = True
+            error_message: str | None = None
+            start = time.perf_counter()
             try:
-                if not self.is_active():
-                    raise ToolCallError(
-                        f"Tool '{self.get_name_from_cls()}' is not active. Active tools: {self.agent.get_active_tool_names()}"
-                    )
-
-                if log_call:
-                    self._log_tool_application(inspect.currentframe(), session_id)
-
                 # check whether the tool requires an active project and language server
                 if not isinstance(self, ToolMarkerDoesNotRequireActiveProject):
                     if self.agent.get_active_project() is None:
@@ -370,11 +384,6 @@ class Tool(Component):
                             "No active project. Ask the user to provide the project path or to select a project from this list of known projects: "
                             + f"{self.agent.serena_config.project_names}"
                         )
-
-                # construct apply kwargs, adding session_id if the tool is session-aware
-                apply_kwargs = dict(kwargs)
-                if self._is_session_aware:
-                    apply_kwargs["session_id"] = session_id
 
                 # apply the actual tool
                 try:
@@ -396,15 +405,28 @@ class Tool(Component):
                     else:
                         raise
 
-                # record tool usage
-                self.agent.record_tool_usage(apply_kwargs, result, self)
-
-            except ToolCallError:
+            except ToolCallError as e:
+                success = False
+                error_message = e.get_error_message()
+                result = e.get_error_message()
                 raise
             except Exception as e:
                 msg = f"{e.__class__.__name__}: {e}"
+                success = False
+                error_message = msg
+                result = msg
                 log.error(msg, exc_info=e)
                 raise ToolCallError(msg)
+            finally:
+                duration_ms = (time.perf_counter() - start) * 1000
+                self.agent._record_tool_call_safely(
+                    tool_name=tool_name,
+                    input_str=input_str,
+                    output_str=result,
+                    duration_ms=duration_ms,
+                    success=success,
+                    error_message=error_message,
+                )
 
             if log_call:
                 log.info(f"Result: {result}")

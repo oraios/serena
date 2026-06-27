@@ -9,6 +9,7 @@ import platform
 import signal
 import subprocess
 import threading
+import time
 from collections import defaultdict
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
@@ -438,7 +439,7 @@ class DashboardManager:
         dashboard_host = host_listen_address
         if dashboard_host == "0.0.0.0":
             dashboard_host = "localhost"
-        self.url = f"http://{dashboard_host}:{port}/dashboard/index.html"
+        self.url = f"http://{dashboard_host}:{port}/dashboard/"
 
         # handle startup
         match self._mode:
@@ -624,7 +625,7 @@ class SerenaAgent:
 
         token_count_estimator = RegisteredTokenCountEstimator[self.serena_config.token_count_estimator]
         log.info(f"Will record tool usage statistics with token count estimator: {token_count_estimator.name}.")
-        self._tool_usage_stats = ToolUsageStats(token_count_estimator)
+        self._tool_usage_stats: ToolUsageStats | None = ToolUsageStats(token_count_estimator)
 
         # log fundamental information
         log.info(
@@ -821,14 +822,6 @@ class SerenaAgent:
         """
         return self._task_executor.get_current_tasks()
 
-    def get_last_executed_task(self) -> TaskExecutor.TaskInfo | None:
-        """
-        Gets the last executed task.
-
-        :return: the last executed task info or None if no task has been executed yet
-        """
-        return self._task_executor.get_last_executed_task()
-
     def get_language_server_manager(self) -> LanguageServerManager | None:
         if self._active_project is not None:
             return self._active_project.language_server_manager
@@ -864,15 +857,34 @@ class SerenaAgent:
                 os.environ["COMSPEC"] = ""  # force use of default shell
                 log.info("Adjusting COMSPEC environment variable to use the default shell instead of '%s'", comspec)
 
-    def record_tool_usage(self, input_kwargs: dict, tool_result: str | dict, tool: Tool) -> None:
+    def _record_tool_call_safely(
+        self,
+        tool_name: str,
+        input_str: str,
+        output_str: str,
+        duration_ms: float,
+        success: bool,
+        error_message: str | None,
+    ) -> None:
         """
-        Record the usage of a tool with the given input and output strings if tool usage statistics recording is enabled.
+        Record a tool call into the in-memory analytics buffer. Instrumentation must
+        never break the agent — any exception from the analytics layer is caught
+        and logged at WARNING.
         """
-        tool_name = tool.get_name()
-        input_str = str(input_kwargs)
-        output_str = str(tool_result)
-        log.debug(f"Recording tool usage for tool '{tool_name}'")
-        self._tool_usage_stats.record_tool_usage(tool_name, input_str, output_str)
+        if self._tool_usage_stats is None:
+            return
+        try:
+            self._tool_usage_stats.record_call(
+                tool_name=tool_name,
+                input_str=input_str,
+                output_str=output_str,
+                duration_ms=duration_ms,
+                success=success,
+                error_message=error_message,
+                now=time.time(),
+            )
+        except Exception as e:
+            log.warning(f"Failed to record tool call analytics for '{tool_name}': {e}", exc_info=e)
 
     def get_dashboard_url(self) -> str | None:
         """
