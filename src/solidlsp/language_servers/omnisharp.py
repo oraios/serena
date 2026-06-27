@@ -415,5 +415,10 @@ class OmniSharp(SolidLanguageServer):
         if "referencesProvider" in init_response["capabilities"] and init_response["capabilities"]["referencesProvider"]:
             self.references_available.set()
 
-        self.definition_available.wait()
-        self.references_available.wait()
+        missing_capabilities = [
+            name
+            for event, name in ((self.definition_available, "definition"), (self.references_available, "references"))
+            if not event.is_set()
+        ]
+        if missing_capabilities:
+            log.warning("OmniSharp did not advertise capabilities during initialization: %s", ", ".join(missing_capabilities))
