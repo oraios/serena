@@ -37,6 +37,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     root and skip the engine build/cache directories (`Binaries`, `DerivedDataCache`,
     `Intermediate`, `Saved`) during indexing. clangd fails with a pointer to the Unreal Engine
     setup guide when started in such a project without a `compile_commands.json`. #1566
+  - C/C++ (clangd): for Unreal Engine projects, treat an empty `compile_commands.json`
+    the same as a missing one, since clangd cannot index against it, and inline the
+    `GenerateClangDatabase` command in the startup error instead of only pointing at the
+    setup guide. The Unreal Engine setup guide is reordered to put UnrealBuildTool's clang
+    database first.
   - `typescript_vts`: Add `initialization_options` setting in `ls_specific_settings.typescript_vts`.
     The dict is forwarded to vtsls via `initializationOptions`, `workspace/didChangeConfiguration`,
     and `workspace/configuration` pulls. Enables Yarn PnP setups with `typescript.tsdk` pointing
