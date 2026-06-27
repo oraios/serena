@@ -123,7 +123,12 @@ Some languages require additional installations or setup steps, as noted.
 * **PHP**  
   (by default, uses the Intelephense language server (language `php`), set `INTELEPHENSE_LICENSE_KEY` environment variable for premium features;
   we also support [Phpactor](https://github.com/phpactor/phpactor) (language `php_phpactor`), which requires PHP 8.1+)
-* **Python**
+* **Python**  
+  (by default, uses [Pyright](https://github.com/microsoft/pyright) (language `python`);
+  alternatives: [ty](https://github.com/astral-sh/ty) (language `python_ty`),
+  [pyrefly](https://github.com/facebook/pyrefly) (language `python_pyrefly`),
+  [Jedi](https://github.com/palotas/jedi-language-server) (language `python_jedi`);
+  ty and pyrefly require `uv`/`uvx` in PATH)
 * **R**  
   (requires installation of the `languageserver` R package)
 * **Ruby**  
