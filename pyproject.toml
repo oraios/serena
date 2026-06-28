@@ -111,6 +111,10 @@ max-line-length = 1000
 
 [tool.ty.environment]
 python-version = "3.11"
+# Analyze for all platforms rather than defaulting to the OS ty happens to run on. This keeps the
+# check deterministic across the CI matrix (Linux/Windows/macOS) and lets platform-conditional stdlib
+# members (e.g. subprocess.CREATE_NO_WINDOW, ctypes.windll, pwd) resolve without per-OS type-ignores.
+python-platform = "all"
 
 [tool.ty.rules]
 # Mirror mypy's ignore_missing_imports=true: optional extras (e.g. agno, google-genai) and
