@@ -9,11 +9,11 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
-from test.conftest import is_ci
+from test.conftest import is_ci, language_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
-pytestmark = pytest.mark.skip("Nix is niche and has a heavy toolchain")
+pytestmark = pytest.mark.skipif(not language_tests_enabled(Language.NIX), reason="Nix tests are disabled (nixd not available)")
 
 
 @pytest.mark.nix

@@ -14,11 +14,10 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
-
-from . import EXPERT_UNAVAILABLE, EXPERT_UNAVAILABLE_REASON
+from test.conftest import language_tests_enabled
 
 # These marks will be applied to all tests in this module
-pytestmark = [pytest.mark.elixir, pytest.mark.skipif(EXPERT_UNAVAILABLE, reason=f"Next LS not available: {EXPERT_UNAVAILABLE_REASON}")]
+pytestmark = [pytest.mark.elixir, pytest.mark.skipif(not language_tests_enabled(Language.ELIXIR), reason="Elixir tests are disabled")]
 
 
 class TestElixirLanguageServerSymbols:

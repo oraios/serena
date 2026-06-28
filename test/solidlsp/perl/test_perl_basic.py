@@ -4,10 +4,13 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.conftest import language_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
-pytestmark = pytest.mark.skip("Perl is niche and has a heavy toolchain")
+pytestmark = pytest.mark.skipif(
+    not language_tests_enabled(Language.PERL), reason="Perl tests are disabled (Perl::LanguageServer not available)"
+)
 
 
 @pytest.mark.perl

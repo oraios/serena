@@ -36,7 +36,6 @@ from test.conftest import (
     find_identifier_pos,
     get_pytest_markers,
     get_repo_path,
-    is_ci,
     language_tests_enabled,
 )
 
@@ -725,9 +724,7 @@ SAFE_DELETE_BLOCKED_CASES = [
         id="kotlin_model",
         name_path="Model",
         relative_path=os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
-    ).to_pytest_param(
-        *([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
-    ),
+    ).to_pytest_param(),
     SafeDeleteCase(
         language=Language.TYPESCRIPT,
         id="typescript_helper_function",
@@ -754,9 +751,7 @@ SAFE_DELETE_SUCCEEDS_CASES = [
         id="kotlin_model_user",
         name_path="ModelUser",
         relative_path=os.path.join("src", "main", "kotlin", "test_repo", "ModelUser.kt"),
-    ).to_pytest_param(
-        *([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
-    ),
+    ).to_pytest_param(),
     SafeDeleteCase(
         language=Language.TYPESCRIPT,
         id="typescript_unused_standalone_function",
