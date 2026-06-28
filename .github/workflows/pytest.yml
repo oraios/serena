@@ -1,3 +1,42 @@
+# =============================================================================
+# Test CI -- strategy & rationale (details inline at each step)
+# =============================================================================
+# BATCHING / PARALLELISM
+#   Tests run as parallel matrix jobs over (os x batch). They are split into 5
+#   marker-based batches (jvm, native, other-langs, niche, catch-all). We batch by
+#   pytest MARKER, not pytest-xdist (`-n`): tests share fixtures, language-server
+#   processes and on-disk resources, so in-process parallelism would race them.
+#   Each batch installs ONLY the toolchains its languages need (every install step
+#   is gated on matrix.batch), keeping jobs lean. catch-all is the negation of all
+#   named marker groups, so every test lands in exactly one batch and the partition
+#   cannot desync when a language is added.
+#
+# OS GATING
+#   Default is the full (os x batch) cross-product. `niche` (heavy/slow toolchains:
+#   lean, ocaml, nix, julia, R, perl) is ubuntu-only via matrix.exclude -- not worth
+#   the Windows/macOS cost. An OS-specific *language* inside an otherwise all-OS
+#   batch (swift -> macOS, haskell -> not Windows) is skipped one level down by the
+#   central conftest guard, NOT by the matrix.
+#
+# CONCURRENCY LIMITS (GitHub free tier)
+#   Hard caps: 20 concurrent jobs total and 5 concurrent macOS jobs. These bound the
+#   batch count -- the current matrix is 13 jobs (4 of them macOS), inside both
+#   limits; adding batches/OSes must keep respecting these ceilings or jobs queue.
+#   `concurrency: cancel-in-progress` also kills superseded runs on the same ref to
+#   free capacity quickly.
+#
+# CACHING
+#   Per-batch language-server cache keyed by os+batch (language-servers-<os>-<batch>),
+#   plus dedicated caches for the uv venv (keyed on uv.lock), swiftly, ZLS, FPC and
+#   the Go build/bin. Most niche toolchains restore from cache, so that batch is fast
+#   despite its size.
+#
+# TESTING / SKIPS
+#   All language skip logic is centralized in test/conftest.py
+#   (`language_tests_enabled()`): a test is skipped when its toolchain is not expected
+#   on the current OS/CI. Lint and type-check are batch-independent and run once per
+#   OS (catch-all only), not in every batch.
+# =============================================================================
 name: Tests
 
 on:
@@ -37,9 +76,19 @@ jobs:
         python-version: ["3.11"]
         # 5 batches, each installs ONLY the toolchains its languages need (steps gated by matrix.batch).
         # Node/Python/uv stay in every batch (cheap, needed for the venv + auto-installed LSes).
-        # OS-specific languages skip via the central guards (swift -> macOS only; haskell/nix/perl ->
-        # not Windows), so no matrix excludes are needed. catch-all = web + python + the core framework.
+        # catch-all = web + python + the core framework.
         batch: [jvm, native, other-langs, niche, catch-all]
+        # --- OS gating: which batch runs on which OS -----------------------------------------
+        # Default is the full cross-product (every batch on all three OSes); the `exclude` entries
+        # below carve out the exceptions. An OS-specific *language* inside an otherwise all-OS batch
+        # is handled one level down by the central conftest guard (swift -> macOS only; haskell ->
+        # not Windows), NOT here -- excludes drop a WHOLE batch from an OS.
+        #   jvm, native, other-langs, catch-all -> ubuntu, windows, macOS
+        #   niche                               -> ubuntu only (heavy/slow toolchains -- lean, ocaml,
+        #                                          nix, julia, R, perl -- not worth the Win/macOS cost)
+        exclude:
+          - { os: windows-latest, batch: niche }
+          - { os: macos-latest, batch: niche }
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }}
