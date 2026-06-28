@@ -243,6 +243,7 @@ Flag indicating whether the tests are running in the GitHub CI environment.
 """
 
 is_windows = platform.system() == "Windows"
+is_macos = platform.system() == "Darwin"
 
 
 _LANGUAGE_PYTEST_MARKERS: dict[Language, list[MarkDecorator | Mark]] = {
@@ -400,8 +401,9 @@ def _determine_disabled_languages() -> list[Language]:
     # === 3. Disabled wherever the precondition is missing (including on CI) ===
     # 3a. Platform precondition: these language servers have no native Windows support.
     if is_windows:
-        result.append(Language.ANSIBLE)
-        result.append(Language.SWIFT)
+        result.append(Language.ANSIBLE)  # ansible-language-server has no native Windows support
+    if not is_macos:
+        result.append(Language.SWIFT)  # swiftly toolchain is only set up on the macOS native batch
     # 3b. Toolchain / language-server availability (the LS/compiler must be on PATH or installed).
     if _sh.which("clangd") is None:
         result.append(Language.CPP)
