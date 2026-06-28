@@ -19,6 +19,20 @@ _php_servers: list[Language] = [Language.PHP]
 if language_tests_enabled(Language.PHP_PHPACTOR):
     if not (is_windows and is_ci) and _php_supports_phpactor():
         _php_servers.append(Language.PHP_PHPACTOR)
+if language_tests_enabled(Language.PHP_PHPANTOM):
+    _php_servers.append(Language.PHP_PHPANTOM)
+
+
+def _is_phpactor(language_server: SolidLanguageServer) -> bool:
+    return language_server.language_server.language == Language.PHP_PHPACTOR
+
+
+def _is_phpantom(language_server: SolidLanguageServer) -> bool:
+    return language_server.language_server.language == Language.PHP_PHPANTOM
+
+
+def _is_non_default_php_backend(language_server: SolidLanguageServer) -> bool:
+    return _is_phpactor(language_server) or _is_phpantom(language_server)
 
 
 @pytest.mark.php
@@ -42,13 +56,13 @@ class TestPhpLanguageServers:
         # $greeting in echo $greeting;  (e c h o   $ g r e e t i n g)
         #                           ^ char 5
         # Intelephense uses line 10 (0-indexed), Phpactor uses line 11 (0-indexed)
-        if language_server.language_server.language == Language.PHP_PHPACTOR:
+        if _is_non_default_php_backend(language_server):
             definition_location_list = language_server.request_definition(str(repo_path / "index.php"), 11, 6)
         else:
             definition_location_list = language_server.request_definition(str(repo_path / "index.php"), 10, 6)
 
         assert definition_location_list, f"Expected non-empty definition_location_list but got {definition_location_list=}"
-        if language_server.language_server.language == Language.PHP_PHPACTOR:
+        if _is_non_default_php_backend(language_server):
             assert len(definition_location_list) >= 1
         else:
             assert len(definition_location_list) == 1
@@ -56,27 +70,27 @@ class TestPhpLanguageServers:
         assert definition_location["uri"].endswith("index.php")
         # Definition of $greeting is on line 10 (1-indexed) / line 9 (0-indexed), char 0
         assert definition_location["range"]["start"]["line"] == 9
-        if language_server.language_server.language != Language.PHP_PHPACTOR:
+        if not _is_non_default_php_backend(language_server):
             assert definition_location["range"]["start"]["character"] == 0
 
     @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
     @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
     def test_find_definition_across_files(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         # Intelephense uses line 12 (0-indexed), Phpactor uses line 13 (0-indexed)
-        if language_server.language_server.language == Language.PHP_PHPACTOR:
+        if _is_non_default_php_backend(language_server):
             definition_location_list = language_server.request_definition(str(repo_path / "index.php"), 13, 5)
         else:
             definition_location_list = language_server.request_definition(str(repo_path / "index.php"), 12, 5)
 
         assert definition_location_list, f"Expected non-empty definition_location_list but got {definition_location_list=}"
-        if language_server.language_server.language == Language.PHP_PHPACTOR:
+        if _is_non_default_php_backend(language_server):
             assert len(definition_location_list) >= 1
         else:
             assert len(definition_location_list) == 1
         definition_location = definition_location_list[0]
         assert definition_location["uri"].endswith("helper.php")
         assert definition_location["range"]["start"]["line"] == 2
-        if language_server.language_server.language != Language.PHP_PHPACTOR:
+        if not _is_non_default_php_backend(language_server):
             assert definition_location["range"]["start"]["character"] == 0
 
     @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
@@ -94,14 +108,14 @@ class TestPhpLanguageServers:
         definition_location_list = language_server.request_definition(file_path, 2, 6)  # cursor on 'l' in $localVar
 
         assert definition_location_list, f"Expected non-empty definition_location_list but got {definition_location_list=}"
-        if language_server.language_server.language == Language.PHP_PHPACTOR:
+        if _is_non_default_php_backend(language_server):
             assert len(definition_location_list) >= 1
         else:
             assert len(definition_location_list) == 1
         definition_location = definition_location_list[0]
         assert definition_location["uri"].endswith("simple_var.php")
         assert definition_location["range"]["start"]["line"] == 1  # Definition of $localVar (0-indexed)
-        if language_server.language_server.language != Language.PHP_PHPACTOR:
+        if not _is_non_default_php_backend(language_server):
             assert definition_location["range"]["start"]["character"] == 0  # $localVar (0-indexed)
 
     @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
@@ -117,7 +131,7 @@ class TestPhpLanguageServers:
 
         assert references, f"Expected non-empty references for $greeting but got {references=}"
 
-        if language_server.language_server.language == Language.PHP_PHPACTOR:
+        if _is_non_default_php_backend(language_server):
             actual_locations = [
                 {
                     "uri_suffix": loc["uri"].split("/")[-1],
@@ -163,7 +177,7 @@ class TestPhpLanguageServers:
 
         assert references, f"Expected non-empty references for helperFunction but got {references=}"
 
-        if language_server.language_server.language == Language.PHP_PHPACTOR:
+        if _is_non_default_php_backend(language_server):
             actual_locations_comparable = []
             for loc in references:
                 actual_locations_comparable.append(
@@ -194,7 +208,7 @@ class TestPhpLanguageServers:
             usage_in_index_php = {"uri_suffix": "index.php", "line": 13, "character": 0}
             assert usage_in_index_php in actual_locations_comparable, "Usage of helperFunction in index.php not found"
 
-    @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
+    @pytest.mark.parametrize("language_server", [Language.PHP, Language.PHP_PHPANTOM], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
         """Test that document symbols are properly retrieved after Intelephense capability fix."""
         from solidlsp.ls_utils import SymbolUtils
@@ -203,7 +217,7 @@ class TestPhpLanguageServers:
         assert SymbolUtils.symbol_tree_contains_name(symbols, "helperFunction"), "helperFunction not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "greet"), "greet function not found in symbol tree"
 
-    @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
+    @pytest.mark.parametrize("language_server", [Language.PHP, Language.PHP_PHPANTOM], indirect=True)
     def test_document_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test that document symbols are properly retrieved for a specific file."""
         doc_symbols = language_server.request_document_symbols("helper.php")
@@ -211,7 +225,7 @@ class TestPhpLanguageServers:
         symbol_names = [sym.get("name") for sym in all_symbols[0] if sym.get("name")]
         assert "helperFunction" in symbol_names, f"helperFunction not found in document symbols. Found: {symbol_names}"
 
-    @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
+    @pytest.mark.parametrize("language_server", [Language.PHP, Language.PHP_PHPANTOM], indirect=True)
     def test_document_symbols_hierarchical_structure(self, language_server: SolidLanguageServer) -> None:
         """Verify Intelephense returns hierarchical DocumentSymbol format.
 
@@ -245,7 +259,7 @@ class TestPhpLanguageServers:
         assert "greet" not in root_names, f"greet should be a child of Dog, not at root level. Roots: {root_names}"
         assert "fetch" not in root_names, f"fetch should be a child of Dog, not at root level. Roots: {root_names}"
 
-    @pytest.mark.parametrize("language_server", [Language.PHP], indirect=True)
+    @pytest.mark.parametrize("language_server", [Language.PHP, Language.PHP_PHPANTOM], indirect=True)
     def test_full_symbol_tree_within_file(self, language_server: SolidLanguageServer) -> None:
         """Verify request_full_symbol_tree scoped to a PHP file returns correct symbols.
 

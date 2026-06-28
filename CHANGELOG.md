@@ -42,6 +42,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - `Java`: invalidate JDTLS workspace cache when Java import settings change #1576
   - Improve quoting of arguments in shell executions
   - Add **LaTeX** support (experimental) via [texlab](https://github.com/latex-lsp/texlab).
+  - PHP: add support for PHPantom as alternative to the already supported PHP LS #1554.
 
 * JetBrains:
   - Add configuration option `jetbrains_launch_command`, allowing Serena to spawn IDE instances automatically

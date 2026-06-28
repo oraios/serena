@@ -154,6 +154,10 @@ class Language(str, Enum):
     """Phpactor language server for PHP (instead of Intelephense, which is the default).
     Requires PHP 8.1+ on the system. Fully open-source (MIT license).
     """
+    PHP_PHPANTOM = "php_phpantom"
+    """PHPantom language server for PHP (instead of Intelephense, which is the default).
+    Uses the open-source Rust-based phpantom_lsp binary and can be auto-downloaded.
+    """
     MARKDOWN = "markdown"
     """Marksman language server for Markdown (experimental).
     Must be explicitly specified as the main language, not auto-detected.
@@ -252,6 +256,7 @@ class Language(str, Enum):
             self.CSHARP_OMNISHARP,
             self.RUBY_SOLARGRAPH,
             self.PHP_PHPACTOR,
+            self.PHP_PHPANTOM,
             self.MARKDOWN,
             self.LATEX,
             self.YAML,
@@ -387,7 +392,7 @@ class Language(str, Enum):
                 return FilenameMatcher(".kt", ".kts")
             case self.DART:
                 return FilenameMatcher(".dart")
-            case self.PHP | self.PHP_PHPACTOR:
+            case self.PHP | self.PHP_PHPACTOR | self.PHP_PHPANTOM:
                 return FilenameMatcher(".php")
             case self.R:
                 return FilenameMatcher(".R", ".r", ".Rmd", ".Rnw")
@@ -603,6 +608,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.phpactor import PhpactorServer
 
                 return PhpactorServer
+            case self.PHP_PHPANTOM:
+                from solidlsp.language_servers.phpantom import PHPantomServer
+
+                return PHPantomServer
             case self.PERL:
                 from solidlsp.language_servers.perl_language_server import PerlLanguageServer
 
