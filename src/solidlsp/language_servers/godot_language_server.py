@@ -80,7 +80,7 @@ class GodotLanguageServer(SolidLanguageServer):
         process_launch_info: ProcessLaunchInfo,
         logging_fn: Callable[[str, str, StringDict | str], None] | None,
     ) -> LanguageServerInterface:
-        settings: dict = self._custom_settings or {}
+        settings = self._custom_settings or {}
         port = settings.get("port", DEFAULT_GODOT_LS_PORT)
         request_timeout = settings.get("request_timeout", DEFAULT_GODOT_REQUEST_TIMEOUT)
         self._configured_request_timeout = settings.get("request_timeout")

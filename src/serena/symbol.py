@@ -1321,7 +1321,7 @@ class SymbolDictGrouper(Generic[TSymbolDict], ABC):
         """
         # avoid side effects by working on a deep-copy
         symbols_copy = copy.deepcopy(symbols)
-        return self._group_by(symbols_copy, self._group_keys, self._group_children_keys, is_children=False)  # type: ignore
+        return self._group_by(symbols_copy, self._group_keys, self._group_children_keys, is_children=False)
 
 
 class LanguageServerSymbolDictGrouper(SymbolDictGrouper[LanguageServerSymbol.OutputDict]):

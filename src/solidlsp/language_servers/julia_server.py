@@ -141,7 +141,7 @@ class JuliaLanguageServer(SolidLanguageServer):
         Returns the initialize params for the Julia Language Server.
         """
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
-        initialize_params: InitializeParams = {  # type: ignore
+        initialize_params: InitializeParams = {
             "processId": os.getpid(),
             "rootPath": repository_absolute_path,
             "rootUri": root_uri,
@@ -171,7 +171,7 @@ class JuliaLanguageServer(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params  # type: ignore
+        return initialize_params
 
     def _start_server(self) -> None:
         """Start the LanguageServer.jl server process."""

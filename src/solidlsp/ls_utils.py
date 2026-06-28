@@ -527,7 +527,7 @@ class PlatformUtils:
             _anonymous_ = ("u",)
 
         sys_info = SYSTEM_INFO()
-        ctypes.windll.kernel32.GetNativeSystemInfo(ctypes.byref(sys_info))  # type: ignore
+        ctypes.windll.kernel32.GetNativeSystemInfo(ctypes.byref(sys_info))
 
         arch_map = {
             9: "AMD64",

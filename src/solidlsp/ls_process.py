@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from queue import Empty, Queue
-from typing import IO, Any, AnyStr
+from typing import IO, Any, AnyStr, cast
 
 from sensai.util.string import ToStringMixin
 
@@ -462,24 +462,30 @@ class StdioLanguageServer(LanguageServerInterface):
         log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
         kwargs = subprocess_util.subprocess_kwargs()
         kwargs["start_new_session"] = self.start_independent_lsp_process
-        self.process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stdin=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=child_proc_env,
-            cwd=self.process_launch_info.cwd,
-            shell=True,
-            **kwargs,
+        # the language server is launched with binary (bytes) pipes; the cast is needed because the
+        # presence of platform-specific **kwargs prevents ty from selecting the bytes Popen overload
+        process = cast(
+            "subprocess.Popen[bytes]",
+            subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stdin=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=child_proc_env,
+                cwd=self.process_launch_info.cwd,
+                shell=True,
+                **kwargs,
+            ),
         )
+        self.process = process
 
         # Check if process terminated immediately
-        if self.process.returncode is not None:
+        if process.returncode is not None:
             log.error("Language server has already terminated/could not be started")
             # Process has already terminated
-            stderr_data = self.process.stderr.read() if self.process.stderr else b""
+            stderr_data = process.stderr.read() if process.stderr else b""
             error_message = stderr_data.decode("utf-8", errors="replace")
-            raise RuntimeError(f"Process terminated immediately with code {self.process.returncode}. Error: {error_message}")
+            raise RuntimeError(f"Process terminated immediately with code {process.returncode}. Error: {error_message}")
 
         # start threads to read stdout and stderr of the process
         threading.Thread(
@@ -522,7 +528,7 @@ class StdioLanguageServer(LanguageServerInterface):
             except Exception:
                 pass
 
-    def _read_bytes_from_process(self, process, stream, num_bytes) -> bytes:  # type: ignore
+    def _read_bytes_from_process(self, process, stream, num_bytes) -> bytes:
         """Read exactly num_bytes from process stdout"""
         data = b""
         while len(data) < num_bytes:

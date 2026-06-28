@@ -412,8 +412,8 @@ class PowerShellLanguageServer(SolidLanguageServer):
 
         with self.open_file(relative_file_path):
             self.server.notify.did_save_text_document(
-                {
-                    LSPConstants.TEXT_DOCUMENT: {  # type: ignore
+                {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                    LSPConstants.TEXT_DOCUMENT: {
                         LSPConstants.URI: uri,
                     }
                 }

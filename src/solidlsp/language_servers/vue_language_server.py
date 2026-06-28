@@ -344,7 +344,7 @@ class VueLanguageServer(SolidLanguageServer):
                     continue
 
                 new_item: dict = {}
-                new_item.update(item)  # type: ignore[arg-type]
+                new_item.update(item)
                 new_item["absolutePath"] = str(abs_path)
                 new_item["relativePath"] = str(rel_path)
                 result.append(ls_types.Location(**new_item))  # type: ignore
@@ -390,7 +390,7 @@ class VueLanguageServer(SolidLanguageServer):
                     log.debug(f"Skipping invalid location item: {item}")
                     continue
 
-                abs_path = PathUtils.uri_to_path(item["uri"])  # type: ignore[arg-type]
+                abs_path = PathUtils.uri_to_path(item["uri"])
                 if not Path(abs_path).is_relative_to(self.repository_root_path):
                     log.warning(f"Found file reference outside repository: {abs_path}, skipping")
                     continue
@@ -401,7 +401,7 @@ class VueLanguageServer(SolidLanguageServer):
                     continue
 
                 new_item: dict = {}
-                new_item.update(item)  # type: ignore[arg-type]
+                new_item.update(item)
                 new_item["absolutePath"] = str(abs_path)
                 new_item["relativePath"] = str(rel_path)
                 ret.append(Location(**new_item))  # type: ignore

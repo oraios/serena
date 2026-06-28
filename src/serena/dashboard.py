@@ -789,7 +789,9 @@ class SerenaDashboardAPI:
         # patch flask.cli.show_server to avoid printing the server info
         from flask import cli
 
-        cli.show_server_banner = lambda *args, **kwargs: None
+        # ty cannot model reassigning a third-party module's function attribute (it rejects any
+        # replacement, even one with an identical signature), so the monkeypatch is suppressed here
+        cli.show_server_banner = lambda *args, **kwargs: None  # ty: ignore[invalid-assignment]
         self._app.run(host=self._host, port=port, debug=False, use_reloader=False, threaded=True)
         return port
 

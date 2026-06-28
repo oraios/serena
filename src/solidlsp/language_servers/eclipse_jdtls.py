@@ -1299,26 +1299,26 @@ class EclipseJDTLS(SolidLanguageServer):
             ],
         }
 
-        initialize_params["initializationOptions"]["workspaceFolders"] = [repo_uri]  # type: ignore
+        initialize_params["initializationOptions"]["workspaceFolders"] = [repo_uri]
 
         # IntelliCode bundle: only attached in default vscode-java VSIX mode.
         # In upstream-jdtls mode (jdtls_path set) we don't ship IntelliCode — agentic Serena workflows
         # don't use completion ranking, so the bundle would be inert dead weight.
         if self.runtime_dependency_paths.intellicode_jar_path is not None:
-            initialize_params["initializationOptions"]["bundles"] = [self.runtime_dependency_paths.intellicode_jar_path]  # type: ignore
+            initialize_params["initializationOptions"]["bundles"] = [self.runtime_dependency_paths.intellicode_jar_path]
         else:
-            initialize_params["initializationOptions"]["bundles"] = []  # type: ignore
+            initialize_params["initializationOptions"]["bundles"] = []
 
-        initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"] = [  # type: ignore
+        initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"] = [
             {"name": "JavaSE-21", "path": self.runtime_dependency_paths.jre_home_path, "default": True}
         ]
 
-        for runtime in initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"]:  # type: ignore
+        for runtime in initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"]:
             assert "name" in runtime
             assert "path" in runtime
             assert os.path.exists(runtime["path"]), f"Runtime required for eclipse_jdtls at path {runtime['path']} does not exist"
 
-        gradle_settings = initialize_params["initializationOptions"]["settings"]["java"]["import"]["gradle"]  # type: ignore
+        gradle_settings = initialize_params["initializationOptions"]["settings"]["java"]["import"]["gradle"]
         # In upstream-jdtls mode we don't ship a Gradle distribution — Buildship will use the project's
         # ./gradlew wrapper or a system-installed Gradle via its standard discovery rules.
         if self.runtime_dependency_paths.gradle_path is not None:
@@ -1483,7 +1483,7 @@ class EclipseJDTLS(SolidLanguageServer):
                 symbol["name"] = symbol["name"][: symbol["name"].index("(")]
             children = symbol.get("children")
             if children:
-                for child in children:  # type: ignore
+                for child in children:
                     fix_name(child)
 
         for root_symbol in result:

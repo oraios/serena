@@ -318,7 +318,7 @@ class ClojureLSP(SolidLanguageServer):
         if source_paths is not None:
             initialization_options["source-paths"] = source_paths
 
-        result = {  # type: ignore
+        result = {
             "processId": os.getpid(),
             "rootPath": repository_absolute_path,
             "rootUri": root_uri,

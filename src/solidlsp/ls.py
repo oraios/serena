@@ -108,8 +108,8 @@ class LSPFileBuffer:
             return
         self._is_open_in_ls = True
         self.language_server.server.notify.did_open_text_document(
-            {
-                LSPConstants.TEXT_DOCUMENT: {  # type: ignore
+            {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                LSPConstants.TEXT_DOCUMENT: {
                     LSPConstants.URI: self.uri,
                     LSPConstants.LANGUAGE_ID: self.language_id,
                     LSPConstants.VERSION: 0,
@@ -121,8 +121,8 @@ class LSPFileBuffer:
     def close(self) -> None:
         if self._is_open_in_ls:
             self.language_server.server.notify.did_close_text_document(
-                {
-                    LSPConstants.TEXT_DOCUMENT: {  # type: ignore
+                {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                    LSPConstants.TEXT_DOCUMENT: {
                         LSPConstants.URI: self.uri,
                     }
                 }
@@ -223,10 +223,10 @@ class SymbolBodyFactory:
             return existing_body
 
         assert "location" in symbol
-        start_line = symbol["location"]["range"]["start"]["line"]  # type: ignore
-        end_line = symbol["location"]["range"]["end"]["line"]  # type: ignore
-        start_col = symbol["location"]["range"]["start"]["character"]  # type: ignore
-        end_col = symbol["location"]["range"]["end"]["character"]  # type: ignore
+        start_line = symbol["location"]["range"]["start"]["line"]
+        end_line = symbol["location"]["range"]["end"]["line"]
+        start_col = symbol["location"]["range"]["start"]["character"]
+        end_col = symbol["location"]["range"]["end"]["character"]
         return SymbolBody(self._lines, start_line, start_col, end_line, end_col)
 
 
@@ -508,7 +508,7 @@ class SolidLanguageServer(ABC):
         # For now, we assume that all language server implementations have the same signature of the constructor
         # (which, unfortunately, differs from the signature of the base class).
         # If this assumption is ever violated, we need branching logic here.
-        ls = ls_class(config, repository_root_path, solidlsp_settings)  # type: ignore
+        ls = ls_class(config, repository_root_path, solidlsp_settings)
         ls.set_request_timeout(timeout)
         return ls
 
@@ -590,7 +590,7 @@ class SolidLanguageServer(ABC):
                 log.debug(f"LSP: {source} -> {target}: {msg!s}")
 
         else:
-            logging_fn = None  # type: ignore
+            logging_fn = None
 
         # create the LanguageServerHandler, which provides the functionality to start the language server and communicate with it,
         # preparing the launch command beforehand
@@ -1024,8 +1024,8 @@ class SolidLanguageServer(ABC):
             if self._supports_pull_diagnostics():
                 try:
                     response = self.server.send.text_document_diagnostic(
-                        {
-                            LSPConstants.TEXT_DOCUMENT: {  # type: ignore
+                        {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                            LSPConstants.TEXT_DOCUMENT: {
                                 LSPConstants.URI: uri,
                             }
                         }
@@ -1380,8 +1380,8 @@ class SolidLanguageServer(ABC):
         new_contents, new_l, new_c = TextUtils.insert_text_at_position(file_buffer.contents, line, column, text_to_be_inserted)
         file_buffer.contents = new_contents
         self.server.notify.did_change_text_document(
-            {
-                LSPConstants.TEXT_DOCUMENT: {  # type: ignore
+            {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                LSPConstants.TEXT_DOCUMENT: {
                     LSPConstants.VERSION: file_buffer.version,
                     LSPConstants.URI: file_buffer.uri,
                 },
@@ -1423,8 +1423,8 @@ class SolidLanguageServer(ABC):
         )
         file_buffer.contents = new_contents
         self.server.notify.did_change_text_document(
-            {
-                LSPConstants.TEXT_DOCUMENT: {  # type: ignore
+            {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                LSPConstants.TEXT_DOCUMENT: {
                     LSPConstants.VERSION: file_buffer.version,
                     LSPConstants.URI: file_buffer.uri,
                 },
@@ -1766,15 +1766,15 @@ class SolidLanguageServer(ABC):
                 response = self.server.send.completion(completion_params)
                 if isinstance(response, list):
                     response = {"items": response, "isIncomplete": False}
-                if response is None or not response["isIncomplete"]:  # type: ignore
+                if response is None or not response["isIncomplete"]:
                     break
 
             # TODO: Understand how to appropriately handle `isIncomplete`
-            if response is None or (response["isIncomplete"] and not allow_incomplete):  # type: ignore
+            if response is None or (response["isIncomplete"] and not allow_incomplete):
                 return []
 
             if "items" in response:
-                response = response["items"]  # type: ignore
+                response = response["items"]
 
             response = cast(list[LSPTypes.CompletionItem], response)
 
@@ -1792,8 +1792,8 @@ class SolidLanguageServer(ABC):
 
                 if "label" in item:
                     completion_item["completionText"] = item["label"]
-                    completion_item["kind"] = item["kind"]  # type: ignore
-                elif "insertText" in item:  # type: ignore
+                    completion_item["kind"] = item["kind"]
+                elif "insertText" in item:
                     completion_item["completionText"] = item["insertText"]
                     completion_item["kind"] = item["kind"]
                 elif "textEdit" in item and "newText" in item["textEdit"]:
@@ -1977,9 +1977,9 @@ class SolidLanguageServer(ABC):
                     item["location"] = tree_location
                 location = item["location"]
                 if "absolutePath" not in location:
-                    location["absolutePath"] = absolute_path  # type: ignore
+                    location["absolutePath"] = absolute_path
                 if "relativePath" not in location:
-                    location["relativePath"] = relative_file_path  # type: ignore
+                    location["relativePath"] = relative_file_path
 
                 item["body"] = self.create_symbol_body(item, factory=body_factory)
 
@@ -2021,7 +2021,7 @@ class SolidLanguageServer(ABC):
                     if "children" in usymbol:
                         usymbol["children"] = convert_symbols_with_common_parent(usymbol["children"], usymbol)  # type: ignore
                     else:
-                        usymbol["children"] = []  # type: ignore
+                        usymbol["children"] = []
                     unified_symbols.append(usymbol)
                 return unified_symbols
 
@@ -2080,7 +2080,7 @@ class SolidLanguageServer(ABC):
                 return []
 
             # Create package symbol for directory
-            package_symbol = ls_types.UnifiedSymbolInformation(  # type: ignore
+            package_symbol = ls_types.UnifiedSymbolInformation(
                 name=os.path.basename(abs_dir_path),
                 kind=ls_types.SymbolKind.Package,
                 location=ls_types.Location(
@@ -2128,7 +2128,7 @@ class SolidLanguageServer(ABC):
 
                         # Create file symbol, link with children
                         file_range = self._get_range_from_file_content(file_data.contents)
-                        file_symbol = ls_types.UnifiedSymbolInformation(  # type: ignore
+                        file_symbol = ls_types.UnifiedSymbolInformation(
                             name=os.path.splitext(contained_dir_or_file_name)[0],
                             kind=ls_types.SymbolKind.File,
                             range=file_range,
@@ -2980,7 +2980,7 @@ class SolidLanguageServer(ABC):
                             migrated_cache[new_cache_key] = (file_hash, root_symbols)
                             num_symbols_migrated += len(all_symbols)
                     log.info("Migrated %d document symbols from legacy cache", num_symbols_migrated)
-                    self._raw_document_symbols_cache = migrated_cache  # type: ignore
+                    self._raw_document_symbols_cache = migrated_cache
                     self._raw_document_symbols_cache_is_modified = True
                     self._save_raw_document_symbols_cache()
                     legacy_cache_file.unlink()

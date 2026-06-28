@@ -104,7 +104,7 @@ The project uses modern Python tooling:
 - **uv** for fast dependency resolution and virtual environments
 - **pytest** for testing with language-specific markers (`@pytest.mark.csharp`)
 - **ruff** for linting and formatting
-- **mypy** for type checking
+- **ty** (Astral) for type checking
 
 ## Build and Development
 

@@ -145,7 +145,7 @@ class SuspendedLoggersContext:
         root_logger.handlers.clear()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:  # type: ignore
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         root_logger = lg.getLogger()
         root_logger.handlers = self.saved_root_handlers
         if self.saved_root_level is not None:

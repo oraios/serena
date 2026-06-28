@@ -1038,7 +1038,7 @@ class ALLanguageServer(SolidLanguageServer):
         if original_name != normalized_name and self._AL_OBJECT_NAME_PATTERN.match(original_name):
             sel_range = symbol.get("selectionRange")
             if sel_range:
-                start = sel_range.get("start")  # type: ignore
+                start = sel_range.get("start")
                 if start and "line" in start and "character" in start:
                     line = start["line"]
                     char = start["character"]

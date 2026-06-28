@@ -265,7 +265,7 @@ class TestAngularCoreProbe:
         from solidlsp.language_servers.angular_language_server import AngularLanguageServer
 
         stub = type("Stub", (), {"repository_root_path": repo_path})()
-        return AngularLanguageServer._find_angular_core_install(stub)  # type: ignore[arg-type]
+        return AngularLanguageServer._find_angular_core_install(stub)
 
     def test_finds_core_at_project_root(self, tmp_path) -> None:
         core_pkg = tmp_path / "node_modules" / "@angular" / "core" / "package.json"

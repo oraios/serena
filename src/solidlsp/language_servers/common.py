@@ -120,7 +120,7 @@ class RuntimeDependencyCollection:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             **kwargs,
-        )  # type: ignore
+        )
         if completed_process.returncode != 0:
             log.warning("Command '%s' failed with return code %d", command, completed_process.returncode)
             log.warning("Command output:\n%s", completed_process.stdout)

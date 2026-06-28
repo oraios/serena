@@ -228,7 +228,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
                     # In python 3.15 we could specify extra_items=True in the TypedDict definition,
                     # https://peps.python.org/pep-0728/
                     # If we ever upgrade to 3.15, we can remove the type: ignore[typeddict-unknown-key]
-                    s_dict["info"] = symbol_info  # type: ignore[typeddict-unknown-key]
+                    s_dict["info"] = symbol_info
 
         grouped_symbol_dicts = self.symbol_dict_grouper.group(symbol_dicts)
         result = self._to_json(grouped_symbol_dicts)
@@ -306,12 +306,12 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
                 }
             )
 
-        result = self.symbol_dict_grouper.group(reference_dicts)  # type: ignore
+        result = self.symbol_dict_grouper.group(reference_dicts)
 
         # shortened result closures, from least to most aggressive shortening
         def make_refs_without_context() -> str:
             """References with name_path and reference line, without surrounding code lines"""
-            grouped = self.symbol_dict_grouper.group(copy.deepcopy(ref_summaries))  # type: ignore
+            grouped = self.symbol_dict_grouper.group(copy.deepcopy(ref_summaries))
             return f"References without surrounding lines:\n{self._to_json(grouped)}"
 
         def make_per_file_counts() -> str:

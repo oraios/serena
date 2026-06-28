@@ -6,7 +6,7 @@ Run via `uv run poe <task>` (or `poe <task>` inside the activated venv). Poe exe
 - `poe test` — pytest on `test/` (per-language tests are marker-gated; pass `-m <marker>` to enable).
 - `poe lint` — ruff format-check + ruff check (no fixes).
 - `poe format` — ruff `--fix` then `ruff format` (mutates files).
-- `poe type-check` — mypy on `src/serena`, `src/solidlsp`, and `test/` (test pass disables `no-untyped-def`).
+- `poe type-check` — ty on `src/serena`, `src/solidlsp`, and `test/` (test pass relaxes pytest/mock-noisy rules via `[[tool.ty.overrides]]`).
 - Single test file: `uv run pytest test/path/to/test_x.py -vv`. Language-gated: add `-m python` etc.
 
 ## Docs

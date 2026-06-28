@@ -25,7 +25,7 @@ class BaseMockTool(Tool):
     """A mock Tool class for testing."""
 
     def __init__(self):
-        super().__init__(MockAgent())  # type: ignore
+        super().__init__(MockAgent())
 
 
 class BasicTool(BaseMockTool):

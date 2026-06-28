@@ -47,7 +47,7 @@ class BaseCase:
     id: str
 
     def to_pytest_param(self, *marks: MarkDecorator | Mark) -> ParameterSet:
-        return pytest.param(self.language, self, marks=[*get_pytest_markers(self.language), *marks], id=self.id)  # type: ignore
+        return pytest.param(self.language, self, marks=[*get_pytest_markers(self.language), *marks], id=self.id)
 
 
 @dataclass
@@ -1295,7 +1295,7 @@ class TestPromptProvision:
 
     @classmethod
     def _call_tool(cls, agent: SerenaAgent, tool_class: type[Tool], session_id: str = "global", **kwargs) -> str:
-        result = agent.get_tool(tool_class).apply_ex(mcp_ctx=cls.MockContext(session_id), **kwargs)  # type: ignore
+        result = agent.get_tool(tool_class).apply_ex(mcp_ctx=cls.MockContext(session_id), **kwargs)
         return result
 
     @staticmethod

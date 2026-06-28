@@ -200,7 +200,7 @@ class TaskExecutor:
                 self._task_executor_task_index += 1
             else:
                 task_prefix_name = "BackgroundTask"
-            task_name = f"{task_prefix_name}:{name or task.__name__}"
+            task_name = f"{task_prefix_name}:{name or getattr(task, '__name__', 'task')}"
             if logged:
                 log.info(f"Scheduling {task_name}")
             task_obj = self.Task(function=task, name=task_name, logged=logged, timeout=timeout)

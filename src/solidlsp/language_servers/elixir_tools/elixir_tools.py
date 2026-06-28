@@ -212,6 +212,7 @@ class ElixirTools(SolidLanguageServer):
         )
         self.server_ready = threading.Event()
         self.request_id = 0
+        self._building_project = False
 
         # Set generous timeout for Expert which can be slow to initialize and respond
         self.set_request_timeout(180.0)
