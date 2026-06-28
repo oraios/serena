@@ -144,9 +144,7 @@ PYDEVD_DISABLE_FILE_VALIDATION = "1"
 type = "simple"
 
 [tool.poe.tasks]
-# Uses PYTEST_MARKERS env var for default markers
-# For custom markers, one can either adjust the env var or just use -m option in the command line,
-# as the second -m option will override the first one.
+# For custom markers, use poe test -m ...
 test = "pytest test -vv"
 _ruff_check = "ruff check src scripts test"
 _ruff_format_check = "ruff format --check src scripts test"

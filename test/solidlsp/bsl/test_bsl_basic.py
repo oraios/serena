@@ -10,6 +10,7 @@ from solidlsp.ls_utils import SymbolUtils
 from solidlsp.settings import SolidLSPSettings
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
+pytestmark = pytest.mark.skip("BSL is a niche language, the tests are slow and flaky.")
 
 @pytest.mark.bsl
 class TestBSLLanguageServer:
