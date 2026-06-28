@@ -579,12 +579,13 @@ jobs:
         if: matrix.batch == 'niche' && runner.os != 'Windows'
         shell: bash
         run: |
-          # Install nixd from the pinned nixpkgs channel (nix_path above) via classic nix-env:
-          # it pulls from channels.nixos.org and never touches the GitHub API. The flake form
-          # `nix profile install github:nix-community/nixd` resolves an unpinned HEAD through
-          # api.github.com/.../commits/HEAD, which GitHub now 429-throttles on CI even with a
-          # token (it's a secondary "scraping" throttle on that endpoint, not the rate limit).
-          nix-env -iA nixpkgs.nixd
+          # Install nixd from the nixos-unstable channel (set as <nixpkgs> on NIX_PATH via nix_path
+          # above) using classic nix-env. `-f '<nixpkgs>'` resolves the channel tarball from
+          # nixos.org and selects the `nixd` attribute -- it never touches the GitHub API. (The flake
+          # form `nix profile install github:nix-community/nixd` resolves an unpinned HEAD through
+          # api.github.com/.../commits/HEAD, which GitHub 429-throttles on CI even with a token;
+          # and `nix-env -iA nixpkgs.nixd` fails here because no channel named `nixpkgs` is registered.)
+          nix-env -f '<nixpkgs>' -iA nixd
           if ! command -v nixd &> /dev/null; then
             echo "nixd installation failed or not in PATH"; exit 1
           fi
