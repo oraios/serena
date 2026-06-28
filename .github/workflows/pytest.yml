@@ -15,7 +15,7 @@
 #   Default is the full (os x batch) cross-product. `niche` (heavy/slow toolchains:
 #   lean, ocaml, nix, julia, R, perl) is ubuntu-only via matrix.exclude -- not worth
 #   the Windows/macOS cost. An OS-specific *language* inside an otherwise all-OS
-#   batch (swift -> macOS, haskell -> not Windows) is skipped one level down by the
+#   batch (swift -> macOS, haskell -> Linux only) is skipped one level down by the
 #   central conftest guard, NOT by the matrix.
 #
 # CONCURRENCY LIMITS (GitHub free tier)
@@ -64,7 +64,8 @@ jobs:
     env:
       MARKERS_JVM: "java or csharp or fsharp or kotlin or scala or groovy or clojure or bsl"
       MARKERS_NATIVE: "cpp or rust or go or zig or pascal or swift"  # swift is macOS-only (skips elsewhere via the guard)
-      # other-langs: grab-bag + scripting languages + haskell (haskell skips on Windows via the guard)
+      # other-langs: grab-bag + scripting languages + haskell. Haskell (GHC/HLS) is installed only on
+      # Linux -- it's too slow/expensive to build on the macOS runner -- and skips on Windows+macOS via the guard.
       MARKERS_OTHER_LANGS: "ruby or php or lua or luau or bash or powershell or elixir or erlang or dart or haxe or haskell or terraform or rego or ansible or yaml or toml or markdown or latex or crystal or cue or fortran or ada or matlab or systemverilog or hlsl or msl or al"
       # niche: slow, mostly-cached toolchains. ocaml + haskell are the two slowest -- kept in separate
       # batches (ocaml here, haskell in other-langs). nix + perl skip on Windows via the guard.
@@ -521,14 +522,14 @@ jobs:
           fi
       # --- Slow / heavy language toolchains, each isolated in its own batch (OS gating via matrix excludes) ---
       - name: Setup Haskell toolchain
-        if: matrix.batch == 'other-langs' && runner.os != 'Windows'
+        if: matrix.batch == 'other-langs' && runner.os == 'Linux'
         uses: haskell/ghcup-setup@v1
         with:
           ghc: '9.12.2'
           cabal: '3.10.3.0'
           hls: '2.11.0.0'
       - name: Verify Haskell tools
-        if: matrix.batch == 'other-langs' && runner.os != 'Windows'
+        if: matrix.batch == 'other-langs' && runner.os == 'Linux'
         shell: bash
         run: |
           which ghc && ghc --version
@@ -539,7 +540,7 @@ jobs:
             echo "WARNING: haskell-language-server-wrapper not found (may be incompatible with GHC 9.12.2)"
           fi
       - name: Pre-build Haskell test project for HLS
-        if: matrix.batch == 'other-langs' && runner.os != 'Windows'
+        if: matrix.batch == 'other-langs' && runner.os == 'Linux'
         shell: bash
         run: |
           cd test/resources/repos/haskell/test_repo
@@ -569,11 +570,21 @@ jobs:
         uses: cachix/install-nix-action@v30
         with:
           nix_path: nixpkgs=channel:nixos-unstable
+          # Authenticate any GitHub fetch Nix makes during evaluation/tests with the runner's
+          # GITHUB_TOKEN (raises the unauthenticated 60 req/hr-per-IP API limit to ~1000/hr).
+          # nixd itself is installed from the channel below, so this is just insurance.
+          extra_nix_config: |
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
       - name: Install nixd (Nix Language Server)
         if: matrix.batch == 'niche' && runner.os != 'Windows'
         shell: bash
         run: |
-          nix profile install github:nix-community/nixd
+          # Install nixd from the pinned nixpkgs channel (nix_path above) via classic nix-env:
+          # it pulls from channels.nixos.org and never touches the GitHub API. The flake form
+          # `nix profile install github:nix-community/nixd` resolves an unpinned HEAD through
+          # api.github.com/.../commits/HEAD, which GitHub now 429-throttles on CI even with a
+          # token (it's a secondary "scraping" throttle on that endpoint, not the rate limit).
+          nix-env -iA nixpkgs.nixd
           if ! command -v nixd &> /dev/null; then
             echo "nixd installation failed or not in PATH"; exit 1
           fi
