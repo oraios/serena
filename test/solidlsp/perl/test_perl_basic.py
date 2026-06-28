@@ -1,4 +1,3 @@
-import platform
 from pathlib import Path
 
 import pytest
@@ -8,9 +7,10 @@ from solidlsp.ls_config import Language
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
+pytestmark = pytest.mark.skip("Perl is niche and has a heavy toolchain")
+
 
 @pytest.mark.perl
-@pytest.mark.skipif(platform.system() == "Windows", reason="Perl::LanguageServer does not support native Windows operation")
 class TestPerlLanguageServer:
     """
     Tests for Perl::LanguageServer integration.

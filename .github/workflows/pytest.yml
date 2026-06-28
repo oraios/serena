@@ -296,23 +296,6 @@ jobs:
             echo "$LUA_LS_DIR/bin" >> $GITHUB_PATH
             rm lua-ls.zip
           fi
-      - name: Install Perl::LanguageServer
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          if [[ "${{ runner.os }}" == "Linux" ]]; then
-            sudo apt-get update
-            sudo apt-get install -y cpanminus build-essential libanyevent-perl libio-aio-perl
-          elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            brew install cpanminus
-          fi
-          PERL_MM_USE_DEFAULT=1 cpanm --notest --force Perl::LanguageServer
-          # Set up Perl local::lib environment for subsequent steps
-          echo "PERL5LIB=$HOME/perl5/lib/perl5${PERL5LIB:+:${PERL5LIB}}" >> $GITHUB_ENV
-          echo "PERL_LOCAL_LIB_ROOT=$HOME/perl5${PERL_LOCAL_LIB_ROOT:+:${PERL_LOCAL_LIB_ROOT}}" >> $GITHUB_ENV
-          echo "PERL_MB_OPT=--install_base \"$HOME/perl5\"" >> $GITHUB_ENV
-          echo "PERL_MM_OPT=INSTALL_BASE=$HOME/perl5" >> $GITHUB_ENV
-          echo "$HOME/perl5/bin" >> $GITHUB_PATH
       - name: Install ansible-core and ansible-lint (for Ansible language server tests)
         shell: bash
         run: uv run pip install ansible-core ansible-lint
@@ -325,31 +308,6 @@ jobs:
       - name: Install Elm
         shell: bash
         run: npm install -g elm@0.19.1-6
-      - name: Install Nix
-        if: runner.os != 'Windows'  # Nix doesn't support Windows natively
-        uses: cachix/install-nix-action@v30
-        with:
-          nix_path: nixpkgs=channel:nixos-unstable
-      - name: Install nixd (Nix Language Server)
-        if: runner.os != 'Windows'  # Skip on Windows since Nix isn't available
-        shell: bash
-        run: |
-          # Install nixd using nix
-          nix profile install github:nix-community/nixd
-
-          # Verify nixd is installed and working
-          if ! command -v nixd &> /dev/null; then
-            echo "nixd installation failed or not in PATH"
-            exit 1
-          fi
-
-          echo "$HOME/.nix-profile/bin" >> $GITHUB_PATH
-      - name: Verify Nix package build
-        if: runner.os != 'Windows'  # Nix only supported on Linux/macOS
-        shell: bash
-        run: |
-          # Verify the flake builds successfully
-          nix build --no-link
       - name: Install Regal (Rego Language Server)
         shell: bash
         run: |

@@ -4,8 +4,6 @@ Tests for the Nix language server implementation using nixd.
 These tests validate symbol finding and cross-file reference capabilities for Nix expressions.
 """
 
-import platform
-
 import pytest
 
 from solidlsp import SolidLanguageServer
@@ -15,8 +13,7 @@ from test.conftest import is_ci
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
-# Skip all Nix tests on Windows as Nix doesn't support Windows
-pytestmark = pytest.mark.skipif(platform.system() == "Windows", reason="Nix and nil are not available on Windows")
+pytestmark = pytest.mark.skip("Nix is niche and has a heavy toolchain")
 
 
 @pytest.mark.nix
