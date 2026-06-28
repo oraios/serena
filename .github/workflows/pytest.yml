@@ -28,24 +28,32 @@ jobs:
       MARKERS_SWIFT: "swift"  # split out: swiftly toolchain install is the slowest setup, isolate + cache it
       MARKERS_WEB: "typescript or svelte or vue or angular or html or scss or json or solidity or elm"
       MARKERS_PYTHON: "python"
-      MARKERS_SCRIPTING: "ruby or php or perl or lua or luau or bash or powershell or elixir or erlang or dart or haxe"
-      MARKERS_OTHER_LANGS: "terraform or rego or ansible or yaml or toml or markdown or latex or nix or crystal or cue or fortran or ada or matlab or systemverilog or hlsl or msl or al or ocaml or haskell or lean4 or julia or r"
+      MARKERS_SCRIPTING: "ruby or php or lua or luau or bash or powershell or elixir or erlang or dart or haxe"
+      MARKERS_OTHER_LANGS: "terraform or rego or ansible or yaml or toml or markdown or latex or crystal or cue or fortran or ada or matlab or systemverilog or hlsl or msl or al"
+      # Slow / heavy toolchains, each isolated in its own batch (OS gating via the matrix excludes).
+      MARKERS_HASKELL: "haskell"
+      MARKERS_OCAML: "ocaml"
+      MARKERS_NIX: "nix"
+      MARKERS_LEAN: "lean4"
+      MARKERS_NICHE: "julia or r or perl"  # lighter niche toolchains grouped together
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.11"]
         # Test execution is split into parallel batches by pytest marker. Each batch installs ONLY
-        # the toolchains its languages need -- steps below are gated with `if: matrix.batch == ...`
-        # -- so e.g. Swift/Lean are set up only in the batch that runs their tests, not in all 7.
+        # the toolchains its languages need -- steps below are gated with `if: matrix.batch == ...`.
         # Node/Python/uv stay in every batch (cheap, and needed for the venv + auto-installed LSes).
         # "catch-all" carries the unmarked core-framework tests in test/serena and needs no language
-        # toolchains. Rebalance once per-batch timings show up.
-        batch: [jvm, native, swift, web, python, scripting, other-langs, catch-all]
-        # Swift only runs on macOS (disabled on Windows via the central guard), so skip windows x swift.
+        # toolchains. haskell/ocaml/nix/lean are slow toolchains isolated in their own batches.
+        batch: [jvm, native, swift, web, python, scripting, other-langs, haskell, ocaml, nix, lean, niche, catch-all]
         exclude:
-          - os: windows-latest
-            batch: swift
+          # swift is macOS-only (swiftly toolchain + cache; its Linux path has never actually run)
+          - { os: ubuntu-latest, batch: swift }
+          - { os: windows-latest, batch: swift }
+          # haskell / nix have no native Windows support (matches the original `runner.os != 'Windows'`)
+          - { os: windows-latest, batch: haskell }
+          - { os: windows-latest, batch: nix }
     steps:
       - uses: actions/checkout@v4
       - name: Free disk space
@@ -509,10 +517,110 @@ jobs:
             echo "ERROR: FPCDIR does not exist: $FPCDIR"
             exit 1
           fi
-      # Lean 4 is intentionally NOT installed/built here: the toolchain is ~1 GB (it *is* the language
-      # server) and lean4 is already covered by the Linux maximal container (test-parallel.yml's niche
-      # batch). With no `lean` on PATH, the central language_tests_enabled(Language.LEAN4) guard simply
-      # skips lean4 on the Windows/macOS runners -- no per-OS toolchain download.
+      # --- Slow / heavy language toolchains, each isolated in its own batch (OS gating via matrix excludes) ---
+      - name: Setup Haskell toolchain
+        if: matrix.batch == 'haskell'
+        uses: haskell/ghcup-setup@v1
+        with:
+          ghc: '9.12.2'
+          cabal: '3.10.3.0'
+          hls: '2.11.0.0'
+      - name: Verify Haskell tools
+        if: matrix.batch == 'haskell'
+        shell: bash
+        run: |
+          which ghc && ghc --version
+          which cabal && cabal --version
+          if command -v haskell-language-server-wrapper &>/dev/null; then
+            haskell-language-server-wrapper --version || echo "WARNING: HLS wrapper version check failed"
+          else
+            echo "WARNING: haskell-language-server-wrapper not found (may be incompatible with GHC 9.12.2)"
+          fi
+      - name: Pre-build Haskell test project for HLS
+        if: matrix.batch == 'haskell'
+        shell: bash
+        run: |
+          cd test/resources/repos/haskell/test_repo
+          cabal update
+          cabal build --only-dependencies
+          cabal build
+      - name: Install OCaml and opam
+        if: matrix.batch == 'ocaml'
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ runner.os == 'Windows' && '4.14' || '5.3.x' }}
+          dune-cache: true
+          opam-repositories: |
+            ${{ runner.os == 'Windows' && 'opam-repository-mingw: https://github.com/ocaml-opam/opam-repository-mingw.git#sunset' || '' }}
+            default: https://github.com/ocaml/opam-repository.git
+      - name: Install OCaml packages
+        if: matrix.batch == 'ocaml'
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            opam install -y dune ocaml-lsp-server
+          else
+            opam install -y dune 'ocaml-lsp-server>=1.23.0'
+          fi
+      - name: Install Nix
+        if: matrix.batch == 'nix'
+        uses: cachix/install-nix-action@v30
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      - name: Install nixd (Nix Language Server)
+        if: matrix.batch == 'nix'
+        shell: bash
+        run: |
+          nix profile install github:nix-community/nixd
+          if ! command -v nixd &> /dev/null; then
+            echo "nixd installation failed or not in PATH"; exit 1
+          fi
+          echo "$HOME/.nix-profile/bin" >> $GITHUB_PATH
+      - name: Build Lean 4 test project
+        if: matrix.batch == 'lean'
+        uses: leanprover/lean-action@v1
+        with:
+          lake-package-directory: test/resources/repos/lean4/test_repo
+      # --- niche batch: R, Julia, Perl ---
+      - name: Install R
+        if: matrix.batch == 'niche'
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: '4.4.2'
+          use-public-rspm: true
+      - name: Install R sysdeps (libuv for fs package)
+        if: matrix.batch == 'niche' && runner.os == 'Linux'
+        shell: bash
+        run: sudo apt-get update && sudo apt-get install -y libuv1-dev
+      - name: Install R language server
+        if: matrix.batch == 'niche'
+        shell: bash
+        run: Rscript -e "install.packages('languageserver', repos='https://cloud.r-project.org')"
+      - name: Set up Julia
+        if: matrix.batch == 'niche'
+        uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.12.6'
+      - name: Install Julia LanguageServer
+        if: matrix.batch == 'niche'
+        shell: bash
+        run: julia -e 'using Pkg; Pkg.add(Pkg.PackageSpec(name="LanguageServer", version="5.0.0"))'
+      - name: Install Perl::LanguageServer
+        if: matrix.batch == 'niche' && runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y cpanminus build-essential libanyevent-perl libio-aio-perl
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            brew install cpanminus
+          fi
+          PERL_MM_USE_DEFAULT=1 cpanm --notest --force Perl::LanguageServer
+          echo "PERL5LIB=$HOME/perl5/lib/perl5${PERL5LIB:+:${PERL5LIB}}" >> $GITHUB_ENV
+          echo "PERL_LOCAL_LIB_ROOT=$HOME/perl5${PERL_LOCAL_LIB_ROOT:+:${PERL_LOCAL_LIB_ROOT}}" >> $GITHUB_ENV
+          echo "PERL_MB_OPT=--install_base \"$HOME/perl5\"" >> $GITHUB_ENV
+          echo "PERL_MM_OPT=INSTALL_BASE=$HOME/perl5" >> $GITHUB_ENV
+          echo "$HOME/perl5/bin" >> $GITHUB_PATH
       - name: Install npm deps for Angular test repo
         if: matrix.batch == 'web'
         shell: bash
@@ -546,7 +654,12 @@ jobs:
             python)      expr="$MARKERS_PYTHON" ;;
             scripting)   expr="$MARKERS_SCRIPTING" ;;
             other-langs) expr="$MARKERS_OTHER_LANGS" ;;
-            catch-all)   expr="not ($MARKERS_JVM or $MARKERS_NATIVE or $MARKERS_SWIFT or $MARKERS_WEB or $MARKERS_PYTHON or $MARKERS_SCRIPTING or $MARKERS_OTHER_LANGS)" ;;
+            haskell)     expr="$MARKERS_HASKELL" ;;
+            ocaml)       expr="$MARKERS_OCAML" ;;
+            nix)         expr="$MARKERS_NIX" ;;
+            lean)        expr="$MARKERS_LEAN" ;;
+            niche)       expr="$MARKERS_NICHE" ;;
+            catch-all)   expr="not ($MARKERS_JVM or $MARKERS_NATIVE or $MARKERS_SWIFT or $MARKERS_WEB or $MARKERS_PYTHON or $MARKERS_SCRIPTING or $MARKERS_OTHER_LANGS or $MARKERS_HASKELL or $MARKERS_OCAML or $MARKERS_NIX or $MARKERS_LEAN or $MARKERS_NICHE)" ;;
             *)           echo "Unknown batch: ${{ matrix.batch }}" >&2; exit 1 ;;
           esac
           echo "Marker expression: $expr"
@@ -554,7 +667,7 @@ jobs:
       - name: Test with pytest
         shell: bash
         run: uv run poe test -m "${{ steps.markers.outputs.expr }}" -q --tb=short
-      - name: Type-checking with mypy
+      - name: Type-checking with ty
         # Type-checking is batch-independent; run it only once per OS instead of in every batch.
         if: matrix.batch == 'catch-all'
         shell: bash
