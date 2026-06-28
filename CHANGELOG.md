@@ -24,19 +24,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     `activate_project`/project lookup, raising `FileNotFoundError` in `RegisteredProject.matches_root_path`
 
 * Language Servers:
-  - C/C++ (clangd): add Unreal Engine 5 fixture and tests verifying that reflection-macro
-    code (`UCLASS`, `UFUNCTION`, `UPROPERTY`, `GENERATED_BODY`) yields correct symbols,
-    references, definitions, and rename edits in hand-written sources (never in
-    UHT-generated files); add an Unreal Engine setup guide.
-  - C/C++ (clangd, ccls): detect Unreal Engine projects by a `.uproject` file at the project
-    root and skip the engine build/cache directories (`Binaries`, `DerivedDataCache`,
-    `Intermediate`, `Saved`) during indexing. clangd fails with a pointer to the Unreal Engine
-    setup guide when started in such a project without a `compile_commands.json`. #1566
-  - C/C++ (clangd): for Unreal Engine projects, treat an empty `compile_commands.json`
-    the same as a missing one, since clangd cannot index against it, and inline the
-    `GenerateClangDatabase` command in the startup error instead of only pointing at the
-    setup guide. The Unreal Engine setup guide is reordered to put UnrealBuildTool's clang
-    database first.
+  - C/C++ (clangd): improve support and documentation for Unreal Engine 5 projects.
   - `typescript_vts`: Add `initialization_options` setting in `ls_specific_settings.typescript_vts`.
     The dict is forwarded to vtsls via `initializationOptions`, `workspace/didChangeConfiguration`,
     and `workspace/configuration` pulls. Enables Yarn PnP setups with `typescript.tsdk` pointing
