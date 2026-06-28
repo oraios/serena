@@ -30,26 +30,18 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Language Servers:
   - C/C++ (clangd): improve support and documentation for Unreal Engine 5 projects.
-  - `typescript_vts`: Add `initialization_options` setting in `ls_specific_settings.typescript_vts`.
-    The dict is forwarded to vtsls via `initializationOptions`, `workspace/didChangeConfiguration`,
-    and `workspace/configuration` pulls. Enables Yarn PnP setups with `typescript.tsdk` pointing
-    at the Yarn-generated SDK.
+  - `typescript_vts`: Add `initialization_options` setting in `ls_specific_settings.typescript_vts`. 
+    Enables Yarn PnP setups with `typescript.tsdk` pointing at the Yarn-generated SDK.
+  - C#: minor fixes in Omnisharp and Roslyn that prevented startup on some systems #1617
   - `SvelteLanguageServer`: Fix diagnostics requests for TypeScript/JavaScript files incorrectly being
     processed by the Svelte LS instead of the TypeScript LS.
   - `SvelteLanguageServer`: Fix document-symbol requests for TypeScript/JavaScript files returning empty
-    results in svelte-only mode (`languages: [svelte]`). They are now routed to the companion TS server,
-    so symbols defined in plain `.ts`/`.js` files are again discoverable via `find_symbol`/
-    `get_symbols_overview`, and `find_referencing_symbols` no longer fails to locate `.ts`/`.js` symbols. #1552
+    results in svelte-only mode (`languages: [svelte]`. #1552
   - `JuliaLanguageServer`: Fix the stdio MCP server exiting right after `initialize` ("tools fetch failed")
-    when `julia` is enabled. The runtime probe/install subprocesses now run with `stdin=subprocess.DEVNULL`,
-    so they can no longer inherit and clobber Serena's stdin, which is the JSON-RPC pipe under the stdio
-    transport. #1577
+    when `julia` is enabled. #1577
+  - `Java`: invalidate JDTLS workspace cache when Java import settings change #1576
   - Improve quoting of arguments in shell executions
-  - Add **LaTeX** support (experimental) via [texlab](https://github.com/latex-lsp/texlab). Auto-downloads a
-    SHA-256-verified prebuilt texlab binary (osx-arm64/x64, linux-arm64/x64, win-x64); covers `.tex`, `.bib`,
-    `.sty`, and `.cls` files. Provides sectioning document symbols (including beamer frames), label/citation
-    definitions, and `\ref`/`\cite` references. Must be explicitly enabled via language `latex`. texlab is
-    GPL-3.0 and runs as a separate downloaded process.
+  - Add **LaTeX** support (experimental) via [texlab](https://github.com/latex-lsp/texlab).
 
 * JetBrains:
   - Add configuration option `jetbrains_launch_command`, allowing Serena to spawn IDE instances automatically
