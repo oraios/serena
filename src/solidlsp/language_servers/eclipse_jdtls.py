@@ -4,6 +4,7 @@ Provides Java specific instantiation of the LanguageServer class. Contains vario
 
 import dataclasses
 import hashlib
+import json
 import logging
 import os
 import pathlib
@@ -776,20 +777,37 @@ class EclipseJDTLS(SolidLanguageServer):
             vscode-java VSIX bump or upstream install change) lands in a separate ws_dir
             and avoids stale OSGi configs from the previous version blocking startup.
 
+            Workspace-affecting settings are also mixed in so changing Maven/Gradle/JDK
+            inputs lands in a fresh workspace instead of silently reusing stale import
+            state from a previous configuration.
+
             Exception: legacy default-mode users on INITIAL_VSCODE_JAVA_VERSION keep the
-            original ``md5(repository_root_path)`` format. These are users who installed
-            under the legacy unversioned ``vscode-java/`` directory (see the version-pinning
-            convention at the top of this module) — preserving their hash means existing
-            JDTLS workspaces and project caches are reused without a one-time reindex.
+            original ``md5(repository_root_path)`` format *until* one of the tracked
+            workspace-affecting settings is set. This preserves existing caches for the
+            old default setup while still fixing stale-workspace bugs once users opt into
+            custom Java import settings.
             """
+            workspace_setting_keys = (
+                "maven_user_settings",
+                "gradle_user_home",
+                "gradle_wrapper_enabled",
+                "gradle_java_home",
+                "java_home",
+                "use_system_java_home",
+                "maven_offline",
+            )
+            workspace_settings = {key: custom_settings.settings[key] for key in workspace_setting_keys if key in custom_settings.settings}
+            workspace_settings_json = json.dumps(workspace_settings, sort_keys=True, separators=(",", ":"))
+
             is_legacy_initial = (
                 not custom_settings.get("jdtls_path")
                 and custom_settings.get("vscode_java_version", DEFAULT_VSCODE_JAVA_VERSION) == INITIAL_VSCODE_JAVA_VERSION
+                and not workspace_settings
             )
             if is_legacy_initial:
                 ws_hash_input = repository_root_path.encode()
             else:
-                ws_hash_input = (repository_root_path + "|" + jdtls_launcher_jar_path).encode()
+                ws_hash_input = (repository_root_path + "|" + jdtls_launcher_jar_path + "|" + workspace_settings_json).encode()
             return hashlib.md5(ws_hash_input).hexdigest()
 
         def create_launch_command(self) -> list[str]:
