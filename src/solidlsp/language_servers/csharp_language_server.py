@@ -6,6 +6,7 @@ import logging
 import os
 import platform
 import shutil
+import tempfile
 import threading
 from collections.abc import Hashable, Iterable
 from dataclasses import replace
@@ -34,6 +35,8 @@ log = logging.getLogger(__name__)
 
 NUGET_ALLOWED_HOSTS = ("www.nuget.org", "nuget.org", "globalcdn.nuget.org")
 DEFAULT_CSHARP_LANGUAGE_SERVER_VERSION = "5.5.0-2.26078.4"
+WINDOWS_MAX_PATH = 260
+ROSLYN_LONGEST_KNOWN_PACKAGE_MEMBER = "Microsoft.CodeAnalysis.ExternalAccess.CompilerDeveloperSDK.dll"
 
 _RUNTIME_DEPENDENCIES = [
     RuntimeDependency(
@@ -460,12 +463,15 @@ class CSharpLanguageServer(SolidLanguageServer):
             if url is None:
                 raise SolidLSPException(f"No URL specified for package {package_name} version {package_version}")
 
-            temp_dir = Path(self._ls_resources_dir) / "temp_downloads"
-            temp_dir.mkdir(parents=True, exist_ok=True)
+            package_extract_dir = Path(self._ls_resources_dir) / "temp_downloads" / f"{package_name}.{package_version}"
+            projected_path = package_extract_dir / (dependency.extract_path or "") / ROSLYN_LONGEST_KNOWN_PACKAGE_MEMBER
+            if platform.system() == "Windows" and len(str(projected_path)) >= WINDOWS_MAX_PATH:
+                log.warning("Using a short temporary directory for Roslyn package extraction because the configured cache path is too deep")
+                package_extract_dir = Path(tempfile.mkdtemp(prefix="serena-roslyn-")) / package_extract_dir.name
+            package_extract_dir.parent.mkdir(parents=True, exist_ok=True)
 
             try:
                 log.debug(f"Downloading package from: {url}")
-                package_extract_dir = temp_dir / f"{package_name}.{package_version}"
                 FileUtils.download_and_extract_archive_verified(
                     url,
                     str(package_extract_dir),

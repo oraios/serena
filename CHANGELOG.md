@@ -2,15 +2,47 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Add notion of trusted projects via new global configuration setting `trusted_project_path_patterns`.
+    Current effects:
+    - `ls_specific_settings` defined in project configurations will only be applied for trusted projects    
+  - Fix `--project-from-cwd` hijacking git worktrees nested under a Serena project. `find_project_root`
+    now walks up in a single pass so the nearest project boundary wins (either a `.serena/project.yml`
+    or a `.git`, including worktree/submodule pointer files), instead of preferring an ancestor's
+    `.serena/project.yml` over a closer `.git`. This previously bound CLI agents (Claude Code, Codex,
+    Gemini) launched from inside a worktree to the parent repo, causing stale reads and misdirected edits.
+  - Fix: CLI flags on `start-mcp-server` could incorrectly be saved to the global configuration file if the
+    list of projects was modified (triggering a save of the configuration with transient overrides applied)
+  - Fix: context or mode argument referencing a known name (e.g. `--context anitgravity`) could result in   
+    incorrect file access if a corresponding local file existed (e.g. `./antigravity` binary);
+    file access is now guarded with path detection (file ending or path separator must be present)
+  - Allow `query_project` tool to access read-only tools that are not enabled in the current configuration
+  - Adjust prompt generation mechanism to use newly introduced tool name mapping `tool_names`, allowing
+    prompts to directly use tool names that match the active language backend (and removing the need
+    for additional prompts that explain tool name differences)
+  - Improve quoting/escaping of arguments in shell executions on Windows (via `oslex` dependency)
+  - Add tool parameter alias support, adding `name_path` as an alias for `name_path_pattern` in `find_symbol` tools
+  - Make tool call errors surface explicitly as errors at the MCP protocol level
+  - Fix: a registered project whose root directory was deleted while Serena was already running could break
+    `activate_project`/project lookup, raising `FileNotFoundError` in `RegisteredProject.matches_root_path`
+  - Allow structured tool output to be configured on a per-context basis, disabling it for Claude Code
+    (which does not correctly unpack structured output) #1042
+
 * Language Servers:
-  - `typescript_vts`: Add `initialization_options` setting in `ls_specific_settings.typescript_vts`.
-    The dict is forwarded to vtsls via `initializationOptions`, `workspace/didChangeConfiguration`,
-    and `workspace/configuration` pulls. Enables Yarn PnP setups with `typescript.tsdk` pointing
-    at the Yarn-generated SDK.
-  - Add experimental PHP backend `php_phpantom` using `PHPantom-dev/phpantom_lsp`.
+  - C/C++ (clangd): improve support and documentation for Unreal Engine 5 projects.
+  - `typescript_vts`: Add `initialization_options` setting in `ls_specific_settings.typescript_vts`. 
+    Enables Yarn PnP setups with `typescript.tsdk` pointing at the Yarn-generated SDK.
+  - C#: minor fixes in Omnisharp and Roslyn that prevented startup on some systems #1617
   - `SvelteLanguageServer`: Fix diagnostics requests for TypeScript/JavaScript files incorrectly being
     processed by the Svelte LS instead of the TypeScript LS.
+  - `SvelteLanguageServer`: Fix document-symbol requests for TypeScript/JavaScript files returning empty
+    results in svelte-only mode (`languages: [svelte]`. #1552
+  - `JuliaLanguageServer`: Fix the stdio MCP server exiting right after `initialize` ("tools fetch failed")
+    when `julia` is enabled. #1577
+  - `Java`: invalidate JDTLS workspace cache when Java import settings change #1576
   - Improve quoting of arguments in shell executions
+  - Add **LaTeX** support (experimental) via [texlab](https://github.com/latex-lsp/texlab).
+  - PHP: add support for PHPantom as alternative to the already supported PHP LS #1554.
 
 * JetBrains:
   - Add configuration option `jetbrains_launch_command`, allowing Serena to spawn IDE instances automatically
@@ -24,6 +56,12 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix empty executions queue displaying "Loading..."
   - Tray manager: Add NixOS-support for AppIndicator-based trays (e.g., most Wayland-trays) to the package in flake.nix.
   - Fix: Wait for the subprocess that opens the browser window, preventing zombie processes #1488 
+
+* Hooks:
+  - Handle tool_input passed as string gracefully instead of failing (Copilot CLI sends strings).
+
+Dependencies:
+  - Add dependency `oslex`
 
 # v1.5.3 (2026-05-26)
 

@@ -1,8 +1,8 @@
 import logging
 import platform
-import shlex
 import subprocess
 
+import oslex
 import psutil
 
 log = logging.getLogger(__name__)
@@ -19,17 +19,16 @@ def subprocess_kwargs() -> dict:
     return kwargs
 
 
-def convert_shell_cmd(cmd: str | list[str]) -> str | list[str]:
+def convert_shell_cmd(cmd: str | list[str]) -> str:
     """
-    Converts a command (specified as a list or string) to a format supported by subprocess calls with shell=True on the current platform.
-    List format must be converted to string format on POSIX systems, quoting arguments appropriately,
-    while it can be used as-is on Windows.
+    Converts a command (specified as a list or string) to a format supported by subprocess calls with shell=True on the current platform,
+    applying necessary escaping and quoting if the command is specified as a list of arguments.
 
     :param cmd: the command to convert, specified as a list of arguments
     :return: a suitable representation of the command for subprocess calls on the current platform
     """
-    if isinstance(cmd, list) and platform.system() != "Windows":
-        return " ".join(shlex.quote(arg) for arg in cmd)
+    if isinstance(cmd, list):
+        return oslex.join(cmd)
     else:
         return cmd
 

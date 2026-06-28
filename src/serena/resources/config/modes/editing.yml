@@ -21,9 +21,9 @@ prompt: |
   If you need to replace the definition of a symbol, use the `replace_symbol_body` tool.
   If you want to add some new code at the end of the file, use the `insert_after_symbol` tool with the last top-level symbol in the file. 
   Similarly, you can use `insert_before_symbol` with the first top-level symbol in the file to insert code at the beginning of a file.
-  You can understand relationships between symbols by using the `find_referencing_symbols` tool. If not explicitly requested otherwise by the user,
+  You can understand relationships between symbols by using the ``{{ tool_names['find_referencing_symbols'] }}`` tool. If not explicitly requested otherwise by the user,
   you make sure that when you edit a symbol, the change is either backward-compatible or you find and update all references as needed.
-  The `find_referencing_symbols` tool will give you code snippets around the references as well as symbolic information.
+  The `{{ tool_names['find_referencing_symbols'] }}` tool will give you code snippets around the references as well as symbolic information.
   You can assume that all symbol editing tools are reliable, so you never need to verify the results if the tools return without error.
 
   {% if 'replace_content' in available_tools %}

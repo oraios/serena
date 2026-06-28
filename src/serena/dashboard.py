@@ -502,7 +502,7 @@ class SerenaDashboardAPI:
         }
 
         # Get active modes
-        modes = self._agent.get_active_modes()
+        modes = self._agent.get_active_modes().get_modes(include_background_base_modes=False)
         modes_info = [
             {"name": mode.name, "description": mode.description, "path": SerenaAgentMode.get_path(mode.name, instance=mode)}
             for mode in modes

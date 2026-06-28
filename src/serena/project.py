@@ -146,6 +146,14 @@ class Project(ToStringMixin):
     def path_to_project_yml(self) -> str:
         return self.serena_config.get_project_yml_location(self.project_root)
 
+    def is_trusted(self) -> bool:
+        """
+        Checks whether the project is trusted, based on the global configuration.
+
+        :return: True if the project is trusted, False otherwise
+        """
+        return self.serena_config.is_trusted_project_path(self.project_root)
+
     def read_file(self, relative_path: str) -> str:
         """
         Reads a file relative to the project root.
@@ -285,17 +293,15 @@ class Project(ToStringMixin):
 
     def validate_relative_path(self, relative_path: str, require_not_ignored: bool = False) -> None:
         """
-        Validates that the given relative path is safe to read or edit,
-        meaning it's inside the project directory and not ignored.
-
-        Non-existent paths are allowed (not considered ignored) to support
-        editing tools that create new files.
+        Validates that the given relative path is within the project directory
+        (and, optionally, not ignored according to the project's ignore settings),
+        raising a ValueError if the validation fails.
 
         :param relative_path: the path to validate, relative to the project root
         :param require_not_ignored: if True, the path must not be ignored according to the project's ignore settings
         """
         if not self.is_path_in_project(relative_path):
-            raise ValueError(f"{relative_path=} points to path outside of the repository root; cannot access for safety reasons")
+            raise ValueError(f"{relative_path=} points outside the project root ({self.project_root})")
 
         if require_not_ignored:
             if self.is_ignored_path(relative_path):
@@ -419,7 +425,15 @@ class Project(ToStringMixin):
 
             log.info(f"Creating language server manager for {self.project_root}")
             self._language_server_manager_init_error = None
-            ls_specific_settings = {**self.serena_config.ls_specific_settings, **self.project_config.ls_specific_settings}
+            ls_specific_settings = dict(self.serena_config.ls_specific_settings)
+            if self.project_config.ls_specific_settings:
+                if self.is_trusted():
+                    ls_specific_settings.update(self.project_config.ls_specific_settings)
+                else:
+                    log.warning(
+                        f"Project path {self.project_root} is not trusted, ignoring LS-specific settings from project configuration. "
+                        "To trust the project, modify the trusted path patterns in the global configuration."
+                    )
             factory = LanguageServerFactory(
                 project_root=self.project_root,
                 project_data_path=self._serena_data_folder,

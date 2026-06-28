@@ -22,6 +22,7 @@ class HookClient(Enum):
     """The client application that triggered the hook."""
 
     CLAUDE_CODE = "claude-code"
+    CODEBUDDY = "codebuddy"
     VSCODE = "vscode"
     CODEX = "codex"
 
@@ -70,7 +71,11 @@ class PreToolUseHook(Hook, ABC):
         if not _tool_name:
             raise ValueError("Tool name is required in the hook input data")
         self._tool_name = _tool_name
-        self._tool_input: dict | None = self._input_data.get("tool_input") or self._input_data.get("toolInput")
+        raw_tool_input = self._input_data.get("tool_input") or self._input_data.get("toolInput")
+        # TODO: some agents, like copilot CLI, can send a string as value for raw_tool_input
+        #  Example: "tool_input":"*** Begin Patch\n*** Add File: /Users/acbdef/.copilot/session-state/08a961db-02f0-4c7c-b783-1e9818290292/files/hook-tool-test-3.txt\n+third edit tool test\n*** End Patch\n"
+        #  We currently don't parse such tool input and hence don't react to it in hooks
+        self._tool_input: dict | None = raw_tool_input if isinstance(raw_tool_input, dict) else None
 
         # only relevant in claude code at the moment, (not all events include this field; default to empty string)
         raw_permission_mode = self._input_data.get("permission_mode") or self._input_data.get("permissionMode") or ""
@@ -361,7 +366,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             self._file_path = str(file_path).strip() or None
 
     def is_grep_call(self) -> bool:
-        if self._client == HookClient.CLAUDE_CODE:
+        if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
             return self._tool_name == "grep" or "search_for_pattern" in self._tool_name
         if self._client == HookClient.CODEX and self._is_shell_command_call():
             return self._command_name in self._GREP_SHELL_COMMANDS
@@ -369,7 +374,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         return "grep" in self._tool_name
 
     def is_read_call(self) -> bool:
-        if self._client == HookClient.CLAUDE_CODE:
+        if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
             return self._tool_name == "read" or "read_file" in self._tool_name
         if self._client == HookClient.CODEX and self._is_shell_command_call():
             return self._command_name in self._READ_SHELL_COMMANDS

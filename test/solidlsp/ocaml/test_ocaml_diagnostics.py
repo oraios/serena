@@ -1,3 +1,5 @@
+import shutil
+
 import pytest
 
 from solidlsp import SolidLanguageServer
@@ -5,6 +7,7 @@ from solidlsp.ls_config import Language
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
 
+@pytest.mark.skipif(shutil.which("opam") is None, reason="OPAM is not available")
 @pytest.mark.ocaml
 class TestOcamlDiagnostics:
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)

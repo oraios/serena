@@ -65,7 +65,16 @@ For details on mode configuration, see
 def find_project_root(root: str | Path | None = None) -> str | None:
     """Find project root by walking up from CWD.
 
-    Checks for .serena/project.yml first (explicit Serena project), then .git (git root).
+    Returns the nearest ancestor that is either an explicit Serena project
+    (contains .serena/project.yml) or a git root (contains .git, which may be a
+    directory or, for git worktrees and submodules, a pointer file). The nearest
+    such directory wins; a .serena/project.yml at the same level takes priority
+    over .git only because they resolve to the same directory.
+
+    Walking up with a single pass (rather than searching all levels for
+    .serena/project.yml first and only then for .git) ensures a git worktree
+    nested under another Serena project resolves to the worktree itself, instead
+    of being hijacked by the ancestor project's .serena/project.yml.
 
     :param root: If provided, constrains the search to this directory and below
                  (acts as a virtual filesystem root). Search stops at this boundary.
@@ -82,14 +91,12 @@ def find_project_root(root: str | Path | None = None) -> str | None:
             if boundary is not None and parent == boundary:
                 return
 
-    # First pass: look for .serena
+    # Single pass: the nearest project boundary wins, whether it is an explicit
+    # Serena project (.serena/project.yml) or a git root (.git, a dir or a worktree
+    # pointer file). This keeps a nested git worktree from being hijacked by an
+    # ancestor's .serena/project.yml.
     for directory in ancestors():
-        if (directory / ".serena" / "project.yml").is_file():
-            return str(directory)
-
-    # Second pass: look for .git
-    for directory in ancestors():
-        if (directory / ".git").exists():  # .git can be file (worktree) or dir
+        if (directory / ".serena" / "project.yml").is_file() or (directory / ".git").exists():
             return str(directory)
 
     return None
@@ -177,9 +184,7 @@ class TopLevelCommands(AutoRegisteringGroup):
     )
     def init(language_backend: Literal["LSP", "JetBrains"] = "LSP") -> None:
         click.echo(f"\nSerena version: {serena_version()}\n")
-        serena_config = SerenaConfig.from_config_file()
-        serena_config.language_backend = LanguageBackend(language_backend)
-        serena_config.save()
+        serena_config = SerenaConfig.init(language_backend=LanguageBackend(language_backend))
         click.echo(f"Configuration file: {serena_config.config_file_path}")
         click.echo(f"Language backend: {language_backend}")
 
@@ -424,8 +429,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         modes_selection_def: ModeSelectionDefinition | None = None
         if modes:
             modes_selection_def = ModeSelectionDefinition(default_modes=modes)
-        serena_config = SerenaConfig.from_config_file()
-        serena_config.web_dashboard = False
+        serena_config = SerenaConfig.from_config_file().with_headless_mode_overrides()
         print(serena_config.default_modes)
         print(serena_config.base_modes)
 
@@ -923,10 +927,8 @@ class ProjectCommands(AutoRegisteringGroup):
 
         logging.configure(level=logging.INFO)
         project_path = os.path.abspath(project)
-        serena_config = SerenaConfig.from_config_file()
+        serena_config = SerenaConfig.from_config_file().with_headless_mode_overrides()
         serena_config.language_backend = LanguageBackend.LSP
-        serena_config.gui_log_window = False
-        serena_config.web_dashboard = False
         proj = Project.load(project_path, serena_config=serena_config)
 
         # Create log file with timestamp
@@ -1108,7 +1110,7 @@ class ToolCommands(AutoRegisteringGroup):
 
         agent = SerenaAgent(
             project=None,
-            serena_config=SerenaConfig(web_dashboard=False, log_level=logging.INFO),
+            serena_config=SerenaConfig(log_level=logging.INFO).with_headless_mode_overrides(),
             context=serena_context,
         )
         tool = agent.get_tool_by_name(tool_name)

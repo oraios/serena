@@ -27,10 +27,11 @@ Some of the configurable settings include:
     this can also be [overridden per project](per-project-language-backend)
   * UI settings affecting the [Serena Dashboard and GUI tool](060_dashboard.md)
   * the set of tools to enable/disable by default
-  * the set of modes to use by default
+  * the set of [modes](modes) to use by default
   * tool execution parameters (timeout, max. answer length)
   * global ignore rules
   * logging settings
+  * the set of trusted project paths
   * advanced settings specific to individual language servers (see [below](ls-specific-settings))
 
 The global configuration settings apply to all projects.
@@ -199,9 +200,12 @@ Most users will not need to adjust these settings.
 :::
 
 Under the key `ls_specific_settings` in `serena_config.yml`, you can you pass global per-language, 
-language server-specific configuration. You can use the same key in the project configuration files (`project.yml`
+language server-specific configuration. 
+
+You can use the same key in the project configuration files (`project.yml`
 and `project.local.yml` ) to override or extend the global settings for a specific project.
-The settings are merged on top-level, meaning that project-level settings for a language will replace global settings for the same language.
+The settings are merged on top-level, meaning that project-level settings for a language will replace global settings for the same language.  
+Note: Project-level settings are considered only for *trusted projects* (which are defined in the [global configuration](global-config)).
 
 Structure:
 

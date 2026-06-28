@@ -36,6 +36,7 @@ from typing import Any, cast
 
 from overrides import override
 
+from solidlsp.language_servers.common import UE_IGNORED_DIRNAMES, is_unreal_engine_project
 from solidlsp.ls import (
     LanguageServerDependencyProvider,
     LanguageServerDependencyProviderSinglePath,
@@ -71,10 +72,11 @@ class CCLS(SolidLanguageServer):
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
-        ignored_dirs = [
-            ".ccls-cache",
-        ]
-        return super().is_ignored_dirname(dirname) or dirname in ignored_dirs
+        return (
+            super().is_ignored_dirname(dirname)
+            or dirname == ".ccls-cache"
+            or (is_unreal_engine_project(self.repository_root_path) and dirname in UE_IGNORED_DIRNAMES)
+        )
 
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
         def _get_or_install_core_dependency(self) -> str:

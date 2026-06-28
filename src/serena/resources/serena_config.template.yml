@@ -183,5 +183,20 @@ symbol_info_budget: 10
 # Example for a central location: "/projects-metadata/$projectFolderName/.serena"
 project_serena_folder_location: "$projectDir/.serena"
 
+# list of glob patterns for project root directories that are considered trusted.
+# Some project settings will only be applied if the project is trusted.
+# A glob pattern can contain the following:
+#       *  matches any sequence of characters except path separators
+#      **  matches any sequence of characters including path separators
+#       ?  matches any single character except path separators
+#   [abc]  matches any single character in the set (here: a, b, or c)
+# Path separators are normalised internally, so on Windows, both / and \ can be used in the patterns.
+# Example:
+#   trusted_project_path_patterns:
+#     - /home/user/projects/**
+#     - C:\Users\Anna\Dev\work\**
+# The pattern "**" matches any project path, so it can be used to trust all projects.
+trusted_project_path_patterns: []
+
 # the list of registered project paths (updated automatically).
 projects: []

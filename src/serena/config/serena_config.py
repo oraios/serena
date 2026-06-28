@@ -32,6 +32,7 @@ from serena.constants import (
     SERENA_MANAGED_DIR_NAME,
 )
 from serena.util.inspection import determine_programming_language_composition
+from serena.util.text_utils import glob_match
 from serena.util.yaml import YamlCommentNormalisation, load_yaml, normalise_yaml_comments, save_yaml, transfer_yaml_comments
 from solidlsp.ls_config import Language
 
@@ -42,6 +43,7 @@ from ..util.dataclass import get_dataclass_default
 
 if TYPE_CHECKING:
     from ..project import Project
+    from ..tools.tools_base import Tool
 
 log = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -216,6 +218,28 @@ class LanguageBackend(Enum):
 
     def is_jetbrains(self) -> bool:
         return self == LanguageBackend.JETBRAINS
+
+    def get_lsp_tool_class_replacements(self) -> "dict[type[Tool], type[Tool]]":
+        """
+        :return: mapping from LSP tool classes to replacement tool classes (functional replacements)
+        """
+        match self:
+            case LanguageBackend.LSP:
+                return {}
+            case LanguageBackend.JETBRAINS:
+                from ..tools import jetbrains_tools, symbol_tools
+
+                return {
+                    symbol_tools.FindSymbolTool: jetbrains_tools.JetBrainsFindSymbolTool,
+                    symbol_tools.GetSymbolsOverviewTool: jetbrains_tools.JetBrainsGetSymbolsOverviewTool,
+                    symbol_tools.FindReferencingSymbolsTool: jetbrains_tools.JetBrainsFindReferencingSymbolsTool,
+                    symbol_tools.FindImplementationsTool: jetbrains_tools.JetBrainsFindImplementationsTool,
+                    symbol_tools.FindDeclarationTool: jetbrains_tools.JetBrainsFindDeclarationTool,
+                    symbol_tools.RenameSymbolTool: jetbrains_tools.JetBrainsRenameTool,
+                    symbol_tools.SafeDeleteSymbol: jetbrains_tools.JetBrainsSafeDeleteTool,
+                }
+            case _:
+                raise NotImplementedError()
 
 
 class LineEnding(Enum):
@@ -682,9 +706,14 @@ class RegisteredProject(ToStringMixin):
         Check if the given path matches the project root path.
 
         :param path: the path to check
-        :return: True if the path matches the project root, False otherwise
+        :return: True if the path matches the project root, False otherwise (including the case
+            where this project's root directory no longer exists, e.g. a removed git worktree)
         """
-        return self.project_root.samefile(Path(path).resolve())
+        try:
+            return self.project_root.samefile(Path(path).resolve())
+        except OSError:
+            # typically raised if the path does not exist (e.g., a removed git worktree)
+            return False
 
     def get_project_instance(self, serena_config: "SerenaConfig") -> "Project":
         """
@@ -757,7 +786,16 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
       - "/projects-metadata/$projectFolderName/.serena" (stores data in a central location)
     """
 
+    trusted_project_path_patterns: list[str] = field(default_factory=lambda: ["**"])
+    """
+    list of glob patterns for project root directories that are considered trusted.
+    The default "**" considers all project roots as trusted, which is necessary for backward compatibility.
+    The default will apply if a user does not yet have the setting, while new users will get the value
+    defined in the configuration template file. 
+    """
+
     # settings with overridden defaults
+
     language_backend: LanguageBackend = LanguageBackend.LSP
     """
     the language backend to use for code understanding features
@@ -771,6 +809,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
     If the budget is exceeded, Serena stops issuing further requests and returns partial info results.
     0 disables the budget (no early stopping). Negative values are invalid.
     """
+
     # *** fields that are NOT mapped to/from the configuration file ***
 
     _loaded_commented_yaml: CommentedMap | None = None
@@ -957,7 +996,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         # re-save the configuration file if any migrations were performed
         if num_migrations > 0:
             log.info("Legacy configuration was migrated; re-saving configuration file")
-            instance.save()
+            instance._save()
 
         return instance
 
@@ -984,6 +1023,33 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         except Exception as e:
             log.error(f"Error migrating configuration file: {e}")
             return None
+
+    @classmethod
+    def init(cls, language_backend: LanguageBackend) -> "SerenaConfig":
+        """
+        Supports the config initialisation CLI command, allowing the user to configure fundamental settings before
+        the first launch.
+
+        :param language_backend: the language backend to use
+        :return: the created SerenaConfig instance
+        """
+        config = cls.from_config_file()
+        config.language_backend = language_backend
+        config._save()
+        return config
+
+    def with_headless_mode_overrides(self) -> "SerenaConfig":
+        """
+        Modifies this instance to apply overrides for headless mode, where any GUI/user interaction-based features are disabled.
+        This is intended to be applied for cases where a `SerenaConfig` instance is needed to instantiate a `SerenaAgent` instance
+        while the user is not expected to interact with the system (e.g. a CLI command or a test).
+
+        :return: the instance with overrides applied for headless mode
+        """
+        self.gui_log_window = False
+        self.web_dashboard = False
+        self.jetbrains_launch_command = None
+        return self
 
     @cached_property
     def project_paths(self) -> list[str]:
@@ -1035,14 +1101,14 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
 
     def add_registered_project(self, registered_project: RegisteredProject) -> None:
         """
-        Adds a registered project, saving the configuration file.
+        Adds a registered project, persisting the updated project list
         """
         self.projects.append(registered_project)
-        self.save()
+        self._persist_projects()
 
     def add_project_from_path(self, project_root: Path | str) -> "Project":
         """
-        Add a new project to the Serena configuration from a given path, auto-generating the project
+        Adds a new project to the Serena configuration from a given path, auto-generating the project
         with defaults if it does not exist.
         Will raise a FileExistsError if a project already exists at the path.
 
@@ -1083,11 +1149,31 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
                 break
         else:
             raise ValueError(f"Project '{project_name}' not found in Serena configuration; valid project names: {self.project_names}")
-        self.save()
+        self._persist_projects()
 
-    def save(self) -> None:
+    def _persist_projects(self) -> None:
         """
-        Saves the configuration to the file from which it was loaded (if any)
+        Persists ONLY the registered-projects list, leaving every other setting at its on-disk value.
+
+        Project (de)registration can happen while a session is running with transient runtime overrides applied
+        to this in-memory instance (e.g. ``start-mcp-server --language-backend`` / ``--log-level``). A full
+        :meth:`save` would write those overrides back to the global config, silently clobbering the user's
+        settings. Instead we re-load the persisted config, copy in the current project list, and save that — so
+        only ``projects`` is ever mutated on disk.
+        """
+        if self.config_file_path is None:
+            return
+        persisted = SerenaConfig.from_config_file()
+        persisted.projects = list(self.projects)
+        persisted._save()
+
+    def _save(self) -> None:
+        """
+        Saves the full configuration to the file from which it was loaded (if any)
+
+        NOTE: This method is private, because it is not usually safe to save a configuration instance used
+          at runtime, because it often contains transient overrides (e.g. specified through the CLI)
+          that should never be persisted back to the configuration file.
         """
         if self.config_file_path is None:
             return
@@ -1198,3 +1284,16 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         from serena.tools import JetBrainsPluginClient
 
         JetBrainsPluginClient.set_server_address(self.jetbrains_plugin_server_address)
+
+    def is_trusted_project_path(self, project_root: str | Path) -> bool:
+        """
+        Checks if the given project root path matches any of the trusted project root patterns.
+
+        :param project_root: the path to the project root directory
+        :return: True if the project root is trusted, False otherwise
+        """
+        project_root_str = str(project_root)
+        for pattern in self.trusted_project_path_patterns:
+            if glob_match(pattern, project_root_str):
+                return True
+        return False

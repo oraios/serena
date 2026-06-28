@@ -208,11 +208,9 @@ def _make_config_with_project(
 ) -> tuple[SerenaConfig, str]:
     """Create a SerenaConfig with a single registered project and return (config, project_name)."""
     config = SerenaConfig(
-        gui_log_window=False,
-        web_dashboard=False,
         log_level=logging.ERROR,
         language_backend=global_backend,
-    )
+    ).with_headless_mode_overrides()
     project = Project(
         project_root=str(Path(__file__).parent.parent / "resources" / "repos" / "python" / "test_repo"),
         project_config=ProjectConfig(
@@ -252,11 +250,9 @@ class TestEffectiveLanguageBackend:
     def test_no_project_uses_global_backend(self):
         """When no startup project is provided, effective backend is the global one."""
         config = SerenaConfig(
-            gui_log_window=False,
-            web_dashboard=False,
             log_level=logging.ERROR,
             language_backend=LanguageBackend.LSP,
-        )
+        ).with_headless_mode_overrides()
         agent = SerenaAgent(project=None, serena_config=config)
         try:
             assert agent.get_language_backend() == LanguageBackend.LSP
@@ -338,90 +334,68 @@ class TestGetConfiguredProjectSerenaFolder:
     """Tests for SerenaConfig.get_configured_project_serena_folder (pure template resolution)."""
 
     def test_default_location(self):
-        config = SerenaConfig(
-            gui_log_window=False,
-            web_dashboard=False,
-        )
+        config = SerenaConfig().with_headless_mode_overrides()
         result = config.get_configured_project_serena_folder("/home/user/myproject")
         assert result == os.path.abspath("/home/user/myproject/.serena")
 
     def test_custom_location_with_project_folder_name(self):
         config = SerenaConfig(
-            gui_log_window=False,
-            web_dashboard=False,
             project_serena_folder_location="/projects-metadata/$projectFolderName/.serena",
-        )
+        ).with_headless_mode_overrides()
         result = config.get_configured_project_serena_folder("/home/user/myproject")
         assert result == os.path.abspath("/projects-metadata/myproject/.serena")
 
     def test_custom_location_with_project_dir(self):
         config = SerenaConfig(
-            gui_log_window=False,
-            web_dashboard=False,
             project_serena_folder_location="$projectDir/.custom-serena",
-        )
+        ).with_headless_mode_overrides()
         result = config.get_configured_project_serena_folder("/home/user/myproject")
         assert result == os.path.abspath("/home/user/myproject/.custom-serena")
 
     def test_custom_location_with_both_placeholders(self):
         config = SerenaConfig(
-            gui_log_window=False,
-            web_dashboard=False,
             project_serena_folder_location="/data/$projectFolderName/$projectDir/.serena",
-        )
+        ).with_headless_mode_overrides()
         result = config.get_configured_project_serena_folder("/home/user/proj")
         assert result == os.path.abspath("/data/proj/home/user/proj/.serena")
 
     def test_default_field_value(self):
-        config = SerenaConfig(
-            gui_log_window=False,
-            web_dashboard=False,
-        )
+        config = SerenaConfig().with_headless_mode_overrides()
         assert config.project_serena_folder_location == DEFAULT_PROJECT_SERENA_FOLDER_LOCATION
 
     def test_rejects_unknown_placeholder(self):
         config = SerenaConfig(
-            gui_log_window=False,
-            web_dashboard=False,
             project_serena_folder_location="$projectDir/$unknownVar/.serena",
-        )
+        ).with_headless_mode_overrides()
         with pytest.raises(SerenaConfigError, match=r"Unknown placeholder '\$unknownVar'"):
             config.get_configured_project_serena_folder("/home/user/myproject")
 
     def test_rejects_typo_projectDirs(self):
         """$projectDirs should not be silently treated as $projectDir + 's'."""
         config = SerenaConfig(
-            gui_log_window=False,
-            web_dashboard=False,
             project_serena_folder_location="$projectDirs/.serena",
-        )
+        ).with_headless_mode_overrides()
         with pytest.raises(SerenaConfigError, match=r"Unknown placeholder '\$projectDirs'"):
             config.get_configured_project_serena_folder("/home/user/myproject")
 
     def test_rejects_typo_projectfoldername_lowercase(self):
         config = SerenaConfig(
-            gui_log_window=False,
-            web_dashboard=False,
             project_serena_folder_location="/data/$projectfoldername/.serena",
-        )
+        ).with_headless_mode_overrides()
         with pytest.raises(SerenaConfigError, match=r"Unknown placeholder '\$projectfoldername'"):
             config.get_configured_project_serena_folder("/home/user/myproject")
 
     def test_no_placeholders_is_valid(self):
         config = SerenaConfig(
-            gui_log_window=False,
-            web_dashboard=False,
             project_serena_folder_location="/fixed/path/.serena",
-        )
+        ).with_headless_mode_overrides()
         result = config.get_configured_project_serena_folder("/home/user/myproject")
         assert result == os.path.abspath("/fixed/path/.serena")
 
     def test_error_message_lists_supported_placeholders(self):
         config = SerenaConfig(
-            gui_log_window=False,
-            web_dashboard=False,
             project_serena_folder_location="$bogus/.serena",
-        )
+        ).with_headless_mode_overrides()
         with pytest.raises(SerenaConfigError, match=r"\$projectDir.*\$projectFolderName|\$projectFolderName.*\$projectDir"):
             config.get_configured_project_serena_folder("/home/user/myproject")
 
@@ -452,7 +426,7 @@ class TestProjectSerenaDataFolder:
         return project
 
     def test_default_config_creates_in_project_dir(self):
-        config = SerenaConfig(gui_log_window=False, web_dashboard=False)
+        config = SerenaConfig().with_headless_mode_overrides()
         project = self._make_project(config)
         expected = os.path.abspath(str(self.project_path / SERENA_MANAGED_DIR_NAME))
         assert project.path_to_serena_data_folder() == expected
@@ -461,10 +435,8 @@ class TestProjectSerenaDataFolder:
         custom_base = Path(self.test_dir) / "metadata"
         custom_base.mkdir()
         config = SerenaConfig(
-            gui_log_window=False,
-            web_dashboard=False,
             project_serena_folder_location=str(custom_base) + "/$projectFolderName/.serena",
-        )
+        ).with_headless_mode_overrides()
         project = self._make_project(config)
         expected = os.path.abspath(str(custom_base / "myproject" / ".serena"))
         assert project.path_to_serena_data_folder() == expected
@@ -474,10 +446,8 @@ class TestProjectSerenaDataFolder:
         existing_serena = self.project_path / SERENA_MANAGED_DIR_NAME
         existing_serena.mkdir()
         config = SerenaConfig(
-            gui_log_window=False,
-            web_dashboard=False,
             project_serena_folder_location="/nonexistent/path/$projectFolderName/.serena",
-        )
+        ).with_headless_mode_overrides()
         project = self._make_project(config)
         assert project.path_to_serena_data_folder() == str(existing_serena)
 
@@ -491,10 +461,8 @@ class TestProjectSerenaDataFolder:
         custom_serena.mkdir(parents=True)
 
         config = SerenaConfig(
-            gui_log_window=False,
-            web_dashboard=False,
             project_serena_folder_location=str(custom_base) + "/$projectFolderName/.serena",
-        )
+        ).with_headless_mode_overrides()
         project = self._make_project(config)
         assert project.path_to_serena_data_folder() == str(custom_serena)
 
@@ -567,6 +535,49 @@ class TestSerenaConfigFromConfigFileRobustness:
         assert any("Failed to load project configuration" in msg and str(bad_project.resolve()) in msg for msg in caplog.messages), (
             f"Expected a warning naming {bad_project.resolve()}, got: {caplog.messages}"
         )
+
+
+class TestGetRegisteredProjectWithDanglingProject:
+    """A registered project whose root directory was deleted (e.g. a removed git
+    worktree) must not break lookup/activation of other, valid projects.
+
+    Reproduces the bug where ``get_registered_project`` iterates over every
+    registered project and ``RegisteredProject.matches_root_path`` raises
+    ``FileNotFoundError`` for the dangling project, aborting the whole lookup.
+    """
+
+    def setup_method(self):
+        self.test_dir = Path(tempfile.mkdtemp())
+
+    def teardown_method(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def _make_project_dir(self, name: str) -> Path:
+        project_dir = self.test_dir / name
+        (project_dir / SERENA_MANAGED_DIR_NAME).mkdir(parents=True)
+        (project_dir / SERENA_MANAGED_DIR_NAME / "project.yml").write_text(f'project_name: "{name}"\nlanguages: ["python"]\n')
+        return project_dir
+
+    def test_dangling_project_does_not_break_lookup_of_valid_project(self):
+        config = create_default_serena_config()
+        dangling_dir = self._make_project_dir("dangling_project")
+        valid_dir = self._make_project_dir("valid_project")
+
+        # Register the dangling project FIRST so the path-matching loop hits the
+        # deleted directory before reaching the valid project.
+        config.projects = [
+            RegisteredProject.from_project_root(dangling_dir, serena_config=config),
+            RegisteredProject.from_project_root(valid_dir, serena_config=config),
+        ]
+
+        # Delete the dangling project's directory out from under Serena.
+        shutil.rmtree(dangling_dir)
+
+        # Looking up the valid project by path must succeed, not raise
+        # FileNotFoundError on the deleted dangling project's path.
+        result = config.get_registered_project(str(valid_dir))
+        assert result is not None
+        assert result.project_name == "valid_project"
 
 
 class TestMemoriesManagerCustomPath:

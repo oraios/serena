@@ -23,6 +23,8 @@ from solidlsp.ls_types import SymbolKind
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
+pytestmark = pytest.mark.skip("Haskell installation is heavy, the tests should be executed only on demand")
+
 
 @pytest.mark.haskell
 @pytest.mark.skipif(sys.platform == "win32", reason="HLS not installed on Windows CI")

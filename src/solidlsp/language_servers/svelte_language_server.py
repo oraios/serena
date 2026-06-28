@@ -21,8 +21,10 @@ from solidlsp.language_servers.common import (
 )
 from solidlsp.language_servers.typescript_language_server import TypeScriptLanguageServer
 from solidlsp.ls import (
+    DocumentSymbols,
     LanguageServerDependencyProvider,
     LanguageServerDependencyProviderSinglePath,
+    LSPFileBuffer,
     SolidLanguageServer,
 )
 from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
@@ -646,6 +648,25 @@ class SvelteLanguageServer(SolidLanguageServer):
             with self._ts_server.open_file(relative_file_path):
                 return self._ts_server.request_definition(relative_file_path, line, column)
         return super().request_definition(relative_file_path, line, column)
+
+    @override
+    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
+        """Delegate document-symbol requests for .ts/.js files to the companion TS server.
+
+        The base svelte LS only provides ``documentSymbol`` for .svelte files and returns nothing for
+        .ts/.js files. Without this override, symbols defined in plain .ts/.js modules would be
+        undiscoverable via ``find_symbol``/``get_symbols_overview`` and ``find_referencing_symbols``
+        would fail outright, since it must first locate the target symbol via ``documentSymbol``.
+        Routing .ts/.js files to the companion (svelte-plugin-aware) typescript LS mirrors the
+        existing references/definition/rename delegations.
+
+        The companion's own ``file_buffer`` is not reused here: the provided buffer (if any) is bound
+        to this svelte LS, so the companion opens and reads the file itself.
+        Falls back to the svelte LS when the companion is unavailable or when the file is .svelte.
+        """
+        if _is_ts_file(relative_file_path) and self._ts_server is not None:
+            return self._ts_server.request_document_symbols(relative_file_path)
+        return super().request_document_symbols(relative_file_path, file_buffer)
 
     @override
     def request_text_document_diagnostics(

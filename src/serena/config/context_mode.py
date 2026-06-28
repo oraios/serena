@@ -26,6 +26,10 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+def looks_like_yaml_path(s: str) -> bool:
+    return os.sep in s or (os.altsep and os.altsep in s) or s.lower().endswith((".yml", ".yaml"))
+
+
 @dataclass(kw_only=True)
 class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
     """Represents a mode of operation for the agent, typically read off a YAML file.
@@ -124,16 +128,15 @@ class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
 
     @classmethod
     def load(cls, name_or_path: str | Path) -> Self:
-        # Check if it's a file path that exists
-        path = Path(name_or_path)
-        if path.exists() and path.is_file():
-            return cls.from_yaml(name_or_path)
+        # If it is a path or looks like a path, load from file
+        if isinstance(name_or_path, Path) or looks_like_yaml_path(str(name_or_path)):
+            path = Path(name_or_path)
+            if path.exists() and path.is_file():
+                return cls.from_yaml(name_or_path)
+            else:
+                raise FileNotFoundError(f"Mode file not found: {path.resolve()}")
 
-        # If it looks like a file path but doesn't exist, raise FileNotFoundError
-        name_or_path_str = str(name_or_path)
-        if os.sep in name_or_path_str or (os.altsep and os.altsep in name_or_path_str) or name_or_path_str.endswith((".yml", ".yaml")):
-            raise FileNotFoundError(f"Mode file not found: {path.resolve()}")
-
+        # load from name
         return cls.from_name(str(name_or_path))
 
     def has_prompt(self) -> bool:
@@ -179,6 +182,11 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
     If set to true and a project is provided at startup, the set of tools is limited to those required by the project's
     concrete configuration, and other tools are excluded completely, allowing the set of tools to be minimal.
     The `activate_project` tool will, therefore, be disabled in this case, as project switching is not allowed.
+    """
+
+    structured_tool_output: bool | None = None
+    """
+    whether to use structured output for tools (None = auto)
     """
 
     def _tostring_includes(self) -> list[str]:
@@ -239,15 +247,13 @@ class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
 
     @classmethod
     def load(cls, name_or_path: str | Path) -> Self:
-        # Check if it's a file path that exists
-        path = Path(name_or_path)
-        if path.exists() and path.is_file():
-            return cls.from_yaml(name_or_path)
-
-        # If it looks like a file path but doesn't exist, raise FileNotFoundError
-        name_or_path_str = str(name_or_path)
-        if os.sep in name_or_path_str or (os.altsep and os.altsep in name_or_path_str) or name_or_path_str.endswith((".yml", ".yaml")):
-            raise FileNotFoundError(f"Context file not found: {path.resolve()}")
+        # If it is a path or looks like a path, load from file
+        if isinstance(name_or_path, Path) or looks_like_yaml_path(str(name_or_path)):
+            path = Path(name_or_path)
+            if path.exists() and path.is_file():
+                return cls.from_yaml(name_or_path)
+            else:
+                raise FileNotFoundError(f"Context file not found: {path.resolve()}")
 
         return cls.from_name(str(name_or_path))
 

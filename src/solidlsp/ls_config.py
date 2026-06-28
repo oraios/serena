@@ -163,6 +163,11 @@ class Language(str, Enum):
     Must be explicitly specified as the main language, not auto-detected.
     This is an edge case primarily useful when working on documentation-heavy projects.
     """
+    LATEX = "latex"
+    """texlab language server for LaTeX/BibTeX (experimental).
+    Must be explicitly specified as the main language, not auto-detected.
+    Provides sectioning-hierarchy document symbols plus label/citation definitions and references.
+    """
     YAML = "yaml"
     """YAML language server (experimental).
     Must be explicitly specified as the main language, not auto-detected.
@@ -253,6 +258,7 @@ class Language(str, Enum):
             self.PHP_PHPACTOR,
             self.PHP_PHPANTOM,
             self.MARKDOWN,
+            self.LATEX,
             self.YAML,
             self.JSON,
             self.TOML,
@@ -268,7 +274,7 @@ class Language(str, Enum):
         """Whether the supported language should be considered a programming language.
         Solidlsp supports languages like markdown or json, this method returns False for them.
         """
-        return self not in frozenset((self.MARKDOWN, self.JSON, self.TOML, self.YAML, self.ANSIBLE))
+        return self not in frozenset((self.MARKDOWN, self.LATEX, self.JSON, self.TOML, self.YAML, self.ANSIBLE))
 
     def __str__(self) -> str:
         return self.value
@@ -434,6 +440,8 @@ class Language(str, Enum):
                 return FilenameMatcher(".rego")
             case self.MARKDOWN:
                 return FilenameMatcher(".md", ".markdown")
+            case self.LATEX:
+                return FilenameMatcher(".tex", ".bib", ".sty", ".cls")
             case self.SCALA:
                 return FilenameMatcher(".scala", ".sbt")
             case self.JULIA:
@@ -690,6 +698,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.marksman import Marksman
 
                 return Marksman
+            case self.LATEX:
+                from solidlsp.language_servers.texlab_language_server import TexlabLanguageServer
+
+                return TexlabLanguageServer
             case self.R:
                 from solidlsp.language_servers.r_language_server import RLanguageServer
 
