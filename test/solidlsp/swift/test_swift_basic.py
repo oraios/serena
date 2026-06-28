@@ -6,7 +6,6 @@ like request_references using the Swift test repository.
 """
 
 import os
-import platform
 
 import pytest
 
@@ -14,15 +13,11 @@ from serena.project import Project
 from serena.util.text_utils import LineType
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from test.conftest import is_ci
+from test.conftest import is_ci, language_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
-# Skip Swift tests on Windows due to complex GitHub Actions configuration
-WINDOWS_SKIP = platform.system() == "Windows"
-WINDOWS_SKIP_REASON = "GitHub Actions configuration for Swift on Windows is complex, skipping for now."
-
-pytestmark = [pytest.mark.swift, pytest.mark.skipif(WINDOWS_SKIP, reason=WINDOWS_SKIP_REASON)]
+pytestmark = [pytest.mark.swift, pytest.mark.skipif(not language_tests_enabled(Language.SWIFT), reason="Swift tests are disabled")]
 
 
 class TestSwiftLanguageServerBasics:

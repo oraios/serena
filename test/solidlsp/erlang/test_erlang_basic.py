@@ -9,14 +9,13 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.conftest import language_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
-from . import ERLANG_LS_UNAVAILABLE, ERLANG_LS_UNAVAILABLE_REASON
-
 
 @pytest.mark.erlang
-@pytest.mark.skipif(ERLANG_LS_UNAVAILABLE, reason=f"Erlang LS not available: {ERLANG_LS_UNAVAILABLE_REASON}")
+@pytest.mark.skipif(not language_tests_enabled(Language.ERLANG), reason="Erlang tests are disabled")
 class TestErlangLanguageServerBasics:
     """Test basic functionality of the Erlang language server."""
 

@@ -5,7 +5,6 @@ This module tests Language.SYSTEMVERILOG using verible-verilog-ls.
 Tests are skipped if the language server is not available.
 """
 
-import shutil
 from typing import Any
 
 import pytest
@@ -13,7 +12,12 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
+from test.conftest import language_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
+
+pytestmark = pytest.mark.skipif(
+    not language_tests_enabled(Language.SYSTEMVERILOG), reason="SystemVerilog tests are disabled (verible-verilog-ls not available)"
+)
 
 
 def _find_symbol_by_name(language_server: SolidLanguageServer, file_path: str, name: str) -> dict[str, Any] | None:
@@ -265,7 +269,6 @@ class TestSystemVerilogRename:
             for edit in file_edits:
                 assert edit["newText"] == "my_counter", f"Expected 'my_counter', got {edit['newText']}"
 
-    @pytest.mark.skipif(shutil.which("verible-verilog-ls") is None, reason="verible-verilog-ls is not available")
     @pytest.mark.parametrize("language_server", [Language.SYSTEMVERILOG], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
