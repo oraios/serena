@@ -12,6 +12,7 @@ from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name,
 
 pytestmark = pytest.mark.skip("BSL is a niche language, the tests are slow and flaky.")
 
+
 @pytest.mark.bsl
 class TestBSLLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
