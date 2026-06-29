@@ -14,13 +14,8 @@
 - mccabe complexity cap: 20.
 
 ## Typing (ty)
-- Type checker is **ty** (Astral), configured under `[tool.ty]` in `pyproject.toml`. (Replaced mypy.)
-- `[tool.ty.environment].python-platform = "all"`: analyze for all platforms (not the OS ty runs on). Keeps the check deterministic across the CI matrix and lets platform-conditional stdlib members (`subprocess.CREATE_NO_WINDOW`, `ctypes.windll`, `pwd`, `os.getuid`) resolve without per-OS type-ignores. Do NOT pin a single platform — each OS view has its own gaps.
-- `[tool.ty.rules]`: `unresolved-import` and `possibly-missing-submodule` are set to `ignore` (mirrors mypy's former `ignore_missing_imports=true` for optional extras / platform-specific modules).
-- Excluded paths (`[tool.ty.src].exclude`): `build/`, `docs/`. NOTE: `test/resources/` is deliberately NOT excluded here — that config is also read by the ty language server (the `PYTHON_TY` diagnostics provider) when it analyzes the fixture repos under `test/resources`, and excluding them would suppress the diagnostics those tests rely on. `test/resources` is instead excluded from the `ty check test` CLI task via `--exclude test/resources` (and carved out of the test override via its `exclude`).
-- Test files (`[[tool.ty.overrides]]` on `test/**`, excluding `test/resources/`) relax type rules that ty mis-fires on for pytest/MagicMock-heavy code (e.g. `invalid-argument-type`, `unsupported-operator`, `too-many-positional-arguments`, `parameter-already-assigned`, `unresolved-attribute`); still checked for undefined names, syntax, unused ignores, etc.
-- Suppress a ty diagnostic with `# ty: ignore[<rule>]`; `# type: ignore` (blanket) is also respected. Unused ignores are reported (`unused-type-ignore-comment`).
-
+- Type checker is **ty** (Astral), configured under `[tool.ty]` in `pyproject.toml`.
+  
 ## Tests
 - Language-server tests are pytest-marker-gated (one marker per language; see `pyproject.toml` `[tool.pytest.ini_options].markers`). Default `poe test` runs unmarked tests + whatever `PYTEST_MARKERS` selects.
 - Snapshot tests use **syrupy** with custom `--snapshot-patch-pycharm-diff` plugin (auto-added via `addopts`).
