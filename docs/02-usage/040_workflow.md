@@ -96,6 +96,34 @@ additional projects. For large monorepos, consider listing only the packages you
 cross-references for.
 :::
 
+(activation-command)=
+#### Activation Command
+
+The optional `activation_command` field in `project.yml` (or `project.local.yml`) specifies a shell
+command that Serena runs in the project root directory **before the language backend initialises**.
+This is useful for ensuring prerequisites are in place that the language server depends on, for example:
+
+- Building generated source files a language server needs to index (e.g. `npx nx run-many -t build` in an NX monorepo with gitignored `dist/`)
+- Starting a Docker container a language server connects to
+- Establishing an SSH tunnel to a remote language server
+
+```yaml
+# project.yml or project.local.yml
+activation_command: "npx nx run-many -t build"
+activation_command_timeout: 300  # override the default 180s for slow builds
+```
+
+**Semantics:**
+- Runs synchronously before backend init; the language server waits for it to complete.
+- A non-zero exit code is logged as an error but does **not** abort activation.
+- `activation_command_timeout` (default `180`, in seconds) is a safety backstop: if the command does
+  not exit within the timeout, the process is killed and activation continues.
+- The command and timeout are only applied for *trusted projects* (defined via `trusted_project_path_patterns`
+  in the [global configuration](global-config)). For untrusted projects a warning is logged and the
+  command is skipped.
+- Because `activation_command_timeout` is a per-project field, it can be set in `project.local.yml`
+  to override the value without modifying the shared `project.yml`.
+
 (indexing)=
 ### Indexing
 
