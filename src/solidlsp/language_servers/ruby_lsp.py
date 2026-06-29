@@ -6,6 +6,8 @@ You can pass the following entries in ``ls_specific_settings["ruby"]``:
     - ruby_lsp_version: Override the pinned ruby-lsp gem version installed by
       Serena when no project-local or global ruby-lsp is already available
       (default: the bundled Serena version).
+    - vendor_include_paths: List of top-level paths under ``vendor/`` that
+      should remain indexed. Example: ``["vendor/engines"]``.
 """
 
 import json
@@ -55,7 +57,6 @@ class RubyLsp(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         """Override to ignore Ruby-specific directories that cause performance issues."""
         ruby_ignored_dirs = [
-            "vendor",  # Ruby vendor directory
             ".bundle",  # Bundler cache
             "tmp",  # Temporary files
             "log",  # Log files
@@ -70,6 +71,16 @@ class RubyLsp(SolidLanguageServer):
             ".ruby-lsp",
         ]
         return super().is_ignored_dirname(dirname) or dirname in ruby_ignored_dirs
+
+    def is_ignored_path(self, relative_path: str, ignore_unsupported_files: bool = True) -> bool:
+        """Override to keep only configured vendor subtrees visible to Serena."""
+        parts = pathlib.PurePosixPath(pathlib.Path(relative_path).as_posix()).parts
+        vendor_include_roots = {pathlib.PurePosixPath(path).parts[1] for path in self._custom_settings.get("vendor_include_paths", [])}
+        if "vendor" in parts:
+            if len(parts) < 2 or parts[:1] != ("vendor",) or parts[1] not in vendor_include_roots or "vendor" in parts[2:]:
+                return True
+
+        return super().is_ignored_path(relative_path, ignore_unsupported_files)
 
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
@@ -298,13 +309,11 @@ class RubyLsp(SolidLanguageServer):
 
         return False
 
-    @staticmethod
-    def _get_ruby_exclude_patterns(repository_root_path: str) -> list[str]:
+    def _get_ruby_exclude_patterns(self, repository_root_path: str) -> list[str]:
         """
         Get Ruby and Rails-specific exclude patterns for better performance.
         """
         base_patterns = [
-            "**/vendor/**",  # Ruby vendor directory
             "**/.bundle/**",  # Bundler cache
             "**/tmp/**",  # Temporary files
             "**/log/**",  # Log files
@@ -315,6 +324,15 @@ class RubyLsp(SolidLanguageServer):
             "**/node_modules/**",  # Node modules (for Rails with JS)
             "**/public/assets/**",  # Rails compiled assets
         ]
+
+        vendor_include_roots = {pathlib.PurePosixPath(path).parts[1] for path in self._custom_settings.get("vendor_include_paths", [])}
+        if vendor_include_roots:
+            vendor_dir = pathlib.Path(repository_root_path) / "vendor"
+            if vendor_dir.is_dir():
+                base_patterns.extend(f"vendor/{child.name}/**" for child in vendor_dir.iterdir() if child.name not in vendor_include_roots)
+            base_patterns.extend(f"vendor/{root}/**/vendor/**" for root in vendor_include_roots)
+        else:
+            base_patterns.append("**/vendor/**")
 
         # Add Rails-specific patterns if this is a Rails project
         if RubyLsp._detect_rails_project(repository_root_path):
