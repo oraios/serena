@@ -73,6 +73,9 @@ initial_prompt: |
   Comments:
   When describing parameters, methods/functions and classes, you use a precise style, where the initial (elliptical) phrase
   clearly defines *what* it is. Any details then follow in subsequent sentences.
+  
+  Pull requests:
+  Read `mem:creating_pull_requests` when asked to participate in the creation of a pull request.
 
 # the encoding used by text files in the project
 # For a list of possible encodings, see https://docs.python.org/3.11/library/codecs.html#standard-encodings
