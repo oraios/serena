@@ -5,7 +5,13 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   - Add notion of trusted projects via new global configuration setting `trusted_project_path_patterns`.
     Current effects:
-    - `ls_specific_settings` defined in project configurations will only be applied for trusted projects    
+    - `ls_specific_settings` defined in project configurations will only be applied for trusted projects
+    - `activation_command` (and `activation_command_timeout`) defined in project configurations will only
+      be executed for trusted projects: an optional shell command run in the project root before the
+      language backend initialises (e.g. to generate source files a language server needs to index).
+      Exit code is the primary completion signal; `activation_command_timeout` (default 180s) is a safety
+      backstop — on expiry the process is killed and activation continues. Failures and timeouts are
+      logged but do not abort activation.
   - Fix: context or mode argument referencing a known name (e.g. `--context anitgravity`) could result in   
     incorrect file access if a corresponding local file existed (e.g. `./antigravity` binary);
     file access is now guarded with path detection (file ending or path separator must be present)
