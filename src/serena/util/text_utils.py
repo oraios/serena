@@ -1,4 +1,5 @@
 import fnmatch
+import hashlib
 import logging
 import os
 import re
@@ -526,6 +527,162 @@ class ContentReplacer:
                 "Please revise the expression to be more specific or enable allow_multiple_occurrences if this is expected."
             )
         return updated_content
+
+
+@dataclass
+class ReplacementOccurrence:
+    """A single prospective replacement of a pattern match within one file."""
+
+    occurrence_id: str
+    """stable, content-anchored identifier: '<relative_path>:<index_in_file>@<digest>'"""
+    relative_path: str
+    index_in_file: int
+    """0-based index of this match among the matches within its file (in position order)"""
+    start: int
+    """character offset of the match start within the file content"""
+    end: int
+    """character offset of the match end within the file content"""
+    matched_text: str
+    replacement: str
+    """the fully expanded replacement text (backreferences already resolved)"""
+    start_line: int
+    """0-based line number of the match start"""
+    end_line: int
+    """0-based line number of the match end"""
+    is_ambiguous: bool = False
+    """whether the pattern matches again within the matched text (possible over-match)"""
+
+
+class MultiFileContentReplacer:
+    """
+    Occurrence-level counterpart of :class:`ContentReplacer` operating on multiple files:
+    finds every match of a pattern across a set of file contents, assigns each occurrence a
+    stable content-anchored id, renders minimal line diffs for previewing, and computes the
+    updated content of a file for a selected subset of occurrences.
+    """
+
+    OCCURRENCE_ID_REGEX = re.compile(r"^(?P<path>.+):(?P<index>\d+)@(?P<digest>[0-9a-f]{6})$")
+    _DIGEST_LEN = 6
+
+    def __init__(self, mode: Literal["literal", "regex"], regex_multiline: bool = True):
+        """
+        :param mode: whether the needle is a literal string ("literal") or a regular expression ("regex")
+        :param regex_multiline: whether to apply multi-line regex matching, enabling the flags re.DOTALL and re.MULTILINE
+        """
+        if mode not in ("literal", "regex"):
+            raise ValueError(f"Invalid mode: '{mode}', expected 'literal' or 'regex'.")
+        self.mode = mode
+        self._flags = (re.MULTILINE | re.DOTALL) if regex_multiline else 0
+
+    def _compile(self, needle: str) -> re.Pattern:
+        return re.compile(re.escape(needle) if self.mode == "literal" else needle, flags=self._flags)
+
+    @classmethod
+    def _digest(cls, matched_text: str) -> str:
+        return hashlib.sha1(matched_text.encode("utf-8")).hexdigest()[: cls._DIGEST_LEN]
+
+    @classmethod
+    def make_occurrence_id(cls, relative_path: str, index_in_file: int, matched_text: str) -> str:
+        return f"{relative_path}:{index_in_file}@{cls._digest(matched_text)}"
+
+    @staticmethod
+    def _expand_backreferences(match: re.Match, repl_template: str) -> str:
+        """Expands $!1, $!2, ... in the replacement template (same syntax as :class:`ContentReplacer`)."""
+
+        def expand(m: re.Match) -> str:
+            group_value = match.group(int(m.group(1)))
+            return group_value if group_value is not None else m.group(0)
+
+        return re.sub(r"\$!(\d+)", expand, repl_template)
+
+    def find_occurrences(self, files: list[tuple[str, str]], needle: str, repl: str) -> list[ReplacementOccurrence]:
+        """
+        Finds all matches of the needle in the given files.
+
+        :param files: (relative_path, content) pairs; processed in the given order
+        :param needle: the search expression (literal string or regex, depending on the mode)
+        :param repl: the replacement template (may contain $!N backreferences in regex mode)
+        :return: occurrences in deterministic order (file order, then position within the file)
+        """
+        pattern = self._compile(needle)
+        occurrences: list[ReplacementOccurrence] = []
+        for relative_path, content in files:
+            for index_in_file, match in enumerate(pattern.finditer(content)):
+                matched_text = match.group(0)
+                replacement = self._expand_backreferences(match, repl) if self.mode == "regex" else repl
+                # same over-match heuristic as ContentReplacer: for a multi-line match, the pattern
+                # matching again within the matched text indicates the match may have swallowed
+                # more than intended
+                is_ambiguous = "\n" in matched_text and pattern.search(matched_text[1:]) is not None
+                occurrences.append(
+                    ReplacementOccurrence(
+                        occurrence_id=self.make_occurrence_id(relative_path, index_in_file, matched_text),
+                        relative_path=relative_path,
+                        index_in_file=index_in_file,
+                        start=match.start(),
+                        end=match.end(),
+                        matched_text=matched_text,
+                        replacement=replacement,
+                        start_line=content.count("\n", 0, match.start()),
+                        end_line=content.count("\n", 0, match.end()),
+                        is_ambiguous=is_ambiguous,
+                    )
+                )
+        return occurrences
+
+    @staticmethod
+    def apply_to_content(content: str, occurrences: list[ReplacementOccurrence]) -> str:
+        """
+        Applies the given occurrences (which must have been derived from exactly this content)
+        and returns the updated content.
+        """
+        for occ in sorted(occurrences, key=lambda o: o.start, reverse=True):
+            assert content[occ.start : occ.end] == occ.matched_text, (
+                f"Occurrence {occ.occurrence_id} does not match the content it is being applied to"
+            )
+            content = content[: occ.start] + occ.replacement + content[occ.end :]
+        return content
+
+    @staticmethod
+    def _format_block(block: str, prefix: str, max_lines: int, max_line_chars: int) -> list[str]:
+        lines = block.split("\n")
+        shown = lines[:max_lines]
+        result = []
+        for line in shown:
+            if len(line) > max_line_chars:
+                line = line[:max_line_chars] + f"… (+{len(line) - max_line_chars} chars)"
+            result.append(f"    {prefix} {line}")
+        if len(lines) > max_lines:
+            result.append(f"    {prefix} … ({len(lines) - max_lines} more lines)")
+        return result
+
+    def render_occurrence_diff(
+        self, occ: ReplacementOccurrence, content: str, max_lines_per_side: int = 6, max_line_chars: int = 200
+    ) -> str:
+        """
+        Renders a minimal line diff for the occurrence: the full lines spanned by the match,
+        before and after the replacement.
+
+        :param occ: the occurrence (must have been derived from exactly this content)
+        :param content: the file content the occurrence was found in
+        :param max_lines_per_side: cap on the number of displayed lines per diff side
+        :param max_line_chars: cap on the number of displayed characters per line
+        :return: the rendered diff
+        """
+        line_start = content.rfind("\n", 0, occ.start) + 1
+        line_end = content.find("\n", occ.end)
+        if line_end == -1:
+            line_end = len(content)
+        old_block = content[line_start:line_end]
+        new_block = content[line_start : occ.start] + occ.replacement + content[occ.end : line_end]
+        location = f"line {occ.start_line}" if occ.start_line == occ.end_line else f"lines {occ.start_line}-{occ.end_line}"
+        header = f"  [{occ.occurrence_id}] {location}"
+        if occ.is_ambiguous:
+            header += "  (WARNING: the pattern matches again inside this match — possible over-match, verify the diff)"
+        diff_lines = [header]
+        diff_lines += self._format_block(old_block, "-", max_lines_per_side, max_line_chars)
+        diff_lines += self._format_block(new_block, "+", max_lines_per_side, max_line_chars)
+        return "\n".join(diff_lines)
 
 
 @dataclass
