@@ -395,13 +395,7 @@ class TopLevelCommands(AutoRegisteringGroup):
     @click.command(
         "print-system-prompt", help="Print the system prompt for a project.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH}
     )
-    @click.argument("project", type=click.Path(exists=True), default=os.getcwd(), required=False)
-    @click.option(
-        "--log-level",
-        type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
-        default="WARNING",
-        help="Log level for prompt generation.",
-    )
+    @click.argument("project", type=click.Path(exists=True), default=None, required=False)
     @click.option("--only-instructions", is_flag=True, help="Print only the initial instructions, without prefix/postfix.")
     @click.option(
         "--context", type=str, default=DEFAULT_CONTEXT, show_default=True, help="Built-in context name or path to custom context YAML."
@@ -415,26 +409,19 @@ class TopLevelCommands(AutoRegisteringGroup):
         show_default=False,
         help=_MODES_EXPLANATION,
     )
-    def print_system_prompt(
-        project: str, log_level: str, only_instructions: bool, context: str, modes: Sequence[str] | None = None
-    ) -> None:
+    def print_system_prompt(project: str | None, only_instructions: bool, context: str, modes: Sequence[str] | None = None) -> None:
         from serena.agent import SerenaAgent
 
         prefix = "You will receive access to Serena's symbolic tools. Below are instructions for using them, take them into account."
         postfix = "You begin by acknowledging that you understood the above instructions and are ready to receive tasks."
 
-        lvl = logging.getLevelNamesMapping()[log_level.upper()]
-        logging.configure(level=lvl)
         context_instance = SerenaAgentContext.load(context)
         modes_selection_def: ModeSelectionDefinition | None = None
         if modes:
             modes_selection_def = ModeSelectionDefinition(default_modes=modes)
         serena_config = SerenaConfig.from_config_file().with_headless_mode_overrides()
-        print(serena_config.default_modes)
-        print(serena_config.base_modes)
-
         agent = SerenaAgent(
-            project=os.path.abspath(project),
+            project=os.path.abspath(project) if project is not None else None,
             serena_config=serena_config,
             context=context_instance,
             modes=modes_selection_def,
