@@ -2,7 +2,7 @@ import re
 
 import pytest
 
-from serena.util.text_utils import LineType, search_files, search_text
+from serena.util.text_utils import LineType, MultiFileContentReplacer, search_files, search_text
 
 
 class TestSearchText:
@@ -575,3 +575,65 @@ class TestExpandBraces:
         from serena.util.text_utils import expand_braces
 
         assert sorted(expand_braces(pattern)) == sorted(expected)
+
+
+class TestMultiFileContentReplacer:
+    FILES = [
+        ("a/first.py", "import old_pkg\n\nvalue = old_pkg.compute()\n"),
+        ("b/second.py", "import old_pkg\nother = 1\n"),
+    ]
+
+    def test_find_occurrences_order_ids_and_lines(self):
+        replacer = MultiFileContentReplacer(mode="literal")
+        occurrences = replacer.find_occurrences(self.FILES, "old_pkg", "new_pkg")
+        assert [o.relative_path for o in occurrences] == ["a/first.py", "a/first.py", "b/second.py"]
+        assert [o.index_in_file for o in occurrences] == [0, 1, 0]
+        assert [o.start_line for o in occurrences] == [0, 2, 0]
+        for o in occurrences:
+            assert o.matched_text == "old_pkg"
+            assert o.replacement == "new_pkg"
+            assert MultiFileContentReplacer.OCCURRENCE_ID_REGEX.match(o.occurrence_id)
+        # ids are content-anchored: same matched text at the same index yields the same id across calls
+        again = replacer.find_occurrences(self.FILES, "old_pkg", "new_pkg")
+        assert [o.occurrence_id for o in again] == [o.occurrence_id for o in occurrences]
+
+    def test_regex_backreference_expansion(self):
+        replacer = MultiFileContentReplacer(mode="regex")
+        files = [("f.txt", "name=alpha\nname=beta\n")]
+        occurrences = replacer.find_occurrences(files, r"name=(\w+)", "id=$!1")
+        assert [o.replacement for o in occurrences] == ["id=alpha", "id=beta"]
+
+    def test_apply_to_content_selected_subset(self):
+        replacer = MultiFileContentReplacer(mode="literal")
+        path, content = self.FILES[0]
+        occurrences = [o for o in replacer.find_occurrences(self.FILES, "old_pkg", "new_pkg") if o.relative_path == path]
+        updated = replacer.apply_to_content(content, occurrences[1:])  # only the second occurrence
+        assert updated == "import old_pkg\n\nvalue = new_pkg.compute()\n"
+        updated_all = replacer.apply_to_content(content, occurrences)
+        assert updated_all == "import new_pkg\n\nvalue = new_pkg.compute()\n"
+
+    def test_ambiguous_multiline_match_is_flagged(self):
+        replacer = MultiFileContentReplacer(mode="regex")
+        files = [("f.txt", "start A\nstart B\nend\n")]
+        occurrences = replacer.find_occurrences(files, r"start.*?end", "X")
+        assert len(occurrences) == 1
+        assert occurrences[0].is_ambiguous
+
+    def test_render_occurrence_diff_minimal_lines(self):
+        replacer = MultiFileContentReplacer(mode="literal")
+        path, content = self.FILES[0]
+        occ = replacer.find_occurrences([(path, content)], "old_pkg.compute()", "new_pkg.compute_all()")[0]
+        diff = replacer.render_occurrence_diff(occ, content)
+        assert occ.occurrence_id in diff
+        assert "line 2" in diff
+        assert "    - value = old_pkg.compute()" in diff
+        assert "    + value = new_pkg.compute_all()" in diff
+        # only the affected line is shown, not the whole file
+        assert "import old_pkg" not in diff
+
+    def test_apply_to_content_rejects_drifted_occurrence(self):
+        replacer = MultiFileContentReplacer(mode="literal")
+        path, content = self.FILES[0]
+        occ = replacer.find_occurrences([(path, content)], "old_pkg", "new_pkg")[0]
+        with pytest.raises(AssertionError):
+            replacer.apply_to_content("completely different content", [occ])

@@ -1,11 +1,10 @@
 description: Interactive mode for clarification and step-by-step work
 prompt: |
-  You are operating in interactive mode. You should engage with the user throughout the task, asking for clarification
-  whenever anything is unclear, insufficiently specified, or ambiguous.
-  
-  Break down complex tasks into smaller steps and explain your thinking at each stage. When you're uncertain about
-  a decision, present options to the user and ask for guidance rather than making assumptions.
-  
+  You should engage with the user throughout the task, asking for clarification whenever anything is unclear, 
+  insufficiently specified, or ambiguous. 
+  When you're uncertain about a decision, present options to the user and ask for guidance rather than making assumptions. 
   Focus on providing informative results for intermediate steps, such that the user can follow along with your progress and
   provide feedback as needed.
+  This applies unless the user explicitly stated they are unavailable/instructs you to proceed without asking questions.  
+  
 excluded_tools: []

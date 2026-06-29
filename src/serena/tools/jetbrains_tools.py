@@ -323,7 +323,7 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
     def apply(
         self,
         relative_path: str,
-        depth: int = 0,
+        depth: int = -1,
         max_answer_chars: int = -1,
         include_file_documentation: bool = False,
     ) -> str:
@@ -335,10 +335,17 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
         or by using the `list_dir` and `find_file` tools (or similar).
 
         :param relative_path: the relative path to the file to get the overview of
-        :param depth: depth up to which descendants shall be retrieved (e.g., use 1 to also retrieve immediate children).
+        :param depth: depth up to which descendants shall be retrieved.
+            Default (-1) results in a language specific choice: 1 for java and kotlin and 0 for other languages
         :param max_answer_chars: max characters for the result (-1 for default). If exceeded, no content/a shortened result is returned.
         :param include_file_documentation: whether to include the file's docstring. Default False.
         """
+        if depth == -1:
+            if relative_path.endswith((".java", ".kt")):
+                depth = 1
+            else:
+                depth = 0
+
         relative_path = self._sanitize_input_param(relative_path)
         with JetBrainsPluginClient.from_project(self.project) as client:
             symbol_overview = client.get_symbols_overview(

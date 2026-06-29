@@ -6,6 +6,20 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add notion of trusted projects via new global configuration setting `trusted_project_path_patterns`.
     Current effects:
     - `ls_specific_settings` defined in project configurations will only be applied for trusted projects    
+  - Fix: context or mode argument referencing a known name (e.g. `--context anitgravity`) could result in   
+    incorrect file access if a corresponding local file existed (e.g. `./antigravity` binary);
+    file access is now guarded with path detection (file ending or path separator must be present)
+  - Adjust prompt generation mechanism to use newly introduced tool name mapping `tool_names`, allowing
+    prompts to directly use tool names that match the active language backend (and removing the need
+    for additional prompts that explain tool name differences)
+  - Improve quoting/escaping of arguments in shell executions on Windows (via `oslex` dependency)
+  - Fix: a registered project whose root directory was deleted while Serena was already running could break
+    `activate_project`/project lookup, raising `FileNotFoundError` in `RegisteredProject.matches_root_path`
+  - Update prompts/instructions: Serena instructions manual, modes (editing, interactive) 
+  - Allow structured tool output to be configured on a per-context basis, disabling it for Claude Code
+    (which does not correctly unpack structured output) #1042
+
+* CLI:
   - Fix `--project-from-cwd` hijacking git worktrees nested under a Serena project. `find_project_root`
     now walks up in a single pass so the nearest project boundary wins (either a `.serena/project.yml`
     or a `.git`, including worktree/submodule pointer files), instead of preferring an ancestor's
@@ -13,20 +27,13 @@ Status of the `main` branch. Changes prior to the next official version change w
     Gemini) launched from inside a worktree to the parent repo, causing stale reads and misdirected edits.
   - Fix: CLI flags on `start-mcp-server` could incorrectly be saved to the global configuration file if the
     list of projects was modified (triggering a save of the configuration with transient overrides applied)
-  - Fix: context or mode argument referencing a known name (e.g. `--context anitgravity`) could result in   
-    incorrect file access if a corresponding local file existed (e.g. `./antigravity` binary);
-    file access is now guarded with path detection (file ending or path separator must be present)
-  - Allow `query_project` tool to access read-only tools that are not enabled in the current configuration
-  - Adjust prompt generation mechanism to use newly introduced tool name mapping `tool_names`, allowing
-    prompts to directly use tool names that match the active language backend (and removing the need
-    for additional prompts that explain tool name differences)
-  - Improve quoting/escaping of arguments in shell executions on Windows (via `oslex` dependency)
+
+* Tools:
+  - New tool: `replace_in_files`
+  - `get_symbols_overview`, `jet_brains_get_symbols_overview`: Improved default for `depth` parameter
   - Add tool parameter alias support, adding `name_path` as an alias for `name_path_pattern` in `find_symbol` tools
+  - Allow `query_project` tool to access read-only tools that are not enabled in the current configuration
   - Make tool call errors surface explicitly as errors at the MCP protocol level
-  - Fix: a registered project whose root directory was deleted while Serena was already running could break
-    `activate_project`/project lookup, raising `FileNotFoundError` in `RegisteredProject.matches_root_path`
-  - Allow structured tool output to be configured on a per-context basis, disabling it for Claude Code
-    (which does not correctly unpack structured output) #1042
 
 * Language Servers:
   - C/C++ (clangd): improve support and documentation for Unreal Engine 5 projects.
@@ -60,7 +67,10 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Hooks:
   - Handle tool_input passed as string gracefully instead of failing (Copilot CLI sends strings).
 
-Dependencies:
+* Memories:
+  - Make memory iteration follow symbolic links 
+
+* Dependencies:
   - Add dependency `oslex`
 
 # v1.5.3 (2026-05-26)

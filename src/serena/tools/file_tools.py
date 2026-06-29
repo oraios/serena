@@ -14,7 +14,14 @@ from typing import Literal
 
 from serena.tools import SUCCESS_RESULT, EditedFileContext, EditingToolWithDiagnostics, Tool, ToolMarkerOptional
 from serena.util.file_system import scan_directory
-from serena.util.text_utils import ContentReplacer, search_files
+from serena.util.text_utils import (
+    ContentReplacer,
+    MultiFileContentReplacer,
+    ReplacementOccurrence,
+    expand_braces,
+    glob_match,
+    search_files,
+)
 
 
 class ReadFileTool(Tool):
@@ -223,6 +230,239 @@ class ReplaceContentTool(EditingToolWithDiagnostics):
                 updated_content = replacer.replace(original_content, needle, repl)
                 context.set_updated_content(updated_content)
             return diagnostics_context.format_result(SUCCESS_RESULT)
+
+
+class ReplaceInFilesTool(EditingToolWithDiagnostics):
+    """
+    Replaces occurrences of a pattern across multiple files, with dry-run preview and per-occurrence selection.
+    """
+
+    def apply(
+        self,
+        needle: str,
+        repl: str,
+        mode: Literal["literal", "regex"],
+        relative_path: str = "",
+        paths_include_glob: str = "",
+        paths_exclude_glob: str = "",
+        dry_run: bool = False,
+        occurrence_ids: list[str] | None = None,
+        expected_count: int = -1,
+        max_answer_chars: int = -1,
+    ) -> str:
+        r"""
+        Replaces occurrences of a pattern across multiple files in ONE call.
+
+        This is the preferred tool for repeated small edits (renames, import swaps, annotation changes,
+        path prefixes) spanning several files or many places in one file: one call with a SHORT pattern
+        replaces many single-file replacements with long disambiguating needles.
+
+        Recommended protocol whenever there is ANY risk of unintended replacements:
+        1. Call with dry_run=True: every prospective change is returned as a minimal line diff with an
+           occurrence id; nothing is modified.
+        2. Call again with dry_run=False, passing the ids you want in occurrence_ids (omit it to apply
+           all). You pick the desired replacements from the list - no counting, no needle-crafting.
+
+        For clearly unambiguous bulk replacements you may skip the dry run; pass expected_count as a
+        guard. If the actual number of matches differs, NOTHING is changed and the diff list is
+        returned, so a failed guard costs one call and gives you the dry-run output to select from.
+
+        :param needle: the string (mode "literal") or regular expression (mode "regex"; Python `re`
+            syntax with DOTALL and MULTILINE) to search for
+        :param repl: the replacement string. In regex mode, backreferences to matched groups can be
+            specified as $!1, $!2, etc.
+        :param mode: either "literal" or "regex", specifying how `needle` is to be interpreted
+        :param relative_path: only consider this file or directory (default: the whole project)
+        :param paths_include_glob: optional glob (relative to the project root, e.g. "src/**/*.java")
+            restricting which files are considered
+        :param paths_exclude_glob: optional glob of files to exclude; takes precedence over the include glob
+        :param dry_run: if True, do not modify anything; return the prospective changes as a list of
+            diffs with occurrence ids
+        :param occurrence_ids: optional list of occurrence ids (obtained from a dry run) to which the
+            replacement is restricted; if any id is unknown or stale, NOTHING is changed. If omitted,
+            all occurrences are replaced.
+        :param expected_count: optional guard for calls without occurrence_ids: the number of
+            occurrences you expect to be replaced. If the actual count differs, nothing is changed and
+            the list of prospective changes is returned. -1 disables the guard.
+        :param max_answer_chars: if the output exceeds this many characters, a shortened version is
+            returned. -1 uses the configured default.
+        :return: in a dry run, the prospective changes; otherwise a summary of the applied replacements
+        """
+        replacer = MultiFileContentReplacer(mode=mode)
+        files = self._collect_files(relative_path, paths_include_glob, paths_exclude_glob)
+        occurrences = replacer.find_occurrences(files, needle, repl)
+        contents = dict(files)
+
+        if dry_run:
+            return self._render_listing(replacer, occurrences, contents, max_answer_chars, dry_run=True)
+
+        if occurrence_ids is not None:
+            selected, problems = self._resolve_occurrence_ids(occurrence_ids, occurrences)
+            if problems:
+                problem_lines = "\n".join(f"  {p}" for p in problems)
+                raise ValueError(
+                    f"{len(problems)} of the given occurrence_ids could not be resolved - NO changes were applied:\n"
+                    f"{problem_lines}\n"
+                    "Re-run with dry_run=True to obtain current occurrence ids."
+                )
+            if not selected:
+                raise ValueError("occurrence_ids is empty - pass at least one id from a dry run, or omit the parameter to replace all.")
+            return self._apply_occurrences(replacer, selected, contents, needle, repl)
+
+        # blind apply (no ids)
+        if not occurrences:
+            raise ValueError(
+                "No occurrences of the pattern were found - NO changes were applied. "
+                "Check the mode (a literal needle containing regex metacharacters must use mode 'literal'; "
+                "wildcards require mode 'regex') and the path/glob restrictions, "
+                "or locate the content with search_for_pattern first."
+            )
+        if expected_count >= 0 and len(occurrences) != expected_count:
+            listing = self._render_listing(replacer, occurrences, contents, max_answer_chars, dry_run=False)
+            raise ValueError(
+                f"expected_count={expected_count}, but the pattern matches {len(occurrences)} occurrence(s) - "
+                f"NO changes were applied. Review the prospective changes below; re-issue with the corrected "
+                f"expectation, a refined pattern, or occurrence_ids selecting the intended subset.\n{listing}"
+            )
+        ambiguous = [o for o in occurrences if o.is_ambiguous]
+        if ambiguous:
+            listing = self._render_listing(replacer, occurrences, contents, max_answer_chars, dry_run=False)
+            raise ValueError(
+                f"{len(ambiguous)} occurrence(s) are ambiguous (the pattern matches again inside the matched text, "
+                f"indicating possible over-matching) - NO changes were applied. Review the prospective changes below "
+                f"and either refine the pattern or explicitly select occurrences via occurrence_ids.\n{listing}"
+            )
+        return self._apply_occurrences(replacer, occurrences, contents, needle, repl)
+
+    def _collect_files(self, relative_path: str, paths_include_glob: str, paths_exclude_glob: str) -> list[tuple[str, str]]:
+        """Collects (relative_path, content) pairs of the non-ignored files in scope, in sorted path order."""
+        relative_path = relative_path.strip()
+        if relative_path:
+            self.project.validate_relative_path(relative_path, require_not_ignored=True)
+        abs_path = os.path.join(self.get_project_root(), relative_path)
+        if not os.path.exists(abs_path):
+            raise FileNotFoundError(f"Relative path {relative_path} does not exist.")
+        if os.path.isfile(abs_path):
+            rel_paths = [relative_path]
+        else:
+            _dirs, rel_paths = scan_directory(
+                path=abs_path,
+                recursive=True,
+                is_ignored_dir=self.project.is_ignored_path,
+                is_ignored_file=self.project.is_ignored_path,
+                relative_to=self.get_project_root(),
+            )
+        include_patterns = expand_braces(paths_include_glob.strip()) if paths_include_glob.strip() else None
+        exclude_patterns = expand_braces(paths_exclude_glob.strip()) if paths_exclude_glob.strip() else None
+        files: list[tuple[str, str]] = []
+        for path in sorted(rel_paths):
+            if include_patterns and not any(glob_match(p, path) for p in include_patterns):
+                continue
+            if exclude_patterns and any(glob_match(p, path) for p in exclude_patterns):
+                continue
+            try:
+                files.append((path, self.project.read_file(path)))
+            except Exception:
+                continue  # skip unreadable (e.g. binary) files
+        return files
+
+    def _render_listing(
+        self,
+        replacer: MultiFileContentReplacer,
+        occurrences: list[ReplacementOccurrence],
+        contents: dict[str, str],
+        max_answer_chars: int,
+        dry_run: bool,
+    ) -> str:
+        affected_files = sorted({o.relative_path for o in occurrences})
+        header = f"Found {len(occurrences)} occurrence(s) in {len(affected_files)} file(s)."
+        if dry_run:
+            header += (
+                " DRY RUN - no changes were applied.\n"
+                "Re-issue with dry_run=False to replace all of them, or additionally pass occurrence_ids "
+                "with the ids of the occurrences to replace."
+            )
+        parts = [header]
+        for path in affected_files:
+            file_occurrences = [o for o in occurrences if o.relative_path == path]
+            parts.append(f"\n{path} ({len(file_occurrences)} occurrence(s)):")
+            for occ in file_occurrences:
+                parts.append(replacer.render_occurrence_diff(occ, contents[path]))
+        result = "\n".join(parts)
+
+        def make_locations_only() -> str:
+            lines = [header] + [f"  [{o.occurrence_id}] line {o.start_line}" for o in occurrences]
+            return "\n".join(lines)
+
+        def make_per_file_counts() -> str:
+            counts = {path: sum(1 for o in occurrences if o.relative_path == path) for path in affected_files}
+            return f"{header}\nOccurrence counts per file:\n{self._to_json(counts)}"
+
+        def make_summary() -> str:
+            return header
+
+        return self._limit_length(
+            result, max_answer_chars, shortened_result_factories=[make_locations_only, make_per_file_counts, make_summary]
+        )
+
+    @staticmethod
+    def _resolve_occurrence_ids(
+        occurrence_ids: list[str], occurrences: list[ReplacementOccurrence]
+    ) -> tuple[list[ReplacementOccurrence], list[str]]:
+        """Resolves the requested ids against the current occurrences, diagnosing each failure."""
+        occurrences_by_id = {o.occurrence_id: o for o in occurrences}
+        indices_by_path: dict[str, set[int]] = {}
+        for o in occurrences:
+            indices_by_path.setdefault(o.relative_path, set()).add(o.index_in_file)
+        selected: dict[str, ReplacementOccurrence] = {}
+        problems: list[str] = []
+        for oid in occurrence_ids:
+            occurrence = occurrences_by_id.get(oid)
+            if occurrence is not None:
+                selected[oid] = occurrence
+                continue
+            id_match = MultiFileContentReplacer.OCCURRENCE_ID_REGEX.match(oid)
+            if id_match is None:
+                problems.append(f"{oid}: malformed id (expected '<path>:<index>@<digest>' as returned by a dry run)")
+            elif id_match.group("path") not in indices_by_path:
+                problems.append(f"{oid}: the pattern currently has no matches in this file")
+            elif int(id_match.group("index")) not in indices_by_path[id_match.group("path")]:
+                problems.append(f"{oid}: the file now has fewer matches than at dry-run time (content changed)")
+            else:
+                problems.append(f"{oid}: the matched text changed since the dry run (content changed)")
+        return list(selected.values()), problems
+
+    def _apply_occurrences(
+        self,
+        replacer: MultiFileContentReplacer,
+        occurrences: list[ReplacementOccurrence],
+        contents: dict[str, str],
+        needle: str,
+        repl: str,
+    ) -> str:
+        occurrences_by_file: dict[str, list[ReplacementOccurrence]] = {}
+        for occ in occurrences:
+            occurrences_by_file.setdefault(occ.relative_path, []).append(occ)
+        with self.DiagnosticsContext(self, *occurrences_by_file.keys()) as diagnostics_context:
+            code_editor = self.create_code_editor()
+            for path, file_occurrences in occurrences_by_file.items():
+                with EditedFileContext(path, code_editor) as context:
+                    original_content = context.get_original_content()
+                    if original_content != contents[path]:
+                        # the editor's view differs from what was scanned (e.g. line-ending normalization);
+                        # re-derive the occurrences from the authoritative content and re-validate by id
+                        fresh_by_id = {o.occurrence_id: o for o in replacer.find_occurrences([(path, original_content)], needle, repl)}
+                        try:
+                            file_occurrences = [fresh_by_id[o.occurrence_id] for o in file_occurrences]
+                        except KeyError as e:
+                            raise ValueError(
+                                f"The content of {path} changed while replacing (occurrence {e} no longer resolves); "
+                                f"the file was NOT modified. Re-run with dry_run=True for current ids."
+                            ) from e
+                    context.set_updated_content(replacer.apply_to_content(original_content, file_occurrences))
+            per_file = "\n".join(f"  {path}: {len(occs)}" for path, occs in occurrences_by_file.items())
+            summary = f"Replaced {len(occurrences)} occurrence(s) in {len(occurrences_by_file)} file(s):\n{per_file}"
+            return diagnostics_context.format_result(summary)
 
 
 class DeleteLinesTool(EditingToolWithDiagnostics, ToolMarkerOptional):

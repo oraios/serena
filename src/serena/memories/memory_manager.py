@@ -2,7 +2,7 @@ import logging
 import os
 import re
 import shutil
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Literal
 
@@ -233,11 +233,27 @@ class MemoryManager:
         def get_full_list(self) -> list[str]:
             return sorted(self.memories + self.read_only_memories)
 
+    @staticmethod
+    def _iter_memory_files(search_dir: Path) -> Iterator[Path]:
+        """Yields every ``*.md`` file under ``search_dir``, descending into symlinked directories.
+
+        Directory symlinks must be followed so that memories shared via symlink are discovered
+        (e.g. a monorepo whose ``.serena/memories`` folder symlinks each submodule's memory
+        directory, making them addressable as ``<submodule>/<name>``). ``Path.rglob`` only
+        follows symlinked directories from Python 3.13 onwards, via ``recurse_symlinks``; on
+        3.11/3.12 it silently skips them, so we fall back to ``os.walk(followlinks=True)`` there.
+        ``rglob`` is preferred when available as it is faster than ``os.walk``.
+        """
+        for root, _dirs, files in os.walk(search_dir, followlinks=True):
+            for filename in files:
+                if filename.endswith(".md"):
+                    yield Path(root) / filename
+
     def _list_memories(self, search_dir: Path, base_dir: Path, prefix: str = "") -> MemoriesList:
         result = self.MemoriesList()
         if not search_dir.exists():
             return result
-        for md_file in search_dir.rglob("*.md"):
+        for md_file in self._iter_memory_files(search_dir):
             rel = str(md_file.relative_to(base_dir).with_suffix("")).replace(os.sep, "/")
             memory_name = prefix + rel
             if self._is_ignored_memory(memory_name):
