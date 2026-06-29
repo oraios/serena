@@ -602,12 +602,24 @@ jobs:
         with:
           r-version: '4.4.2'
           use-public-rspm: true
+      - name: Cache R packages (languageserver + its deps)
+        if: matrix.batch == 'niche'
+        id: cache-r
+        uses: actions/cache@v3
+        with:
+          # setup-r exports R_LIBS_USER as $RUNNER_TEMP/Library (a stable path) and re-exports it on
+          # every run -- including cache hits -- so R finds the restored packages with no extra env.
+          # Bump the trailing -vN (or r-version) to invalidate after an R/OS-image upgrade.
+          path: ${{ env.R_LIBS_USER }}
+          key: r-pkgs-${{ runner.os }}-R4.4.2-languageserver-v1
       - name: Install R sysdeps (libuv for fs package)
+        # Always run (NOT gated on the cache): the cached, compiled `fs` package links libuv at
+        # runtime, so the shared lib must be present even when the build below is skipped.
         if: matrix.batch == 'niche' && runner.os == 'Linux'
         shell: bash
         run: sudo apt-get update && sudo apt-get install -y libuv1-dev
       - name: Install R language server
-        if: matrix.batch == 'niche'
+        if: matrix.batch == 'niche' && steps.cache-r.outputs.cache-hit != 'true'
         shell: bash
         run: Rscript -e "install.packages('languageserver', repos='https://cloud.r-project.org')"
       - name: Set up Julia
@@ -615,21 +627,40 @@ jobs:
         uses: julia-actions/setup-julia@v2
         with:
           version: '1.12.6'
+      - name: Cache Julia depot (packages + precompiled)
+        # Caches the depot (~/.julia: packages, artifacts, compiled, ...) with an auto-managed key,
+        # so the LanguageServer Pkg.add below is a near-no-op (already installed + precompiled) on
+        # warm runs. The action handles save/restore itself -- no cache-hit gating needed.
+        if: matrix.batch == 'niche'
+        uses: julia-actions/cache@v2
       - name: Install Julia LanguageServer
         if: matrix.batch == 'niche'
         shell: bash
         run: julia -e 'using Pkg; Pkg.add(Pkg.PackageSpec(name="LanguageServer", version="5.0.0"))'
+      - name: Cache Perl::LanguageServer (~/perl5)
+        if: matrix.batch == 'niche' && runner.os != 'Windows'
+        id: cache-perl
+        uses: actions/cache@v3
+        with:
+          path: ~/perl5
+          key: perl-ls-${{ runner.os }}-v1
       - name: Install Perl::LanguageServer
         if: matrix.batch == 'niche' && runner.os != 'Windows'
         shell: bash
         run: |
+          # System deps are cheap and needed at runtime (the cached LS links libanyevent/libio-aio),
+          # so install them always; the slow cpanm build (XS compile of Coro etc.) runs only on a miss.
           if [[ "${{ runner.os }}" == "Linux" ]]; then
             sudo apt-get update
             sudo apt-get install -y cpanminus build-essential libanyevent-perl libio-aio-perl
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
             brew install cpanminus
           fi
-          PERL_MM_USE_DEFAULT=1 cpanm --notest --force Perl::LanguageServer
+          if [[ "${{ steps.cache-perl.outputs.cache-hit }}" != "true" ]]; then
+            # --local-lib pins the install to ~/perl5 (matching the PERL5LIB exports below), so the
+            # cached directory is exactly what `perl -MPerl::LanguageServer` loads on a restore.
+            PERL_MM_USE_DEFAULT=1 cpanm --notest --force --local-lib="$HOME/perl5" Perl::LanguageServer
+          fi
           echo "PERL5LIB=$HOME/perl5/lib/perl5${PERL5LIB:+:${PERL5LIB}}" >> $GITHUB_ENV
           echo "PERL_LOCAL_LIB_ROOT=$HOME/perl5${PERL_LOCAL_LIB_ROOT:+:${PERL_LOCAL_LIB_ROOT}}" >> $GITHUB_ENV
           echo "PERL_MB_OPT=--install_base \"$HOME/perl5\"" >> $GITHUB_ENV
