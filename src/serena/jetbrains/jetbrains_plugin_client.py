@@ -311,8 +311,8 @@ class JetBrainsPluginClient(ToStringMixin):
             if method.upper() == "GET":
                 response = self._session.get(url, timeout=self._timeout)
             elif method.upper() == "POST":
-                json_data = json.dumps(data) if data else None
-                response = self._session.post(url, data=json_data, timeout=self._timeout)
+                data_dict = data if data is not None else {}
+                response = self._session.post(url, data=json.dumps(data_dict), timeout=self._timeout)
             else:
                 raise ValueError(f"Unsupported HTTP method: {method}")
 
