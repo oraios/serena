@@ -2,7 +2,6 @@ import logging
 import os
 import re
 import shutil
-import sys
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Literal

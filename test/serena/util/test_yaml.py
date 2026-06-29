@@ -3,7 +3,7 @@
 Regression: ``~/.serena/serena_config.yml`` was corrupted in the field when a non-atomic
 truncate-and-write saved a SHORTER value over a longer existing file (or two Serena processes
 saved concurrently), leaving a stale tail (e.g. a dangling ``ena`` line) that made the YAML
-unparseable, which wedged every later load. ``save_yaml`` now writes to a temp file and
+unparsable, which wedged every later load. ``save_yaml`` now writes to a temp file and
 ``os.replace``s it onto the target, so each write is all-or-nothing.
 """
 
