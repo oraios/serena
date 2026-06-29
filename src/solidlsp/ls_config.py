@@ -571,7 +571,7 @@ class Language(str, Enum):
 
                 return CSharpLanguageServer
             case self.CSHARP_OMNISHARP:
-                from solidlsp.language_servers.omnisharp import OmniSharp  # type: ignore[attr-defined]
+                from solidlsp.language_servers.omnisharp import OmniSharp
 
                 return OmniSharp
             case self.TYPESCRIPT:
@@ -679,7 +679,7 @@ class Language(str, Enum):
 
                 return ZigLanguageServer
             case self.NIX:
-                from solidlsp.language_servers.nixd_ls import NixLanguageServer  # type: ignore
+                from solidlsp.language_servers.nixd_ls import NixLanguageServer
 
                 return NixLanguageServer
             case self.LUA:

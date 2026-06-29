@@ -1,4 +1,3 @@
-# type: ignore
 import os
 
 import pytest

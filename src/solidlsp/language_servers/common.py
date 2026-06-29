@@ -106,7 +106,7 @@ class RuntimeDependencyCollection:
         if not PlatformUtils.get_platform_id().is_windows():
             import pwd
 
-            kwargs["user"] = pwd.getpwuid(os.getuid()).pw_name  # type: ignore
+            kwargs["user"] = pwd.getpwuid(os.getuid()).pw_name
 
         command = subprocess_util.convert_shell_cmd(command)
         log.info("Running command %s in '%s'", f"'{command}'" if isinstance(command, str) else command, cwd)
@@ -120,7 +120,7 @@ class RuntimeDependencyCollection:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             **kwargs,
-        )  # type: ignore
+        )
         if completed_process.returncode != 0:
             log.warning("Command '%s' failed with return code %d", command, completed_process.returncode)
             log.warning("Command output:\n%s", completed_process.stdout)

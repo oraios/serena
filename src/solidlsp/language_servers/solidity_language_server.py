@@ -313,8 +313,8 @@ class SolidityLanguageServer(SolidLanguageServer):
         }
 
         self.server.notify.did_open_text_document(
-            {
-                LSPConstants.TEXT_DOCUMENT: {  # type: ignore
+            {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                LSPConstants.TEXT_DOCUMENT: {
                     LSPConstants.URI: uri,
                     LSPConstants.LANGUAGE_ID: self.language_id,
                     LSPConstants.VERSION: 0,
@@ -324,12 +324,12 @@ class SolidityLanguageServer(SolidLanguageServer):
         )
         try:
             self.server.notify.did_change_text_document(
-                {
-                    LSPConstants.TEXT_DOCUMENT: {  # type: ignore
+                {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                    LSPConstants.TEXT_DOCUMENT: {
                         LSPConstants.URI: uri,
                         LSPConstants.VERSION: 1,
                     },
-                    LSPConstants.CONTENT_CHANGES: [  # type: ignore
+                    LSPConstants.CONTENT_CHANGES: [
                         {
                             LSPConstants.RANGE: {
                                 "start": {"line": 0, "character": 0},
@@ -348,8 +348,8 @@ class SolidityLanguageServer(SolidLanguageServer):
             )
         finally:
             self.server.notify.did_close_text_document(
-                {
-                    LSPConstants.TEXT_DOCUMENT: {  # type: ignore
+                {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                    LSPConstants.TEXT_DOCUMENT: {
                         LSPConstants.URI: uri,
                     }
                 }

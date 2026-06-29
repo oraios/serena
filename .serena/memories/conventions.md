@@ -13,11 +13,9 @@
 - `ruff format` runs on `src scripts test`; same set for `ruff check`.
 - mccabe complexity cap: 20.
 
-## Typing (mypy strict)
-- `disallow_untyped_defs = true`, `disallow_incomplete_defs = true`, `strict_equality`, `strict_optional`, `warn_unreachable`, `no_implicit_optional`.
-- Excluded paths: `^build/`, `^docs/`, `^test/resources/`.
-- Test files relax `disallow_untyped_defs` (still type-checked otherwise).
-
+## Typing (ty)
+- Type checker is **ty** (Astral), configured under `[tool.ty]` in `pyproject.toml`.
+  
 ## Tests
 - Language-server tests are pytest-marker-gated (one marker per language; see `pyproject.toml` `[tool.pytest.ini_options].markers`). Default `poe test` runs unmarked tests + whatever `PYTEST_MARKERS` selects.
 - Snapshot tests use **syrupy** with custom `--snapshot-patch-pycharm-diff` plugin (auto-added via `addopts`).

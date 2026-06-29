@@ -48,5 +48,5 @@ class ExecuteShellCommandTool(Tool, ToolMarkerCanEdit):
                     )
 
         result = execute_shell_command(command, cwd=_cwd, capture_stderr=capture_stderr)
-        result = result.json()
+        result = result.model_dump_json()
         return self._limit_length(result, max_answer_chars)

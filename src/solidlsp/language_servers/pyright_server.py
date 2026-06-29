@@ -65,7 +65,7 @@ class PyrightServer(SolidLanguageServer):
         Returns the initialize params for the Pyright Language Server.
         """
         # Create basic initialization parameters
-        initialize_params = {  # type: ignore
+        initialize_params = {
             "processId": os.getpid(),
             "rootPath": repository_absolute_path,
             "rootUri": pathlib.Path(repository_absolute_path).as_uri(),
@@ -168,9 +168,10 @@ class PyrightServer(SolidLanguageServer):
             message_text = ""
             percentage: object | None = None
             if isinstance(params, dict):
-                raw_message = params.get("message")
+                params_dict = cast("dict[str, object]", params)
+                raw_message = params_dict.get("message")
                 message_text = "" if raw_message is None else str(raw_message)
-                percentage = params.get("percentage")
+                percentage = params_dict.get("percentage")
             elif params is not None:
                 message_text = str(params)
 

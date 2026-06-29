@@ -327,7 +327,7 @@ class Tool(Component):
         """
         return {}
 
-    def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, mcp_ctx: Context | None = None, **kwargs) -> str:  # type: ignore
+    def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, mcp_ctx: Context | None = None, **kwargs) -> str:
         """
         Applies the tool with logging and exception handling, using the given keyword arguments.
         This method either returns a string result or raises a ToolCallError in case of an error during tool application
@@ -468,7 +468,7 @@ class EditingToolWithDiagnostics(Tool, ToolMarkerCanEdit):
         def __enter__(self) -> Self:
             return self
 
-        def __exit__(self, exc_type, exc_val, exc_tb):  # type: ignore
+        def __exit__(self, exc_type, exc_val, exc_tb):
             pass
 
         def format_result(

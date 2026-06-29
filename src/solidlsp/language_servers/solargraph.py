@@ -133,7 +133,7 @@ class Solargraph(SolidLanguageServer):
                     if bundle_cmd.startswith("bin/"):
                         bundle_full_path = os.path.join(repository_root_path, bundle_cmd)
                     else:
-                        bundle_full_path = find_executable_with_extensions(bundle_cmd)  # type: ignore[assignment]
+                        bundle_full_path = find_executable_with_extensions(bundle_cmd)
                     if bundle_full_path and os.path.exists(bundle_full_path):
                         bundle_path = bundle_full_path if bundle_cmd.startswith("bin/") else bundle_cmd
                         break
@@ -275,12 +275,12 @@ class Solargraph(SolidLanguageServer):
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
         exclude_patterns = Solargraph._get_ruby_exclude_patterns(repository_absolute_path)
 
-        initialize_params: InitializeParams = {  # type: ignore
+        initialize_params: InitializeParams = {
             "processId": os.getpid(),
             "rootPath": repository_absolute_path,
             "rootUri": root_uri,
             "initializationOptions": {
-                "exclude": exclude_patterns,  # type: ignore[dict-item]
+                "exclude": exclude_patterns,
             },
             "capabilities": {
                 "workspace": {
@@ -301,7 +301,7 @@ class Solargraph(SolidLanguageServer):
                 }
             ],
         }
-        return initialize_params  # type: ignore[return-value]
+        return initialize_params
 
     def _start_server(self) -> None:
         """

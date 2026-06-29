@@ -36,7 +36,7 @@ if os.name != "nt":  # Unix-like systems
     import pwd
 else:
     # Dummy pwd module for Windows
-    class pwd:  # type: ignore
+    class pwd:
         @staticmethod
         def getpwuid(uid: Any) -> Any:
             return type("obj", (), {"pw_name": os.environ.get("USERNAME", "unknown")})()

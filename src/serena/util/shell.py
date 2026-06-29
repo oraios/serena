@@ -47,7 +47,7 @@ def subprocess_check_output(
 ) -> str:
     output = subprocess.check_output(
         args, stdin=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=timeout, env=os.environ.copy(), cwd=cwd, **subprocess_kwargs()
-    ).decode(encoding)  # type: ignore
+    ).decode(encoding)
     if strip:
         output = output.strip()
     return output

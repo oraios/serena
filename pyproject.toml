@@ -73,7 +73,7 @@ text = "MIT"
 dev = [
   "jinja2==3.1.6",
   # In version 1.0.4 we get a NoneType error related to some config conversion (yml_analytics is None and should be a list)
-  "mypy==1.17.0",
+  "ty==0.0.24",
   "poethepoet==0.36.0",
   "pytest==8.4.1",
   "pytest-xdist==3.8.0",
@@ -109,29 +109,47 @@ packages = ["src/serena", "src/interprompt", "src/solidlsp"]
 [tool.doc8]
 max-line-length = 1000
 
-[tool.mypy]
-allow_redefinition = true
-check_untyped_defs = true
-disallow_incomplete_defs = true
-disallow_untyped_defs = true
-ignore_missing_imports = true
-no_implicit_optional = true
-pretty = true
-show_error_codes = true
-show_error_context = true
-show_traceback = true
-strict_equality = true
-strict_optional = true
-warn_no_return = true
-warn_redundant_casts = true
-warn_unreachable = true
-warn_unused_configs = true
-warn_unused_ignores = false
-exclude = "^build/|^docs/|^test/resources/"
+[tool.ty.environment]
+python-version = "3.11"
+# Analyze for all platforms rather than defaulting to the OS ty happens to run on. This keeps the
+# check deterministic across the CI matrix (Linux/Windows/macOS) and lets platform-conditional stdlib
+# members (e.g. subprocess.CREATE_NO_WINDOW, ctypes.windll, pwd) resolve without per-OS type-ignores.
+python-platform = "all"
 
-[[tool.mypy.overrides]]
-module = "test.*"
-disallow_untyped_defs = false  # untyped defs are OK in tests
+[tool.ty.rules]
+# Mirror mypy's ignore_missing_imports=true: optional extras (e.g. agno, google-genai) and
+# platform-specific modules (e.g. AppKit on macOS) are not installed in the default dev environment,
+# so we do not want unresolvable imports to fail the type check.
+unresolved-import = "ignore"
+possibly-missing-submodule = "ignore"
+
+[tool.ty.src]
+# NOTE: test/resources is intentionally NOT excluded here. This config is also discovered by the ty
+# language server (used by the PYTHON_TY diagnostics provider) when it analyzes the sample fixture
+# repos under test/resources; excluding them here would suppress the diagnostics those tests rely on.
+# test/resources is instead excluded from the `ty check test` CLI task via its --exclude flag.
+exclude = ["build/", "docs/"]
+
+[[tool.ty.overrides]]
+# Test code is heavily dynamic (pytest fixtures, MagicMock, intentionally loose Optionals). ty models
+# pytest's fail/skip helpers and MagicMock far more strictly than mypy did (mypy inferred `Any` for
+# these), which produces hundreds of diagnostics that are not real bugs. We therefore relax these
+# specific type rules for tests only, while still catching genuinely broken test code (undefined
+# names, syntax errors, unused type-ignore comments, etc.). The sample fixture repos under
+# test/resources are excluded so the ty language server still reports real diagnostics on them.
+include = ["test/**"]
+exclude = ["test/resources/"]
+
+[tool.ty.overrides.rules]
+invalid-argument-type = "ignore"
+invalid-key = "ignore"
+invalid-return-type = "ignore"
+no-matching-overload = "ignore"
+not-subscriptable = "ignore"
+parameter-already-assigned = "ignore"
+too-many-positional-arguments = "ignore"
+unresolved-attribute = "ignore"
+unsupported-operator = "ignore"
 
 [tool.poe.env]
 PYDEVD_DISABLE_FILE_VALIDATION = "1"
@@ -152,9 +170,9 @@ _ruff_fix = "ruff check --fix src scripts test"
 _ruff_format = "ruff format src scripts test"
 lint = ["_ruff_format_check", "_ruff_check"]
 format = ["_ruff_fix", "_ruff_format"]
-_mypy_core = "mypy src/serena src/solidlsp"
-_mypy_test = "mypy --disable-error-code no-untyped-def test"
-type-check = ["_mypy_core", "_mypy_test"]
+_ty_core = "ty check src/serena src/solidlsp"
+_ty_test = "ty check test --exclude test/resources"
+type-check = ["_ty_core", "_ty_test"]
 # docs
 _autogen_docs = "python docs/autogen_docs.py"
 _sphinx_build = "sphinx-build -b html docs docs/_build -W --keep-going"

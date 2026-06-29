@@ -15,7 +15,7 @@ def subprocess_kwargs() -> dict:
     """
     kwargs = {}
     if platform.system() == "Windows":
-        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
     return kwargs
 
 

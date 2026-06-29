@@ -438,7 +438,7 @@ class SvelteLanguageServer(SolidLanguageServer):
                 return
             _orig_notify_send("$/onDidChangeTsOrJsFile", {"uri": uri, "changes": changes})
 
-        self.server.notify.send_notification = send_notification_wrapped  # type: ignore[method-assign]  # type: ignore[method-assign]  # type: ignore[method-assign]
+        self.server.notify.send_notification = send_notification_wrapped
 
     def _get_initialize_params(self) -> InitializeParams:
         """

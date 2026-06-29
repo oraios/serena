@@ -34,7 +34,7 @@ from serena.util.logging import MemoryLogHandler
 log = logging.getLogger(__name__)
 
 
-def configure_logging(*args, **kwargs) -> None:  # type: ignore
+def configure_logging(*args, **kwargs) -> None:
     # We only do something here if logging has not yet been configured.
     # Normally, logging is configured in the MCP server startup script.
     if not logging.is_enabled():
@@ -95,7 +95,7 @@ class SerenaFastMCPTool(FastMCPTool):
                 param_desc = f"{param_doc.description.strip().strip('.') + '.'}"
                 properties["description"] = param_desc[0].upper() + param_desc[1:]
 
-        def execute_fn(**kwargs) -> str:  # type: ignore
+        def execute_fn(**kwargs) -> str:
             try:
                 return tool.apply_ex(log_call=True, catch_exceptions=False, **kwargs)
             except ToolCallError as e:
@@ -182,7 +182,7 @@ class SerenaMCPFactory:
         """
         s = deepcopy(schema)
 
-        def walk(node):  # type: ignore
+        def walk(node):
             if not isinstance(node, dict):
                 # lists get handled by parent calls
                 return node

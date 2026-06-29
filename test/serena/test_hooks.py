@@ -464,22 +464,22 @@ class TestToolUseCounter:
         counter = ToolUseCounter(n_recent_grep_uses=2, n_recent_read_file_uses=1)
 
         hook_stub = type("HookStub", (), {"session_persistence_dir": str(tmp_path)})()
-        counter.save(hook_stub)  # type: ignore[arg-type]
-        loaded = ToolUseCounter.load(hook_stub)  # type: ignore[arg-type]
+        counter.save(hook_stub)
+        loaded = ToolUseCounter.load(hook_stub)
 
         assert loaded.n_recent_grep_uses == 2
         assert loaded.n_recent_read_file_uses == 1
 
     def test_load_returns_fresh_counter_on_missing_file(self, tmp_path: Path):
         hook_stub = type("HookStub", (), {"session_persistence_dir": str(tmp_path / "nonexistent")})()
-        loaded = ToolUseCounter.load(hook_stub)  # type: ignore[arg-type]
+        loaded = ToolUseCounter.load(hook_stub)
         assert loaded == ToolUseCounter()
 
     def test_load_returns_fresh_counter_on_corrupt_file(self, tmp_path: Path):
         hook_stub = type("HookStub", (), {"session_persistence_dir": str(tmp_path)})()
         path = tmp_path / ToolUseCounter._FILE_NAME
         path.write_bytes(b"not a pickle")
-        loaded = ToolUseCounter.load(hook_stub)  # type: ignore[arg-type]
+        loaded = ToolUseCounter.load(hook_stub)
         assert loaded == ToolUseCounter()
 
     def test_is_hook_active_respects_min_interval(self):

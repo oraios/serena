@@ -277,7 +277,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         if original_name != normalized_name:
             sel_range = symbol.get("selectionRange")
             if sel_range:
-                start = sel_range.get("start")  # type: ignore
+                start = sel_range.get("start")
                 if start and "line" in start and "character" in start:
                     line = start["line"]
                     char = start["character"]

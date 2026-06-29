@@ -3,6 +3,7 @@
 import logging
 import os
 import shutil
+from typing import cast
 
 from overrides import override
 
@@ -62,7 +63,7 @@ class RegalLanguageServer(SolidLanguageServer):
         :return: LSP initialization parameters
         """
         root_uri = PathUtils.path_to_uri(repository_absolute_path)
-        return {
+        initialize_params = {
             "processId": os.getpid(),
             "locale": "en",
             "rootPath": repository_absolute_path,
@@ -76,9 +77,9 @@ class RegalLanguageServer(SolidLanguageServer):
                     "documentSymbol": {
                         "dynamicRegistration": True,
                         "hierarchicalDocumentSymbolSupport": True,
-                        "symbolKind": {"valueSet": list(range(1, 27))},  # type: ignore[arg-type]
+                        "symbolKind": {"valueSet": list(range(1, 27))},
                     },
-                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},  # type: ignore[list-item]
+                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
                     "codeAction": {"dynamicRegistration": True},
                     "formatting": {"dynamicRegistration": True},
                 },
@@ -95,17 +96,18 @@ class RegalLanguageServer(SolidLanguageServer):
                 }
             ],
         }
+        return cast(InitializeParams, initialize_params)
 
     def _start_server(self) -> None:
         """Start Regal language server process and wait for initialization."""
 
-        def register_capability_handler(params) -> None:  # type: ignore[no-untyped-def]
+        def register_capability_handler(params) -> None:
             return
 
-        def window_log_message(msg) -> None:  # type: ignore[no-untyped-def]
+        def window_log_message(msg) -> None:
             log.info(f"LSP: window/logMessage: {msg}")
 
-        def do_nothing(params) -> None:  # type: ignore[no-untyped-def]
+        def do_nothing(params) -> None:
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)

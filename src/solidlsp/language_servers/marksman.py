@@ -201,7 +201,7 @@ class Marksman(SolidLanguageServer):
         Returns the initialize params for the Marksman Language Server.
         """
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
-        initialize_params: InitializeParams = {  # type: ignore
+        initialize_params: InitializeParams = {
             "processId": os.getpid(),
             "locale": "en",
             "rootPath": repository_absolute_path,
