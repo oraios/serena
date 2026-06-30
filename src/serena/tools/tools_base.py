@@ -47,6 +47,18 @@ class LanguageScoping:
     """a short, one-line note to append to the result when files of an excluded language were actually
     skipped within the search scope; ``None`` if nothing was skipped (in which case no note should be emitted)"""
 
+    @classmethod
+    def none(cls) -> "LanguageScoping":
+        """:return: a scoping that excludes nothing and carries no coverage note"""
+        return cls(excluded_languages=frozenset(), coverage_note=None)
+
+    def with_note(self, text: str) -> str:
+        """
+        :param text: a tool result
+        :return: the result with the coverage note prepended (if there is one), else unchanged
+        """
+        return f"{self.coverage_note}\n{text}" if self.coverage_note else text
+
 
 def _format_coverage_note(skipped_counts: dict[Language, int]) -> str | None:
     """
@@ -373,9 +385,9 @@ class Tool(Component):
             or language-agnostic tools). Directories are not considered pinned files.
         """
         rp = kwargs.get("relative_path")
-        if isinstance(rp, str) and rp.strip():
+        if isinstance(rp, str):
             rp = rp.strip()
-            if os.path.isfile(os.path.join(self.get_project_root(), rp)):
+            if rp and os.path.isfile(os.path.join(self.get_project_root(), rp)):
                 return [rp]
         return None
 
@@ -399,8 +411,9 @@ class Tool(Component):
         for rp in target_paths:
             hit = languages_for_path(rp, project.project_config.languages) & excluded_langs
             if hit:
-                lang_list = ", ".join(sorted(lang.value for lang in hit))
-                hit_lang = sorted(hit, key=lambda lang: lang.value)[0].value
+                hit_values = sorted(lang.value for lang in hit)
+                lang_list = ", ".join(hit_values)
+                hit_lang = hit_values[0]
                 return (
                     f"Error: Tool '{self.get_name()}' is disabled for {lang_list} in this project; "
                     f"'{rp}' is a {hit_lang} file. Inspect {hit_lang} code with text-based tools "
@@ -420,10 +433,10 @@ class Tool(Component):
         """
         project = self.agent.get_active_project()
         if project is None:
-            return LanguageScoping(excluded_languages=frozenset(), coverage_note=None)
+            return LanguageScoping.none()
         excluded_langs = project.project_config.excluded_languages_for_tool(self.get_name())
         if not excluded_langs:
-            return LanguageScoping(excluded_languages=frozenset(), coverage_note=None)
+            return LanguageScoping.none()
         skipped_counts = project.count_source_files_for_languages(excluded_langs, relative_path=relative_path)
         return LanguageScoping(excluded_languages=frozenset(excluded_langs), coverage_note=_format_coverage_note(skipped_counts))
 

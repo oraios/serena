@@ -670,6 +670,4 @@ class SearchForPatternTool(Tool):
         limited = self._limit_length(
             result, max_answer_chars, shortened_result_factories=[make_lines_only, make_per_file_counts, make_summary]
         )
-        if scoping.coverage_note:
-            return f"{scoping.coverage_note}\n{limited}"
-        return limited
+        return scoping.with_note(limited)

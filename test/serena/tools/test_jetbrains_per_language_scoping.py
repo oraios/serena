@@ -7,8 +7,6 @@ server; only the in-tool scoping/filtering logic is exercised. We disable the to
 count is > 0 and the note is emitted.
 """
 
-import pytest
-
 from serena.config.serena_config import ProjectConfig
 from serena.project import Project
 from serena.tools.jetbrains_tools import JetBrainsFindSymbolTool
@@ -101,7 +99,7 @@ def test_external_dependency_symbols_are_not_scoped(monkeypatch):
         result = tool.apply(name_path_pattern="Thing", search_deps=True)
         assert "Coverage" in result  # in-project python files were skipped
         body = result.split("\n", 1)[1]
-        assert "ExtThing" in body          # external symbol retained
-        assert "BaseModel" not in body     # in-project python symbol scoped away
+        assert "ExtThing" in body  # external symbol retained
+        assert "BaseModel" not in body  # in-project python symbol scoped away
     finally:
         tool.project.shutdown(timeout=5)
