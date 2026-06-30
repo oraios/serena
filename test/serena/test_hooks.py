@@ -677,6 +677,24 @@ class TestSessionEndCleanupHook:
         with patch("sys.stdin", _make_stdin(stdin_data)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
             SessionEndCleanupHook(HookClient.CLAUDE_CODE).execute()
 
+    def test_codex_cleanup_emits_continue_json(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        session_dir = tmp_path / "hook_data" / "codex-cleanup"
+        session_dir.mkdir(parents=True)
+        (session_dir / "tool_use_counter.pkl").write_bytes(pickle.dumps(ToolUseCounter()))
+
+        stdin_data = {"session_id": "codex-cleanup"}
+        with patch("sys.stdin", _make_stdin(stdin_data)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            SessionEndCleanupHook(HookClient.CODEX).execute()
+
+        assert not session_dir.exists()
+        assert json.loads(capsys.readouterr().out.strip()) == {"continue": True}
+
+    def test_codex_cleanup_without_session_id_is_noop(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        with patch("sys.stdin", _make_stdin({})), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            SessionEndCleanupHook(HookClient.CODEX).execute()
+
+        assert json.loads(capsys.readouterr().out.strip()) == {"continue": True}
+
 
 class TestHookCli:
     """Tests for the Click CLI entry point (serena-hooks)."""
@@ -692,6 +710,19 @@ class TestHookCli:
             result = runner.invoke(hook_commands, ["cleanup", "--client", "claude-code"], input=stdin_json)
         assert result.exit_code == 0
         assert not session_dir.exists()
+
+    def test_cleanup_command_codex(self, tmp_path: Path):
+        session_dir = tmp_path / "hook_data" / "cli-cleanup-codex"
+        session_dir.mkdir(parents=True)
+        (session_dir / "somefile").write_text("data")
+
+        stdin_json = json.dumps({"session_id": "cli-cleanup-codex"})
+        runner = CliRunner()
+        with patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            result = runner.invoke(hook_commands, ["cleanup", "--client", "codex"], input=stdin_json)
+        assert result.exit_code == 0
+        assert not session_dir.exists()
+        assert json.loads(result.output) == {"continue": True}
 
     def test_remind_command(self, tmp_path: Path):
         """Invoke the remind command enough times to trigger a deny."""
