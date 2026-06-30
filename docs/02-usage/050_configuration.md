@@ -243,8 +243,11 @@ a caveat appended to each affected tool's description, so it can plan to use fal
   refused if the tool is disabled for *any* matching language (conservative behaviour).
 - Disabling `find_referencing_symbols` for `L` removes references *anchored in* `L` files; cross-language
   references were already limited by the single-language-server model and are not affected here.
-- Under the **JetBrains backend**, only the file-pinned refusal and the `search_for_pattern` scoping apply;
-  whole-project JetBrains symbol search is not scoped per language in this version.
+- Under the **JetBrains backend**, the file-pinned refusal, `search_for_pattern` scoping, and whole-project
+  `jet_brains_find_symbol` scoping all apply. Note that the JetBrains symbol tools are exposed under their own
+  names (e.g. `jet_brains_find_symbol`), so list those names in `excluded_tools_by_language` rather than the LSP
+  names (e.g. `find_symbol`) when running this backend. Cross-language *references* returned by
+  `jet_brains_find_referencing_symbols` are not filtered (matching the LSP behaviour).
 
 (ls-specific-settings)=
 ### Language Server-Specific Settings
