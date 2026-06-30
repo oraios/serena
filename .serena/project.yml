@@ -76,7 +76,7 @@ initial_prompt: |
   Comments:
   When describing parameters, methods/functions and classes, you use a precise style, where the initial (elliptical) phrase
   clearly defines *what* it is. Any details then follow in subsequent sentences.
-  
+
   Pull requests:
   Read `mem:creating_pull_requests` when asked to participate in the creation of a pull request.
 
@@ -139,8 +139,8 @@ ignored_memory_patterns: []
 
 # advanced configuration option allowing to configure language server-specific options.
 # Maps the language key to the options.
-# Have a look at the docstring of the constructors of the LS implementations within solidlsp (e.g., for C# or PHP) to see which options are available.
-# No documentation on options means no options are available.
+# The settings are considered only if the project is trusted (see global configuration to define trusted projects).
+# See https://oraios.github.io/serena/02-usage/050_configuration.html#language-server-specific-settings
 ls_specific_settings: {}
 
 # list of mode names to be activated additionally for this project, e.g. ["query-projects"]
@@ -176,3 +176,16 @@ additional_workspace_folders: []
 #       - replace_symbol_body
 #       - find_referencing_symbols
 excluded_tools_by_language: {}
+
+# optional shell command to run before the language backend (LSP or JetBrains) is initialised.
+# the command runs in the project root directory and is only executed if the project is trusted
+# (see trusted_project_path_patterns in the global configuration).
+# serena waits for the command to exit: a non-zero exit code is logged as an error but does not
+# abort activation. a per-project timeout (activation_command_timeout, default 180s) is the safety
+# backstop for non-terminating commands; on expiry the process is killed and activation continues.
+# example: activation_command: "npx nx run-many -t build"
+activation_command:
+
+# maximum time in seconds to wait for activation_command to complete before killing it (default 180s).
+# must be a positive number.
+activation_command_timeout: 180.0

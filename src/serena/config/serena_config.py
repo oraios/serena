@@ -3,6 +3,7 @@ The Serena Model Context Protocol (MCP) Server
 """
 
 import dataclasses
+import inspect
 import os
 import re
 import shutil
@@ -662,9 +663,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
             search tools find_symbol/search_for_pattern, which accept an optional ``relative_path``).
             Language-agnostic tools (e.g. read_memory, execute_shell_command) return ``False``.
         """
-        import inspect
-
-        apply_fn = tool_class.__dict__.get("apply") or getattr(tool_class, "apply", None)
+        apply_fn = getattr(tool_class, "apply", None)
         if apply_fn is None:
             return False
         try:

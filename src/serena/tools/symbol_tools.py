@@ -217,11 +217,8 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
                 relative_path_to_name_paths[s.location.relative_path or "unknown"].append(s.get_name_path())
             return f"Shortened result:\n{self._to_json(relative_path_to_name_paths)}"
 
-        def with_coverage_note(text: str) -> str:
-            return f"{scoping.coverage_note}\n{text}" if scoping.coverage_note else text
-
         if 0 < max_matches < n_matches:
-            return with_coverage_note(f"Matched {n_matches}>{max_matches=} symbols.\n" + create_short_result_relative_path_to_name_paths())
+            return scoping.with_note(f"Matched {n_matches}>{max_matches=} symbols.\n" + create_short_result_relative_path_to_name_paths())
 
         symbol_dicts = [
             s.to_dict(
@@ -248,7 +245,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
 
         grouped_symbol_dicts = self.symbol_dict_grouper.group(symbol_dicts)
         result = self._to_json(grouped_symbol_dicts)
-        return with_coverage_note(
+        return scoping.with_note(
             self._limit_length(result, max_answer_chars, shortened_result_factories=[create_short_result_relative_path_to_name_paths])
         )
 
