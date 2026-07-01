@@ -231,17 +231,20 @@ class Project(ToStringMixin):
             log.debug(f"Path {abs_path} does not exist, skipping ignore check")
             return False
 
-        # Check file extension if it's a file
-        is_file = os.path.isfile(abs_path)
-        if is_file and ignore_non_source_files:
-            is_file_in_supported_language = False
-            for language in self.project_config.languages:
-                fn_matcher = language.get_source_fn_matcher()
-                if fn_matcher.is_relevant_filename(abs_path):
-                    is_file_in_supported_language = True
-                    break
-            if not is_file_in_supported_language:
-                return True
+        # check code file restriction (depending on backend)
+        if ignore_non_source_files:
+            # apply restriction only for LSP backend, which enumerates known languages
+            # and therefore can determine whether a file is a source file or not
+            if self.language_backend.is_lsp():
+                if os.path.isfile(abs_path):
+                    is_file_in_supported_language = False
+                    for language in self.project_config.languages:
+                        fn_matcher = language.get_source_fn_matcher()
+                        if fn_matcher.is_relevant_filename(abs_path):
+                            is_file_in_supported_language = True
+                            break
+                    if not is_file_in_supported_language:
+                        return True
 
         # Create normalized path for consistent handling
         rel_path = Path(relative_path)
