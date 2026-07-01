@@ -9,6 +9,7 @@ from sensai.util.logging import LogTime
 from sensai.util.string import TextBuilder, ToStringMixin
 
 from serena.config.serena_config import (
+    LanguageBackend,
     ProjectConfig,
     SerenaConfig,
 )
@@ -120,6 +121,16 @@ class Project(ToStringMixin):
     @property
     def project_name(self) -> str:
         return self.project_config.project_name
+
+    @property
+    def language_backend(self) -> LanguageBackend:
+        # The backend configuration is fundamentally owned by the agent, so it takes
+        # precedence. (Note: The agent does not necessary honour the project's choice,
+        # as it may be invalid.)
+        if self._agent is not None:
+            return self._agent.get_language_backend()
+        else:
+            return self.serena_config.determine_language_backend(self.project_config)
 
     @classmethod
     def load(
