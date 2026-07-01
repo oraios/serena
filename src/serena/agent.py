@@ -1203,7 +1203,7 @@ class SerenaAgent:
             self._update_active_tools()
 
         def init_project_services() -> None:
-            self._run_activation_command(project)
+            self._run_project_activation_command(project)
             self._init_active_project_language_backend()
 
         # initialise the project's language backend in the background
@@ -1218,12 +1218,11 @@ class SerenaAgent:
 
         return True
 
-    def _run_activation_command(self, project: Project) -> None:
+    @staticmethod
+    def _run_project_activation_command(project: Project) -> None:
         """
-        Runs the project's activation_command (if set and the project is trusted) before the language
-        backend initialises. The command's exit code is the primary completion signal; a per-project
-        timeout is the safety backstop for non-terminating commands. Failures and timeouts are logged
-        but never abort activation (there is no return channel to the LLM at this point).
+        Runs the given project's activation_command (if set and the project is trusted).
+        Failures are logged.
         """
         activation_command = project.project_config.activation_command
         if not activation_command:
@@ -1239,7 +1238,7 @@ class SerenaAgent:
         cmd = subprocess_util.convert_shell_cmd(activation_command)
         log.info(f"Running activation_command for project '{project.project_name}': {cmd}")
         try:
-            with LogTime("activation_command", logger=log):
+            with LogTime("Project activation command", logger=log):
                 p = subprocess.Popen(
                     cmd,
                     shell=True,
@@ -1254,7 +1253,7 @@ class SerenaAgent:
                         log.error(f"activation_command for project '{project.project_name}' failed (exit {p.returncode}): {stderr.strip()}")
                 except subprocess.TimeoutExpired:
                     log.error(
-                        f"activation_command for project '{project.project_name}' timed out after "
+                        f"Activation_command for project '{project.project_name}' timed out after "
                         f"{timeout}s; terminating process and continuing with backend initialisation."
                     )
                     terminate_process_tree_with_kill_fallback(p, terminate_timeout=5.0, process_name="activation_command")

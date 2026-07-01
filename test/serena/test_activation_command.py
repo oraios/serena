@@ -51,7 +51,7 @@ class TestRunActivationCommand:
         project = _make_project(tmp_path, activation_command=None)
         agent = self._make_agent(project)
         with caplog.at_level(logging.INFO):
-            agent._run_activation_command(project)
+            agent._run_project_activation_command(project)
         assert "activation_command" not in caplog.text
 
     def test_trusted_command_runs_in_project_root(self, tmp_path: Path):
@@ -63,7 +63,7 @@ class TestRunActivationCommand:
             cmd = "touch sentinel.txt"
         project = _make_project(tmp_path, activation_command=cmd, trusted=True)
         agent = self._make_agent(project)
-        agent._run_activation_command(project)
+        agent._run_project_activation_command(project)
         assert sentinel.exists(), "Command did not run in project root (sentinel file missing)"
 
     def test_untrusted_project_skips_command(self, tmp_path: Path, caplog):
@@ -72,7 +72,7 @@ class TestRunActivationCommand:
         project = _make_project(tmp_path, activation_command=cmd, trusted=False)
         agent = self._make_agent(project)
         with caplog.at_level(logging.WARNING):
-            agent._run_activation_command(project)
+            agent._run_project_activation_command(project)
         assert not sentinel.exists(), "Command must not run for untrusted project"
         assert "not trusted" in caplog.text
 
@@ -81,7 +81,7 @@ class TestRunActivationCommand:
         project = _make_project(tmp_path, activation_command=cmd, trusted=True)
         agent = self._make_agent(project)
         with caplog.at_level(logging.ERROR):
-            agent._run_activation_command(project)  # must not raise
+            agent._run_project_activation_command(project)  # must not raise
         assert any("failed" in r.message.lower() for r in caplog.records if r.levelno == logging.ERROR)
 
     @pytest.mark.slow
@@ -96,5 +96,5 @@ class TestRunActivationCommand:
         )
         agent = self._make_agent(project)
         with caplog.at_level(logging.ERROR):
-            agent._run_activation_command(project)  # must not hang or raise
+            agent._run_project_activation_command(project)  # must not hang or raise
         assert any("timed out" in r.message.lower() for r in caplog.records if r.levelno == logging.ERROR)
