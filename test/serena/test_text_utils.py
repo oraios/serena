@@ -1,7 +1,9 @@
 import re
+from collections.abc import Callable
 
 import pytest
 
+from serena.util.file_proxy import FileCollection, FileProxy
 from serena.util.text_utils import LineType, MultiFileContentReplacer, search_files, search_text
 
 
@@ -221,6 +223,23 @@ def mock_reader_always_match(file_path: str) -> str:
     return "This line contains a match."
 
 
+class MockFileProxy(FileProxy):
+    def __init__(self, relative_path: str, mock_reader: Callable[[str], str] = mock_reader_always_match):
+        self.relative_path = relative_path
+        self.mock_reader = mock_reader
+
+    def get_contents(self) -> str:
+        return self.mock_reader(self.relative_path)
+
+    def get_relative_path(self) -> str:
+        return self.relative_path
+
+
+class MockFileCollection(FileCollection):
+    def __init__(self, file_paths, mock_reader: Callable[[str], str] = mock_reader_always_match):
+        super().__init__([MockFileProxy(path, mock_reader) for path in file_paths])
+
+
 class TestSearchFiles:
     @pytest.mark.parametrize(
         "file_paths, pattern, paths_include_glob, paths_exclude_glob, expected_matched_files, description",
@@ -254,9 +273,8 @@ class TestSearchFiles:
         Test the include/exclude glob filtering logic in search_files using PathSpec patterns.
         """
         results = search_files(
-            relative_file_paths=file_paths,
+            MockFileCollection(file_paths),
             pattern=pattern,
-            file_reader=mock_reader_always_match,
             paths_include_glob=paths_include_glob,
             paths_exclude_glob=paths_exclude_glob,
             context_lines_before=0,  # No context needed for this test focus
@@ -333,9 +351,8 @@ class TestSearchFiles:
         Test glob patterns that were problematic with the previous gitignore-based implementation.
         """
         results = search_files(
-            relative_file_paths=file_paths,
+            MockFileCollection(file_paths),
             pattern=pattern,
-            file_reader=mock_reader_always_match,
             paths_include_glob=paths_include_glob,
             paths_exclude_glob=paths_exclude_glob,
             context_lines_before=0,
@@ -414,9 +431,8 @@ class TestSearchFiles:
     ):
         """Test search_files with glob patterns containing brace expansions."""
         results = search_files(
-            relative_file_paths=file_paths,
+            MockFileCollection(file_paths),
             pattern=pattern,
-            file_reader=mock_reader_always_match,
             paths_include_glob=paths_include_glob,
             paths_exclude_glob=paths_exclude_glob,
         )
@@ -429,9 +445,8 @@ class TestSearchFiles:
         file_paths = ["a.py", "b.txt"]
         pattern = "non_existent_pattern_in_mock_content"  # This won't match mock_reader_always_match content
         results = search_files(
-            relative_file_paths=file_paths,
+            MockFileCollection(file_paths),
             pattern=pattern,
-            file_reader=mock_reader_always_match,  # Content is "This line contains a match."
             paths_include_glob=None,  # Both files would pass filters
             paths_exclude_glob=None,
         )
@@ -454,9 +469,8 @@ class TestSearchFiles:
         pattern = r"value=(\d+)"
 
         results = search_files(
-            relative_file_paths=file_paths,
+            MockFileCollection(file_paths, specific_mock_reader),
             pattern=pattern,
-            file_reader=specific_mock_reader,
             paths_include_glob="*.py",  # Only include .py files
             paths_exclude_glob="b.*",  # Exclude files starting with b
         )
@@ -484,9 +498,8 @@ class TestSearchFiles:
         pattern = "MATCH HERE"
 
         results = search_files(
-            relative_file_paths=file_paths,
+            MockFileCollection(file_paths, context_mock_reader),
             pattern=pattern,
-            file_reader=context_mock_reader,
             paths_include_glob="*.txt",  # Only include .txt files
             paths_exclude_glob=None,
             context_lines_before=1,

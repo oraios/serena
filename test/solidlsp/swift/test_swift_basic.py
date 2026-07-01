@@ -198,7 +198,7 @@ class TestSwiftProjectBasics:
 
         # Scenario 3: Search for struct definitions
         struct_pattern = r"struct\s+\w+"
-        matches = project.search_source_files_for_pattern(struct_pattern)
+        matches = project.search_project_files_for_pattern(struct_pattern)
         assert len(matches) > 0, "Should find struct definitions"
         # Should find User struct
         user_matches = [m for m in matches if "User" in str(m)]
@@ -206,7 +206,7 @@ class TestSwiftProjectBasics:
 
         # Scenario 4: Search for class definitions
         class_pattern = r"class\s+\w+"
-        matches = project.search_source_files_for_pattern(class_pattern)
+        matches = project.search_project_files_for_pattern(class_pattern)
         assert len(matches) > 0, "Should find class definitions"
         # Should find Calculator and Circle classes
         calculator_matches = [m for m in matches if "Calculator" in str(m)]
@@ -216,7 +216,7 @@ class TestSwiftProjectBasics:
 
         # Scenario 5: Search for enum definitions
         enum_pattern = r"enum\s+\w+"
-        matches = project.search_source_files_for_pattern(enum_pattern)
+        matches = project.search_project_files_for_pattern(enum_pattern)
         assert len(matches) > 0, "Should find enum definitions"
         # Should find Status enum
         status_matches = [m for m in matches if "Status" in str(m)]

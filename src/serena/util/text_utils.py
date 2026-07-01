@@ -1,7 +1,6 @@
 import fnmatch
 import hashlib
 import logging
-import os
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -11,7 +10,7 @@ from typing import Any, Literal, Self
 from bs4 import BeautifulSoup
 from joblib import Parallel, delayed
 
-from serena.constants import DEFAULT_SOURCE_FILE_ENCODING
+from serena.util.file_proxy import FileCollection, FileProxy
 from solidlsp.ls_utils import TextUtils
 
 log = logging.getLogger(__name__)
@@ -237,12 +236,6 @@ def search_text(
     return matches
 
 
-def default_file_reader(file_path: str) -> str:
-    """Reads using the default encoding."""
-    with open(file_path, encoding=DEFAULT_SOURCE_FILE_ENCODING) as f:
-        return f.read()
-
-
 def expand_braces(pattern: str) -> list[str]:
     """
     Expands brace patterns in a glob string.
@@ -319,11 +312,17 @@ def glob_match(pattern: str, path: str) -> bool:
         return fnmatch.fnmatch(path, pattern)
 
 
+class GlobMatcher:
+    def __init__(self, expr: str):
+        self._patterns = expand_braces(expr)
+
+    def matches(self, path: str) -> bool:
+        return any(glob_match(p, path) for p in self._patterns)
+
+
 def search_files(
-    relative_file_paths: list[str],
+    file_collection: FileCollection,
     pattern: str,
-    root_path: str = "",
-    file_reader: Callable[[str], str] = default_file_reader,
     context_lines_before: int = 0,
     context_lines_after: int = 0,
     paths_include_glob: str | None = None,
@@ -333,11 +332,8 @@ def search_files(
     """
     Search for a pattern in a list of files.
 
-    :param relative_file_paths: list of relative file paths in which to search
+    :param file_collection: the collection of files to search (will be optionally filtered by glob patterns)
     :param pattern: pattern to search for
-    :param root_path: root path to resolve relative paths against (by default, current working directory).
-    :param file_reader: function to read a file, by default will just use os.open.
-        All files that can't be read by it will be skipped.
     :param context_lines_before: number of context lines to include before matches
     :param context_lines_after: number of context lines to include after matches
     :param paths_include_glob: optional glob pattern to include files from the list
@@ -345,53 +341,36 @@ def search_files(
     :param multiline: whether to apply multi-line matching, enabling the flags re.DOTALL and re.MULTILINE (default: True)
     :return: list of MatchedConsecutiveLines objects
     """
-    # Pre-filter paths (done sequentially to avoid overhead)
-    # Use proper glob matching instead of gitignore patterns
-    include_patterns = expand_braces(paths_include_glob) if paths_include_glob else None
-    exclude_patterns = expand_braces(paths_exclude_glob) if paths_exclude_glob else None
+    # apply glob filter
+    file_collection = file_collection.filter_glob(paths_include_glob=paths_include_glob, paths_exclude_glob=paths_exclude_glob)
+    log.info(f"Processing {len(file_collection)} files.")
 
-    filtered_paths = []
-    for path in relative_file_paths:
-        if include_patterns:
-            if not any(glob_match(p, path) for p in include_patterns):
-                log.debug(f"Skipping {path}: does not match include pattern {paths_include_glob}")
-                continue
-
-        if exclude_patterns:
-            if any(glob_match(p, path) for p in exclude_patterns):
-                log.debug(f"Skipping {path}: matches exclude pattern {paths_exclude_glob}")
-                continue
-
-        filtered_paths.append(path)
-
-    log.info(f"Processing {len(filtered_paths)} files.")
-
-    def process_single_file(path: str) -> dict[str, Any]:
+    def process_single_file(file_proxy: FileProxy) -> dict[str, Any]:
         """Process a single file - this function will be parallelized."""
+        relative_path = file_proxy.get_relative_path()
         try:
-            abs_path = os.path.join(root_path, path)
-            file_content = file_reader(abs_path)
+            file_content = file_proxy.get_contents()
             search_results = search_text(
                 pattern,
                 content=file_content,
-                source_file_path=path,
+                source_file_path=relative_path,
                 allow_multiline_match=True,
                 context_lines_before=context_lines_before,
                 context_lines_after=context_lines_after,
                 multiline=multiline,
             )
             if len(search_results) > 0:
-                log.debug(f"Found {len(search_results)} matches in {path}")
-            return {"path": path, "results": search_results, "error": None}
+                log.debug(f"Found {len(search_results)} matches in {relative_path}")
+            return {"path": relative_path, "results": search_results, "error": None}
         except Exception as e:
-            log.debug(f"Error processing {path}: {e}")
-            return {"path": path, "results": [], "error": str(e)}
+            log.debug(f"Error processing {relative_path}: {e}")
+            return {"path": relative_path, "results": [], "error": str(e)}
 
     # Execute in parallel using joblib
     results = Parallel(
         n_jobs=-1,
         backend="threading",
-    )(delayed(process_single_file)(path) for path in filtered_paths)
+    )(delayed(process_single_file)(file_proxy) for file_proxy in file_collection)
 
     # Collect results and errors
     matches = []
@@ -406,7 +385,7 @@ def search_files(
     if skipped_file_error_tuples:
         log.debug(f"Failed to read {len(skipped_file_error_tuples)} files: {skipped_file_error_tuples}")
 
-    log.info(f"Found {len(matches)} total matches across {len(filtered_paths)} files")
+    log.info(f"Found {len(matches)} total matches across {len(file_collection)} files")
     return matches
 
 
