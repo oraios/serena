@@ -33,7 +33,7 @@ class ReadFileTool(Tool):
         Reads the given file or a chunk of it.
 
         :param relative_path: the relative path to the file to read
-        :param start_line: the 0-based index of the first line to be retrieved.
+        :param start_line: the 0-based index of the first line to be retrieved, negative values count from the end of the file.
         :param end_line: the 0-based index of the last line to be retrieved (inclusive). If None, read until the end of the file.
         :param max_answer_chars: if the file (chunk) is longer than this number of characters,
             no content will be returned. Don't adjust unless there is really no other way to get the content
@@ -60,7 +60,7 @@ class CreateTextFileTool(EditingToolWithDiagnostics):
 
     def apply(self, relative_path: str, content: str) -> str:
         """
-        Write a new file or overwrite an existing file.
+        Write a new file or overwrite an existing file with the given content.
 
         :param relative_path: the relative path to the file to create
         :param content: the (appropriately encoded) content to write to the file
@@ -181,16 +181,12 @@ class ReplaceContentTool(EditingToolWithDiagnostics):
         r"""
         Replaces one or more occurrences of a given pattern in a file with new content.
 
-        This is the preferred way to replace content in a file whenever the symbol-level
-        tools are not appropriate.
-
-        VERY IMPORTANT: The "regex" mode allows very large sections of code to be replaced without fully quoting them!
-        Use a regex of the form "beginning.*?end-of-text-to-be-replaced" to be faster and more economical!
-        ALWAYS try to use wildcards to avoid specifying the exact content to be replaced,
-        especially if it spans several lines. Note that you cannot make mistakes, because if the regex should match
-        multiple occurrences while you disabled `allow_multiple_occurrences`, an error will be returned, and you can retry
-        with a revised regex.
-        Therefore, using regex mode with suitable wildcards is usually the best choice!
+        VERY IMPORTANT: The "regex" mode allows very large sections of code to be replaced WITHOUT
+        quoting them fully: use a needle of the form "beginning.*?end-of-text-to-be-replaced" with
+        wildcards instead of pasting the exact original text — shorter, cheaper, and you cannot make
+        mistakes, because an ambiguous match returns an error you can refine, so wildcards are safe.
+        Prefer regex mode with suitable wildcards for long multi-line replacements; use the
+        symbol-level editors when replacing a whole method/class.
 
         :param relative_path: the relative path to the file
         :param needle: the string or regex pattern to search for.
