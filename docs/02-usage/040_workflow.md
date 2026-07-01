@@ -53,6 +53,7 @@ The file allows you to configure ...
   * write access
   * [additional workspace folders](additional-workspace-folders) for cross-package reference support in monorepos
   * an initial prompt that shall be passed to the LLM whenever the project is activated
+  * a shell command to run upon project activation (prior to language backend initialisation)
   * the set of tools and modes to use for the project
   * and some other settings.
 
