@@ -22,6 +22,7 @@ from sensai.util.string import ToStringMixin
 from serena.util.file_system import match_path
 from serena.util.text_utils import MatchedConsecutiveLines
 from solidlsp import ls_types
+from solidlsp.initialize_params import DefaultInitializeParamsBuilder, InitializeParamsBuilder
 from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_process import LanguageServerInterface, StdioLanguageServer
@@ -35,6 +36,7 @@ from solidlsp.lsp_protocol_handler.lsp_types import (
     DefinitionParams,
     DocumentSymbol,
     ImplementationParams,
+    InitializeParams,
     LocationLink,
     RenameParams,
     SymbolInformation,
@@ -3281,3 +3283,33 @@ class SolidLanguageServer(ABC):
 
     def is_running(self) -> bool:
         return self.server.is_running()
+
+    def _create_initialize_params_builder(self) -> InitializeParamsBuilder:
+        return DefaultInitializeParamsBuilder(self)
+
+    def _create_base_initialize_params(self) -> dict | InitializeParams:
+        """
+        Subclasses should override this method to provide server-specific InitializeParams settings,
+        which provide the basis for the InitializeParams object sent to the language server during initialization.
+
+        The returned dictionary is passed to the builder constructed by _create_initialize_params_builder()
+        in order to create the final InitializeParams object.
+
+        The default builder implementation already sets the following keys, so implementations of this method
+        should not set them:
+
+        - processId
+        - rootPath
+        - rootUri
+        - clientInfo
+        - workspaceFolders
+
+        :return: the base InitializeParams settings
+        """
+        raise NotImplementedError
+
+    def _create_initialize_params(self) -> InitializeParams:
+        """
+        Create the InitializeParams object to send to the language server during initialization.
+        """
+        return self._create_initialize_params_builder().with_base_options(self._create_base_initialize_params()).build()
