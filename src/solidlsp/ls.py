@@ -22,6 +22,7 @@ from sensai.util.string import ToStringMixin
 from serena.util.file_system import match_path
 from serena.util.text_utils import MatchedConsecutiveLines
 from solidlsp import ls_types
+from solidlsp.init_options import DefaultInitializeParamsBuilder, InitializeParamsBuilder
 from solidlsp.language_servers.common import build_uvx_launch_command
 from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
@@ -36,6 +37,7 @@ from solidlsp.lsp_protocol_handler.lsp_types import (
     DefinitionParams,
     DocumentSymbol,
     ImplementationParams,
+    InitializeParams,
     LocationLink,
     RenameParams,
     SymbolInformation,
@@ -3156,3 +3158,15 @@ class SolidLanguageServer(ABC):
 
     def is_running(self) -> bool:
         return self.server.is_running()
+
+    def _create_initialize_params_builder(self) -> InitializeParamsBuilder:
+        return DefaultInitializeParamsBuilder(self)
+
+    def _create_base_initialize_params(self) -> dict | InitializeParams:
+        raise NotImplementedError
+
+    def _create_initialize_params(self) -> InitializeParams:
+        """
+        Create the InitializeParams object to send to the language server during initialization.
+        """
+        return self._create_initialize_params_builder().with_base_options(self._create_base_initialize_params()).build()

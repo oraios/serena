@@ -13,7 +13,6 @@ from overrides import override
 
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderUvx, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -59,12 +58,8 @@ class PyrightServer(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["venv", "__pycache__"]
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
-        """
-        Returns the initialize params for the Pyright Language Server.
-        """
-        # Create basic initialization parameters
+    def _create_base_initialize_params(self) -> dict:
+        repository_absolute_path = self.repository_root_path
         initialize_params = {
             "processId": os.getpid(),
             "rootPath": repository_absolute_path,
@@ -115,8 +110,7 @@ class PyrightServer(SolidLanguageServer):
                 {"uri": pathlib.Path(repository_absolute_path).as_uri(), "name": os.path.basename(repository_absolute_path)}
             ],
         }
-
-        return cast(InitializeParams, initialize_params)
+        return initialize_params
 
     def _start_server(self) -> None:
         """
@@ -230,7 +224,7 @@ class PyrightServer(SolidLanguageServer):
         self.server.start()
 
         # Send proper initialization parameters
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to pyright server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
