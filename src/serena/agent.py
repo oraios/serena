@@ -640,12 +640,10 @@ class SerenaAgent:
         # determine the effective language backend for this session.
         # If a startup project is provided and has a per-project override, use it; otherwise use the global config.
         # Since we don't want to change the toolset after startup, the language backend cannot be changed within a running Serena session
-        self._language_backend = self.serena_config.language_backend
-        if registered_project_to_activate is not None and registered_project_to_activate.project_config.language_backend is not None:
-            self._language_backend = registered_project_to_activate.project_config.language_backend
-            log.info(f"Using language backend as configured in project.yml: {self._language_backend.name}")
-        else:
-            log.info(f"Using language backend from global configuration: {self._language_backend.name}")
+        self._language_backend = self.serena_config.determine_language_backend(
+            project_config=registered_project_to_activate.project_config if registered_project_to_activate is not None else None,
+            log_choice=True,
+        )
 
         # create the tool names mapping for prompts
         self._prompt_tool_names_mapping = self._create_prompt_tool_names_mapping(self._language_backend)

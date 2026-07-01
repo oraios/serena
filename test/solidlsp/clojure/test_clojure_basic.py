@@ -211,7 +211,7 @@ class TestProjectBasics:
 
     @pytest.mark.parametrize("project", [Language.CLOJURE], indirect=True)
     def test_search_files_for_pattern(self, project: Project) -> None:
-        result = project.search_source_files_for_pattern("defn.*greet")
+        result = project.search_project_files_for_pattern("defn.*greet")
 
         assert result is not None, "Pattern search should return results"
         assert len(result) > 0, "Should find at least one match for 'defn.*greet'"
@@ -219,7 +219,7 @@ class TestProjectBasics:
         core_matches = [match for match in result if match.source_file_path and "core.clj" in match.source_file_path]
         assert len(core_matches) > 0, "Should find greet function in core.clj"
 
-        result = project.search_source_files_for_pattern(":require")
+        result = project.search_project_files_for_pattern(":require")
 
         assert result is not None, "Should find require statements"
         utils_matches = [match for match in result if match.source_file_path and "utils.clj" in match.source_file_path]

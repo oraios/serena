@@ -1297,3 +1297,14 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
             if glob_match(pattern, project_root_str):
                 return True
         return False
+
+    def determine_language_backend(self, project_config: ProjectConfig | None = None, log_choice: bool = False):
+        language_backend = self.language_backend
+        if project_config and project_config.language_backend is not None:
+            language_backend = project_config.language_backend
+            if log_choice:
+                log.info(f"Using language backend as configured in project: {language_backend.name}")
+        else:
+            if log_choice:
+                log.info(f"Using language backend from global configuration: {language_backend.name}")
+        return language_backend
