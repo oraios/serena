@@ -19,6 +19,12 @@ class FileProxy(ABC):
     def get_relative_path(self) -> str:
         """:return: the relative path reported by Serena (actual relative path or encoded external path)"""
 
+    @abstractmethod
+    def is_glob_supported(self):
+        """
+        :return: whether the proxy supports glob filtering based on its relative path
+        """
+
 
 class LocalProjectFileProxy(FileProxy):
     def __init__(self, relative_path: str, project: "Project"):
@@ -32,6 +38,9 @@ class LocalProjectFileProxy(FileProxy):
 
     def get_relative_path(self) -> str:
         return self._relative_path
+
+    def is_glob_supported(self):
+        return True
 
 
 class FileCollection:
@@ -67,9 +76,8 @@ class FileCollection:
 
         filtered_files = []
         for f in self._file_proxies:
-            if isinstance(f, LocalProjectFileProxy):
-                local_file: LocalProjectFileProxy = f
-                path = local_file.get_relative_path()
+            if f.is_glob_supported():
+                path = f.get_relative_path()
                 if include_glob_matcher:
                     if not include_glob_matcher.matches(path):
                         log.debug(f"Skipping {path}: does not match include pattern {paths_include_glob}")

@@ -233,6 +233,9 @@ class MockFileProxy(FileProxy):
     def get_relative_path(self) -> str:
         return self.relative_path
 
+    def is_glob_supported(self):
+        return True
+
 
 class MockFileCollection(FileCollection):
     def __init__(self, file_paths, mock_reader: Callable[[str], str] = mock_reader_always_match):
