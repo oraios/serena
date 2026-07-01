@@ -35,6 +35,7 @@ from serena.config.serena_config import (
     ModeSelectionDefinitionWithAddedModes,
     ModeSelectionDefinitionWithBaseModes,
     NamedToolInclusionDefinition,
+    ProjectConfig,
     RegisteredProject,
     SerenaConfig,
     SerenaPaths,
@@ -852,7 +853,24 @@ class SerenaAgent:
         return self._context
 
     def get_tool_description_override(self, tool_name: str) -> str | None:
-        return self._context.tool_description_overrides.get(tool_name, None)
+        """
+        :param tool_name: the name of the tool
+        :return: an overriding tool description, or ``None`` to use the tool's default description.
+            This composes the active context's description override (if any) with a per-language
+            caveat when the tool is disabled for one or more languages in the active project.
+        """
+        base_override = self._context.tool_description_overrides.get(tool_name, None)
+        caveat: str | None = None
+        if self._active_project is not None:
+            excluded_langs = self._active_project.project_config.excluded_languages_for_tool(tool_name)
+            if excluded_langs:
+                langs_str = ", ".join(sorted(lang.value for lang in excluded_langs))
+                caveat = f"Note: disabled for {langs_str} in this project (their files are skipped / refused)."
+        if caveat is None:
+            return base_override
+        if base_override is not None:
+            return f"{base_override.rstrip()}\n{caveat}"
+        return caveat
 
     def _check_shell_settings(self) -> None:
         # On Windows, Claude Code sets COMSPEC to Git-Bash (often even with a path containing spaces),
@@ -1053,6 +1071,11 @@ class SerenaAgent:
                 msg += f"\n{mode.prompt}"
         self._project_prompt_status.mark_mode_prompts_as_provided(session_id)
 
+        # inform about per-language tool disabling (so the agent can plan fallbacks)
+        per_language_tool_summary = self._format_excluded_tools_by_language_summary(proj.project_config)
+        if per_language_tool_summary:
+            msg += f"\n{per_language_tool_summary}"
+
         # add project-specific prompt
         if proj.project_config.initial_prompt:
             msg += f"\nProject-specific instructions:\n {proj.project_config.initial_prompt}"
@@ -1060,6 +1083,29 @@ class SerenaAgent:
         self._project_prompt_status.mark_project_activation_message_as_provided(session_id)
 
         return msg
+
+    @staticmethod
+    def _format_excluded_tools_by_language_summary(project_config: "ProjectConfig") -> str | None:
+        """
+        Builds the upfront summary of per-language tool disabling for the project activation message.
+
+        :param project_config: the active project's configuration
+        :return: a short summary, or ``None`` if no tools are disabled per language
+        """
+        excluded = project_config.excluded_tools_by_language
+        if not excluded:
+            return None
+        per_language = [
+            f"{lang.value} → {', '.join(tools)}" for lang, tools in sorted(excluded.items(), key=lambda item: item[0].value) if tools
+        ]
+        if not per_language:
+            return None
+        return (
+            "In this project the following tools are disabled per language: "
+            + "; ".join(per_language)
+            + ". For those languages, the tools' files are skipped (whole-project/search tools) or "
+            "refused (file-pinned tools); use text-based search (search_for_pattern) or read files directly instead."
+        )
 
     def _update_active_modes(self, log_message: bool = True) -> None:
         """

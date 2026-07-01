@@ -6,8 +6,9 @@ import serena.jetbrains.jetbrains_types as jb
 from serena.code_editor import JetBrainsCodeEditor
 from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
 from serena.jetbrains.jetbrains_types import SymbolDTO, SymbolDTOUtil
+from serena.project import _filter_out_languages
 from serena.symbol import JetBrainsSymbolDictGrouper
-from serena.tools import Tool, ToolMarkerBeta, ToolMarkerOptional, ToolMarkerSymbolicEdit, ToolMarkerSymbolicRead
+from serena.tools import LanguageScoping, Tool, ToolMarkerBeta, ToolMarkerOptional, ToolMarkerSymbolicEdit, ToolMarkerSymbolicRead
 from serena.util.text_utils import find_text_coordinates
 
 log = logging.getLogger(__name__)
@@ -106,6 +107,16 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
             )
         symbols = symbol_collection_response["symbols"]
 
+        # per-language tool disabling (Behaviour 2): scope a whole-project / directory search to the
+        # non-excluded languages and append a coverage note when files were skipped. A pinned project
+        # file would already have been refused by Behaviour 1 (in apply_ex); searches of external
+        # dependencies are not language-scoped.
+        is_external_search = relative_path is not None and relative_path.startswith(jb.JB_EXTERNAL_FILE_PREFIX)
+        scoping = LanguageScoping.none() if is_external_search else self.get_language_scoping(relative_path=(relative_path or "").strip())
+        if scoping.excluded_languages:
+            allowed_paths = set(_filter_out_languages([s["relative_path"] for s in symbols], scoping.excluded_languages))
+            symbols = [s for s in symbols if SymbolDTOUtil.is_external_symbol(s) or s["relative_path"] in allowed_paths]
+
         def create_shortened_result() -> str:
             """Shortened results containing symbol types and identifiers (path + name_path) only, without children"""
             dicts: list[SymbolDTO] = [
@@ -116,11 +127,11 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
 
         n_matches = len(symbols)
         if 0 < max_matches < n_matches:
-            return f"Matched {n_matches}>{max_matches=} symbols.\n" + create_shortened_result()
+            return scoping.with_note(f"Matched {n_matches}>{max_matches=} symbols.\n" + create_shortened_result())
 
         grouped_symbols = self.symbol_dict_grouper.group(symbols)
         result = self._to_json(grouped_symbols)
-        return self._limit_length(result, max_answer_chars, shortened_result_factories=[create_shortened_result])
+        return scoping.with_note(self._limit_length(result, max_answer_chars, shortened_result_factories=[create_shortened_result]))
 
     @classmethod
     def get_param_aliases(cls) -> dict[str, str]:

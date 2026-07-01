@@ -194,6 +194,12 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         assert max_matches != 0, "max_matches must be > 0 or equal to -1."
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
+
+        # per-language tool disabling (Behaviour 2): scope a whole-project search to the non-excluded
+        # languages. When a specific file is pinned, the refuse guard (Behaviour 1) has already run, so
+        # scoping here is a no-op for the single-file case.
+        scoping = self.get_language_scoping(relative_path=(relative_path or "").strip())
+
         symbol_retriever = self.create_language_server_symbol_retriever()
         symbols = symbol_retriever.find(
             name_path_pattern,
@@ -201,6 +207,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
             exclude_kinds=parsed_exclude_kinds,
             substring_matching=substring_matching,
             within_relative_path=relative_path,
+            exclude_languages=scoping.excluded_languages,
         )
         n_matches = len(symbols)
 
@@ -211,7 +218,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
             return f"Shortened result:\n{self._to_json(relative_path_to_name_paths)}"
 
         if 0 < max_matches < n_matches:
-            return f"Matched {n_matches}>{max_matches=} symbols.\n" + create_short_result_relative_path_to_name_paths()
+            return scoping.with_note(f"Matched {n_matches}>{max_matches=} symbols.\n" + create_short_result_relative_path_to_name_paths())
 
         symbol_dicts = [
             s.to_dict(
@@ -238,7 +245,9 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
 
         grouped_symbol_dicts = self.symbol_dict_grouper.group(symbol_dicts)
         result = self._to_json(grouped_symbol_dicts)
-        return self._limit_length(result, max_answer_chars, shortened_result_factories=[create_short_result_relative_path_to_name_paths])
+        return scoping.with_note(
+            self._limit_length(result, max_answer_chars, shortened_result_factories=[create_short_result_relative_path_to_name_paths])
+        )
 
     @classmethod
     def get_param_aliases(cls) -> dict[str, str]:

@@ -26,6 +26,20 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+def _filter_out_languages(relative_file_paths: list[str], exclude_languages: "set[Language] | frozenset[Language]") -> list[str]:
+    """
+    Removes from the given list the paths that belong to any of the excluded languages.
+
+    :param relative_file_paths: the candidate relative file paths
+    :param exclude_languages: the languages whose files shall be removed
+    :return: the filtered list of relative file paths
+    """
+    if not exclude_languages:
+        return relative_file_paths
+    matchers = [lang.get_source_fn_matcher() for lang in exclude_languages]
+    return [p for p in relative_file_paths if not any(m.is_relevant_filename(p) for m in matchers)]
+
+
 class Project(ToStringMixin):
     def __init__(
         self,
@@ -344,6 +358,31 @@ class Project(ToStringMixin):
                         )
             return rel_file_paths
 
+    def count_source_files_for_languages(
+        self, languages: "set[Language] | frozenset[Language]", relative_path: str = ""
+    ) -> dict[Language, int]:
+        """
+        Counts the (non-ignored) source files in scope that belong to each of the given languages.
+
+        This is used by the per-language tool-disabling mechanism to decide whether to emit a coverage
+        note when a whole-project/search call is scoped to exclude one or more languages (and to report
+        how many files were skipped).
+
+        :param languages: the languages to count source files for
+        :param relative_path: if provided, restrict the count to this file or subdirectory
+        :return: a mapping from language to the number of in-scope source files of that language;
+            languages with no in-scope files are omitted
+        """
+        if not languages:
+            return {}
+        matchers = {lang: lang.get_source_fn_matcher() for lang in languages}
+        counts: dict[Language, int] = {}
+        for rel_file_path in self.gather_source_files(relative_path=relative_path):
+            for lang, matcher in matchers.items():
+                if matcher.is_relevant_filename(rel_file_path):
+                    counts[lang] = counts.get(lang, 0) + 1
+        return counts
+
     def search_source_files_for_pattern(
         self,
         pattern: str,
@@ -353,6 +392,7 @@ class Project(ToStringMixin):
         paths_include_glob: str | None = None,
         paths_exclude_glob: str | None = None,
         multiline: bool = True,
+        exclude_languages: "set[Language] | frozenset[Language]" = frozenset(),
     ) -> list[MatchedConsecutiveLines]:
         """
         Search for a pattern across all (non-ignored) source files
@@ -364,9 +404,13 @@ class Project(ToStringMixin):
         :param paths_include_glob: Glob pattern to filter which files to include in the search
         :param paths_exclude_glob: Glob pattern to filter which files to exclude from the search. Takes precedence over paths_include_glob.
         :param multiline: Whether to compile the regex with the DOTALL flag (``.`` matches newlines).
+        :param exclude_languages: languages whose source files shall be excluded from the search
+            (used by the per-language tool-disabling mechanism)
         :return: List of matched consecutive lines with context
         """
         relative_file_paths = self.gather_source_files(relative_path=relative_path)
+        if exclude_languages:
+            relative_file_paths = _filter_out_languages(relative_file_paths, exclude_languages)
         return search_files(
             relative_file_paths,
             pattern,

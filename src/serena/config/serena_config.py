@@ -3,6 +3,7 @@ The Serena Model Context Protocol (MCP) Server
 """
 
 import dataclasses
+import inspect
 import os
 import re
 import shutil
@@ -298,6 +299,21 @@ Uses $projectDir and $projectFolderName as placeholders.
 """
 
 
+def languages_for_path(path: str, configured_languages: Sequence[Language]) -> set[Language]:
+    """
+    Resolves the path to the configured language(s) whose source-file matcher considers it relevant.
+
+    Resolution is scoped to the project's configured languages (rather than all of :class:`Language`)
+    to avoid spurious matches caused by file-extension overlap between languages.
+
+    :param path: a (relative or absolute) file path
+    :param configured_languages: the project's configured languages
+    :return: the set of configured languages matching the given path (usually a singleton, but may
+        contain multiple entries when configured languages share a file extension)
+    """
+    return {lang for lang in configured_languages if lang.get_source_fn_matcher().is_relevant_filename(path)}
+
+
 @dataclass(kw_only=True)
 class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
     project_name: str
@@ -308,6 +324,13 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
     ignore_all_files_in_gitignore: bool = True
     initial_prompt: str = ""
     encoding: str = DEFAULT_SOURCE_FILE_ENCODING
+    excluded_tools_by_language: dict[Language, list[str]] = field(default_factory=dict)
+    """
+    maps a configured language to the list of tool names that shall be disabled for that language.
+    Disabling tool `T` for language `L` means that `T` behaves as if `L`'s files did not exist:
+    calls that pin an `L` file are refused, whole-project/search calls are transparently scoped to
+    the non-`L` languages, and language-agnostic tools are unaffected (a no-op).
+    """
 
     # internal fields which are not mapped to/from the configuration file (must start with "_")
     _local_override_keys: list[str] = field(default_factory=list)
@@ -324,6 +347,14 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
 
     def _tostring_includes(self) -> list[str]:
         return ["project_name"]
+
+    def excluded_languages_for_tool(self, tool_name: str) -> set[Language]:
+        """
+        :param tool_name: the name of a tool
+        :return: the set of configured languages for which the given tool is disabled
+            (see :attr:`excluded_tools_by_language`)
+        """
+        return {lang for lang, tools in self.excluded_tools_by_language.items() if tool_name in tools}
 
     @classmethod
     def autogenerate(
@@ -520,12 +551,17 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         if "base_modes" in data and data["base_modes"] is not None:
             log.warning("The base_modes setting in project.yml is deprecated and will be ignored.")
 
+        excluded_tools_by_language = cls._parse_excluded_tools_by_language(
+            data.get("excluded_tools_by_language") or {}, languages, lang_name_mapping
+        )
+
         return cls(
             project_name=data["project_name"],
             languages=languages,
             ignored_paths=ignored_paths,
             additional_workspace_folders=additional_workspace_folders,
             excluded_tools=excluded_tools,
+            excluded_tools_by_language=excluded_tools_by_language,
             fixed_tools=fixed_tools,
             included_optional_tools=included_optional_tools,
             read_only=data["read_only"],
@@ -543,6 +579,85 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
             _local_override_keys=local_override_keys,
         )
 
+    @staticmethod
+    def _parse_excluded_tools_by_language(
+        raw: dict[str, Any],
+        configured_languages: list[Language],
+        lang_name_mapping: dict[str, str],
+    ) -> dict[Language, list[str]]:
+        """
+        Parses and validates the ``excluded_tools_by_language`` configuration.
+
+        :param raw: the raw mapping from language string to list of tool names
+        :param configured_languages: the project's configured languages; each key must be one of these
+        :param lang_name_mapping: mapping of language aliases (e.g. ``javascript`` -> ``typescript``)
+        :return: the validated mapping from :class:`Language` to list of tool names
+        :raises ValueError: if a key is not a valid/configured language or a tool name is unknown
+        """
+        from serena.tools import ToolRegistry
+
+        if not isinstance(raw, dict):
+            raise ValueError(f"excluded_tools_by_language must be a mapping of language to tool names, got: {raw!r}")
+
+        registry = ToolRegistry()
+        configured_set = set(configured_languages)
+        result: dict[Language, list[str]] = {}
+        for language_str, tool_names in raw.items():
+            # resolve the language, applying the same alias normalisation as the `languages` field
+            orig_language_str = language_str
+            normalised = str(language_str).lower()
+            normalised = lang_name_mapping.get(normalised, normalised)
+            try:
+                language = Language(normalised)
+            except ValueError as e:
+                raise ValueError(
+                    f"Invalid language '{orig_language_str}' in excluded_tools_by_language.\n"
+                    f"Valid language strings are: {[l.value for l in Language]}"
+                ) from e
+            if language not in configured_set:
+                raise ValueError(
+                    f"Language '{orig_language_str}' in excluded_tools_by_language is not among the project's "
+                    f"configured languages: {[l.value for l in configured_languages]}"
+                )
+
+            tool_names = tool_names or []
+            if not isinstance(tool_names, list):
+                raise ValueError(f"excluded_tools_by_language['{orig_language_str}'] must be a list of tool names, got: {tool_names!r}")
+            for tool_name in tool_names:
+                if not registry.is_valid_tool_name(tool_name):
+                    raise ValueError(
+                        f"Unknown tool name '{tool_name}' in excluded_tools_by_language['{orig_language_str}']. "
+                        f"See the list of valid tools (e.g. via `serena tools list`)."
+                    )
+                # warn if the tool does not target files at all (gating it has no effect)
+                if not ProjectConfig._tool_targets_files(registry.get_tool_class_by_name(tool_name)):
+                    log.warning(
+                        "Tool '%s' configured in excluded_tools_by_language for language '%s' is language-agnostic "
+                        "(it does not target source files); the entry will have no effect.",
+                        tool_name,
+                        language.value,
+                    )
+            result[language] = list(tool_names)
+        return result
+
+    @staticmethod
+    def _tool_targets_files(tool_class: "type[Tool]") -> bool:
+        """
+        :param tool_class: a tool class
+        :return: whether the tool concretely targets source files (and is therefore affected by
+            per-language disabling). A tool targets files if its ``apply`` method accepts a
+            ``relative_path`` parameter (covering both pinned-file tools and the whole-project
+            search tools find_symbol/search_for_pattern, which accept an optional ``relative_path``).
+            Language-agnostic tools (e.g. read_memory, execute_shell_command) return ``False``.
+        """
+        apply_fn = getattr(tool_class, "apply", None)
+        if apply_fn is None:
+            return False
+        try:
+            return "relative_path" in inspect.signature(apply_fn).parameters
+        except (TypeError, ValueError):
+            return False
+
     def _to_yaml_dict(self) -> dict:
         """
         :return: a yaml-serializable dictionary representation of this configuration
@@ -559,6 +674,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         d["languages"] = [lang.value for lang in self.languages]
         d["language_backend"] = self.language_backend.value if self.language_backend is not None else None
         d["line_ending"] = self.line_ending.value if self.line_ending is not None else None
+        d["excluded_tools_by_language"] = {lang.value: list(tools) for lang, tools in self.excluded_tools_by_language.items()}
 
         return d
 

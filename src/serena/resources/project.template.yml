@@ -84,6 +84,24 @@ read_only: false
 # Find the list of tools here: https://oraios.github.io/serena/01-about/035_tools.html
 excluded_tools: []
 
+# Per-language tool disabling: maps a configured language (a key of `languages` above) to a list of
+# tool names that shall be disabled *for that language only*.
+# Disabling tool T for language L makes T behave as if L's files did not exist:
+#   - calls that pin an L file (e.g. replace_symbol_body on a .hx file) are refused with an explanation,
+#   - whole-project / search calls (find_symbol without a path, search_for_pattern) are transparently
+#     scoped to the non-L languages and a short coverage note is appended when L files were skipped,
+#   - language-agnostic tools (e.g. read_memory) are unaffected (configuring one logs a warning).
+# This is useful when a particular language server produces unreliable symbol information, so you want
+# symbolic tools restricted to the languages where they are trustworthy while keeping text-based tools.
+# Find the list of tools here: https://oraios.github.io/serena/01-about/035_tools.html
+# Example:
+#   excluded_tools_by_language:
+#     haxe:
+#       - find_symbol
+#       - replace_symbol_body
+#       - find_referencing_symbols
+excluded_tools_by_language: {}
+
 # list of tools to include that would otherwise be disabled (particularly optional tools that are disabled by default).
 # This extends the existing inclusions (e.g. from the global configuration).
 # Find the list of tools here: https://oraios.github.io/serena/01-about/035_tools.html

@@ -18,6 +18,13 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Update prompts/instructions: Serena instructions manual, modes (editing, interactive) 
   - Allow structured tool output to be configured on a per-context basis, disabling it for Claude Code
     (which does not correctly unpack structured output) #1042
+  - Add project configuration option `excluded_tools_by_language`, which disables a specific tool for a
+    specific language only (useful in multi-language projects where a tool is unreliable for one language
+    but should remain available for the others). A disabled tool behaves as if that language's files did
+    not exist: calls that pin such a file are refused, while whole-project/search tools (e.g. `find_symbol`,
+    `search_for_pattern`) are transparently scoped to the remaining languages and report skipped files via
+    a short coverage note. The disabled tools are also summarised in the initial instructions and noted in
+    the affected tools' descriptions.
 
 * CLI:
   - Fix `--project-from-cwd` hijacking git worktrees nested under a Serena project. `find_project_root`
@@ -55,6 +62,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add configuration option `jetbrains_launch_command`, allowing Serena to spawn IDE instances automatically
     upon project activation
   - Fix: `jet_brains_list_inspections` failed when only default parameters were used #1615 
+  - `jet_brains_find_symbol`: honour `excluded_tools_by_language` for whole-project searches, scoping the
+    results to the non-excluded languages and appending a coverage note (parity with the LSP backend)
 
 * Dashboard:
   - Make list of trusted hosts configurable, fixing host validation introduced in v1.5.2 allowing only
