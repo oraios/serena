@@ -1,0 +1,72 @@
+:root {
+  --bg: #f5f5f5;
+  --bg-card: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-secondary-btn: #f0f2f5;
+  --text-primary: #1f2328;
+  --text-secondary: #3f4754;
+  --text-muted: #6a737d;
+  --border: #e3e6ea;
+  --border-strong: #d0d7de;
+  --accent: #eaa45d;
+  --accent-hover: #dca662;
+  --chart-2: #6aa3d8;
+  --chart-3: #7fb77e;
+  --chart-4: #d88c8c;
+  --chart-5: #b39ddb;
+  /* chart-6 was #e0a458, near-identical to --accent (#eaa45d) — recoloured to a
+     distinct teal so an 8th-tool legend doesn't show two oranges. */
+  --chart-6: #4db6ac;
+  --chart-7: #e57aa8;
+  --chart-8: #a1887f;
+  --chart-grid: #dddddd;
+  --text-on-accent: #ffffff;
+  --btn-disabled: #adb5bd;
+  --tool-highlight: #fff3bf;
+  --tool-highlight-text: #1f2328;
+  --btn-secondary-hover: #e3e6ea;
+  --stats-header: #f0f2f5;
+  --success: #22c55e;
+  --log-debug: #8b95a1;
+  --log-info: #1f2328;
+  --log-warning: #d97706;
+  --log-error: #dc2626;
+  --radius: 6px;
+  --radius-sm: 4px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --max-width: 1600px;
+  --font-sans:
+    'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow-elevated: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --focus-ring: 0 0 0 3px rgba(234, 164, 93, 0.18);
+}
+
+[data-theme='dark'] {
+  --bg: #1a1a1a;
+  --bg-card: #2d2d2d;
+  --bg-elevated: #262b32;
+  --bg-secondary-btn: #2d333b;
+  --text-primary: #e6edf3;
+  --text-secondary: #c9d1d9;
+  --text-muted: #8b95a1;
+  --border: #2d333b;
+  --border-strong: #3d444d;
+  --chart-grid: #444444;
+  --btn-disabled: #4a5159;
+  --tool-highlight: #f6c948;
+  --tool-highlight-text: #15181c;
+  --btn-secondary-hover: #3d444d;
+  --stats-header: #262b32;
+  --log-info: #e6edf3;
+  --log-warning: #f59e0b;
+  --log-error: #f87171;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.45);
+}

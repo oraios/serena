@@ -124,3 +124,80 @@ def test_task_executor_cancellation_via_task_info(executor):
         pass
     end_time = time.time()
     assert (end_time - start_time) < 9, "Cancelled task did not stop in time"
+
+
+import threading
+
+
+def test_task_records_started_and_finished_at_on_success():
+    task = TaskExecutor.Task(function=lambda: "ok", name="t1", logged=False)
+    task.start()
+    task.wait_until_done(timeout=2.0)
+    assert task.started_at is not None
+    assert task.finished_at is not None
+    assert task.finished_at >= task.started_at
+
+
+def test_task_records_finished_at_on_failure():
+    def boom() -> str:
+        raise RuntimeError("nope")
+
+    task = TaskExecutor.Task(function=boom, name="t2", logged=False)
+    task.start()
+    task.wait_until_done(timeout=2.0)
+    assert task.finished_at is not None
+    assert task.future.exception() is not None
+
+
+def test_task_info_get_duration_and_error_message():
+    task_ok = TaskExecutor.Task(function=lambda: "ok", name="t3", logged=False)
+    task_ok.start()
+    task_ok.wait_until_done(timeout=2.0)
+    info_ok = TaskExecutor.TaskInfo.from_task(task_ok, is_running=False)
+    assert info_ok.get_duration_ms() is not None
+    assert info_ok.get_duration_ms() >= 0
+    assert info_ok.get_error_message() is None
+
+    def boom() -> str:
+        raise RuntimeError("kaboom")
+
+    task_err = TaskExecutor.Task(function=boom, name="t4", logged=False)
+    task_err.start()
+    task_err.wait_until_done(timeout=2.0)
+    info_err = TaskExecutor.TaskInfo.from_task(task_err, is_running=False)
+    assert info_err.get_error_message() is not None
+    assert "kaboom" in info_err.get_error_message()
+
+
+def test_task_info_get_display_name_strips_task_n_prefix():
+    task = TaskExecutor.Task(function=lambda: "ok", name="Task-7: find_symbol", logged=False)
+    info = TaskExecutor.TaskInfo.from_task(task, is_running=False)
+    assert info.get_display_name() == "find_symbol"
+    task2 = TaskExecutor.Task(function=lambda: "ok", name="naked-name", logged=False)
+    info2 = TaskExecutor.TaskInfo.from_task(task2, is_running=False)
+    assert info2.get_display_name() == "naked-name"
+
+
+def test_finished_at_visible_before_future_done_callback_fires():
+    """
+    Race-fix regression: if finished_at is set AFTER set_result, a done-callback
+    observer may see finished_at == None. We assert the inverse: every done-callback
+    observation sees finished_at populated.
+    """
+    observations: list[bool] = []
+    barrier = threading.Event()
+
+    for _ in range(100):
+        task = TaskExecutor.Task(function=lambda: "ok", name="race", logged=False)
+
+        def cb(_fut, t=task):
+            observations.append(t.finished_at is not None)
+            if len(observations) == 100:
+                barrier.set()
+
+        task.future.add_done_callback(cb)
+        task.start()
+
+    barrier.wait(timeout=10.0)
+    assert len(observations) == 100
+    assert all(observations), "finished_at was None for one or more done-callback observations"
