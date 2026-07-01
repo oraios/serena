@@ -141,7 +141,6 @@ def search_text(
     pattern: str,
     content: str | None = None,
     source_file_path: str | None = None,
-    allow_multiline_match: bool = False,
     context_lines_before: int = 0,
     context_lines_after: int = 0,
     is_glob: bool = False,
@@ -154,8 +153,6 @@ def search_text(
     :param content: The text content to search. May be None if source_file_path is provided.
     :param source_file_path: Optional path to the source file. If content is None,
         this has to be passed and the file will be read.
-    :param allow_multiline_match: Whether to search across multiple lines. Currently, the default
-        option (False) is very inefficient, so it is recommended to set this to True.
     :param context_lines_before: Number of context lines to include before matches
     :param context_lines_after: Number of context lines to include after matches
     :param is_glob: If True, pattern is treated as a glob-like pattern (e.g., "*.py", "test_??.py")
@@ -178,60 +175,36 @@ def search_text(
     # Convert pattern to a compiled regex if it's a string
     if is_glob:
         pattern = glob_to_regex(pattern)
-    if allow_multiline_match:
-        # For multiline matches, optionally use DOTALL so '.' matches newlines
-        flags = (re.MULTILINE | re.DOTALL) if multiline else 0
-        compiled_pattern = re.compile(pattern, flags)
-        # Search across the entire content as a single string
-        for match in compiled_pattern.finditer(content):
-            start_pos = match.start()
-            end_pos = match.end()
 
-            # Find the line numbers for the start and end positions
-            start_line_num = content[:start_pos].count("\n")
-            end_line_num = content[:end_pos].count("\n")
+    # For multiline matches, optionally use DOTALL so '.' matches newlines
+    flags = (re.MULTILINE | re.DOTALL) if multiline else 0
+    compiled_pattern = re.compile(pattern, flags)
+    # Search across the entire content as a single string
+    for match in compiled_pattern.finditer(content):
+        start_pos = match.start()
+        end_pos = match.end()
 
-            # Calculate the range of lines to include in the context
-            context_start = max(0, start_line_num - context_lines_before)
-            context_end = min(total_lines - 1, end_line_num + context_lines_after)
+        # Find the line numbers for the start and end positions
+        start_line_num = content[:start_pos].count("\n")
+        end_line_num = content[:end_pos].count("\n")
 
-            # Create TextLine objects for the context
-            context_lines = []
-            for line_num in range(context_start, context_end + 1):
-                if context_start <= line_num < start_line_num:
-                    match_type = LineType.BEFORE_MATCH
-                elif end_line_num < line_num <= context_end:
-                    match_type = LineType.AFTER_MATCH
-                else:
-                    match_type = LineType.MATCH
+        # Calculate the range of lines to include in the context
+        context_start = max(0, start_line_num - context_lines_before)
+        context_end = min(total_lines - 1, end_line_num + context_lines_after)
 
-                context_lines.append(TextLine(line_number=line_num, line_content=lines[line_num], match_type=match_type))
+        # Create TextLine objects for the context
+        context_lines = []
+        for line_num in range(context_start, context_end + 1):
+            if context_start <= line_num < start_line_num:
+                match_type = LineType.BEFORE_MATCH
+            elif end_line_num < line_num <= context_end:
+                match_type = LineType.AFTER_MATCH
+            else:
+                match_type = LineType.MATCH
 
-            matches.append(MatchedConsecutiveLines(lines=context_lines, source_file_path=source_file_path))
-    else:
-        # TODO: extremely inefficient! Since we currently don't use this option in SerenaAgent or LanguageServer,
-        #   it is not urgent to fix, but should be either improved or the option should be removed.
-        # Search line by line, normal compile without DOTALL
-        compiled_pattern = re.compile(pattern)
-        for i, line in enumerate(lines):
-            if compiled_pattern.search(line):
-                # Calculate the range of lines to include in the context
-                context_start = max(0, i - context_lines_before)
-                context_end = min(total_lines - 1, i + context_lines_after)
+            context_lines.append(TextLine(line_number=line_num, line_content=lines[line_num], match_type=match_type))
 
-                # Create TextLine objects for the context
-                context_lines = []
-                for j in range(context_start, context_end + 1):
-                    if j < i:
-                        match_type = LineType.BEFORE_MATCH
-                    elif j > i:
-                        match_type = LineType.AFTER_MATCH
-                    else:
-                        match_type = LineType.MATCH
-
-                    context_lines.append(TextLine(line_number=j, line_content=lines[j], match_type=match_type))
-
-                matches.append(MatchedConsecutiveLines(lines=context_lines, source_file_path=source_file_path))
+        matches.append(MatchedConsecutiveLines(lines=context_lines, source_file_path=source_file_path))
 
     return matches
 
@@ -354,7 +327,6 @@ def search_files(
                 pattern,
                 content=file_content,
                 source_file_path=relative_path,
-                allow_multiline_match=True,
                 context_lines_before=context_lines_before,
                 context_lines_after=context_lines_after,
                 multiline=multiline,
