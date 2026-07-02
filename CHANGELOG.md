@@ -18,6 +18,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Update prompts/instructions: Serena instructions manual, modes (editing, interactive) 
   - Allow structured tool output to be configured on a per-context basis, disabling it for Claude Code
     (which does not correctly unpack structured output) #1042
+  - Fix: Project-specific filtering of files for source files ignored the language backend. 
+    The check is really only possible for LSP. 
   - Fix: File system permission errors during gitignore scanning were not caught #1624 
 
 * CLI:

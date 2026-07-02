@@ -1,7 +1,6 @@
 import fnmatch
 import hashlib
 import logging
-import os
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -11,7 +10,7 @@ from typing import Any, Literal, Self
 from bs4 import BeautifulSoup
 from joblib import Parallel, delayed
 
-from serena.constants import DEFAULT_SOURCE_FILE_ENCODING
+from serena.util.file_proxy import FileCollection, FileProxy
 from solidlsp.ls_utils import TextUtils
 
 log = logging.getLogger(__name__)
@@ -142,7 +141,6 @@ def search_text(
     pattern: str,
     content: str | None = None,
     source_file_path: str | None = None,
-    allow_multiline_match: bool = False,
     context_lines_before: int = 0,
     context_lines_after: int = 0,
     is_glob: bool = False,
@@ -155,8 +153,6 @@ def search_text(
     :param content: The text content to search. May be None if source_file_path is provided.
     :param source_file_path: Optional path to the source file. If content is None,
         this has to be passed and the file will be read.
-    :param allow_multiline_match: Whether to search across multiple lines. Currently, the default
-        option (False) is very inefficient, so it is recommended to set this to True.
     :param context_lines_before: Number of context lines to include before matches
     :param context_lines_after: Number of context lines to include after matches
     :param is_glob: If True, pattern is treated as a glob-like pattern (e.g., "*.py", "test_??.py")
@@ -179,68 +175,38 @@ def search_text(
     # Convert pattern to a compiled regex if it's a string
     if is_glob:
         pattern = glob_to_regex(pattern)
-    if allow_multiline_match:
-        # For multiline matches, optionally use DOTALL so '.' matches newlines
-        flags = (re.MULTILINE | re.DOTALL) if multiline else 0
-        compiled_pattern = re.compile(pattern, flags)
-        # Search across the entire content as a single string
-        for match in compiled_pattern.finditer(content):
-            start_pos = match.start()
-            end_pos = match.end()
 
-            # Find the line numbers for the start and end positions
-            start_line_num = content[:start_pos].count("\n")
-            end_line_num = content[:end_pos].count("\n")
+    # For multiline matches, optionally use DOTALL so '.' matches newlines
+    flags = (re.MULTILINE | re.DOTALL) if multiline else 0
+    compiled_pattern = re.compile(pattern, flags)
+    # Search across the entire content as a single string
+    for match in compiled_pattern.finditer(content):
+        start_pos = match.start()
+        end_pos = match.end()
 
-            # Calculate the range of lines to include in the context
-            context_start = max(0, start_line_num - context_lines_before)
-            context_end = min(total_lines - 1, end_line_num + context_lines_after)
+        # Find the line numbers for the start and end positions
+        start_line_num = content[:start_pos].count("\n")
+        end_line_num = content[:end_pos].count("\n")
 
-            # Create TextLine objects for the context
-            context_lines = []
-            for line_num in range(context_start, context_end + 1):
-                if context_start <= line_num < start_line_num:
-                    match_type = LineType.BEFORE_MATCH
-                elif end_line_num < line_num <= context_end:
-                    match_type = LineType.AFTER_MATCH
-                else:
-                    match_type = LineType.MATCH
+        # Calculate the range of lines to include in the context
+        context_start = max(0, start_line_num - context_lines_before)
+        context_end = min(total_lines - 1, end_line_num + context_lines_after)
 
-                context_lines.append(TextLine(line_number=line_num, line_content=lines[line_num], match_type=match_type))
+        # Create TextLine objects for the context
+        context_lines = []
+        for line_num in range(context_start, context_end + 1):
+            if context_start <= line_num < start_line_num:
+                match_type = LineType.BEFORE_MATCH
+            elif end_line_num < line_num <= context_end:
+                match_type = LineType.AFTER_MATCH
+            else:
+                match_type = LineType.MATCH
 
-            matches.append(MatchedConsecutiveLines(lines=context_lines, source_file_path=source_file_path))
-    else:
-        # TODO: extremely inefficient! Since we currently don't use this option in SerenaAgent or LanguageServer,
-        #   it is not urgent to fix, but should be either improved or the option should be removed.
-        # Search line by line, normal compile without DOTALL
-        compiled_pattern = re.compile(pattern)
-        for i, line in enumerate(lines):
-            if compiled_pattern.search(line):
-                # Calculate the range of lines to include in the context
-                context_start = max(0, i - context_lines_before)
-                context_end = min(total_lines - 1, i + context_lines_after)
+            context_lines.append(TextLine(line_number=line_num, line_content=lines[line_num], match_type=match_type))
 
-                # Create TextLine objects for the context
-                context_lines = []
-                for j in range(context_start, context_end + 1):
-                    if j < i:
-                        match_type = LineType.BEFORE_MATCH
-                    elif j > i:
-                        match_type = LineType.AFTER_MATCH
-                    else:
-                        match_type = LineType.MATCH
-
-                    context_lines.append(TextLine(line_number=j, line_content=lines[j], match_type=match_type))
-
-                matches.append(MatchedConsecutiveLines(lines=context_lines, source_file_path=source_file_path))
+        matches.append(MatchedConsecutiveLines(lines=context_lines, source_file_path=source_file_path))
 
     return matches
-
-
-def default_file_reader(file_path: str) -> str:
-    """Reads using the default encoding."""
-    with open(file_path, encoding=DEFAULT_SOURCE_FILE_ENCODING) as f:
-        return f.read()
 
 
 def expand_braces(pattern: str) -> list[str]:
@@ -319,11 +285,17 @@ def glob_match(pattern: str, path: str) -> bool:
         return fnmatch.fnmatch(path, pattern)
 
 
+class GlobMatcher:
+    def __init__(self, expr: str):
+        self._patterns = expand_braces(expr)
+
+    def matches(self, path: str) -> bool:
+        return any(glob_match(p, path) for p in self._patterns)
+
+
 def search_files(
-    relative_file_paths: list[str],
+    file_collection: FileCollection,
     pattern: str,
-    root_path: str = "",
-    file_reader: Callable[[str], str] = default_file_reader,
     context_lines_before: int = 0,
     context_lines_after: int = 0,
     paths_include_glob: str | None = None,
@@ -333,11 +305,8 @@ def search_files(
     """
     Search for a pattern in a list of files.
 
-    :param relative_file_paths: list of relative file paths in which to search
+    :param file_collection: the collection of files to search (will be optionally filtered by glob patterns)
     :param pattern: pattern to search for
-    :param root_path: root path to resolve relative paths against (by default, current working directory).
-    :param file_reader: function to read a file, by default will just use os.open.
-        All files that can't be read by it will be skipped.
     :param context_lines_before: number of context lines to include before matches
     :param context_lines_after: number of context lines to include after matches
     :param paths_include_glob: optional glob pattern to include files from the list
@@ -345,53 +314,35 @@ def search_files(
     :param multiline: whether to apply multi-line matching, enabling the flags re.DOTALL and re.MULTILINE (default: True)
     :return: list of MatchedConsecutiveLines objects
     """
-    # Pre-filter paths (done sequentially to avoid overhead)
-    # Use proper glob matching instead of gitignore patterns
-    include_patterns = expand_braces(paths_include_glob) if paths_include_glob else None
-    exclude_patterns = expand_braces(paths_exclude_glob) if paths_exclude_glob else None
+    # apply glob filter
+    file_collection = file_collection.filter_glob(paths_include_glob=paths_include_glob, paths_exclude_glob=paths_exclude_glob)
+    log.info(f"Processing {len(file_collection)} files.")
 
-    filtered_paths = []
-    for path in relative_file_paths:
-        if include_patterns:
-            if not any(glob_match(p, path) for p in include_patterns):
-                log.debug(f"Skipping {path}: does not match include pattern {paths_include_glob}")
-                continue
-
-        if exclude_patterns:
-            if any(glob_match(p, path) for p in exclude_patterns):
-                log.debug(f"Skipping {path}: matches exclude pattern {paths_exclude_glob}")
-                continue
-
-        filtered_paths.append(path)
-
-    log.info(f"Processing {len(filtered_paths)} files.")
-
-    def process_single_file(path: str) -> dict[str, Any]:
+    def process_single_file(file_proxy: FileProxy) -> dict[str, Any]:
         """Process a single file - this function will be parallelized."""
+        relative_path = file_proxy.get_relative_path()
         try:
-            abs_path = os.path.join(root_path, path)
-            file_content = file_reader(abs_path)
+            file_content = file_proxy.get_contents()
             search_results = search_text(
                 pattern,
                 content=file_content,
-                source_file_path=path,
-                allow_multiline_match=True,
+                source_file_path=relative_path,
                 context_lines_before=context_lines_before,
                 context_lines_after=context_lines_after,
                 multiline=multiline,
             )
             if len(search_results) > 0:
-                log.debug(f"Found {len(search_results)} matches in {path}")
-            return {"path": path, "results": search_results, "error": None}
+                log.debug(f"Found {len(search_results)} matches in {relative_path}")
+            return {"path": relative_path, "results": search_results, "error": None}
         except Exception as e:
-            log.debug(f"Error processing {path}: {e}")
-            return {"path": path, "results": [], "error": str(e)}
+            log.debug(f"Error processing {relative_path}: {e}")
+            return {"path": relative_path, "results": [], "error": str(e)}
 
     # Execute in parallel using joblib
     results = Parallel(
         n_jobs=-1,
         backend="threading",
-    )(delayed(process_single_file)(path) for path in filtered_paths)
+    )(delayed(process_single_file)(file_proxy) for file_proxy in file_collection)
 
     # Collect results and errors
     matches = []
@@ -406,7 +357,7 @@ def search_files(
     if skipped_file_error_tuples:
         log.debug(f"Failed to read {len(skipped_file_error_tuples)} files: {skipped_file_error_tuples}")
 
-    log.info(f"Found {len(matches)} total matches across {len(filtered_paths)} files")
+    log.info(f"Found {len(matches)} total matches across {len(file_collection)} files")
     return matches
 
 

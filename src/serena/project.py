@@ -9,12 +9,14 @@ from sensai.util.logging import LogTime
 from sensai.util.string import TextBuilder, ToStringMixin
 
 from serena.config.serena_config import (
+    LanguageBackend,
     ProjectConfig,
     SerenaConfig,
 )
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from serena.memories.memory_manager import MemoryManager
-from serena.util.file_system import GitignoreParser, match_path
+from serena.util.file_proxy import FileCollection
+from serena.util.file_system import GitignoreParser, match_path, scan_directory
 from serena.util.text_utils import MatchedConsecutiveLines, search_files
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
@@ -120,6 +122,16 @@ class Project(ToStringMixin):
     def project_name(self) -> str:
         return self.project_config.project_name
 
+    @property
+    def language_backend(self) -> LanguageBackend:
+        # The backend configuration is fundamentally owned by the agent, so it takes
+        # precedence. (Note: The agent does not necessary honour the project's choice,
+        # as it may be invalid.)
+        if self._agent is not None:
+            return self._agent.get_language_backend()
+        else:
+            return self.serena_config.determine_language_backend(self.project_config)
+
     @classmethod
     def load(
         cls,
@@ -219,17 +231,20 @@ class Project(ToStringMixin):
             log.debug(f"Path {abs_path} does not exist, skipping ignore check")
             return False
 
-        # Check file extension if it's a file
-        is_file = os.path.isfile(abs_path)
-        if is_file and ignore_non_source_files:
-            is_file_in_supported_language = False
-            for language in self.project_config.languages:
-                fn_matcher = language.get_source_fn_matcher()
-                if fn_matcher.is_relevant_filename(abs_path):
-                    is_file_in_supported_language = True
-                    break
-            if not is_file_in_supported_language:
-                return True
+        # check code file restriction (depending on backend)
+        if ignore_non_source_files:
+            # apply restriction only for LSP backend, which enumerates known languages
+            # and therefore can determine whether a file is a source file or not
+            if self.language_backend.is_lsp():
+                if os.path.isfile(abs_path):
+                    is_file_in_supported_language = False
+                    for language in self.project_config.languages:
+                        fn_matcher = language.get_source_fn_matcher()
+                        if fn_matcher.is_relevant_filename(abs_path):
+                            is_file_in_supported_language = True
+                            break
+                    if not is_file_in_supported_language:
+                        return True
 
         # Create normalized path for consistent handling
         rel_path = Path(relative_path)
@@ -344,7 +359,7 @@ class Project(ToStringMixin):
                         )
             return rel_file_paths
 
-    def search_source_files_for_pattern(
+    def search_project_files_for_pattern(
         self,
         pattern: str,
         relative_path: str = "",
@@ -353,6 +368,7 @@ class Project(ToStringMixin):
         paths_include_glob: str | None = None,
         paths_exclude_glob: str | None = None,
         multiline: bool = True,
+        code_files_only: bool = True,
     ) -> list[MatchedConsecutiveLines]:
         """
         Search for a pattern across all (non-ignored) source files
@@ -366,12 +382,26 @@ class Project(ToStringMixin):
         :param multiline: Whether to compile the regex with the DOTALL flag (``.`` matches newlines).
         :return: List of matched consecutive lines with context
         """
-        relative_file_paths = self.gather_source_files(relative_path=relative_path)
+        if code_files_only:
+            relative_file_paths = self.gather_source_files(relative_path=relative_path)
+            file_collection = FileCollection.from_local_project_paths(relative_file_paths, self)
+        else:
+            abs_path = os.path.join(self.project_root, relative_path)
+            if os.path.isfile(abs_path):
+                rel_paths_to_search = [relative_path]
+            else:
+                _dirs, rel_paths_to_search = scan_directory(
+                    path=abs_path,
+                    recursive=True,
+                    is_ignored_dir=self.is_ignored_path,
+                    is_ignored_file=self.is_ignored_path,
+                    relative_to=self.project_root,
+                )
+            file_collection = FileCollection.from_local_project_paths(rel_paths_to_search, self)
+
         return search_files(
-            relative_file_paths,
+            file_collection,
             pattern,
-            root_path=self.project_root,
-            file_reader=self.read_file,
             context_lines_before=context_lines_before,
             context_lines_after=context_lines_after,
             paths_include_glob=paths_include_glob,
