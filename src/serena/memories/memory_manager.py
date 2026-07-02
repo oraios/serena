@@ -2,9 +2,13 @@ import logging
 import os
 import re
 import shutil
+import threading
 from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Literal
+
+from filelock import BaseFileLock, FileLock
 
 from serena.config.serena_config import (
     SerenaPaths,
@@ -48,6 +52,9 @@ class MemoryManager:
         self._read_only_memory_patterns = [re.compile(pattern) for pattern in set(read_only_memory_patterns)]
         self._ignored_memory_patterns = [re.compile(pattern) for pattern in set(ignored_memory_patterns)]
 
+        self._thread_lock = threading.Lock()
+        self._file_lock: BaseFileLock | None = None
+
     def _is_read_only_memory(self, name: str) -> bool:
         for pattern in self._read_only_memory_patterns:
             if pattern.fullmatch(name):
@@ -59,6 +66,23 @@ class MemoryManager:
             if pattern.fullmatch(name):
                 return True
         return False
+
+    @contextmanager
+    def _write_locked(self) -> Iterator[None]:
+        """Serializes memory write operations across threads and processes.
+
+        The thread lock guards against concurrent writes from within one process; the advisory
+        file lock guards against a second Serena process operating on the same data folder
+        (e.g. the same project opened in two MCP clients). The file lock is created lazily so
+        that constructing a MemoryManager has no filesystem side effects.
+        """
+        with self._thread_lock:
+            if self._file_lock is None:
+                lock_dir = self._project_memory_dir.parent if self._project_memory_dir is not None else self._global_memory_dir.parent
+                lock_dir.mkdir(parents=True, exist_ok=True)
+                self._file_lock = FileLock(str(lock_dir / ".memory_write.lock"), timeout=10)
+            with self._file_lock:
+                yield
 
     def _check_not_ignored(self, name: str) -> None:
         if self._is_ignored_memory(name):
@@ -200,8 +224,9 @@ class MemoryManager:
         self._check_not_ignored(name)
         self._check_write_access(name, is_tool_context)
         memory_file_path = self.get_memory_file_path(name)
-        with open(memory_file_path, "w", encoding=self._encoding) as f:
-            f.write(content)
+        with self._write_locked():
+            with open(memory_file_path, "w", encoding=self._encoding) as f:
+                f.write(content)
         return f"Memory {name} written."
 
     class MemoriesList:
@@ -299,9 +324,10 @@ class MemoryManager:
         self._check_not_ignored(name)
         self._check_write_access(name, is_tool_context)
         memory_file_path = self.get_memory_file_path(name)
-        if not memory_file_path.exists():
-            return f"Memory {name} not found."
-        memory_file_path.unlink()
+        with self._write_locked():
+            if not memory_file_path.exists():
+                return f"Memory {name} not found."
+            memory_file_path.unlink()
         return f"Memory {name} deleted."
 
     def move_memory(self, old_name: str, new_name: str, is_tool_context: bool) -> str:
@@ -318,13 +344,14 @@ class MemoryManager:
         old_path = self.get_memory_file_path(old_name)
         new_path = self.get_memory_file_path(new_name)
 
-        if not old_path.exists():
-            raise FileNotFoundError(f"Memory {old_name} not found.")
-        if new_path.exists():
-            raise FileExistsError(f"Memory {new_name} already exists.")
+        with self._write_locked():
+            if not old_path.exists():
+                raise FileNotFoundError(f"Memory {old_name} not found.")
+            if new_path.exists():
+                raise FileExistsError(f"Memory {new_name} already exists.")
 
-        new_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(old_path, new_path)
+            new_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(old_path, new_path)
 
         return f"Memory renamed from {old_name} to {new_name}."
 
@@ -378,14 +405,15 @@ class MemoryManager:
         self._check_not_ignored(name)
         self._check_write_access(name, is_tool_context)
         memory_file_path = self.get_memory_file_path(name)
-        if not memory_file_path.exists():
-            raise FileNotFoundError(f"Memory {name} not found.")
-        with open(memory_file_path, encoding=self._encoding) as f:
-            original_content = f.read()
-        replacer = ContentReplacer(mode=mode, allow_multiple_occurrences=allow_multiple_occurrences, regex_multiline=regex_multiline)
-        updated_content = replacer.replace(original_content, needle, repl)
-        with open(memory_file_path, "w", encoding=self._encoding) as f:
-            f.write(updated_content)
+        with self._write_locked():
+            if not memory_file_path.exists():
+                raise FileNotFoundError(f"Memory {name} not found.")
+            with open(memory_file_path, encoding=self._encoding) as f:
+                original_content = f.read()
+            replacer = ContentReplacer(mode=mode, allow_multiple_occurrences=allow_multiple_occurrences, regex_multiline=regex_multiline)
+            updated_content = replacer.replace(original_content, needle, repl)
+            with open(memory_file_path, "w", encoding=self._encoding) as f:
+                f.write(updated_content)
         return f"Memory {name} edited successfully."
 
     def validate_referential_integrity(

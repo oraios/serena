@@ -718,3 +718,60 @@ class TestAutoPrefixBareReferences:
         # idempotent: the second run should not touch anything
         assert second.total_replacements == 0
         assert fs_manager.load_memory("docs") == "the mem:auth/login process"
+
+
+class TestConcurrentWrites:
+    """Memory writes must be serialized: concurrent writers on the same data folder
+    (multiple threads here, standing in for multiple agent sessions) must never
+    produce torn/interleaved memory files or spurious errors.
+    """
+
+    def test_parallel_saves_to_same_memory_are_atomic(self, fs_manager: MemoryManager) -> None:
+        import threading
+
+        payloads = [f"# writer {i}\n" + (f"line-{i} " * 200) for i in range(8)]
+        errors: list[Exception] = []
+
+        def writer(payload: str) -> None:
+            try:
+                for _ in range(20):
+                    fs_manager.save_memory("shared", payload, is_tool_context=False)
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=writer, args=(p,)) for p in payloads]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors
+        # the final content must be exactly one writer's payload, never a mix of two
+        assert fs_manager.load_memory("shared") in payloads
+
+    def test_parallel_save_and_delete_do_not_error(self, fs_manager: MemoryManager) -> None:
+        import threading
+
+        errors: list[Exception] = []
+
+        def saver() -> None:
+            try:
+                for i in range(30):
+                    fs_manager.save_memory("contended", f"content {i}", is_tool_context=False)
+            except Exception as e:
+                errors.append(e)
+
+        def deleter() -> None:
+            try:
+                for _ in range(30):
+                    fs_manager.delete_memory("contended", is_tool_context=False)
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=saver), threading.Thread(target=deleter)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors

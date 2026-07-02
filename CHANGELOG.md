@@ -79,6 +79,9 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Memories:
   - Make memory iteration follow symbolic links 
+  - Fix: serialize memory write operations (save/delete/rename) with a thread lock and an advisory
+    file lock, preventing torn or interleaved memory files when the same project is used from
+    multiple threads or Serena processes concurrently
 
 * Dependencies:
   - Add dependency `oslex`
