@@ -31,36 +31,40 @@ def determine_programming_language_composition(repo_path: str) -> dict[Language,
     """
     Determine the programming language composition of a repository.
 
-    :param repo_path: Path to the repository to analyze
+    Percentages are computed relative to the number of files that match at least
+    one supported language, not the total file count.  This prevents files that
+    belong to no supported language (images, plain text, licenses, lock files, etc.)
+    from diluting language percentages in repositories where such files dominate.
 
-    :return: Dictionary mapping languages to percentages of files matching each language
+    :param repo_path: Path to the repository to analyze
+    :return: Dictionary mapping languages to percentages of recognised source files
+        matching each language (denominator = files matched by at least one language)
     """
     all_files = find_all_non_ignored_files(repo_path)
 
     if not all_files:
         return {}
 
-    # Count files for each language
+    # collect all language matchers once
+    all_languages = list(Language.iter_all(include_experimental=False))
+    matchers = {lang: lang.get_source_fn_matcher() for lang in all_languages}
+
+    # count files per language in a single pass over the files
     language_counts: dict[Language, int] = {}
-    total_files = len(all_files)
-
-    for language in Language.iter_all(include_experimental=False):
-        matcher = language.get_source_fn_matcher()
-        count = 0
-
-        for file_path in all_files:
-            # Use just the filename for matching, not the full path
-            filename = os.path.basename(file_path)
+    recognised_files = 0
+    for file_path in all_files:
+        # Use just the filename for matching, not the full path
+        filename = os.path.basename(file_path)
+        matched_any = False
+        for lang, matcher in matchers.items():
             if matcher.is_relevant_filename(filename):
-                count += 1
+                language_counts[lang] = language_counts.get(lang, 0) + 1
+                matched_any = True
+        if matched_any:
+            recognised_files += 1
 
-        if count > 0:
-            language_counts[language] = count
+    if recognised_files == 0:
+        return {}
 
-    # Convert counts to percentages
-    language_percentages: dict[Language, float] = {}
-    for language, count in language_counts.items():
-        percentage = (count / total_files) * 100
-        language_percentages[language] = round(percentage, 2)
-
-    return language_percentages
+    # convert to percentages relative to recognised source files only
+    return {lang: round(count / recognised_files * 100, 2) for lang, count in language_counts.items()}
