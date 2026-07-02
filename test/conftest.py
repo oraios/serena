@@ -426,6 +426,8 @@ def _determine_disabled_languages() -> list[Language]:
         result.append(Language.LEAN4)
     if _sh.which("crystalline") is None:
         result.append(Language.CRYSTAL)
+    if _sh.which("qmlls6") is None and _sh.which("qmlls") is None:
+        result.append(Language.QML)
     if _sh.which("julia") is None:  # LanguageServer.jl is auto-installed by the LS when julia is present
         result.append(Language.JULIA)
     if _sh.which("nixd") is None:
