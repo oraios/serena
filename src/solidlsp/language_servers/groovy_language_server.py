@@ -5,13 +5,11 @@ Provides Groovy specific instantiation of the LanguageServer class. Contains var
 import dataclasses
 import logging
 import os
-import pathlib
 import shlex
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import FileUtils, PlatformUtils
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -244,19 +242,11 @@ class GroovyLanguageServer(SolidLanguageServer):
             "   Ensure the JAR file is available at the configured path\n"
         )
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Groovy Language Server.
         """
-        if not os.path.isabs(repository_absolute_path):
-            repository_absolute_path = os.path.abspath(repository_absolute_path)
-
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params = {
-            "clientInfo": {"name": "Serena Groovy Client", "version": "1.0.0"},
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
             "capabilities": {
                 "textDocument": {
                     "synchronization": {"dynamicRegistration": True, "didSave": True},
@@ -282,15 +272,8 @@ class GroovyLanguageServer(SolidLanguageServer):
                     }
                 },
             },
-            "processId": os.getpid(),
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
         }
-        return initialize_params  # type: ignore
+        return initialize_params
 
     def _start_server(self) -> None:
         """
@@ -316,7 +299,7 @@ class GroovyLanguageServer(SolidLanguageServer):
 
         log.info("Starting Groovy server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)

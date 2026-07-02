@@ -4,7 +4,6 @@ Provides Scala specific instantiation of the LanguageServer class. Contains vari
 
 import logging
 import os
-import pathlib
 import shutil
 import subprocess
 from enum import Enum
@@ -14,7 +13,6 @@ from overrides import override
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_utils import PlatformUtils
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -259,17 +257,12 @@ class ScalaLanguageServer(SolidLanguageServer):
             log.info("Bootstrapping metals finished.")
         return [metals_executable]
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Scala Language Server.
         """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params = {
             "locale": "en",
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
             "initializationOptions": {
                 "compilerOptions": {
                     "completionCommand": None,
@@ -304,7 +297,7 @@ class ScalaLanguageServer(SolidLanguageServer):
             },
             "capabilities": {"textDocument": {"documentSymbol": {"hierarchicalDocumentSymbolSupport": True}}},
         }
-        return initialize_params  # type: ignore
+        return initialize_params
 
     def _start_server(self) -> None:
         """
@@ -315,7 +308,7 @@ class ScalaLanguageServer(SolidLanguageServer):
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
 
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
         self.server.send.initialize(initialize_params)
         self.server.notify.initialized({})
 

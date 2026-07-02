@@ -15,7 +15,7 @@ import pathlib
 import sys
 import threading
 import time
-from typing import Any, cast
+from typing import Any
 
 from typing_extensions import override
 
@@ -23,7 +23,7 @@ from solidlsp import ls_types
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderUvx, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams, LSPErrorCodes
+from solidlsp.lsp_protocol_handler.lsp_types import LSPErrorCodes
 from solidlsp.lsp_protocol_handler.server import LSPError, PayloadLike
 from solidlsp.settings import SolidLSPSettings
 
@@ -171,17 +171,11 @@ class PyreflyLanguageServer(SolidLanguageServer):
     def _get_language_id_for_file(self, relative_file_path: str) -> str:
         return "python"
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the pyrefly language server.
         """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params = {
-            "processId": os.getpid(),
-            "clientInfo": {"name": "Serena", "version": "0.1.0"},
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
             "capabilities": {
                 "window": {
                     "workDoneProgress": True,
@@ -216,9 +210,8 @@ class PyreflyLanguageServer(SolidLanguageServer):
                     "publishDiagnostics": {"relatedInformation": True},
                 },
             },
-            "workspaceFolders": [{"uri": root_uri, "name": os.path.basename(repository_absolute_path)}],
         }
-        return cast(InitializeParams, initialize_params)
+        return initialize_params
 
     def _start_server(self) -> None:
         """
@@ -280,7 +273,7 @@ class PyreflyLanguageServer(SolidLanguageServer):
         self.server.start()
         # retry requests that pyrefly cancels while re-indexing the workspace in the background
         self._install_mutation_retry()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to pyrefly server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)

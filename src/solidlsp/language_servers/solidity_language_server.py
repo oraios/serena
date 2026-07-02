@@ -19,7 +19,6 @@ from solidlsp import ls_types
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, LSPConstants, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -178,21 +177,10 @@ class SolidityLanguageServer(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in {"artifacts", "cache", "typechain-types"}
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """Return LSP InitializeParams for the Solidity language server."""
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
-        return {  # type: ignore
+        return {
             "locale": "en",
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
             "capabilities": {
                 "textDocument": {
                     "synchronization": {
@@ -208,11 +196,11 @@ class SolidityLanguageServer(SolidLanguageServer):
                     "documentSymbol": {
                         "dynamicRegistration": True,
                         "hierarchicalDocumentSymbolSupport": True,
-                        "symbolKind": {"valueSet": list(range(1, 27))},  # type: ignore[arg-type]
+                        "symbolKind": {"valueSet": list(range(1, 27))},
                     },
                     "hover": {
                         "dynamicRegistration": True,
-                        "contentFormat": ["markdown", "plaintext"],  # type: ignore[list-item]
+                        "contentFormat": ["markdown", "plaintext"],
                     },
                     "publishDiagnostics": {"relatedInformation": True},
                 },
@@ -263,7 +251,7 @@ class SolidityLanguageServer(SolidLanguageServer):
         log.info("Starting Solidity language server process")
         self.server.start()
 
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
         log.debug("Sending initialize request to Solidity language server")
         init_response = self.server.send.initialize(initialize_params)
         log.debug(f"Received initialize response from Solidity server: {init_response}")

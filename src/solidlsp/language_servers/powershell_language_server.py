@@ -11,7 +11,6 @@ You can pass the following entries in ``ls_specific_settings["powershell"]``:
 
 import logging
 import os
-import pathlib
 import platform
 import shutil
 import subprocess
@@ -27,7 +26,6 @@ from solidlsp.ls import LSPConstants, RawDocumentSymbol, SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import FileUtils
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -277,12 +275,10 @@ class PowerShellLanguageServer(SolidLanguageServer):
 
         return original_name
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the PowerShell Editor Services.
         """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params = {
             "locale": "en",
             "capabilities": {
@@ -326,17 +322,8 @@ class PowerShellLanguageServer(SolidLanguageServer):
                     },
                 },
             },
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
         }
-        return initialize_params  # type: ignore[return-value]
+        return initialize_params
 
     def _start_server(self) -> None:
         """
@@ -375,7 +362,7 @@ class PowerShellLanguageServer(SolidLanguageServer):
 
         log.info("Starting PowerShell Editor Services process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)

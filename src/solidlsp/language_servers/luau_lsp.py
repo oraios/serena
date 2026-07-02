@@ -20,8 +20,6 @@ See: https://github.com/JohnnyMorganz/luau-lsp
 """
 
 import logging
-import os
-import pathlib
 import platform
 import shutil
 import threading
@@ -32,7 +30,6 @@ from overrides import override
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_utils import FileUtils
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -270,12 +267,10 @@ class LuauLanguageServer(SolidLanguageServer):
         super().__init__(config, repository_root_path, None, "luau", solidlsp_settings)
         self.server_ready = threading.Event()
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Luau Language Server.
         """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params = {
             "locale": "en",
             "capabilities": {
@@ -322,20 +317,11 @@ class LuauLanguageServer(SolidLanguageServer):
                     },
                 },
             },
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
             # luau-lsp initialization options
             # These can be overridden via .luaurc in the project root
             "initializationOptions": {},
         }
-        return initialize_params  # type: ignore[return-value]
+        return initialize_params
 
     def _start_server(self) -> None:
         """Start Luau Language Server process"""
@@ -366,7 +352,7 @@ class LuauLanguageServer(SolidLanguageServer):
 
         log.info("Starting Luau Language Server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)

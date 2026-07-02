@@ -5,7 +5,6 @@ Provides C# specific instantiation of the LanguageServer class. Contains various
 import json
 import logging
 import os
-import pathlib
 import threading
 from collections.abc import Iterable
 
@@ -15,7 +14,6 @@ from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_utils import DotnetVersion, FileUtils, PlatformId, PlatformUtils
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -127,8 +125,7 @@ class OmniSharp(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["bin", "obj"]
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Omnisharp Language Server.
         """
@@ -137,18 +134,10 @@ class OmniSharp(SolidLanguageServer):
 
         del d["_description"]
 
-        d["processId"] = os.getpid()
-        assert d["rootPath"] == "$rootPath"
-        d["rootPath"] = repository_absolute_path
-
-        assert d["rootUri"] == "$rootUri"
-        d["rootUri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["uri"] == "$uri"
-        d["workspaceFolders"][0]["uri"] = pathlib.Path(repository_absolute_path).as_uri()
-
-        assert d["workspaceFolders"][0]["name"] == "$name"
-        d["workspaceFolders"][0]["name"] = os.path.basename(repository_absolute_path)
+        # processId, rootPath, rootUri and workspaceFolders are set centrally by the InitializeParamsBuilder
+        del d["rootPath"]
+        del d["rootUri"]
+        del d["workspaceFolders"]
 
         return d
 
@@ -402,7 +391,7 @@ class OmniSharp(SolidLanguageServer):
 
         log.info("Starting OmniSharp server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)

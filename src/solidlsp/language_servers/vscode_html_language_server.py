@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import logging
 import os
-import pathlib
 import shutil
 import threading
 
@@ -29,7 +28,6 @@ from overrides import override
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -112,9 +110,7 @@ class VsCodeHtmlLanguageServer(SolidLanguageServer):
         def _create_launch_command(self, core_path: str) -> list[str]:
             return [core_path, "--stdio"]
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+    def _create_base_initialize_params(self) -> dict:
         initialize_params: dict = {
             "locale": "en",
             "capabilities": {
@@ -142,17 +138,8 @@ class VsCodeHtmlLanguageServer(SolidLanguageServer):
                 "handledSchemas": ["file"],
                 "provideFormatter": False,
             },
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
         }
-        return initialize_params  # type: ignore[return-value]
+        return initialize_params
 
     def _start_server(self) -> None:
         def do_nothing(_params: dict) -> None:
@@ -169,7 +156,7 @@ class VsCodeHtmlLanguageServer(SolidLanguageServer):
 
         log.info("Starting vscode-html-language-server")
         self.server.start()
-        init_params = self._get_initialize_params(self.repository_root_path)
+        init_params = self._create_initialize_params()
         init_response = self.server.send.initialize(init_params)
         log.debug("HTML LS initialize response: %s", init_response)
         # Sanity-check key capabilities; HTML LSP always provides documentSymbol + completion

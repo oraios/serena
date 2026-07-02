@@ -26,7 +26,7 @@ from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_types import Hover
 from solidlsp.ls_utils import FileUtils, PathUtils
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams, InitializeResult
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeResult
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
@@ -486,60 +486,51 @@ class CSharpLanguageServer(SolidLanguageServer):
             except Exception as e:
                 raise SolidLSPException(f"Failed to download package {package_name} version {package_version} from NuGet.org: {e}") from e
 
-    def _get_initialize_params(self) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Microsoft.CodeAnalysis.LanguageServer.
         """
-        root_uri = PathUtils.path_to_uri(self.repository_root_path)
-        root_name = os.path.basename(self.repository_root_path)
-        return cast(
-            InitializeParams,
-            {
-                "workspaceFolders": [{"uri": root_uri, "name": root_name}],
-                "processId": os.getpid(),
-                "rootPath": self.repository_root_path,
-                "rootUri": root_uri,
-                "capabilities": {
-                    "window": {
-                        "workDoneProgress": True,
-                        "showMessage": {"messageActionItem": {"additionalPropertiesSupport": True}},
-                        "showDocument": {"support": True},
+        return {
+            "capabilities": {
+                "window": {
+                    "workDoneProgress": True,
+                    "showMessage": {"messageActionItem": {"additionalPropertiesSupport": True}},
+                    "showDocument": {"support": True},
+                },
+                "workspace": {
+                    "applyEdit": True,
+                    "workspaceEdit": {"documentChanges": True},
+                    "didChangeConfiguration": {"dynamicRegistration": True},
+                    "didChangeWatchedFiles": {"dynamicRegistration": True},
+                    "symbol": {
+                        "dynamicRegistration": True,
+                        "symbolKind": {"valueSet": list(range(1, 27))},
                     },
-                    "workspace": {
-                        "applyEdit": True,
-                        "workspaceEdit": {"documentChanges": True},
-                        "didChangeConfiguration": {"dynamicRegistration": True},
-                        "didChangeWatchedFiles": {"dynamicRegistration": True},
-                        "symbol": {
-                            "dynamicRegistration": True,
-                            "symbolKind": {"valueSet": list(range(1, 27))},
+                    "executeCommand": {"dynamicRegistration": True},
+                    "configuration": True,
+                    "workspaceFolders": True,
+                    "workDoneProgress": True,
+                },
+                "textDocument": {
+                    "synchronization": {"dynamicRegistration": True, "willSave": True, "willSaveWaitUntil": True, "didSave": True},
+                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                    "signatureHelp": {
+                        "dynamicRegistration": True,
+                        "signatureInformation": {
+                            "documentationFormat": ["markdown", "plaintext"],
+                            "parameterInformation": {"labelOffsetSupport": True},
                         },
-                        "executeCommand": {"dynamicRegistration": True},
-                        "configuration": True,
-                        "workspaceFolders": True,
-                        "workDoneProgress": True,
                     },
-                    "textDocument": {
-                        "synchronization": {"dynamicRegistration": True, "willSave": True, "willSaveWaitUntil": True, "didSave": True},
-                        "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
-                        "signatureHelp": {
-                            "dynamicRegistration": True,
-                            "signatureInformation": {
-                                "documentationFormat": ["markdown", "plaintext"],
-                                "parameterInformation": {"labelOffsetSupport": True},
-                            },
-                        },
-                        "definition": {"dynamicRegistration": True},
-                        "references": {"dynamicRegistration": True},
-                        "documentSymbol": {
-                            "dynamicRegistration": True,
-                            "symbolKind": {"valueSet": list(range(1, 27))},
-                            "hierarchicalDocumentSymbolSupport": True,
-                        },
+                    "definition": {"dynamicRegistration": True},
+                    "references": {"dynamicRegistration": True},
+                    "documentSymbol": {
+                        "dynamicRegistration": True,
+                        "symbolKind": {"valueSet": list(range(1, 27))},
+                        "hierarchicalDocumentSymbolSupport": True,
                     },
                 },
             },
-        )
+        }
 
     def _start_server(self) -> None:
         indexing_complete = threading.Event()
@@ -672,7 +663,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             raise SolidLSPException(f"Failed to start C# language server: {e}")
 
         # Send initialization
-        initialize_params = self._get_initialize_params()
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request to language server")
         try:

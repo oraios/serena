@@ -6,7 +6,6 @@ Contains various configurations and settings specific to Ruby.
 import json
 import logging
 import os
-import pathlib
 import re
 import shutil
 import subprocess
@@ -16,7 +15,6 @@ from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -267,18 +265,13 @@ class Solargraph(SolidLanguageServer):
 
         return base_patterns
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Solargraph Language Server.
         """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
-        exclude_patterns = Solargraph._get_ruby_exclude_patterns(repository_absolute_path)
+        exclude_patterns = Solargraph._get_ruby_exclude_patterns(self.repository_root_path)
 
-        initialize_params: InitializeParams = {
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
+        initialize_params = {
             "initializationOptions": {
                 "exclude": exclude_patterns,
             },
@@ -289,17 +282,11 @@ class Solargraph(SolidLanguageServer):
                 "textDocument": {
                     "documentSymbol": {
                         "hierarchicalDocumentSymbolSupport": True,
-                        "symbolKind": {"valueSet": list(range(1, 27))},  # type: ignore[arg-type]
+                        "symbolKind": {"valueSet": list(range(1, 27))},
                     },
                 },
             },
-            "trace": "verbose",  # type: ignore[typeddict-item]
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
+            "trace": "verbose",
         }
         return initialize_params
 
@@ -341,7 +328,7 @@ class Solargraph(SolidLanguageServer):
 
         log.info("Starting solargraph server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         log.info(f"Sending init params: {json.dumps(initialize_params, indent=4)}")

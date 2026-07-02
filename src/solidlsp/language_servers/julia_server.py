@@ -1,6 +1,5 @@
 import logging
 import os
-import pathlib
 import platform
 import shutil
 import subprocess
@@ -10,7 +9,7 @@ from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.lsp_protocol_handler.lsp_types import DiagnosticTag, InitializeParams
+from solidlsp.lsp_protocol_handler.lsp_types import DiagnosticTag
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -136,15 +135,11 @@ class JuliaLanguageServer(SolidLanguageServer):
         # runs (standalone test invocations, CI cold start).
         return 30.0
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Julia Language Server.
         """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
-        initialize_params: InitializeParams = {
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
+        initialize_params: dict = {
             "capabilities": {
                 # workspace.configuration MUST be true: LanguageServer.jl pulls all julia.lint.*
                 # settings via workspace/configuration after initialize. Without it, the server
@@ -164,12 +159,6 @@ class JuliaLanguageServer(SolidLanguageServer):
                     "documentSymbol": {"dynamicRegistration": True},
                 },
             },
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
         }
         return initialize_params
 
@@ -202,7 +191,7 @@ class JuliaLanguageServer(SolidLanguageServer):
         log.info("Starting LanguageServer.jl server process")
         self.server.start()
 
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
         log.info("Sending initialize request to Julia Language Server")
 
         init_response = self.server.send.initialize(initialize_params)
