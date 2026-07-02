@@ -1457,6 +1457,9 @@ class SolidLanguageServer(ABC):
             self._ensure_server_started()
 
             t0 = perf_counter() if _debug_enabled else None
+            # arm indexing tracking before didOpen so that the subsequent wait can
+            # observe the indexing progress triggered by opening the file
+            self.language_server._pre_open_for_cross_file_references()
             with self.language_server.open_file(self.relative_file_path):
                 self.language_server._wait_for_cross_file_references_if_needed()
                 try:
@@ -1607,6 +1610,14 @@ class SolidLanguageServer(ABC):
                 },
             },
         )
+
+    def _pre_open_for_cross_file_references(self) -> None:
+        """Called just before open_file() for requests that may need cross-file indexing.
+
+        Override to pre-arm async indexing tracking before sending didOpen (e.g. clear
+        a threading.Event so a subsequent wait for indexing blocks correctly).
+        The base implementation is a no-op.
+        """
 
     def _wait_for_cross_file_references_if_needed(self) -> None:
         if not self._has_waited_for_cross_file_references:
