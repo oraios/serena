@@ -173,6 +173,7 @@ format = ["_ruff_fix", "_ruff_format"]
 _ty_core = "ty check src/serena src/solidlsp"
 _ty_test = "ty check test --exclude test/resources"
 type-check = ["_ty_core", "_ty_test"]
+ty = ["type-check"]
 # docs
 _autogen_docs = "python docs/autogen_docs.py"
 _sphinx_build = "sphinx-build -b html docs docs/_build -W --keep-going"
