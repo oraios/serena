@@ -611,15 +611,27 @@ class SearchForPatternTool(Tool):
             file_to_matches[match.source_file_path].append(match.to_display_string())
 
         # capture lightweight match data for shortening before serialization
-        match_lines_by_file: dict[str, list[int]] = defaultdict(list)
+        match_lines_by_file: dict[str, list[dict[str, int | str]]] = defaultdict(list)
         for match in matches:
             assert match.source_file_path is not None
-            match_lines_by_file[match.source_file_path].append(match.matched_lines[0].line_number)
+            first = match.matched_lines[0]
+            match_lines_by_file[match.source_file_path].append({"line": first.line_number, "text": first.line_content.strip()})
 
         # shortened result closures, from least to most aggressive shortening
+        _TEXT_TRUNCATE = 60
+
         def make_lines_only() -> str:
-            """Match locations without surrounding context"""
-            return f"Match lines per file:\n{self._to_json(match_lines_by_file)}"
+            """Match locations with line number and truncated matched text."""
+            compact = {
+                path: [{"line": m["line"], "text": str(m["text"])[:_TEXT_TRUNCATE]} for m in lines]
+                for path, lines in match_lines_by_file.items()
+            }
+            return f"Result too long. Use read_file with line ranges below:\n{self._to_json(compact)}"
+
+        def make_line_numbers_only() -> str:
+            """Match locations as bare line numbers (no text)."""
+            numbers = {path: [m["line"] for m in lines] for path, lines in match_lines_by_file.items()}
+            return f"Match lines per file:\n{self._to_json(numbers)}"
 
         def make_per_file_counts() -> str:
             counts = {path: len(lines) for path, lines in match_lines_by_file.items()}
@@ -630,5 +642,7 @@ class SearchForPatternTool(Tool):
 
         result = self._to_json(file_to_matches)
         return self._limit_length(
-            result, max_answer_chars, shortened_result_factories=[make_lines_only, make_per_file_counts, make_summary]
+            result,
+            max_answer_chars,
+            shortened_result_factories=[make_lines_only, make_line_numbers_only, make_per_file_counts, make_summary],
         )
