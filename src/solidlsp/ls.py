@@ -301,8 +301,14 @@ class LanguageServerDependencyProvider(ABC):
 
 class LanguageServerDependencyProviderBaseCommand(LanguageServerDependencyProvider, ABC):
     """
-    Special case of a dependency provider, where the launch command is constructed from a base command
-    (which can potentially be overridden by the user in LS-specific settings).
+    Special case of a dependency provider, where the launch command is constructed from a base command.
+
+    The user can configure aspects of the launch command in LS-specific settings:
+
+      * ``ls_path``: overrides the path of the language server's core dependency (e.g. its executable or a JAR file),
+        from which the base command is formed, bypassing Serena's managed installation
+      * ``ls_args``: overrides the arguments that are added to the base command in order to form the launch command
+      * ``ls_extra_args``: additional arguments to append to the launch command
     """
 
     @abstractmethod
@@ -326,12 +332,33 @@ class LanguageServerDependencyProviderBaseCommand(LanguageServerDependencyProvid
         """
 
     def create_launch_command(self) -> list[str]:
+        # obtain base command
         ls_path = self._custom_settings.get("ls_path", None)
         if ls_path is not None:
             base_command = [ls_path]
         else:
             base_command = self._create_default_base_command()
-        return self._create_launch_command_from_base_command(list(base_command))
+
+        # create launch command from base command
+        ls_args = self._custom_settings.get("ls_args")
+        if ls_args is not None:
+            if not isinstance(ls_args, list):
+                log.warning("The 'ls_args' setting should be a list of strings. Ignoring the provided value: %s", ls_args)
+                ls_args = None
+        if ls_args is not None:
+            cmd = list(base_command) + ls_args
+        else:
+            cmd = self._create_launch_command_from_base_command(list(base_command))
+
+        # add user-provided extra arguments (if any)
+        ls_extra_args = self._custom_settings.get("ls_extra_args", [])
+        if ls_extra_args:
+            if not isinstance(ls_extra_args, list):
+                log.warning("The 'ls_extra_args' setting should be a list of strings. Ignoring the provided value: %s", ls_extra_args)
+            else:
+                cmd = cmd + ls_extra_args
+
+        return cmd
 
 
 class LanguageServerDependencyProviderSinglePath(LanguageServerDependencyProviderBaseCommand, ABC):
