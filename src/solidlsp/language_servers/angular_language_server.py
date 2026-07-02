@@ -166,8 +166,8 @@ class AngularTypeScriptServer(TypeScriptLanguageServer):
         )
 
     @override
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
-        params = super()._get_initialize_params(repository_absolute_path)
+    def _create_base_initialize_params(self) -> dict:
+        params = super()._create_base_initialize_params()
         # Load @angular/language-service as a tsserver plugin via typescript-language-server's
         # initializationOptions.plugins API (the same API Vue uses for @vue/typescript-plugin).
         params["initializationOptions"] = {

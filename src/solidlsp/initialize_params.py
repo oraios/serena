@@ -50,9 +50,20 @@ class DefaultInitializeParamsBuilder(InitializeParamsBuilder):
 
     def _apply_updates(self):
         root_abs_path = self._ls.repository_root_path
+
         self._set("processId", os.getpid())
         self._set("rootPath", root_abs_path)
         self._set("rootUri", pathlib.Path(root_abs_path).as_uri())
         self._set("clientInfo", {"name": "Serena"})
+
         if self._set_workspace_folders:
-            self._set("workspaceFolders", [self._create_workspace_folder_entry(root_abs_path)])
+            abs_workspace_paths = self._ls.config.get_absolute_workspace_folders(root_abs_path)
+            log.info("Workspace folders: %s", abs_workspace_paths)
+            workspace_folders = [self._create_workspace_folder_entry(abs_path) for abs_path in abs_workspace_paths]
+            additional_abs_workspace_paths = [
+                p for p in self._ls.config.get_absolute_additional_workspace_folders(root_abs_path) if p not in abs_workspace_paths
+            ]
+            if additional_abs_workspace_paths:
+                log.info("Additional workspace folders (not indexed by SolidLSP): %s", additional_abs_workspace_paths)
+                workspace_folders.extend([self._create_workspace_folder_entry(abs_path) for abs_path in additional_abs_workspace_paths])
+            self._set("workspaceFolders", workspace_folders)

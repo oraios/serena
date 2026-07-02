@@ -2,14 +2,19 @@
 Configuration objects for language servers
 """
 
+import logging
+import os
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
 if TYPE_CHECKING:
     from solidlsp import SolidLanguageServer
+
+log = logging.getLogger(__name__)
 
 
 class FilenameMatcher:
@@ -826,13 +831,25 @@ class Language(str, Enum):
         raise ValueError(f"Unhandled language server class: {ls_class}")
 
 
-@dataclass
+@dataclass(frozen=True)
 class LanguageServerConfig:
     """
     Configuration parameters
     """
 
     code_language: Language
+    workspace_folders: list[str] = field(default_factory=lambda: ["."])
+    """
+    list of workspace folders to be used by the language server and to be fully indexed by SolidLSP.
+    Paths can either be absolute or relative to the project root.
+    These folders must be descendants of the project root.
+    """
+    additional_workspace_folders: list[str] = field(default_factory=list)
+    """
+    list of additional workspace folders to be passed to the language server, but which are not to be indexed by SolidLSP. 
+    Paths can either be absolute or relative to the project root.
+    These folders can potentially be outside of the project root, e.g. for cross-package reference support.
+    """
     trace_lsp_communication: bool = False
     start_independent_lsp_process: bool = True
     ignored_paths: list[str] = field(default_factory=list)
@@ -845,3 +862,38 @@ class LanguageServerConfig:
         import inspect
 
         return cls(**{k: v for k, v in env.items() if k in inspect.signature(cls).parameters})
+
+    @staticmethod
+    def _absolute_workspace_folders(folders: list[str], project_root: str) -> list[str]:
+        abs_workspace_folders = []
+        for path in folders:
+            if os.path.isabs(path):
+                abs_path = str(Path(path).resolve())
+            else:
+                abs_path = os.path.realpath(os.path.join(project_root, path))
+            if not os.path.exists(abs_path):
+                log.error("Workspace folder does not exist: %s; skipping", abs_path)
+                continue
+            if abs_path in abs_workspace_folders:
+                log.warning("Duplicate workspace folder: %s; skipping", abs_path)
+                continue
+            abs_workspace_folders.append(abs_path)
+        return abs_workspace_folders
+
+    def get_absolute_workspace_folders(self, project_root: str) -> list[str]:
+        """
+        Get the absolute paths of the workspace folders, resolving relative paths against the project root.
+
+        :param project_root: The root path of the project
+        :return: List of absolute workspace folder paths
+        """
+        return self._absolute_workspace_folders(self.workspace_folders, project_root)
+
+    def get_absolute_additional_workspace_folders(self, project_root: str) -> list[str]:
+        """
+        Get the absolute paths of the additional workspace folders, resolving relative paths against the project root.
+
+        :param project_root: The root path of the project
+        :return: List of absolute additional workspace folder paths
+        """
+        return self._absolute_workspace_folders(self.additional_workspace_folders, project_root)

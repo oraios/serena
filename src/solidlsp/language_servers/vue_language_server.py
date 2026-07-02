@@ -121,8 +121,8 @@ class VueTypeScriptServer(TypeScriptLanguageServer):
         )
 
     @override
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
-        params = super()._get_initialize_params(repository_absolute_path)
+    def _create_base_initialize_params(self) -> dict:
+        params = super()._create_base_initialize_params()
 
         params["initializationOptions"] = {
             "plugins": [
