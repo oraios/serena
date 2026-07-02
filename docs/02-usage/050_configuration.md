@@ -222,15 +222,15 @@ Most of Serena's language servers construct the command that launches the langua
 a *base command* or a *core dependency*.
 For these language servers, the following settings can be used to customize the launch command:
 
-| Setting                | Description                                                                                                                                                                                                                               |
-|------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `ls_path` (string)     | overrides the path of the language server's core dependency (e.g. its executable or a JAR file). Use this if you have installed the language server yourself and want Serena to use your installation instead of its managed installation. |
-| `ls_args` (list)       | overrides the internal command construction completely and simply adds `ls_args` to the base command                                                                                                                                      | 
-| `ls_extra_args` (list) | a list of additional arguments to append to the launch command                                                                                                                                                                            |
+| Setting                                    | Description                                                                                                                                                                                                                                                                                                                                           |
+|--------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `ls_path` (string) or `ls_base_cmd` (list) | overrides the path of the language server's core dependency (`ls_path`), e.g. its executable or a JAR file, or a base command for its execution (`ls_base_cmd`), e.g. `["npx", "-y", "/my/local/package"]`. Use this if you have installed the language server yourself and want Serena to use your installation instead of its managed installation. |
+| `ls_args` (list)                           | overrides the internal command construction completely and simply adds `ls_args` to the base command                                                                                                                                                                                                                                                  | 
+| `ls_extra_args` (list)                     | a list of additional arguments to append to the launch command                                                                                                                                                                                                                                                                                        |
 
 * If you set `ls_args`, the internal command construction (which may do more than to append arguments to a base command) is bypassed.
-  You can define the full launch command by providing both `ls_path` and `ls_args`.
-* If `ls_args` is not set, the internal command construction (which sets default arguments) is applied, and you can use `ls_path` to override the path of the core dependency.
+  You can define the full launch command by providing both `ls_path`/`ls_base_cmd` and `ls_args`.
+* If `ls_args` is not set, the internal command construction (which sets default arguments) is applied, and you can use `ls_path` or `ls_base_cmd` to override the path of the core dependency/the base command.
 * `ls_extra_args` is always appended to the end of the launch command.
 
 Example:
@@ -243,7 +243,7 @@ ls_specific_settings:
 ```
 
 These settings are supported by all language servers whose dependency provider derives from
-`LanguageServerDependencyProviderBaseCommand`, and `ls_path` is additionally exposed by some wrappers explicitly.
+`LanguageServerDependencyProviderBaseCommand`, and `ls_path` is additionally exposed by some implementations explicitly.
 Common examples include: `ansible`, `bash`, `bsl`, `clojure`, `cpp`, `cpp_ccls`, `hlsl`, `html`, `kotlin`, `lean4`, `luau`, `markdown`, `php`,
 `php_phpactor`, `python`, `rust`, `scss`, `solidity`, `systemverilog`, `toml`, `typescript`, and `yaml`.
 

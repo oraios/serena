@@ -305,6 +305,7 @@ class LanguageServerDependencyProviderBaseCommand(LanguageServerDependencyProvid
 
     The user can configure aspects of the launch command in LS-specific settings:
 
+      * ``ls_base_cmd`: overrides the base command
       * ``ls_path``: overrides the path of the language server's core dependency (e.g. its executable or a JAR file),
         from which the base command is formed, bypassing Serena's managed installation
       * ``ls_args``: overrides the arguments that are added to the base command in order to form the launch command
@@ -333,11 +334,17 @@ class LanguageServerDependencyProviderBaseCommand(LanguageServerDependencyProvid
 
     def create_launch_command(self) -> list[str]:
         # obtain base command
-        ls_path = self._custom_settings.get("ls_path", None)
-        if ls_path is not None:
-            base_command = [ls_path]
-        else:
-            base_command = self._create_default_base_command()
+        base_command = self._custom_settings.get("ls_base_cmd", None)
+        if base_command is not None and not isinstance(base_command, list):
+            log.warning("The 'ls_base_cmd' setting should be a list of strings. Ignoring the provided value: %s", base_command)
+            base_command = None
+        if base_command is None:
+            ls_path = self._custom_settings.get("ls_path", None)
+            if ls_path is not None:
+                base_command = [ls_path]
+            else:
+                # default case: base command is constructed by the provider implementation
+                base_command = self._create_default_base_command()
 
         # create launch command from base command
         ls_args = self._custom_settings.get("ls_args")
