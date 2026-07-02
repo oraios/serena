@@ -33,16 +33,30 @@ To implement a new language server using the DependencyProvider pattern:
     ```
     The resource dir that is passed is the directory in which installed dependencies should be stored!
 
-**Base Classes:**
+**Base Classes** (choose the most specific one that fits):
 
-- **`LanguageServerDependencyProviderSinglePath`** - For language servers with a single core dependency (e.g., an executable or JAR file)
-  - Provides automatic support for the `ls_path` custom setting, allowing users to override the core dependency path (if they have it installed it themselves)
+- **`LanguageServerDependencyProviderUvx`** - For language servers distributed as a PyPI package, run on demand
+  via `uvx` / `uv x` (no installation step to implement)
+  - Simply instantiate it with the package name, pinned default version, entrypoint (console script) and optional `extra_args`;
+    the version can be overridden by the user via the configured `version_setting_key` custom setting
+  - Reference implementation: `PyrightServer`
+
+- **`LanguageServerDependencyProviderBaseCommand`** - For the common case where the
+  launch command is constructed from a *base command* (which the user can override via custom settings; handled generically)
+  - Implement `_create_default_base_command()` to return the default base command (executable + args), downloading/installing
+    dependencies beforehand if necessary
+  - Implement `_create_launch_command_from_base_command(base_command)` to add any further arguments, producing the
+    final launch command
+
+- **`LanguageServerDependencyProviderSinglePath`** - Alternative to inheriting from `...BaseCommand` directly for the case
+  of a single core dependency (e.g., an executable or JAR file); mostly present in existing implementations - for new
+  implementations, prefer `...BaseCommand`
   - Implement `_get_or_install_core_dependency()` to return the path to the core dependency, downloading/installing it automatically if necessary
   - Implement `_create_launch_command(core_path)` to build the full command from the core path
-  - Reference implementations: `TypeScriptLanguageServer`, `Intelephense`, `ClojureLSP`, `ClangdLanguageServer`, `PyrightServer`
+  - Reference implementations: `TypeScriptLanguageServer`, `Intelephense`, `ClojureLSP`, `ClangdLanguageServer`
 
-- **`LanguageServerDependencyProvider`** - The base class, which can be directly inherited from for complex cases with multiple dependencies or custom setup
-  - Implement `create_launch_command()` directly
+- **`LanguageServerDependencyProvider`** - The root base class, for complex cases with multiple dependencies or custom setup
+  - Implement `create_launch_command()` directly (note: no automatic support for user-level launch command overrides in this case)
   - Reference implementations: `EclipseJDTLS`, `CSharpLanguageServer`, `MatlabLanguageServer`
 
 **Implementation Pointers::**

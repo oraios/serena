@@ -4,7 +4,6 @@ import logging
 import os
 import pathlib
 import platform
-import shutil
 import subprocess
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -149,42 +148,6 @@ class RuntimeDependencyCollection:
                 expected_sha256=dep.sha256,
                 allowed_hosts=dep.allowed_hosts,
             )
-
-
-DEFAULT_UVX_PYTHON_VERSION = "3.13"
-
-
-def build_uvx_launch_command(
-    package: str,
-    version: str,
-    entrypoint: str,
-    extra_args: Sequence[str] = (),
-    python_version: str = DEFAULT_UVX_PYTHON_VERSION,
-) -> list[str]:
-    """Build a command that runs a pinned PyPI package's console script on demand via ``uvx`` / ``uv x``.
-
-    Resolution order:
-      1. Prefer ``uvx`` (env var ``UVX`` or PATH lookup).
-      2. Fall back to ``uv x`` if only ``uv`` is on PATH.
-      3. Raise ``RuntimeError`` if neither is available.
-
-    :param package: PyPI package name (e.g. ``"pyright"``).
-    :param version: Pinned package version.
-    :param entrypoint: Console script provided by the package (e.g. ``"pyright-langserver"``).
-    :param extra_args: Arguments appended after the entrypoint (e.g. ``("--stdio",)``).
-    :param python_version: Python interpreter version passed via ``-p`` (uv will fetch it if missing).
-    """
-    base_args = ["-p", python_version, "--from", f"{package}=={version}", entrypoint, *extra_args]
-
-    uvx_path = os.environ.get("UVX") or shutil.which("uvx")
-    if uvx_path is not None:
-        return [uvx_path, *base_args]
-
-    uv_path = shutil.which("uv")
-    if uv_path is not None:
-        return [uv_path, "x", *base_args]
-
-    raise RuntimeError("Could not find 'uvx' or 'uv' in PATH. Install uv (https://docs.astral.sh/uv/).")
 
 
 def build_npm_install_command(package_name: str, version: str, registry: str | None = None) -> list[str]:
