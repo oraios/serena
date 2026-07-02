@@ -3,7 +3,6 @@ import shutil
 import tempfile
 from pathlib import Path
 
-# Assuming the gitignore parser code is in a module named 'gitignore_parser'
 from pathspec import PathSpec
 
 from serena.util.file_system import GitignoreParser, GitignoreSpec, match_path
@@ -715,3 +714,42 @@ src/*.o
 
         # foo.txt in other/ should NOT be ignored (outside foo/ subtree)
         assert not parser.should_ignore("other/foo.txt"), "other/foo.txt should NOT be ignored by foo/.gitignore"
+
+
+class TestGitignoreParserPermissionError:
+    """Test PermissionError handling in GitignoreParser."""
+
+    def setup_method(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.repo_path = Path(self.test_dir)
+
+    def teardown_method(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def test_scandir_permission_error_on_subdirectory(self):
+        """
+        Test that GitignoreParser does not crash when a subdirectory
+        is not readable (PermissionError on os.scandir).
+
+        Regression test for https://github.com/oraios/serena/issues/1624
+        """
+        # Create a root .gitignore
+        gitignore = self.repo_path / ".gitignore"
+        gitignore.write_text("*.log\n")
+
+        # Create an unreadable subdirectory
+        unreadable = self.repo_path / "unreadable_dir"
+        unreadable.mkdir()
+
+        # Remove read permissions (Unix only; on Windows this is a no-op)
+        old_mode = os.stat(unreadable).st_mode
+        os.chmod(unreadable, 0o000)
+
+        try:
+            # This should not raise PermissionError
+            parser = GitignoreParser(str(self.repo_path))
+            # Parser should still function
+            assert parser.should_ignore("test.log")
+        finally:
+            # Restore permissions so teardown can clean up
+            os.chmod(unreadable, old_mode)
