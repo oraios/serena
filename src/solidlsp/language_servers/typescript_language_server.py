@@ -233,6 +233,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params = {
             "locale": "en",
+            # Disable Automatic Type Acquisition (ATA): with ATA enabled, tsserver fetches
+            # @types/* packages from npm in the background during indexing, which makes startup
+            # slow, network-dependent, and nondeterministic (and can hang on offline/locked-down
+            # machines). Serena relies on the types already installed in the project instead.
             "initializationOptions": {
                 "preferences": {
                     "disableAutomaticTypingAcquisition": True,
