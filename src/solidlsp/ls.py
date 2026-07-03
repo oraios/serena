@@ -764,6 +764,13 @@ class SolidLanguageServer(ABC):
         """
         self._abs_workspace_folders_all = self._abs_workspace_folders_indexed + self._abs_workspace_folders_additional
 
+    @property
+    def custom_settings(self) -> SolidLSPSettings.CustomLSSettings:
+        """
+        The (user-provided) language server-specific settings.
+        """
+        return self._custom_settings
+
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         """
         Creates the dependency provider for this language server.

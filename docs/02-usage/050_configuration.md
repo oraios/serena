@@ -250,6 +250,36 @@ Common examples include: `ansible`, `bash`, `bsl`, `clojure`, `cpp`, `cpp_ccls`,
 If `ls_path` is set, Serena's managed download or install is bypassed for that language server.
 In that case, any server-specific version or registry settings do not apply.
 
+(override-init-options)=
+#### Overriding Language Server Initialization Options
+
+When Serena starts a language server, it sends a set of `initializationOptions` as part of the
+Language Server Protocol `initialize` request. These options are constructed internally and are
+tailored to each language server. In some cases, you may want to override or extend these options,
+e.g. to enable a feature or to adjust a behavior that is specific to your setup.
+
+Under the key `initializationOptions` within a language's `ls_specific_settings`, you can provide a
+dictionary of options that is applied on top of the internally constructed `initializationOptions`.
+The values are combined at the top level only: for each top-level key you define, your value
+replaces the original value for that key exactly as given (there is no recursive/deep merge of
+nested dictionaries). Internally constructed keys that you do not define are left unchanged.
+
+* If Serena constructs `initializationOptions` for the language server, each top-level key you
+  provide replaces the internally constructed value for that same key, while all other internally
+  constructed keys are retained.
+* If Serena does not construct any `initializationOptions` for the language server, your custom
+  options are used as-is.
+
+Example:
+
+```yaml
+ls_specific_settings:
+  <language>:
+    initializationOptions:
+      someFeature:
+        enabled: true
+```
+
 #### AL
 
 Serena uses the AL language server bundled in the Microsoft Dynamics 365 Business Central VS Code extension.

@@ -67,3 +67,16 @@ class DefaultInitializeParamsBuilder(InitializeParamsBuilder):
                 log.info("Additional workspace folders (not indexed by SolidLSP): %s", additional_abs_workspace_paths)
                 workspace_folders.extend([self._create_workspace_folder_entry(abs_path) for abs_path in additional_abs_workspace_paths])
             self._set("workspaceFolders", workspace_folders)
+
+        init_options_key = "initializationOptions"
+        custom_init_options = self._ls.custom_settings.get(init_options_key, None)
+        if custom_init_options:
+            if not isinstance(custom_init_options, dict):
+                log.error("Custom initialization options should be a dictionary, but got %s. Ignoring.", type(custom_init_options).__name__)
+            else:
+                log.info("Applying custom initialization options: %s", custom_init_options)
+                if init_options_key in self._params:
+                    self._params[init_options_key].update(custom_init_options)
+                else:
+                    self._params[init_options_key] = custom_init_options
+                log.info("Final initialization options: %s", self._params[init_options_key])
