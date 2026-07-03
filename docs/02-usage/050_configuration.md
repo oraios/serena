@@ -7,7 +7,7 @@ You can disable tools, change Serena's fundamental instructions
 (what we denote as the `system_prompt`), adjust the output of tools that just provide a prompt, 
 and even adjust tool descriptions.
 
-Serena is configured in using a multi-layered approach:
+Serena is configured using a multi-layered approach:
 
  * **global configuration** (`serena_config.yml`, see below)
  * **project configuration** (`project.yml`, see [Project Configuration](project-config))
