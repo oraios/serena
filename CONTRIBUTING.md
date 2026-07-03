@@ -55,3 +55,23 @@ The Serena tools (and in fact all Serena code) can be executed without an LLM, a
 any MCP specifics (though you can use the mcp inspector, if you want).
 
 An example script for running tools is provided in [scripts/demo_run_tools.py](scripts/demo_run_tools.py).
+
+## Live-Testing the Grok Integration
+
+The unit tests cover client setup and hooks with mocked CLI interactions. To additionally verify the
+Grok integration against a *real* `grok` CLI installation, run
+
+```shell
+uv run python scripts/live_test_grok.py
+```
+
+The script validates client setup (`serena setup grok`), the native hook protocol
+(`serena-hooks --client=grok`) and an MCP handshake with the `grok` context — without ever starting a
+model session, so it incurs no inference cost. It backs up `~/.grok/config.toml` before the first
+change, pairs every registration with a removal, restores the baseline at the end (also on abort), and
+refuses to run if a `serena` MCP server is already registered in Grok. Per-check evidence files and a
+Markdown report are written to a work directory printed at startup.
+
+Useful options: `--hooks-only` runs only the pure-local checks (never touching the Grok configuration),
+`--skip-unit` skips the pytest smoke run, and `--help` lists all options (including overrides for the
+`grok`/`serena` executables and the Grok config path).

@@ -93,8 +93,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     instead of accepting the deletion (change in `TextUtils.delete_text_between_positions`,
     which now accepts the end position similar to `insert_text_at_position`).
   - Fix: glob pattern expansion in `expand_braces` did not terminate with empty or unbalanced braces #1690
+  - Add a `grok` context optimized for xAI's Grok Build CLI.
+  - Add `scripts/live_test_grok.py`, a zero-inference live smoke test verifying the Grok integration
+    (setup, hooks, MCP handshake) against a real `grok` CLI installation (see `CONTRIBUTING.md`).
 
 * CLI:
+  - Add `serena setup grok` to register Serena as a Grok MCP server.
   - Fix `--project-from-cwd` hijacking git worktrees nested under a Serena project. `find_project_root`
     now walks up in a single pass so the nearest project boundary wins (either a `.serena/project.yml`
     or a `.git`, including worktree/submodule pointer files), instead of preferring an ancestor's
@@ -180,6 +184,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Wait for the subprocess that opens the browser window, preventing zombie processes #1488 
 
 * Hooks:
+  - Add `serena-hooks --client=grok`, including Grok-native PreToolUse allow/deny output.
+  - PreToolUse remind hook: coerce non-string shell command values instead of failing, and recognize
+    `target_file`/`targetFile` file-path keys (shared payload parsing, applies to all hook clients).
   - Handle tool_input passed as string gracefully instead of failing (Copilot CLI sends strings).
 
 * Memories:
