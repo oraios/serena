@@ -11,6 +11,7 @@ from collections import defaultdict
 from collections.abc import Callable, Hashable, Iterator, Sequence
 from contextlib import contextmanager
 from copy import copy
+from dataclasses import dataclass
 from pathlib import Path, PurePath
 from time import monotonic, perf_counter, sleep
 from typing import Any, Self, Union, cast
@@ -22,6 +23,7 @@ from sensai.util.string import ToStringMixin
 from serena.util.file_system import match_path
 from serena.util.text_utils import MatchedConsecutiveLines
 from solidlsp import ls_types
+from solidlsp.initialize_params import DefaultInitializeParamsBuilder, InitializeParamsBuilder
 from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_process import LanguageServerInterface, StdioLanguageServer
@@ -35,6 +37,7 @@ from solidlsp.lsp_protocol_handler.lsp_types import (
     DefinitionParams,
     DocumentSymbol,
     ImplementationParams,
+    InitializeParams,
     LocationLink,
     RenameParams,
     SymbolInformation,
@@ -651,7 +654,7 @@ class SolidLanguageServer(ABC):
 
         Do not instantiate this class directly. Use `LanguageServer.create` method instead.
 
-        :param config: the global SolidLSP configuration.
+        :param config: the language server's configuration.
         :param repository_root_path: the root path of the repository.
         :param process_launch_info: (DEPRECATED: pass None and implement _create_dependency_provider instead)
             the command used to start the actual language server.
@@ -661,12 +664,13 @@ class SolidLanguageServer(ABC):
             notification by default.
             If the language server uses multiple language identifiers, it must override the method `get_language_id_for_file`
             to provide the appropriate identifier for each type of file.
+        :param solidlsp_settings: the global SolidLSP settings
         :param cache_version_raw_document_symbols: the version, for caching, of the raw document symbols coming
             from this specific language server. This should be incremented by subclasses calling this constructor
             whenever the format of the raw document symbols changes (typically because the language server
             improves/fixes its output).
         """
-        self._solidlsp_config = config
+        self.config = config
         self._solidlsp_settings = solidlsp_settings
         lang = self.get_language_enum_instance()
         self._custom_settings = solidlsp_settings.get_ls_specific_settings(lang)
@@ -744,28 +748,13 @@ class SolidLanguageServer(ABC):
 
         self._has_waited_for_cross_file_references = False
 
-        # resolving additional workspace folders
-        self._additional_workspace_abs_paths: list[str] = []
-        _seen: set[str] = set()
-        for additional_workspace_path in self._solidlsp_settings.additional_workspace_folders:
-            if not additional_workspace_path or additional_workspace_path == ".":
-                continue
-            if not os.path.isabs(additional_workspace_path):
-                additional_workspace_abs_path = os.path.realpath(os.path.join(self.repository_root_path, additional_workspace_path))
-            else:
-                additional_workspace_abs_path = str(Path(additional_workspace_path).resolve())
-            if not os.path.isdir(additional_workspace_abs_path):
-                log.error(
-                    "additional_workspace_folders: skipping non-existent directory %s (resolved to %s)",
-                    additional_workspace_abs_path,
-                    additional_workspace_abs_path,
-                )
-                continue
-            if additional_workspace_abs_path in _seen:
-                log.info("additional_workspace_folders: skipping duplicate %s", additional_workspace_path)
-                continue
-            _seen.add(additional_workspace_abs_path)
-            self._additional_workspace_abs_paths.append(additional_workspace_abs_path)
+        self._abs_workspace_folders_indexed = self.config.get_absolute_workspace_folders(self.repository_root_path)
+        self._abs_workspace_folders_additional = self.config.get_absolute_additional_workspace_folders(self.repository_root_path)
+        """
+        additional workspace folders, which are passed to the language server in the initialization request
+        but which are not indexed by SolidLSP, i.e. not traversed for full symbol tree
+        """
+        self._abs_workspace_folders_all = self._abs_workspace_folders_indexed + self._abs_workspace_folders_additional
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         """
@@ -804,7 +793,7 @@ class SolidLanguageServer(ABC):
             language=self.language,
             determine_log_level=self._determine_log_level,
             logger=logging_fn,
-            start_independent_lsp_process=self._solidlsp_config.start_independent_lsp_process,
+            start_independent_lsp_process=self.config.start_independent_lsp_process,
         )
 
     # --- diagnostics-related functions ---
@@ -1206,6 +1195,48 @@ class SolidLanguageServer(ABC):
         """Check if a relative path traverses outside the workspace root via '..' components."""
         return ".." in PurePath(relative_file_path).parts
 
+    @dataclass
+    class PathWorkspaceStatus:
+        """
+        Represents the status of a path with respect to the language server's workspace folders.
+        """
+
+        ls: "SolidLanguageServer"
+        resolve_abs_path: Path
+        is_in_workspace_folder: bool
+        workspace_root: str | None = None
+        """
+        the workspace root the path is within/relative to, if any
+        """
+
+        @classmethod
+        def from_abs_resolved_path(cls, path: Path, ls: "SolidLanguageServer") -> "SolidLanguageServer.PathWorkspaceStatus":
+            """
+            :param path: an absolute, resolved Path instance
+            :param ls: the language server instance
+            """
+            for workspace in ls._abs_workspace_folders_all:
+                if path.is_relative_to(workspace):
+                    return SolidLanguageServer.PathWorkspaceStatus(
+                        ls=ls, is_in_workspace_folder=True, workspace_root=workspace, resolve_abs_path=path
+                    )
+            return SolidLanguageServer.PathWorkspaceStatus(ls=ls, is_in_workspace_folder=False, resolve_abs_path=path)
+
+        @classmethod
+        def from_relative_path(cls, relative_path: str, ls: "SolidLanguageServer") -> "SolidLanguageServer.PathWorkspaceStatus":
+            """
+            :param relative_path: a relative path from the repository root
+            :param ls: the language server instance
+            """
+            return cls.from_abs_resolved_path(pathlib.Path(ls.repository_root_path, relative_path).resolve(), ls)
+
+        def check_within_workspace_or_raise(self):
+            if not self.is_in_workspace_folder:
+                raise ValueError(
+                    f"Path {self.resolve_abs_path} is outside of configured workspaces. "
+                    f"Configured workspaces: {self.ls._abs_workspace_folders_all}."
+                )
+
     def _resolve_file_uri(self, relative_file_path: str) -> str:
         """Construct a canonical file URI from a relative path.
 
@@ -1215,35 +1246,8 @@ class SolidLanguageServer(ABC):
         p = pathlib.Path(os.path.join(self.repository_root_path, relative_file_path))
         if self._path_contains_dots(relative_file_path):
             p = p.resolve()
-            is_outside_of_configured_workspaces = True
-            configured_workspaces = [*self._additional_workspace_abs_paths, self.repository_root_path]
-            for workspace in configured_workspaces:
-                if p.is_relative_to(workspace):
-                    is_outside_of_configured_workspaces = False
-                    break
-            if is_outside_of_configured_workspaces:
-                raise ValueError(
-                    f"Path {relative_file_path} contains '..' segments and is outside of configured workspaces. "
-                    f"Configured workspaces: {configured_workspaces}. Resolved path: {p}."
-                )
+            self.PathWorkspaceStatus.from_abs_resolved_path(p, self).check_within_workspace_or_raise()
         return p.as_uri()
-
-    def _build_workspace_folders_param(self, repository_absolute_path: str) -> list[dict[str, str]]:
-        """Build the ``workspaceFolders`` list for LSP initialization.
-
-        Returns a list containing the primary workspace folder followed by any
-        additional workspace folders configured in settings.
-        """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
-        folders: list[dict[str, str]] = [
-            {"uri": root_uri, "name": os.path.basename(repository_absolute_path)},
-        ]
-        for abs_folder in self._additional_workspace_abs_paths:
-            folder_uri = pathlib.Path(abs_folder).as_uri()
-            folders.append({"uri": folder_uri, "name": os.path.basename(abs_folder)})
-        if len(folders) > 1:
-            log.info("LSP multi-root workspace: %d folders", len(folders))
-        return folders
 
     def _activate_additional_workspaces(self) -> None:
         """Open a representative file from each additional workspace folder to
@@ -1258,7 +1262,7 @@ class SolidLanguageServer(ABC):
         enable this feature; the default implementation raises ``NotImplementedError``.
         """
         opened_count = 0
-        for additional_workspace in self._additional_workspace_abs_paths:
+        for additional_workspace in self._abs_workspace_folders_additional:
             source_file = self._find_representative_source_file(additional_workspace)
             if source_file is None:
                 log.warning("No source file found in additional workspace folder: %s", additional_workspace)
@@ -2188,24 +2192,17 @@ class SolidLanguageServer(ABC):
             If a directory is passed, all files within this directory will be considered.
         :return: A list of root symbols representing the top-level packages/modules in the project.
         """
-        if within_relative_path is not None:
-            within_abs_path = os.path.join(self.repository_root_path, within_relative_path)
-            if not os.path.exists(within_abs_path):
-                raise FileNotFoundError(f"File or directory not found: {within_abs_path}")
-            if os.path.isfile(within_abs_path):
-                if self.is_ignored_path(within_relative_path):
-                    log.error("You passed a file explicitly, but it is ignored. This is probably an error. File: %s", within_relative_path)
-                    return []
-                else:
-                    root_nodes = self.request_document_symbols(within_relative_path).root_symbols
-                    return root_nodes
 
         # Helper function to recursively process directories
-        def process_directory(rel_dir_path: str) -> list[ls_types.UnifiedSymbolInformation]:
-            abs_dir_path = self.repository_root_path if rel_dir_path == "." else os.path.join(self.repository_root_path, rel_dir_path)
+        def process_directory(abs_dir_path: str) -> list[ls_types.UnifiedSymbolInformation]:
             abs_dir_path = os.path.realpath(abs_dir_path)
 
-            if self.is_ignored_path(str(Path(abs_dir_path).relative_to(self.repository_root_path))):
+            rel_dir_path: str | None
+            try:
+                rel_dir_path = str(Path(abs_dir_path).relative_to(self.repository_root_path))
+            except ValueError:  # not relative to repository root
+                rel_dir_path = None
+            if rel_dir_path and self.is_ignored_path(rel_dir_path):
                 log.debug("Skipping directory: %s (because it should be ignored)", rel_dir_path)
                 return []
 
@@ -2252,7 +2249,7 @@ class SolidLanguageServer(ABC):
                     continue
 
                 if os.path.isdir(contained_dir_or_file_abs_path):
-                    child_symbols = process_directory(contained_dir_or_file_rel_path)
+                    child_symbols = process_directory(contained_dir_or_file_abs_path)
                     package_symbol["children"].extend(child_symbols)
                     for child in child_symbols:
                         child["parent"] = package_symbol
@@ -2302,9 +2299,23 @@ class SolidLanguageServer(ABC):
 
             return result
 
-        # Start from the root or the specified directory
-        start_rel_path = within_relative_path or "."
-        return process_directory(start_rel_path)
+        if within_relative_path:
+            within_abs_path = os.path.join(self.repository_root_path, within_relative_path)
+            if not os.path.exists(within_abs_path):
+                raise FileNotFoundError(f"File or directory not found: {within_abs_path}")
+            if self.is_ignored_path(within_relative_path):
+                raise ValueError(f"Explicitly requested symbols in '{within_relative_path}' while the path is ignored")
+            if os.path.isfile(within_abs_path):
+                root_nodes = self.request_document_symbols(within_relative_path).root_symbols
+                return root_nodes
+            else:
+                self.PathWorkspaceStatus.from_abs_resolved_path(Path(within_abs_path).resolve(), self).check_within_workspace_or_raise()
+                return process_directory(within_abs_path)
+        else:
+            full_result = []
+            for root in self.config.get_absolute_workspace_folders(self.repository_root_path):
+                full_result.extend(process_directory(root))
+            return full_result
 
     @staticmethod
     def _get_range_from_file_content(file_content: str) -> ls_types.Range:
@@ -3292,3 +3303,33 @@ class SolidLanguageServer(ABC):
 
     def is_running(self) -> bool:
         return self.server.is_running()
+
+    def _create_initialize_params_builder(self) -> InitializeParamsBuilder:
+        return DefaultInitializeParamsBuilder(self)
+
+    def _create_base_initialize_params(self) -> dict | InitializeParams:
+        """
+        Subclasses should override this method to provide server-specific InitializeParams settings,
+        which provide the basis for the InitializeParams object sent to the language server during initialization.
+
+        The returned dictionary is passed to the builder constructed by _create_initialize_params_builder()
+        in order to create the final InitializeParams object.
+
+        The default builder implementation already sets the following keys, so implementations of this method
+        should not set them:
+
+        - processId
+        - rootPath
+        - rootUri
+        - clientInfo
+        - workspaceFolders
+
+        :return: the base InitializeParams settings
+        """
+        raise NotImplementedError
+
+    def _create_initialize_params(self) -> InitializeParams:
+        """
+        Create the InitializeParams object to send to the language server during initialization.
+        """
+        return self._create_initialize_params_builder().with_base_options(self._create_base_initialize_params()).build()

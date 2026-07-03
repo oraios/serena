@@ -303,7 +303,8 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
     project_name: str
     languages: list[Language]
     ignored_paths: list[str] = field(default_factory=list)
-    additional_workspace_folders: list[str] = field(default_factory=list)
+    ls_workspace_folders: list[str] = field(default_factory=lambda: ["."])
+    ls_additional_workspace_folders: list[str] = field(default_factory=list)
     read_only: bool = False
     ignore_all_files_in_gitignore: bool = True
     initial_prompt: str = ""
@@ -318,6 +319,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
     SERENA_PROJECT_FILE = "project.yml"
     SERENA_LOCAL_PROJECT_FILE = "project.local.yml"
     FIELDS_WITHOUT_DEFAULTS = {"project_name", "languages"}
+    RENAMED_FIELDS = {"additional_workspace_folders": "ls_additional_workspace_folders"}
     YAML_COMMENT_NORMALISATION = YamlCommentNormalisation.LEADING
     """
     the comment normalisation strategy to use when loading/saving project configuration files.
@@ -443,9 +445,22 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
           and `was_complete` will always be True.
         """
         data = load_yaml(yml_path, comment_normalisation=comment_normalisation)
+        was_complete = True
+
+        # backward compatibility
+        # NOTE: This must also work for project.local.yml files, which may be highly incomplete
+        # * handle single "language" field
+        if "languages" not in data and "language" in data:
+            data["languages"] = [data["language"]]
+            del data["language"]
+        # * handle renamed fields
+        for old_key, new_key in cls.RENAMED_FIELDS.items():
+            if old_key in data and new_key not in data:
+                data[new_key] = data[old_key]
+                del data[old_key]
+                was_complete = False
 
         # apply defaults
-        was_complete = True
         if apply_defaults:
             for field_info in dataclasses.fields(cls):
                 key = field_info.name
@@ -457,13 +472,6 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
                     was_complete = False
                     default_value = get_dataclass_default(cls, key)
                     data.setdefault(key, default_value)
-
-        # backward compatibility
-        # NOTE: This must also work for project.local.yml files, which may be highly incomplete
-        # * handle single "language" field
-        if "languages" not in data and "language" in data:
-            data["languages"] = [data["language"]]
-            del data["language"]
 
         # Note: Checks for validity of fields must not happen here but in _from_dict.
         # Here, the data may be incomplete, because this function is also used for
@@ -480,6 +488,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
             the ProjectConfig dataclass
         :param local_override_keys: the list of keys that have been overridden from project.local.yml
         """
+        # map languages to list of enum items, checking for errors
         lang_name_mapping = {"javascript": "typescript"}
         languages: list[Language] = []
         for language_str in data["languages"]:
@@ -526,7 +535,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         fixed_tools = data["fixed_tools"] or []
         excluded_tools = data["excluded_tools"] or []
         included_optional_tools = data["included_optional_tools"] or []
-        additional_workspace_folders = data.get("additional_workspace_folders") or []
+        additional_workspace_folders = data.get("ls_additional_workspace_folders") or []
 
         if "base_modes" in data and data["base_modes"] is not None:
             log.warning("The base_modes setting in project.yml is deprecated and will be ignored.")
@@ -535,7 +544,8 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
             project_name=data["project_name"],
             languages=languages,
             ignored_paths=ignored_paths,
-            additional_workspace_folders=additional_workspace_folders,
+            ls_workspace_folders=data["ls_workspace_folders"],
+            ls_additional_workspace_folders=additional_workspace_folders,
             excluded_tools=excluded_tools,
             fixed_tools=fixed_tools,
             included_optional_tools=included_optional_tools,

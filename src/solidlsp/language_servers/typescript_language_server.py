@@ -4,11 +4,10 @@ Provides TypeScript specific instantiation of the LanguageServer class. Contains
 
 import logging
 import os
-import pathlib
 import shutil
 import threading
 import time
-from typing import Any, cast
+from typing import Any
 
 from overrides import override
 from sensai.util.logging import LogTime
@@ -17,7 +16,6 @@ from solidlsp import ls_types
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_utils import PlatformId, PlatformUtils
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
@@ -226,11 +224,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             return "javascriptreact"
         return self.language_id
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
-        """
-        Returns the initialize params for the TypeScript Language Server.
-        """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+    def _create_base_initialize_params(self) -> dict:
         initialize_params = {
             "locale": "en",
             # Disable Automatic Type Acquisition (ATA): with ATA enabled, tsserver fetches
@@ -269,12 +263,8 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                     "workDoneProgress": True,  # Enables $/progress notifications for project loading
                 },
             },
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
-            "workspaceFolders": self._build_workspace_folders_param(repository_absolute_path),
         }
-        return cast(InitializeParams, initialize_params)
+        return initialize_params
 
     def _start_server(self) -> None:
         """
@@ -377,7 +367,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
 
         log.info("Starting TypeScript server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info(
             "Sending initialize request from LSP client to LSP server and awaiting response",

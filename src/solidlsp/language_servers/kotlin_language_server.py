@@ -21,7 +21,6 @@ import os
 import pathlib
 import stat
 import threading
-from typing import cast
 
 from overrides import override
 
@@ -32,7 +31,6 @@ from solidlsp.ls import (
 )
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_utils import FileUtils, PlatformUtils
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -185,20 +183,13 @@ class KotlinLanguageServer(SolidLanguageServer):
             env["JAVA_TOOL_OPTIONS"] = jvm_options
             return env
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Kotlin Language Server.
         """
-        if not os.path.isabs(repository_absolute_path):
-            repository_absolute_path = os.path.abspath(repository_absolute_path)
-
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+        root_uri = pathlib.Path(self.repository_root_path).as_uri()
         initialize_params = {
-            "clientInfo": {"name": "Multilspy Kotlin Client", "version": "1.0.0"},
             "locale": "en",
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
             "capabilities": {
                 "workspace": {
                     "applyEdit": True,
@@ -429,15 +420,8 @@ class KotlinLanguageServer(SolidLanguageServer):
                 },
             },
             "trace": "off",
-            "processId": os.getpid(),
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
         }
-        return cast(InitializeParams, initialize_params)
+        return initialize_params
 
     def _start_server(self) -> None:
         """
@@ -503,7 +487,7 @@ class KotlinLanguageServer(SolidLanguageServer):
 
         log.info("Starting Kotlin server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)

@@ -25,7 +25,7 @@ from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_types import UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils, PlatformUtils
-from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, InitializeParams, SymbolInformation
+from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, SymbolInformation
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -904,15 +904,13 @@ class EclipseJDTLS(SolidLanguageServer):
             log.info(f"Using bundled JRE for JDTLS: {java_home}")
             return {"syntaxserver": "false", "JAVA_HOME": java_home}
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize parameters for the EclipseJDTLS server.
         """
         # Look into https://github.com/eclipse/eclipse.jdt.ls/blob/master/org.eclipse.jdt.ls.core/src/org/eclipse/jdt/ls/core/internal/preferences/Preferences.java to understand all the options available
 
-        if not os.path.isabs(repository_absolute_path):
-            repository_absolute_path = os.path.abspath(repository_absolute_path)
-        repo_uri = pathlib.Path(repository_absolute_path).as_uri()
+        repo_uri = pathlib.Path(self.repository_root_path).as_uri()
 
         # Load user's Maven and Gradle configuration paths from ls_specific_settings["java"]
 
@@ -996,8 +994,6 @@ class EclipseJDTLS(SolidLanguageServer):
 
         initialize_params = {
             "locale": "en",
-            "rootPath": repository_absolute_path,
-            "rootUri": pathlib.Path(repository_absolute_path).as_uri(),
             "capabilities": {
                 "workspace": {
                     "applyEdit": True,
@@ -1290,13 +1286,6 @@ class EclipseJDTLS(SolidLanguageServer):
                 },
             },
             "trace": "verbose",
-            "processId": os.getpid(),
-            "workspaceFolders": [
-                {
-                    "uri": repo_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
         }
 
         initialize_params["initializationOptions"]["workspaceFolders"] = [repo_uri]
@@ -1324,7 +1313,7 @@ class EclipseJDTLS(SolidLanguageServer):
         if self.runtime_dependency_paths.gradle_path is not None:
             gradle_settings["home"] = self.runtime_dependency_paths.gradle_path
         gradle_settings["java"] = {"home": gradle_java_home if gradle_java_home is not None else self.runtime_dependency_paths.jre_path}
-        return cast(InitializeParams, initialize_params)
+        return initialize_params
 
     def _start_server(self) -> None:
         """
@@ -1377,7 +1366,7 @@ class EclipseJDTLS(SolidLanguageServer):
 
         log.info("Starting EclipseJDTLS server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)

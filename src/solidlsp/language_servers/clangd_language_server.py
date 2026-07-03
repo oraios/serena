@@ -2,10 +2,9 @@ import hashlib
 import json
 import logging
 import os
-import pathlib
 import threading
 from collections.abc import Hashable
-from typing import Any, cast
+from typing import Any
 
 from overrides import override
 
@@ -13,7 +12,6 @@ from solidlsp.language_servers.common import UE_IGNORED_DIRNAMES
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, ProcessLaunchInfo, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection, is_unreal_engine_project
@@ -315,12 +313,10 @@ class ClangdLanguageServer(SolidLanguageServer):
             # which is required for finding cross-file references
             return [core_path, "--background-index"]
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the clangd Language Server.
         """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params = {
             "locale": "en",
             "capabilities": {
@@ -336,18 +332,9 @@ class ClangdLanguageServer(SolidLanguageServer):
                 },
                 "workspace": {"workspaceFolders": True, "didChangeConfiguration": {"dynamicRegistration": True}},
             },
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
         }
 
-        return cast(InitializeParams, initialize_params)
+        return initialize_params
 
     def _start_server(self) -> None:
         """
@@ -403,7 +390,7 @@ class ClangdLanguageServer(SolidLanguageServer):
 
         log.info("Starting Clangd server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)

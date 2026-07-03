@@ -66,6 +66,11 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add **LaTeX** support (experimental) via [texlab](https://github.com/latex-lsp/texlab).
   - PHP: add support for PHPantom as alternative to the already supported PHP LS #1554.
   - Add new launch command customization options: `ls_args`, `ls_extra_args` and `ls_base_cmd`
+  - Add new configuration option `ls_workspace_folders` to allow indexed source folders to be specified
+    explicitly. In monorepos, this allows the set of indexed folders to be restricted to a subset of
+    the repository. #1627
+  - Rename configuration option `additional_workspace_folders` to `ls_additional_workspace_folders`
+    and support the option across all language servers (previously limited to TypeScript).
 
 * JetBrains:
   - Add configuration option `jetbrains_launch_command`, allowing Serena to spawn IDE instances automatically

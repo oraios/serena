@@ -7,7 +7,6 @@ You can pass the following entries in ``ls_specific_settings["al"]``:
 
 import logging
 import os
-import pathlib
 import platform
 import re
 import stat
@@ -448,20 +447,12 @@ class ALLanguageServer(SolidLanguageServer):
 
         return None
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> dict:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the AL Language Server.
         """
-        # Ensure we have an absolute path for URI generation
-        repository_path = pathlib.Path(repository_absolute_path).resolve()
-        root_uri = repository_path.as_uri()
-
         # AL requires extensive capabilities based on VS Code trace
         initialize_params = {
-            "processId": os.getpid(),
-            "rootPath": str(repository_path),
-            "rootUri": root_uri,
             "capabilities": {
                 "workspace": {
                     "applyEdit": True,
@@ -512,7 +503,6 @@ class ALLanguageServer(SolidLanguageServer):
                 },
             },
             "trace": "verbose",
-            "workspaceFolders": [{"uri": root_uri, "name": repository_path.name}],
         }
 
         return initialize_params
@@ -556,12 +546,12 @@ class ALLanguageServer(SolidLanguageServer):
         self.server.start()
 
         # Send initialize request
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to AL LSP server and awaiting response")
 
         # Send initialize and wait for response
-        resp = self.server.send_request("initialize", initialize_params)
+        resp = self.server.send_request("initialize", dict(initialize_params))
         if resp is None:
             raise RuntimeError("AL Language Server initialization failed - no response")
 

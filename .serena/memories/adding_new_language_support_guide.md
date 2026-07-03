@@ -67,30 +67,44 @@ You should look at at least one existing implementation of each base class to un
 
 ### 1.2 LSP Initialization
 
-Override initialization methods if needed:
+Override `_create_base_initialize_params` to provide server-specific initialization
+parameters. The common keys — `processId`, `rootPath`, `rootUri`, `clientInfo` and
+`workspaceFolders` — are set centrally by the `InitializeParamsBuilder` (see
+`src/solidlsp/initialize_params.py`), so your override MUST NOT set them. Just return
+the server-specific settings (typically `capabilities` and `initializationOptions`):
 
 ```python
-def _get_initialize_params(self) -> InitializeParams:
-    """Return language-specific initialization parameters."""
+def _create_base_initialize_params(self) -> dict:
+    """Return language-specific initialization parameters (server-specific keys only)."""
     return {
-        "processId": os.getpid(),
-        "rootUri": PathUtils.path_to_uri(self.repository_root_path),
         "capabilities": {
             # Language-specific capabilities
-        }
+        },
+        # "initializationOptions": {...},  # if the server needs them
     }
 
 def _start_server(self):
     """Start the language server with custom handlers."""
     # Set up notification handlers
     self.server.on_notification("window/logMessage", self._handle_log_message)
-    
-    # Start server and initialize
+
+    # Start server and initialize. Do NOT call _create_base_initialize_params directly;
+    # _create_initialize_params() wraps it with the builder to add the common keys.
     self.server.start()
-    init_response = self.server.send.initialize(self._get_initialize_params())
-    
+    init_response = self.server.send.initialize(self._create_initialize_params())
+
     self.server.notify.initialized({})
 ```
+
+Notes:
+- The builder resolves `workspaceFolders` from the language server config (indexed
+  folders + `ls_additional_workspace_folders`); don't build the folder list yourself.
+- To send a folder list nested inside `initializationOptions` (some servers, e.g.
+  `EclipseJDTLS`/`KotlinLanguageServer`, need this), set it explicitly there — only the
+  *top-level* `workspaceFolders` is builder-managed.
+- To suppress the top-level `workspaceFolders` entirely, override
+  `_create_initialize_params_builder` and construct `DefaultInitializeParamsBuilder`
+  with `set_workspace_folders=False`.
 
 After `_start_server` returns, the language server should be fully operational.
 If the server requires that one waits for certain notifications or responses before being ready, implement that logic here.

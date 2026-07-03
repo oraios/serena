@@ -1,8 +1,6 @@
 import logging
 import os
-import pathlib
 from collections.abc import Hashable
-from typing import cast
 
 from overrides import override
 
@@ -11,7 +9,6 @@ from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 from ..ls_config import Language, LanguageServerConfig
-from ..lsp_protocol_handler.lsp_types import InitializeParams
 from .common import RuntimeDependency, RuntimeDependencyCollection
 
 log = logging.getLogger(__name__)
@@ -149,12 +146,10 @@ class DartLanguageServer(SolidLanguageServer):
 
         return f"{dart_executable_path} language-server --client-id multilspy.dart --client-version 1.2"
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Dart Language Server.
         """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params = {
             "capabilities": {
                 "textDocument": {
@@ -171,18 +166,9 @@ class DartLanguageServer(SolidLanguageServer):
                 "allowOpenUri": False,
             },
             "trace": "verbose",
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": pathlib.Path(repository_absolute_path).as_uri(),
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
         }
 
-        return cast(InitializeParams, initialize_params)
+        return initialize_params
 
     def _start_server(self) -> None:
         """
@@ -212,7 +198,7 @@ class DartLanguageServer(SolidLanguageServer):
 
         log.info("Starting dart-language-server server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
         log.debug("Sending initialize request to dart-language-server")
         init_response = self.server.send_request("initialize", initialize_params)  # type: ignore
         log.info(f"Received initialize response from dart-language-server: {init_response}")

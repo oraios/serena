@@ -9,13 +9,11 @@ import re
 import shutil
 import subprocess
 import threading
-from typing import cast
 
 from overrides import override
 
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
@@ -308,10 +306,8 @@ class ClojureLSP(SolidLanguageServer):
         log.info(f"clojure-lsp source-paths scanned from project descriptors: {scanned}")
         return scanned
 
-    def _get_initialize_params(self) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """Returns the init params for clojure-lsp."""
-        repository_absolute_path = self.repository_root_path
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
         source_paths = self._resolve_source_paths()
 
         initialization_options: dict = {"dependency-scheme": "jar", "text-document-sync-kind": "incremental"}
@@ -319,9 +315,6 @@ class ClojureLSP(SolidLanguageServer):
             initialization_options["source-paths"] = source_paths
 
         result = {
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
             "capabilities": {
                 "workspace": {
                     "applyEdit": True,
@@ -344,9 +337,8 @@ class ClojureLSP(SolidLanguageServer):
             },
             "initializationOptions": initialization_options,
             "trace": "off",
-            "workspaceFolders": [{"uri": root_uri, "name": os.path.basename(repository_absolute_path)}],
         }
-        return cast(InitializeParams, result)
+        return result
 
     def _start_server(self) -> None:
         def register_capability_handler(params: dict) -> None:
@@ -389,7 +381,7 @@ class ClojureLSP(SolidLanguageServer):
         log.info("Starting clojure-lsp server process")
         self.server.start()
 
-        initialize_params = self._get_initialize_params()
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)

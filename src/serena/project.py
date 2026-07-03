@@ -466,12 +466,12 @@ class Project(ToStringMixin):
                     )
             factory = LanguageServerFactory(
                 project_root=self.project_root,
+                project_config=self.project_config,
                 project_data_path=self._serena_data_folder,
                 encoding=self.project_config.encoding,
                 ignored_patterns=self._ignored_patterns,
                 ls_timeout=ls_timeout,
                 ls_specific_settings=ls_specific_settings,
-                additional_workspace_folders=self.project_config.additional_workspace_folders,
                 trace_lsp_communication=self.serena_config.trace_lsp_communication,
             )
             self.language_server_manager = LanguageServerManager.from_languages(self.project_config.languages, factory)

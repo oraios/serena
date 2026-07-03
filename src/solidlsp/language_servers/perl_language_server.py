@@ -5,8 +5,6 @@ Note: Windows is not supported as Nix itself doesn't support Windows natively.
 """
 
 import logging
-import os
-import pathlib
 import subprocess
 import time
 from typing import Any
@@ -16,7 +14,7 @@ from overrides import override
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_utils import PlatformId, PlatformUtils
-from solidlsp.lsp_protocol_handler.lsp_types import DidChangeConfigurationParams, InitializeParams
+from solidlsp.lsp_protocol_handler.lsp_types import DidChangeConfigurationParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -112,17 +110,12 @@ class PerlLanguageServer(SolidLanguageServer):
         )
         self.request_id = 0
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for Perl::LanguageServer.
         Based on the expected structure from Perl::LanguageServer::Methods::_rpcreq_initialize.
         """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params = {
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
             "capabilities": {
                 "textDocument": {
                     "synchronization": {"didSave": True, "dynamicRegistration": True},
@@ -138,15 +131,9 @@ class PerlLanguageServer(SolidLanguageServer):
                 },
             },
             "initializationOptions": {},
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
         }
 
-        return initialize_params  # type: ignore
+        return initialize_params
 
     def _start_server(self) -> None:
         """Start Perl::LanguageServer process"""
@@ -180,7 +167,7 @@ class PerlLanguageServer(SolidLanguageServer):
 
         log.info("Starting Perl::LanguageServer process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)

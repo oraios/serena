@@ -66,6 +66,7 @@ def _create_ls(
     ignored_paths: list[str] | None = None,
     trace_lsp_communication: bool = False,
     ls_specific_settings: dict[Language, dict[str, Any]] | None = None,
+    workspace_folders: list[str] | None = None,
     additional_workspace_folders: list[str] | None = None,
     solidlsp_dir: Path | None = None,
 ) -> SolidLanguageServer:
@@ -79,6 +80,8 @@ def _create_ls(
         code_language=language,
         ignored_paths=ignored_paths,
         trace_lsp_communication=trace_lsp_communication,
+        workspace_folders=workspace_folders or ["."],
+        additional_workspace_folders=additional_workspace_folders or [],
     )
     effective_solidlsp_dir = solidlsp_dir if solidlsp_dir is not None else SerenaPaths().serena_user_home_dir
     project_data_path = os.path.join(repo_path, SERENA_MANAGED_DIR_NAME)
@@ -89,7 +92,6 @@ def _create_ls(
             solidlsp_dir=effective_solidlsp_dir,
             project_data_path=project_data_path,
             ls_specific_settings=ls_specific_settings or {},
-            additional_workspace_folders=additional_workspace_folders or [],
         ),
     )
 
@@ -101,11 +103,19 @@ def start_ls_context(
     ignored_paths: list[str] | None = None,
     trace_lsp_communication: bool = False,
     ls_specific_settings: dict[Language, dict[str, Any]] | None = None,
+    workspace_folders: list[str] | None = None,
     additional_workspace_folders: list[str] | None = None,
     solidlsp_dir: Path | None = None,
 ) -> Iterator[SolidLanguageServer]:
     ls = _create_ls(
-        language, repo_path, ignored_paths, trace_lsp_communication, ls_specific_settings, additional_workspace_folders, solidlsp_dir
+        language,
+        repo_path,
+        ignored_paths,
+        trace_lsp_communication,
+        ls_specific_settings,
+        workspace_folders,
+        additional_workspace_folders,
+        solidlsp_dir,
     )
     log.info(f"Starting language server for {language} {repo_path}")
     with ls.start_server_context():

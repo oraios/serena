@@ -5,7 +5,7 @@ from collections.abc import Iterator
 
 from sensai.util.logging import LogTime
 
-from serena.config.serena_config import SerenaPaths
+from serena.config.serena_config import ProjectConfig, SerenaPaths
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
@@ -22,25 +22,27 @@ class LanguageServerFactory:
     def __init__(
         self,
         project_root: str,
+        project_config: ProjectConfig,
         project_data_path: str,
         encoding: str,
         ignored_patterns: list[str],
         ls_timeout: float | None = None,
         ls_specific_settings: dict | None = None,
-        additional_workspace_folders: list[str] | None = None,
         trace_lsp_communication: bool = False,
     ):
         self.project_root = project_root
+        self.project_config = project_config
         self.project_data_path = project_data_path
         self.encoding = encoding
         self.ignored_patterns = ignored_patterns
         self.ls_timeout = ls_timeout
         self.ls_specific_settings = ls_specific_settings
-        self.additional_workspace_folders = additional_workspace_folders or []
         self.trace_lsp_communication = trace_lsp_communication
 
     def create_language_server(self, language: Language) -> SolidLanguageServer:
         ls_config = LanguageServerConfig(
+            workspace_folders=self.project_config.ls_workspace_folders,
+            additional_workspace_folders=self.project_config.ls_additional_workspace_folders,
             code_language=language,
             ignored_paths=self.ignored_patterns,
             trace_lsp_communication=self.trace_lsp_communication,
@@ -56,7 +58,6 @@ class LanguageServerFactory:
                 solidlsp_dir=SerenaPaths().serena_user_home_dir,
                 project_data_path=self.project_data_path,
                 ls_specific_settings=self.ls_specific_settings or {},
-                additional_workspace_folders=self.additional_workspace_folders,
             ),
         )
 

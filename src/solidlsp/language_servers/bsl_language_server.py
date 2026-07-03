@@ -14,7 +14,6 @@ You can configure the following options in ls_specific_settings (in serena_confi
 
 import logging
 import os
-import pathlib
 import re
 import shutil
 import subprocess
@@ -27,7 +26,6 @@ from solidlsp.ls import (
     SolidLanguageServer,
 )
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -166,10 +164,8 @@ class BSLLanguageServer(SolidLanguageServer):
             _verify_java_available()
             return ["java", "-jar", core_path]
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
-        return {  # type: ignore[return-value]
+    def _create_base_initialize_params(self) -> dict:
+        return {
             "locale": "en",
             "capabilities": {
                 "textDocument": {
@@ -179,9 +175,9 @@ class BSLLanguageServer(SolidLanguageServer):
                     "documentSymbol": {
                         "dynamicRegistration": True,
                         "hierarchicalDocumentSymbolSupport": True,
-                        "symbolKind": {"valueSet": list(range(1, 27))},  # type: ignore
+                        "symbolKind": {"valueSet": list(range(1, 27))},
                     },
-                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},  # type: ignore
+                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
                     "rename": {"dynamicRegistration": True, "prepareSupport": True},
                 },
                 "workspace": {
@@ -190,12 +186,6 @@ class BSLLanguageServer(SolidLanguageServer):
                     "symbol": {"dynamicRegistration": True},
                 },
             },
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
-            "workspaceFolders": [
-                {"uri": root_uri, "name": os.path.basename(repository_absolute_path)},
-            ],
         }
 
     def _start_server(self) -> None:
@@ -216,7 +206,7 @@ class BSLLanguageServer(SolidLanguageServer):
         log.info("Starting BSL language server process")
         self.server.start()
 
-        init_params = self._get_initialize_params(self.repository_root_path)
+        init_params = self._create_initialize_params()
         init_response = self.server.send.initialize(init_params)
         log.debug("BSL LSP initialize response: %s", init_response)
 

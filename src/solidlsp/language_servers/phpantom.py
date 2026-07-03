@@ -4,11 +4,9 @@ Provides PHP specific instantiation of the LanguageServer class using PHPantom.
 
 import logging
 import os
-import pathlib
 import shutil
 import stat
 from time import sleep
-from typing import cast
 
 from overrides import override
 
@@ -22,7 +20,7 @@ from solidlsp.ls import (
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler import lsp_types as protocol_lsp_types
-from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, InitializeParams, LocationLink
+from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
@@ -178,12 +176,10 @@ class PHPantomServer(SolidLanguageServer):
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialization params for the PHPantom Language Server.
         """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
-
         # declaring client capabilities
         initialize_params = {
             "locale": "en",
@@ -213,17 +209,8 @@ class PHPantomServer(SolidLanguageServer):
                     "symbol": {"dynamicRegistration": True},
                 },
             },
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
         }
-        return cast(InitializeParams, initialize_params)
+        return initialize_params
 
     def _start_server(self) -> None:
         """Start PHPantom server process."""
@@ -244,7 +231,7 @@ class PHPantomServer(SolidLanguageServer):
 
         log.info("Starting PHPantom server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         # negotiating server capabilities
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")

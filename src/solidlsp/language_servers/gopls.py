@@ -2,16 +2,14 @@ import hashlib
 import json
 import logging
 import os
-import pathlib
 import subprocess
 from collections.abc import Hashable
-from typing import Any, cast
+from typing import Any
 
 from overrides import override
 
 from solidlsp.ls import RawDocumentSymbol, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -103,11 +101,10 @@ class Gopls(SolidLanguageServer):
         super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd="gopls", cwd=repository_root_path), "go", solidlsp_settings)
         self.request_id = 0
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Go Language Server.
         """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params: dict = {
             "locale": "en",
             "capabilities": {
@@ -122,15 +119,6 @@ class Gopls(SolidLanguageServer):
                 },
                 "workspace": {"workspaceFolders": True, "didChangeConfiguration": {"dynamicRegistration": True}},
             },
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
         }
 
         # Apply gopls-specific settings via initializationOptions
@@ -149,7 +137,7 @@ class Gopls(SolidLanguageServer):
             log.debug("Applying gopls settings via initializationOptions: keys=%s", list(gopls_settings.keys()))
             initialize_params["initializationOptions"] = gopls_settings
 
-        return cast(InitializeParams, initialize_params)
+        return initialize_params
 
     def _validate_gopls_settings_dict(self, gopls_settings: object) -> dict:
         if not isinstance(gopls_settings, dict):
@@ -233,7 +221,7 @@ class Gopls(SolidLanguageServer):
 
         log.info("Starting gopls server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)

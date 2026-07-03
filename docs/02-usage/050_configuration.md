@@ -1002,9 +1002,6 @@ Supported settings:
 | `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
 | `indexing_timeout` | `30.0` | Timeout in seconds for waiting on tsserver's `$/progress` project-indexing signal (both at startup and before the first cross-file reference query). If indexing does not complete within this window, Serena logs a warning and proceeds anyway. Increase it for very large projects. |
 
-TypeScript supports [additional workspace folders](additional-workspace-folders) for cross-package
-reference discovery. Configure `additional_workspace_folders` in `project.yml` to enable this feature.
-
 #### Svelte
 
 Serena uses `svelte-language-server` for the `svelte` language key. Use `svelte` for Svelte projects instead of also listing `typescript`, unless you intentionally want multiple language servers active for the same files.

@@ -1,16 +1,12 @@
 """Regal Language Server implementation for Rego policy files."""
 
 import logging
-import os
 import shutil
-from typing import cast
 
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_utils import PathUtils
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -54,20 +50,14 @@ class RegalLanguageServer(SolidLanguageServer):
             solidlsp_settings,
         )
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Regal Language Server.
 
-        :param repository_absolute_path: Absolute path to the repository
         :return: LSP initialization parameters
         """
-        root_uri = PathUtils.path_to_uri(repository_absolute_path)
         initialize_params = {
-            "processId": os.getpid(),
             "locale": "en",
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
             "capabilities": {
                 "textDocument": {
                     "synchronization": {"didSave": True, "dynamicRegistration": True},
@@ -89,14 +79,8 @@ class RegalLanguageServer(SolidLanguageServer):
                     "symbol": {"dynamicRegistration": True},
                 },
             },
-            "workspaceFolders": [
-                {
-                    "name": os.path.basename(repository_absolute_path),
-                    "uri": root_uri,
-                }
-            ],
         }
-        return cast(InitializeParams, initialize_params)
+        return initialize_params
 
     def _start_server(self) -> None:
         """Start Regal language server process and wait for initialization."""
@@ -117,7 +101,7 @@ class RegalLanguageServer(SolidLanguageServer):
 
         log.info("Starting Regal language server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info(
             "Sending initialize request from LSP client to LSP server and awaiting response",
