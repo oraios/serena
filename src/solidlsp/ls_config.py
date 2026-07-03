@@ -834,10 +834,13 @@ class Language(str, Enum):
 @dataclass(frozen=True)
 class LanguageServerConfig:
     """
-    Configuration parameters
+    Configuration parameters for a language server instance
     """
 
     code_language: Language
+    """
+    defines the language server to use
+    """
     workspace_folders: list[str] = field(default_factory=lambda: ["."])
     """
     list of workspace folders to be used by the language server and to be fully indexed by SolidLSP.

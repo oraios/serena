@@ -638,9 +638,8 @@ class SolidLanguageServer(ABC):
         repository_root_path = os.path.abspath(repository_root_path)
 
         ls_class = config.code_language.get_ls_class()
-        # For now, we assume that all language server implementations have the same signature of the constructor
-        # (which, unfortunately, differs from the signature of the base class).
-        # If this assumption is ever violated, we need branching logic here.
+        # All language server implementations are required to use the same signature of the constructor
+        # (which differs from the signature of the base class constructor).
         ls = ls_class(config, repository_root_path, solidlsp_settings)
         ls.set_request_timeout(timeout)
         return ls
