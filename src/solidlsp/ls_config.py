@@ -47,6 +47,9 @@ class FilenameMatcher:
         return False
 
 
+_filename_matcher_singletons: dict["Language", FilenameMatcher] = {}
+
+
 class Language(str, Enum):
     """
     Enumeration of language servers supported by SolidLSP.
@@ -311,11 +314,14 @@ class Language(str, Enum):
         return self.get_ls_class().supports_implementation_request()
 
     def get_source_fn_matcher(self) -> FilenameMatcher:
+        matcher = _filename_matcher_singletons.get(self)
+        if matcher is not None:
+            return matcher
         match self:
             case self.PYTHON | self.PYTHON_JEDI | self.PYTHON_TY | self.PYTHON_PYREFLY:
-                return FilenameMatcher(".py", ".pyi")
+                matcher = FilenameMatcher(".py", ".pyi")
             case self.JAVA:
-                return FilenameMatcher(".java")
+                matcher = FilenameMatcher(".java")
             case self.TYPESCRIPT | self.TYPESCRIPT_VTS:
                 # see https://github.com/oraios/serena/issues/204
                 path_patterns = []
@@ -323,20 +329,20 @@ class Language(str, Enum):
                     for postfix in ["x", ""]:
                         for base_pattern in ["ts", "js"]:
                             path_patterns.append(f".{prefix}{base_pattern}{postfix}")
-                return FilenameMatcher(*path_patterns)
+                matcher = FilenameMatcher(*path_patterns)
             case self.CSHARP | self.CSHARP_OMNISHARP:
-                return FilenameMatcher(".cs")
+                matcher = FilenameMatcher(".cs")
             case self.RUST:
-                return FilenameMatcher(".rs")
+                matcher = FilenameMatcher(".rs")
             case self.GO:
-                return FilenameMatcher(".go")
+                matcher = FilenameMatcher(".go")
             case self.RUBY:
-                return FilenameMatcher(".rb", ".erb")
+                matcher = FilenameMatcher(".rb", ".erb")
             case self.RUBY_SOLARGRAPH:
-                return FilenameMatcher(".rb")
+                matcher = FilenameMatcher(".rb")
             case self.CPP:
                 # From llvm-project/clang/lib/Driver/Types.cpp types::lookupTypeForExtension:
-                return FilenameMatcher(
+                matcher = FilenameMatcher(
                     # C
                     ".c",
                     ".h",
@@ -378,7 +384,7 @@ class Language(str, Enum):
                 )
             case self.CPP_CCLS:
                 # From llvm-project/clang/lib/Driver/Types.cpp types::lookupTypeForExtension:
-                return FilenameMatcher(
+                matcher = FilenameMatcher(
                     # C
                     ".c",
                     ".h",
@@ -404,94 +410,94 @@ class Language(str, Enum):
                     case_sensitive=False,
                 )
             case self.KOTLIN:
-                return FilenameMatcher(".kt", ".kts")
+                matcher = FilenameMatcher(".kt", ".kts")
             case self.DART:
-                return FilenameMatcher(".dart")
+                matcher = FilenameMatcher(".dart")
             case self.PHP | self.PHP_PHPACTOR | self.PHP_PHPANTOM:
-                return FilenameMatcher(".php")
+                matcher = FilenameMatcher(".php")
             case self.R:
-                return FilenameMatcher(".R", ".r", ".Rmd", ".Rnw")
+                matcher = FilenameMatcher(".R", ".r", ".Rmd", ".Rnw")
             case self.PERL:
-                return FilenameMatcher(".pl", ".pm", ".t")
+                matcher = FilenameMatcher(".pl", ".pm", ".t")
             case self.CLOJURE:
-                return FilenameMatcher(".clj", ".cljs", ".cljc", ".edn")  # codespell:ignore edn
+                matcher = FilenameMatcher(".clj", ".cljs", ".cljc", ".edn")  # codespell:ignore edn
             case self.ELIXIR:
-                return FilenameMatcher(".ex", ".exs")
+                matcher = FilenameMatcher(".ex", ".exs")
             case self.ELM:
-                return FilenameMatcher(".elm")
+                matcher = FilenameMatcher(".elm")
             case self.TERRAFORM:
-                return FilenameMatcher(".tf", ".tfvars", ".tfstate")
+                matcher = FilenameMatcher(".tf", ".tfvars", ".tfstate")
             case self.SWIFT:
-                return FilenameMatcher(".swift")
+                matcher = FilenameMatcher(".swift")
             case self.BASH:
-                return FilenameMatcher(".sh", ".bash")
+                matcher = FilenameMatcher(".sh", ".bash")
             case self.CRYSTAL:
-                return FilenameMatcher(".cr")
+                matcher = FilenameMatcher(".cr")
             case self.CUE:
-                return FilenameMatcher(".cue")
+                matcher = FilenameMatcher(".cue")
             case self.YAML:
-                return FilenameMatcher(".yaml", ".yml")
+                matcher = FilenameMatcher(".yaml", ".yml")
             case self.JSON:
-                return FilenameMatcher(".json", ".jsonc")
+                matcher = FilenameMatcher(".json", ".jsonc")
             case self.TOML:
-                return FilenameMatcher(".toml")
+                matcher = FilenameMatcher(".toml")
             case self.ZIG:
-                return FilenameMatcher(".zig", ".zon")
+                matcher = FilenameMatcher(".zig", ".zon")
             case self.LUA:
-                return FilenameMatcher(".lua")
+                matcher = FilenameMatcher(".lua")
             case self.LUAU:
-                return FilenameMatcher(".luau")
+                matcher = FilenameMatcher(".luau")
             case self.NIX:
-                return FilenameMatcher(".nix")
+                matcher = FilenameMatcher(".nix")
             case self.ERLANG:
-                return FilenameMatcher(".erl", ".hrl", ".escript", ".config", ".app", ".app.src")
+                matcher = FilenameMatcher(".erl", ".hrl", ".escript", ".config", ".app", ".app.src")
             case self.OCAML:
-                return FilenameMatcher(".ml", ".mli", ".re", ".rei")
+                matcher = FilenameMatcher(".ml", ".mli", ".re", ".rei")
             case self.AL:
-                return FilenameMatcher(".al", ".dal")
+                matcher = FilenameMatcher(".al", ".dal")
             case self.FSHARP:
-                return FilenameMatcher(".fs", ".fsx", ".fsi")
+                matcher = FilenameMatcher(".fs", ".fsx", ".fsi")
             case self.REGO:
-                return FilenameMatcher(".rego")
+                matcher = FilenameMatcher(".rego")
             case self.MARKDOWN:
-                return FilenameMatcher(".md", ".markdown")
+                matcher = FilenameMatcher(".md", ".markdown")
             case self.LATEX:
-                return FilenameMatcher(".tex", ".bib", ".sty", ".cls")
+                matcher = FilenameMatcher(".tex", ".bib", ".sty", ".cls")
             case self.SCALA:
-                return FilenameMatcher(".scala", ".sbt")
+                matcher = FilenameMatcher(".scala", ".sbt")
             case self.JULIA:
-                return FilenameMatcher(".jl")
+                matcher = FilenameMatcher(".jl")
             case self.FORTRAN:
-                return FilenameMatcher(".f90", ".f95", ".f03", ".f08", ".f", ".for", ".fpp", case_sensitive=False)
+                matcher = FilenameMatcher(".f90", ".f95", ".f03", ".f08", ".f", ".for", ".fpp", case_sensitive=False)
             case self.HASKELL:
-                return FilenameMatcher(".hs", ".lhs")
+                matcher = FilenameMatcher(".hs", ".lhs")
             case self.HAXE:
-                return FilenameMatcher(".hx")
+                matcher = FilenameMatcher(".hx")
             case self.LEAN4:
-                return FilenameMatcher(".lean")
+                matcher = FilenameMatcher(".lean")
             case self.VUE:
                 path_patterns = [".vue"]
                 for prefix in ["c", "m", ""]:
                     for postfix in ["x", ""]:
                         for base_pattern in ["ts", "js"]:
                             path_patterns.append(f".{prefix}{base_pattern}{postfix}")
-                return FilenameMatcher(*path_patterns)
+                matcher = FilenameMatcher(*path_patterns)
             case self.SVELTE:
                 path_patterns = [".svelte"]
                 for prefix in ["c", "m", ""]:
                     for base_pattern in ["ts", "js"]:
                         path_patterns.append(f".{prefix}{base_pattern}")
-                return FilenameMatcher(*path_patterns)
+                matcher = FilenameMatcher(*path_patterns)
             case self.POWERSHELL:
-                return FilenameMatcher(".ps1", ".psm1", ".psd1")
+                matcher = FilenameMatcher(".ps1", ".psm1", ".psd1")
             case self.PASCAL:
-                return FilenameMatcher(".pas", ".pp", ".lpr", ".dpr", ".dpk", ".inc")
+                matcher = FilenameMatcher(".pas", ".pp", ".lpr", ".dpr", ".dpk", ".inc")
             case self.GROOVY:
-                return FilenameMatcher(".groovy", ".gvy")
+                matcher = FilenameMatcher(".groovy", ".gvy")
             case self.MATLAB:
-                return FilenameMatcher(".m", ".mlx", ".mlapp")
+                matcher = FilenameMatcher(".m", ".mlx", ".mlapp")
             case self.HLSL:
-                return FilenameMatcher(
+                matcher = FilenameMatcher(
                     ".hlsl",
                     ".hlsli",
                     ".fx",
@@ -509,26 +515,26 @@ class Language(str, Enum):
                     ".wgsl",
                 )
             case self.SYSTEMVERILOG:
-                return FilenameMatcher(".sv", ".svh", ".v", ".vh")
+                matcher = FilenameMatcher(".sv", ".svh", ".v", ".vh")
             case self.SOLIDITY:
-                return FilenameMatcher(".sol")
+                matcher = FilenameMatcher(".sol")
             case self.ANSIBLE:
-                return FilenameMatcher(".yaml", ".yml")
+                matcher = FilenameMatcher(".yaml", ".yml")
             case self.MSL:
-                return FilenameMatcher(".mrc")
+                matcher = FilenameMatcher(".mrc")
             case self.BSL:
-                return FilenameMatcher(".bsl", ".os")
+                matcher = FilenameMatcher(".bsl", ".os")
             case self.ADA:
-                return FilenameMatcher(".ads", ".adb", ".ada", case_sensitive=False)
+                matcher = FilenameMatcher(".ads", ".adb", ".ada", case_sensitive=False)
             case self.GDSCRIPT:
-                return FilenameMatcher(".gd", ".gdscript")
+                matcher = FilenameMatcher(".gd", ".gdscript")
             case self.HTML:
-                return FilenameMatcher(".html", ".htm")
+                matcher = FilenameMatcher(".html", ".htm")
             case self.SCSS:
                 # *.css is handled by the same engine (vscode-css-languageservice) that powers
                 # Microsoft's CSS LS, so we route plain CSS through Some Sass too. The CSS feature
                 # toggles default off upstream and are flipped on at initialization time.
-                return FilenameMatcher(".scss", ".sass", ".css")
+                matcher = FilenameMatcher(".scss", ".sass", ".css")
             case self.ANGULAR:
                 # Angular templates can be standalone .html files or inline templates
                 # within .ts component files; the dual-server architecture handles both.
@@ -537,9 +543,11 @@ class Language(str, Enum):
                 for prefix in ["c", "m", ""]:
                     for postfix in ["x", ""]:
                         path_patterns.append(f".{prefix}ts{postfix}")
-                return FilenameMatcher(*path_patterns)
+                matcher = FilenameMatcher(*path_patterns)
             case _:
                 raise ValueError(f"Unhandled language: {self}")
+        _filename_matcher_singletons[self] = matcher
+        return matcher
 
     def get_ls_class(self) -> type["SolidLanguageServer"]:
         match self:
