@@ -8,6 +8,7 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
+from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
@@ -310,6 +311,7 @@ class Language(str, Enum):
         """
         return self.get_ls_class().supports_implementation_request()
 
+    @cache
     def get_source_fn_matcher(self) -> FilenameMatcher:
         match self:
             case self.PYTHON | self.PYTHON_JEDI | self.PYTHON_TY | self.PYTHON_PYREFLY:
