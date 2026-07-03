@@ -147,6 +147,11 @@ class VtsLanguageServer(SolidLanguageServer):
         """
         initialize_params: dict = {
             "locale": "en",
+            "initializationOptions": {
+                "preferences": {
+                    "disableAutomaticTypingAcquisition": True,
+                },
+            },
             "capabilities": {
                 "textDocument": {
                     "synchronization": {"didSave": True, "dynamicRegistration": True},
