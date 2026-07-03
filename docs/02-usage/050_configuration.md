@@ -871,6 +871,34 @@ Notes:
 - Use the FPC compiler driver (`fpc`/`fpc.exe`), not backend compilers like `ppc386.exe`.
 - These settings are passed as environment variables to the pasls process.
 
+#### Perl
+
+Serena uses [Perl::LanguageServer](https://metacpan.org/pod/Perl::LanguageServer) for Perl support. Install Perl and the server with `cpanm Perl::LanguageServer`; Linux and macOS only (the server does not run on Windows).
+
+Perl::LanguageServer only indexes files whose extension is in its `perl.fileFilter` and skips directories listed in `perl.ignoreDirs`. Both are exposed below so projects with non-standard extensions (e.g. `.cgi` / `.psgi` web handlers) can make those files visible (#1449).
+
+**Configuration:**
+
+Configure the language server via `ls_specific_settings.perl` in `serena_config.yml`:
+
+| Setting        | Default                                                                                     | Description                                                                                                    |
+| -------------- | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `file_filter`  | `[".pm", ".pl", ".t"]`                                                                      | File extensions (with leading dot) that Perl::LanguageServer should index, e.g. `[".pm", ".pl", ".t", ".cgi"]`. |
+| `ignore_dirs`  | `[".git", ".svn", "blib", "local", ".carton", "vendor", "_build", "cover_db"]`             | Directory names Perl::LanguageServer should skip when indexing.                                               |
+
+Example configuration:
+
+```yaml
+ls_specific_settings:
+  perl:
+    file_filter: [".pm", ".pl", ".t", ".cgi", ".psgi"]
+    ignore_dirs: [".git", "blib", "local", "vendor", "cover_db"]
+```
+
+Notes:
+- Extensions added via `file_filter` are also synced into Serena's Perl source-file matcher, so `find_symbol` and symbol indexing treat the same files as the language server. Defaults are unchanged when these keys are omitted.
+- The matcher is reset on every language server activation, so one project's `file_filter` does not leak into another.
+
 #### PHP (`Intelephense`)
 
 Serena uses Intelephense for the `php` language key.

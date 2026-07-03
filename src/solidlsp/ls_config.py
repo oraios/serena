@@ -26,6 +26,38 @@ class FilenameMatcher:
         """
         self._file_extensions = list(set(file_extensions)) if case_sensitive else list(set(ext.lower() for ext in file_extensions))
         self._case_sensitive = case_sensitive
+        # Snapshot of the initial configuration, used by ``reset``. Relevant for matchers that are
+        # per-language singletons (``Language.get_source_fn_matcher`` is ``@cache``d): extensions added
+        # via ``add_extensions`` for one project must not leak into the next, so the singleton is reset
+        # to this snapshot at every language server initialisation.
+        self._initial_file_extensions = list(self._file_extensions)
+
+    def reset(self) -> None:
+        """
+        Restore the matcher to its initial set of extensions (as provided at construction).
+
+        Undoes any extensions added via :meth:`add_extensions`. Intended for the per-language
+        singleton matchers, which are reset at the start of every language server initialisation so
+        that a previous project's reconfiguration does not leak into a newly activated one.
+        """
+        self._file_extensions = list(self._initial_file_extensions)
+
+    def add_extensions(self, *file_extensions: str) -> None:
+        """
+        Add further file extensions to this matcher (idempotent).
+
+        This is intended for matchers that are per-language singletons, i.e. those returned by
+        :meth:`Language.get_source_fn_matcher` (which is ``@cache``d): extensions that a user
+        configures for a language server (e.g. ``.cgi`` for Perl) can be added here so that every
+        consumer of the matcher — symbol index traversal, ignore checks, language composition —
+        treats the same set of files as sources, staying in sync with the language server.
+
+        :param file_extensions: the additional file extensions, e.g. ``.cgi``
+        """
+        for ext in file_extensions:
+            norm = ext if self._case_sensitive else ext.lower()
+            if norm not in self._file_extensions:
+                self._file_extensions.append(norm)
 
     def is_relevant_filename(self, fn: str) -> bool:
         if not self._case_sensitive:
@@ -311,6 +343,7 @@ class Language(str, Enum):
         """
         return self.get_ls_class().supports_implementation_request()
 
+    # NOTE: Caching results in a singleton per enum item, which is a precondition for persistent configuration of the matcher.
     @cache
     def get_source_fn_matcher(self) -> FilenameMatcher:
         match self:
