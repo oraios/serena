@@ -151,6 +151,11 @@ class VtsLanguageServer(SolidLanguageServer):
         root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params: dict = {
             "locale": "en",
+            "initializationOptions": {
+                "preferences": {
+                    "disableAutomaticTypingAcquisition": True,
+                },
+            },
             "capabilities": {
                 "textDocument": {
                     "synchronization": {"didSave": True, "dynamicRegistration": True},

@@ -51,6 +51,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - C/C++ (clangd): improve support and documentation for Unreal Engine 5 projects.
   - `typescript_vts`: Add `initialization_options` setting in `ls_specific_settings.typescript_vts`. 
     Enables Yarn PnP setups with `typescript.tsdk` pointing at the Yarn-generated SDK.
+  - TypeScript/VTS: disable automatic typing acquisition during initialization (no network
+    downloads at startup) and replace the fixed 2-second cross-file reference wait with
+    event-based `$/progress` indexing tracking (configurable `indexing_timeout`, default 30s)
   - C#: minor fixes in Omnisharp and Roslyn that prevented startup on some systems #1617
   - `SvelteLanguageServer`: Fix diagnostics requests for TypeScript/JavaScript files incorrectly being
     processed by the Svelte LS instead of the TypeScript LS.
