@@ -70,7 +70,7 @@ from solidlsp.language_servers.typescript_language_server import (
 from solidlsp.language_servers.vscode_html_language_server import VsCodeHtmlLanguageServer
 from solidlsp.ls import LanguageServerDependencyProvider, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
-from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, InitializeParams, SymbolInformation
+from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, SymbolInformation
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -502,8 +502,7 @@ class AngularLanguageServer(SolidLanguageServer):
         else:
             log.debug("Found @angular/core at %s", found)
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+    def _create_base_initialize_params(self) -> dict:
         params: dict = {
             "locale": "en",
             "capabilities": {
@@ -531,17 +530,8 @@ class AngularLanguageServer(SolidLanguageServer):
                 "tsProbeLocations": [os.path.join(self._install_dir, "node_modules")],
                 "forceStrictTemplates": False,
             },
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
         }
-        return params  # type: ignore[return-value]
+        return params
 
     @override
     def _start_server(self) -> None:
@@ -580,7 +570,7 @@ class AngularLanguageServer(SolidLanguageServer):
         try:
             log.info("Starting Angular language server (ngserver)")
             self.server.start()
-            init_params = self._get_initialize_params(self.repository_root_path)
+            init_params = self._create_initialize_params()
             init_response = self.server.send.initialize(init_params)
             log.debug("Angular LS initialize response: %s", init_response)
             self.server.notify.initialized({})

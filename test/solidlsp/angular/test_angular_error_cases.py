@@ -335,10 +335,10 @@ class TestAngularStartupCleanup:
         def boom(*_args: object, **_kwargs: object) -> dict:
             raise RuntimeError("simulated ngserver init failure")
 
-        # _get_initialize_params runs after both companions and ngserver have
-        # been spawned — exactly the failure window the cleanup wrapper
+        # _create_base_initialize_params runs after both companions and ngserver
+        # have been spawned — exactly the failure window the cleanup wrapper
         # protects against.
-        monkeypatch.setattr(ls, "_get_initialize_params", boom)
+        monkeypatch.setattr(ls, "_create_base_initialize_params", boom)
 
         try:
             with pytest.raises(RuntimeError, match="simulated ngserver init"):
