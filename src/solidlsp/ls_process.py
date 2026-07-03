@@ -52,6 +52,46 @@ class LanguageServerTerminatedException(Exception):
         return f"LanguageServerTerminatedException: {self.message}" + (f"; Cause: {self.cause}" if self.cause else "")
 
 
+def _positive_int_from_env(name: str, default: int) -> int:
+    """Read a positive int from the environment, falling back to ``default`` on absence or
+    an invalid/non-positive value (so a misconfigured override can never break startup).
+    """
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        log.warning("Ignoring invalid %s=%r (not an integer); using default %d", name, raw, default)
+        return default
+    if value <= 0:
+        log.warning("Ignoring non-positive %s=%d; using default %d", name, value, default)
+        return default
+    return value
+
+
+# Upper bounds on inbound LSP wire data. A misbehaving language server (one that dies
+# mid-frame, or emits a corrupt / oversized / negative "Content-Length") can otherwise drive
+# an unbounded read allocation until the host runs out of memory. A message that exceeds the
+# limit (or declares a negative length) is treated as a fatal protocol error: the reader
+# stops and the language server is torn down (and later restarted) instead of the whole
+# process being OOM-killed. The message limit defaults to 512 MiB and can be raised via
+# SOLIDLSP_MAX_LSP_MESSAGE_SIZE for the rare server that legitimately needs larger frames.
+MAX_LSP_MESSAGE_SIZE = _positive_int_from_env("SOLIDLSP_MAX_LSP_MESSAGE_SIZE", 512 * 1024 * 1024)
+MAX_LSP_HEADER_LINE = 64 * 1024  # 64 KiB; real LSP headers are tiny, so this is pure headroom
+
+
+def _check_message_size(num_bytes: int, language: Language) -> None:
+    """Guard against unbounded/invalid allocation from a malformed LSP frame."""
+    if num_bytes < 0 or num_bytes > MAX_LSP_MESSAGE_SIZE:
+        raise LanguageServerTerminatedException(
+            f"Language server declared an invalid LSP message length ({num_bytes} bytes); "
+            f"expected 0..{MAX_LSP_MESSAGE_SIZE}. Aborting the read loop to avoid unbounded or "
+            f"invalid memory allocation",
+            language=language,
+        )
+
+
 class Request(ToStringMixin):
     @dataclass
     class Result:
@@ -555,7 +595,7 @@ class StdioLanguageServer(LanguageServerInterface):
             while self.process and self.process.stdout:
                 if self.process.poll() is not None:  # process has terminated
                     break
-                line = self.process.stdout.readline()
+                line = self.process.stdout.readline(MAX_LSP_HEADER_LINE)
                 if not line:
                     continue
                 try:
@@ -564,8 +604,9 @@ class StdioLanguageServer(LanguageServerInterface):
                     continue
                 if num_bytes is None:
                     continue
+                _check_message_size(num_bytes, self.language)
                 while line and line.strip():
-                    line = self.process.stdout.readline()
+                    line = self.process.stdout.readline(MAX_LSP_HEADER_LINE)
                 if not line:
                     continue
                 body = self._read_bytes_from_process(self.process, self.process.stdout, num_bytes)
@@ -742,7 +783,7 @@ class TCPLanguageServer(LanguageServerInterface):
                 if f is None:
                     break
                 try:
-                    line = f.readline()
+                    line = f.readline(MAX_LSP_HEADER_LINE)
                 except OSError as exc:
                     if not self._is_stopping:
                         exception = LanguageServerTerminatedException("TCP read error", self.language, cause=exc)
@@ -755,9 +796,10 @@ class TCPLanguageServer(LanguageServerInterface):
                     continue
                 if num_bytes is None:
                     continue
+                _check_message_size(num_bytes, self.language)
                 while line and line.strip():
                     try:
-                        line = f.readline()
+                        line = f.readline(MAX_LSP_HEADER_LINE)
                     except OSError:
                         line = b""
                         break
@@ -772,6 +814,8 @@ class TCPLanguageServer(LanguageServerInterface):
                 if len(body) < num_bytes:
                     break
                 self._handle_body(body)
+        except LanguageServerTerminatedException as exc:
+            exception = exc
         except Exception as exc:
             exception = LanguageServerTerminatedException("Unexpected error in TCP language server read loop", self.language, cause=exc)
         log.info("TCP language server read loop has terminated")
