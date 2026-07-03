@@ -28,7 +28,6 @@ from solidlsp.ls import (
     SolidLanguageServer,
 )
 from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -440,7 +439,7 @@ class SvelteLanguageServer(SolidLanguageServer):
 
         self.server.notify.send_notification = send_notification_wrapped
 
-    def _get_initialize_params(self) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Svelte Language Server.
 
@@ -451,8 +450,6 @@ class SvelteLanguageServer(SolidLanguageServer):
         The resulting dict is also stored as :attr:`_lsp_configuration` so
         ``workspace/configuration`` requests can be answered with real values.
         """
-        root_uri = pathlib.Path(self.repo_path).as_uri()
-
         # base configuration mirroring all plugin-sections from svelte-vscode initializationOptions
         lsp_config: dict[str, Any] = {
             "svelte": {},
@@ -514,17 +511,8 @@ class SvelteLanguageServer(SolidLanguageServer):
                 "dontFilterIncompleteCompletions": True,
                 "configuration": lsp_config,
             },
-            "processId": os.getpid(),
-            "rootPath": self.repo_path,
-            "rootUri": root_uri,
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(self.repo_path),
-                }
-            ],
         }
-        return cast(InitializeParams, initialize_params)
+        return initialize_params
 
     def _start_server(self) -> None:
         def window_log_message(msg: dict) -> None:
@@ -562,7 +550,7 @@ class SvelteLanguageServer(SolidLanguageServer):
         self._wrap_notify_send_for_ts_js_mirror()
         self.server.start()
 
-        init_params = self._get_initialize_params()
+        init_params = self._create_initialize_params()
         init_response = self.server.send.initialize(init_params)
 
         assert "documentSymbolProvider" in init_response["capabilities"], "Svelte LSP did not advertise documentSymbolProvider"

@@ -7,6 +7,9 @@ class DummyLanguageServer(SolidLanguageServer):
     def _start_server(self) -> None:
         raise AssertionError("Not used in this test")
 
+    def _create_base_initialize_params(self) -> dict:
+        return {}
+
 
 def test_request_rename_symbol_edit_opens_file_before_rename(tmp_path) -> None:
     (tmp_path / "index.ts").write_text("export const x = 1;\n", encoding="utf-8")

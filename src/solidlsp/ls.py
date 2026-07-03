@@ -3321,6 +3321,7 @@ class SolidLanguageServer(ABC):
     def _create_initialize_params_builder(self) -> InitializeParamsBuilder:
         return DefaultInitializeParamsBuilder(self)
 
+    @abstractmethod
     def _create_base_initialize_params(self) -> dict | InitializeParams:
         """
         Subclasses should override this method to provide server-specific InitializeParams settings,
@@ -3340,7 +3341,6 @@ class SolidLanguageServer(ABC):
 
         :return: the base InitializeParams settings
         """
-        raise NotImplementedError
 
     def _create_initialize_params(self) -> InitializeParams:
         """
