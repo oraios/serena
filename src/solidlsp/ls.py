@@ -279,6 +279,11 @@ class LanguageServerDependencyProvider(ABC):
     """
 
     def __init__(self, custom_settings: SolidLSPSettings.CustomLSSettings, ls_resources_dir: str):
+        """
+        :param custom_settings: the (user-provided) language server-specific settings
+        :param ls_resources_dir: the directory in which data for the language-server shall be stored
+            (this is already specific to the concrete language server, i.e. no further subdirectory is needed)
+        """
         self._custom_settings = custom_settings
         self._ls_resources_dir = ls_resources_dir
 
@@ -674,6 +679,9 @@ class SolidLanguageServer(ABC):
         self._solidlsp_settings = solidlsp_settings
         lang = self.get_language_enum_instance()
         self._custom_settings = solidlsp_settings.get_ls_specific_settings(lang)
+        """
+        the (user-provided) language server-specific settings
+        """
         self._ls_resources_dir = self.ls_resources_dir(solidlsp_settings)
         log.debug(f"Custom config (LS-specific settings) for {lang}: {self._custom_settings}")
         self._encoding = config.encoding
