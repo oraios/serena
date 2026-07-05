@@ -81,7 +81,7 @@ class HlslLanguageServer(SolidLanguageServer):
             base_url = f"{_GITHUB_RELEASE_BASE}/{tag}"
 
             # macOS has no pre-built binaries; build from source via cargo install
-            cargo_install_cmd = ["cargo", "install", "shader_language_server", "--version", version, "--root", "."]
+            cargo_install_cmd = ["cargo", "install", "--locked", "shader_language_server", "--version", version, "--root", "."]
 
             deps = RuntimeDependencyCollection(
                 [
