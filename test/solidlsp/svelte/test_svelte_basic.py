@@ -76,9 +76,10 @@ class TestSvelteLanguageServer:
         coords = find_text_coordinates(read_repo_file(language_server, file_path), r"(count)")
 
         definitions = language_server.request_definition(file_path, coords.line, coords.col)
+        definition_paths = sorted(definition["relativePath"].replace("\\", "/") for definition in definitions)
 
-        assert len(definitions) == 1, definitions
-        assert definitions[0]["relativePath"].replace("\\", "/") == "src/lib/components/Counter.svelte"
+        assert len(definitions) == 1, definition_paths
+        assert definitions[0]["relativePath"].replace("\\", "/") == "src/lib/components/Counter.svelte", definition_paths
 
     @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
     def test_diagnostics_in_typescript_file(self, language_server: SolidLanguageServer) -> None:

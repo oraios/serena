@@ -73,6 +73,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         - typescript_version: Version of TypeScript to install (default: "5.9.3")
         - typescript_language_server_version: Version of typescript-language-server to install (default: "5.1.3")
         - indexing_timeout: float, timeout in seconds for project indexing (default: 30.0)
+        - server_ready_timeout: float, timeout in seconds for the server-ready signal (default: 10.0)
     """
 
     @classmethod
@@ -82,6 +83,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
     # Safety timeout for $/progress-based indexing wait. Normally the event fires
     # well within this window; the timeout is only hit if the server never sends progress.
     INDEXING_PROGRESS_TIMEOUT = 30.0
+    SERVER_READY_TIMEOUT = 10.0
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
@@ -114,6 +116,35 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         """
         return self._indexing_complete.wait(timeout=timeout)
 
+    def _wait_for_indexing_start_or_completion(self, timeout: float, start_grace: float | None = None) -> bool:
+        """Wait until TypeScript indexing has started and drained, or provably never started.
+
+        :param timeout: Maximum seconds to wait once active indexing progress is observed.
+        :param start_grace: Maximum seconds to wait for progress to begin after opening files.
+        :return: True if indexing completed or no progress began within the grace period, False on timeout.
+        """
+        grace = self._INDEXING_START_GRACE_S if start_grace is None else start_grace
+
+        # wait for progress to begin
+        progress_deadline = time.monotonic() + grace
+        while time.monotonic() < progress_deadline:
+            with self._progress_lock:
+                if self._active_progress_tokens:
+                    break
+                if self._indexing_complete.is_set():
+                    return True
+            time.sleep(0.05)
+
+        # treat absent progress as ready
+        with self._progress_lock:
+            has_active_progress = bool(self._active_progress_tokens)
+            if not has_active_progress:
+                self._indexing_complete.set()
+                return True
+
+        # wait for active progress to drain
+        return self.wait_for_indexing(timeout=timeout)
+
     def expect_indexing(self) -> None:
         """Signal that new files are about to be opened and async indexing should be awaited.
 
@@ -122,6 +153,44 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         complete (or the timeout expires).
         """
         self._indexing_complete.clear()
+
+    def describe_indexing_state(self) -> str:
+        """:return: compact diagnostic state for TypeScript indexing progress."""
+        with self._progress_lock:
+            active_tokens = sorted(token for token in self._active_progress_tokens if token)
+            complete = self._indexing_complete.is_set()
+
+        token_text = ", ".join(active_tokens) if active_tokens else "<none>"
+        return f"complete={complete}, active_progress_tokens={token_text}"
+
+    def _get_server_ready_timeout(self) -> float:
+        """:return: maximum seconds to wait for the TypeScript server-ready signal."""
+        return float(self._custom_settings.get("server_ready_timeout", self.SERVER_READY_TIMEOUT))
+
+    def _get_indexing_timeout(self) -> float:
+        """:return: maximum seconds to wait for TypeScript project indexing."""
+        return float(self._custom_settings.get("indexing_timeout", self.INDEXING_PROGRESS_TIMEOUT))
+
+    def _handle_server_ready_timeout(self, timeout: float) -> None:
+        """Handle a TypeScript server-ready timeout.
+
+        The base TypeScript server keeps the historical permissive behavior. Strict companion
+        servers override this hook to fail before serving requests from a cold server.
+        """
+        log.info("Timeout waiting for TypeScript server to become ready after %.0fs, proceeding anyway", timeout)
+        self.server_ready.set()
+
+    def _handle_project_indexing_timeout(self, timeout: float) -> None:
+        """Handle a TypeScript project-indexing timeout.
+
+        The base TypeScript server keeps the historical permissive behavior. Strict companion
+        servers override this hook to fail before serving requests from a partially indexed program.
+        """
+        log.warning(
+            "TypeScript project indexing did not complete within %.0fs; proceeding anyway (%s)",
+            timeout,
+            self.describe_indexing_state(),
+        )
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
@@ -383,26 +452,22 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         }
 
         self.server.notify.initialized({})
-        if self.server_ready.wait(timeout=10.0):
+        server_ready_timeout = self._get_server_ready_timeout()
+        if self.server_ready.wait(timeout=server_ready_timeout):
             log.info("TypeScript server is ready")
         else:
-            log.info("Timeout waiting for TypeScript server to become ready, proceeding anyway")
-            # Fallback: assume server is ready after timeout
-            self.server_ready.set()
+            self._handle_server_ready_timeout(server_ready_timeout)
 
         # Wait for any async project loading to complete.
         # typescript-language-server may send $/progress for "Initializing JS/TS
         # language features…" after initialized. If no progress is sent,
         # _indexing_complete stays SET and wait() returns immediately.
-        indexing_timeout = self._custom_settings.get("indexing_timeout", self.INDEXING_PROGRESS_TIMEOUT)
+        indexing_timeout = self._get_indexing_timeout()
         log.info("Waiting for TypeScript project indexing to complete (if async)...")
         if self.wait_for_indexing(timeout=indexing_timeout):
             log.info("TypeScript project indexing complete")
         else:
-            log.warning(
-                "TypeScript project indexing did not complete within %.0fs; proceeding anyway",
-                indexing_timeout,
-            )
+            self._handle_project_indexing_timeout(indexing_timeout)
 
         self._activate_additional_workspaces()
 
@@ -438,10 +503,15 @@ class TypeScriptLanguageServer(SolidLanguageServer):
 
     @override
     def _wait_for_additional_workspace_indexing(self) -> None:
-        if self.wait_for_indexing(timeout=self.INDEXING_PROGRESS_TIMEOUT):
+        timeout = self._get_indexing_timeout()
+        if self.wait_for_indexing(timeout=timeout):
             log.info("Additional workspace indexing complete")
         else:
-            log.warning("Additional workspace indexing did not complete within timeout; proceeding anyway")
+            log.warning(
+                "Additional workspace indexing did not complete within %.0fs; proceeding anyway (%s)",
+                timeout,
+                self.describe_indexing_state(),
+            )
 
     @override
     def _get_published_diagnostics_uri(self, request_uri: str) -> str:
@@ -470,19 +540,14 @@ class TypeScriptLanguageServer(SolidLanguageServer):
     def _wait_for_cross_file_references_if_needed(self) -> None:
         if self._has_waited_for_cross_file_references:
             return
-        # Give tsserver a short grace period to start reporting $/progress after the file
-        # was opened. If progress starts, wait until it drains (bounded by indexing_timeout);
-        # if it never starts, tsserver considers the project loaded and we proceed after the
-        # grace period — which is no worse than the previous fixed 2-second wait.
-        grace_deadline = time.monotonic() + self._INDEXING_START_GRACE_S
-        while time.monotonic() < grace_deadline and not self._indexing_complete.is_set() and not self._active_progress_tokens:
-            time.sleep(0.05)
-        if self._active_progress_tokens:
-            timeout = self._custom_settings.get("indexing_timeout", self.INDEXING_PROGRESS_TIMEOUT)
-            if self.wait_for_indexing(timeout=timeout):
-                log.info("TypeScript cross-file indexing complete")
-            else:
-                log.warning("TypeScript cross-file indexing did not complete within %.0fs; proceeding", timeout)
+
+        timeout = self._get_indexing_timeout()
+        if self._wait_for_indexing_start_or_completion(timeout=timeout):
+            log.info("TypeScript cross-file indexing complete")
+        else:
+            log.warning(
+                "TypeScript cross-file indexing did not complete within %.0fs; proceeding (%s)", timeout, self.describe_indexing_state()
+            )
         self._has_waited_for_cross_file_references = True
 
     @override
