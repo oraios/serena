@@ -90,6 +90,14 @@ jetbrains_launch_command:
 # the minimum log level for the GUI log window and the dashboard (10 = debug, 20 = info, 30 = warning, 40 = error)
 log_level: 20
 
+# number of days to keep persisted logs under the Serena home directory.
+# Set to null to disable persisted log trimming.
+persisted_log_retention_days: null
+
+# maximum number of persisted log files to keep under the Serena home directory.
+# Set to null to disable persisted log trimming by file count.
+persisted_log_max_files: null
+
 # whether to trace the communication between Serena and the language servers.
 # This is useful for debugging language server issues.
 trace_lsp_communication: False

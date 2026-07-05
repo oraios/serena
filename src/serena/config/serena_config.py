@@ -9,7 +9,7 @@ import shutil
 from collections.abc import Iterator, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from enum import Enum
 from functools import cached_property
 from pathlib import Path
@@ -131,6 +131,61 @@ class SerenaPaths:
         os.makedirs(log_dir, exist_ok=True)
         self.last_returned_log_file_path = os.path.join(log_dir, prefix + "_" + datetime_tag() + f"_{os.getpid()}" + ".txt")
         return self.last_returned_log_file_path
+
+    def trim_logs(self, retention_days: int | None, max_log_files: int | None = None) -> None:
+        """
+        Remove persisted logs according to the configured retention limits.
+
+        :param retention_days: number of days of persisted logs to retain; None disables trimming.
+        :param max_log_files: maximum number of persisted log files to retain; None disables trimming by count.
+        """
+        if retention_days is None and max_log_files is None:
+            return
+        if retention_days is not None:
+            if isinstance(retention_days, bool) or not isinstance(retention_days, int):
+                raise ValueError(f"persisted_log_retention_days must be an integer or null, got: {retention_days!r}")
+            if retention_days < 0:
+                raise ValueError(f"persisted_log_retention_days cannot be negative, got: {retention_days}")
+        if max_log_files is not None:
+            if isinstance(max_log_files, bool) or not isinstance(max_log_files, int):
+                raise ValueError(f"persisted_log_max_files must be an integer or null, got: {max_log_files!r}")
+            if max_log_files < 0:
+                raise ValueError(f"persisted_log_max_files cannot be negative, got: {max_log_files}")
+
+        logs_dir = Path(self.serena_user_home_dir) / "logs"
+        if not logs_dir.exists():
+            return
+
+        if retention_days is not None:
+            cutoff_date = datetime.now().date() - timedelta(days=retention_days)
+            for entry in logs_dir.iterdir():
+                if not entry.is_dir():
+                    continue
+                try:
+                    log_date = date.fromisoformat(entry.name)
+                except ValueError:
+                    continue
+                if log_date < cutoff_date:
+                    shutil.rmtree(entry)
+
+        if max_log_files is not None:
+            active_log_file = Path(self.last_returned_log_file_path).resolve() if self.last_returned_log_file_path is not None else None
+            log_files = [entry for entry in logs_dir.glob("*/*") if entry.is_file()]
+            if active_log_file is not None:
+                log_files = [entry for entry in log_files if entry.resolve() != active_log_file]
+            log_files.sort(key=lambda path: (path.stat().st_mtime, str(path)), reverse=True)
+            for log_file in log_files[max_log_files:]:
+                log_file.unlink()
+
+        for entry in logs_dir.iterdir():
+            if not entry.is_dir():
+                continue
+            try:
+                date.fromisoformat(entry.name)
+            except ValueError:
+                continue
+            if not any(entry.iterdir()):
+                entry.rmdir()
 
     def get_resource_path(self, *path_elems: str) -> Path:
         return Path(os.path.join(self.resources_dir, *path_elems))
@@ -767,6 +822,8 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
     projects: list[RegisteredProject] = field(default_factory=list)
     gui_log_window: bool = False
     log_level: int = logging.INFO
+    persisted_log_retention_days: int | None = None
+    persisted_log_max_files: int | None = None
     trace_lsp_communication: bool = False
     web_dashboard: bool = True
     web_dashboard_open_on_launch: bool = True
@@ -1020,6 +1077,8 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         if num_migrations > 0:
             log.info("Legacy configuration was migrated; re-saving configuration file")
             instance._save()
+
+        SerenaPaths().trim_logs(instance.persisted_log_retention_days, instance.persisted_log_max_files)
 
         return instance
 

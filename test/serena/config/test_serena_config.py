@@ -2,6 +2,7 @@ import logging
 import os
 import shutil
 import tempfile
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ from serena.config.serena_config import (
     RegisteredProject,
     SerenaConfig,
     SerenaConfigError,
+    SerenaPaths,
 )
 from serena.constants import PROJECT_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
 from serena.project import MemoryManager, Project
@@ -199,6 +201,100 @@ class TestProjectConfigLanguageBackend:
         data.pop("language_backend", None)
         config = ProjectConfig._from_dict(data, local_override_keys=[])
         assert config.language_backend is None
+
+
+class TestSerenaPathsLogTrimming:
+    def test_trim_logs_disabled_leaves_logs_untouched(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        paths = SerenaPaths()
+        monkeypatch.setattr(paths, "serena_user_home_dir", str(tmp_path))
+        old_log_dir = tmp_path / "logs" / "2000-01-01"
+        old_log_dir.mkdir(parents=True)
+        (old_log_dir / "mcp_old.txt").write_text("old log")
+
+        paths.trim_logs(None)
+
+        assert old_log_dir.exists()
+
+    def test_trim_logs_removes_date_directories_older_than_retention(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        paths = SerenaPaths()
+        monkeypatch.setattr(paths, "serena_user_home_dir", str(tmp_path))
+        today = datetime.now().date()
+        old_log_dir = tmp_path / "logs" / (today - timedelta(days=10)).isoformat()
+        kept_log_dir = tmp_path / "logs" / (today - timedelta(days=2)).isoformat()
+        unrelated_dir = tmp_path / "logs" / "not-a-date"
+        for log_dir in [old_log_dir, kept_log_dir, unrelated_dir]:
+            log_dir.mkdir(parents=True)
+            (log_dir / "mcp.txt").write_text("log")
+
+        paths.trim_logs(7)
+
+        assert not old_log_dir.exists()
+        assert kept_log_dir.exists()
+        assert unrelated_dir.exists()
+
+    def test_trim_logs_keeps_newest_log_files_by_count(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        paths = SerenaPaths()
+        monkeypatch.setattr(paths, "serena_user_home_dir", str(tmp_path))
+        log_dir = tmp_path / "logs" / "2026-01-01"
+        log_dir.mkdir(parents=True)
+        log_files = []
+        for i in range(5):
+            log_file = log_dir / f"mcp_{i}.txt"
+            log_file.write_text("log")
+            os.utime(log_file, (i, i))
+            log_files.append(log_file)
+
+        paths.trim_logs(None, max_log_files=3)
+
+        assert [log_file.exists() for log_file in log_files] == [False, False, True, True, True]
+
+    def test_trim_logs_removes_empty_date_directories_after_count_trimming(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        paths = SerenaPaths()
+        monkeypatch.setattr(paths, "serena_user_home_dir", str(tmp_path))
+        old_log_dir = tmp_path / "logs" / "2026-01-01"
+        kept_log_dir = tmp_path / "logs" / "2026-01-02"
+        old_log_dir.mkdir(parents=True)
+        kept_log_dir.mkdir(parents=True)
+        old_log_file = old_log_dir / "mcp_old.txt"
+        kept_log_file = kept_log_dir / "mcp_new.txt"
+        old_log_file.write_text("old")
+        kept_log_file.write_text("new")
+        os.utime(old_log_file, (1, 1))
+        os.utime(kept_log_file, (2, 2))
+
+        paths.trim_logs(None, max_log_files=1)
+
+        assert not old_log_dir.exists()
+        assert kept_log_dir.exists()
+        assert kept_log_file.exists()
+
+    def test_trim_logs_keeps_current_log_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        paths = SerenaPaths()
+        monkeypatch.setattr(paths, "serena_user_home_dir", str(tmp_path))
+        log_dir = tmp_path / "logs" / "2026-01-01"
+        log_dir.mkdir(parents=True)
+        old_log_file = log_dir / "mcp_old.txt"
+        current_log_file = log_dir / "mcp_current.txt"
+        old_log_file.write_text("old")
+        current_log_file.write_text("current")
+        os.utime(old_log_file, (1, 1))
+        os.utime(current_log_file, (2, 2))
+        monkeypatch.setattr(paths, "last_returned_log_file_path", str(current_log_file))
+
+        paths.trim_logs(None, max_log_files=0)
+
+        assert not old_log_file.exists()
+        assert current_log_file.exists()
+
+    @pytest.mark.parametrize("retention_days", [-1, 1.5, True])
+    def test_trim_logs_rejects_invalid_retention_days(self, retention_days):
+        with pytest.raises(ValueError, match="persisted_log_retention_days"):
+            SerenaPaths().trim_logs(retention_days)
+
+    @pytest.mark.parametrize("max_log_files", [-1, 1.5, True])
+    def test_trim_logs_rejects_invalid_max_log_files(self, max_log_files):
+        with pytest.raises(ValueError, match="persisted_log_max_files"):
+            SerenaPaths().trim_logs(None, max_log_files=max_log_files)
 
 
 def _make_config_with_project(
@@ -504,6 +600,36 @@ class TestSerenaConfigFromConfigFileRobustness:
         config = SerenaConfig.from_config_file(generate_if_missing=False)
 
         assert config.projects == []
+
+    def test_persisted_log_retention_is_applied_on_load(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        self.master_config_path.write_text("projects:\npersisted_log_retention_days: 7\npersisted_log_max_files: 1\n")
+        paths = SerenaPaths()
+        monkeypatch.setattr(paths, "serena_user_home_dir", str(tmp_path))
+        old_log_dir = tmp_path / "logs" / (datetime.now().date() - timedelta(days=10)).isoformat()
+        kept_log_dir = tmp_path / "logs" / datetime.now().date().isoformat()
+        old_log_dir.mkdir(parents=True)
+        kept_log_dir.mkdir(parents=True)
+        (old_log_dir / "mcp.txt").write_text("old log")
+        older_kept_log = kept_log_dir / "mcp_older.txt"
+        newest_kept_log = kept_log_dir / "mcp_newer.txt"
+        older_kept_log.write_text("older log")
+        newest_kept_log.write_text("newer log")
+        os.utime(older_kept_log, (1, 1))
+        os.utime(newest_kept_log, (2, 2))
+
+        monkeypatch.setattr(
+            SerenaConfig,
+            "_determine_config_file_path",
+            classmethod(lambda cls: str(self.master_config_path)),
+        )
+
+        config = SerenaConfig.from_config_file(generate_if_missing=False)
+
+        assert config.persisted_log_retention_days == 7
+        assert config.persisted_log_max_files == 1
+        assert not old_log_dir.exists()
+        assert not older_kept_log.exists()
+        assert newest_kept_log.exists()
 
     def test_malformed_project_is_skipped_with_warning(self, caplog, monkeypatch):
         """A malformed project.yml must not abort loading of the others."""
