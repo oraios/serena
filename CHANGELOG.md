@@ -49,6 +49,10 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Language Servers:
   - C/C++ (clangd): improve support and documentation for Unreal Engine 5 projects.
+  - HLSL (`shader-language-server`): pass `--locked` to `cargo install` when building from source
+    on macOS (and in the manual-install instructions), honoring the crate's packaged `Cargo.lock`.
+    Without it, fresh dependency resolution pulled in shader-sense 1.4.0, which no longer compiles
+    against the pinned shader_language_server 1.3.1, breaking the macOS CI job.
   - `typescript_vts`: Add `initialization_options` setting in `ls_specific_settings.typescript_vts`. 
     Enables Yarn PnP setups with `typescript.tsdk` pointing at the Yarn-generated SDK.
   - TypeScript/VTS: disable automatic typing acquisition during initialization (no network
