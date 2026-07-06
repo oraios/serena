@@ -16,6 +16,10 @@ The test is designed to be safe and free:
   from backup if necessary) at the end — also on abort. Hook state is written to an isolated,
   temporary ``SERENA_HOME``. The script refuses to run if a ``serena`` MCP server is already
   registered in Grok, so it never clobbers a real setup.
+* **Credential-safe.** The config backup (which may carry tokens) is written 0600 inside a private,
+  owner-only work directory (a fresh ``mkdtemp`` by default; a supplied ``--work-dir`` is validated
+  as non-symlink, owner-owned and not group/world-accessible) and is deleted once the baseline is
+  confirmed intact. ``--hooks-only`` never mutates the config and therefore never backs it up.
 
 Per-check evidence files and a Markdown report are written to the work directory (printed at
 startup, default: ``<system tmp>/serena-grok-live``). The exit code is 0 iff no check FAILed.
@@ -30,6 +34,7 @@ Usage::
 
 import argparse
 import json
+import os
 import queue
 import shutil
 import subprocess
@@ -274,7 +279,10 @@ class LiveTestConfig:
             raise AbortError("the 'grok' CLI was not found on PATH (override with --grok-bin)")
         grok_config_path = Path(args.grok_config) if args.grok_config else Path.home() / ".grok" / "config.toml"
 
-        work_dir = Path(args.work_dir) if args.work_dir else Path(tempfile.gettempdir()) / "serena-grok-live"
+        # Default to a private, unpredictable work dir (0700, owner-only): it holds a backup of the
+        # user's grok config, which may carry credentials. A fixed shared-tmp path would expose those
+        # to other local users and invites symlink/pre-creation attacks.
+        work_dir = Path(args.work_dir) if args.work_dir else Path(tempfile.mkdtemp(prefix="serena-grok-live-"))
         return cls(
             repo_root=repo_root,
             serena_bin=serena_bin,
@@ -316,7 +324,16 @@ class GrokLiveTest:
         print(f"\n=== {title} ===")
 
     def _write_evidence(self, name: str, content: str) -> None:
-        (self.config.evidence_dir / name).write_text(content, encoding="utf-8")
+        # Evidence can embed other MCP servers' env/args (a common place for tokens); keep it owner-only.
+        path = self.config.evidence_dir / name
+        path.write_text(content, encoding="utf-8")
+        os.chmod(path, 0o600)
+
+    def _open_evidence(self, name: str) -> IO[str]:
+        """Open an evidence file for writing with owner-only (0600) permissions (e.g. server stderr logs)."""
+        path = self.config.evidence_dir / name
+        path.touch(mode=0o600)
+        return open(path, "w", encoding="utf-8")
 
     def _grok(self, *args: str, timeout: float = 60) -> CommandResult:
         return run_command([self.config.grok_bin, *args], timeout=timeout)
@@ -347,6 +364,28 @@ class GrokLiveTest:
             return config.get("mcp_servers", {}).get(server_name, {})
         except (OSError, tomllib.TOMLDecodeError):
             return {}
+
+    def _insert_startup_timeout_sec(self, seconds: int) -> bool:
+        """Add ``startup_timeout_sec`` to the live server's ``[mcp_servers.<name>]`` table, located structurally.
+
+        The table is confirmed to exist (and to lack the key) by parsing the config with ``tomllib``, then the
+        key is inserted immediately after the exact table-header line. This avoids a blind substring replace,
+        which could match ``[mcp_servers.<name>]`` inside a comment or string value elsewhere in the user's
+        config and corrupt it. The rest of the file (comments, formatting) is preserved by editing in place.
+
+        :return: True if the key was inserted, False if the table is absent, already has the key, or is unparsable.
+        """
+        section = f"[mcp_servers.{LIVE_MCP_SERVER_NAME}]"
+        existing = self._read_grok_mcp_server_section(LIVE_MCP_SERVER_NAME)
+        if not existing or "startup_timeout_sec" in existing:
+            return False
+        lines = self.config.grok_config_path.read_text(encoding="utf-8").splitlines()
+        for i, line in enumerate(lines):
+            if line.strip() == section:
+                lines.insert(i + 1, f"startup_timeout_sec = {seconds}")
+                self.config.grok_config_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                return True
+        return False
 
     def _cleanup_grok_state(self) -> None:
         """Removes every Grok-side artifact this run created (idempotent, best-effort)."""
@@ -392,29 +431,61 @@ class GrokLiveTest:
             raise AbortError("environment not usable for the live test")
         self._record("P1", Status.PASS, self._environment_summary)
 
+    @staticmethod
+    def _require_private_dir(path: Path) -> None:
+        """Ensure ``path`` is a real, owner-owned, non-group/world-accessible directory.
+
+        Guards a user-supplied --work-dir before any credential-bearing backup is written into it,
+        and rejects a symlink or another user's pre-created directory.
+        """
+        info = path.lstat()
+        import stat as _stat
+
+        if _stat.S_ISLNK(info.st_mode):
+            raise AbortError(f"work dir {path} is a symlink; refusing to write a config backup through it")
+        if not path.is_dir():
+            raise AbortError(f"work dir {path} exists but is not a directory")
+        if info.st_uid != os.getuid():
+            raise AbortError(f"work dir {path} is not owned by the current user; refusing to use it")
+        if info.st_mode & (_stat.S_IRWXG | _stat.S_IRWXO):
+            raise AbortError(f"work dir {path} is group/world-accessible; run 'chmod 700 {path}' or omit --work-dir")
+
+    def _backup_config_private(self) -> None:
+        """Copy the grok config into the work dir with 0600 from creation (no world-readable window)."""
+        dst = self.config.config_backup_path
+        content = self.config.grok_config_path.read_bytes() if self.config.grok_config_path.exists() else b""
+        fd = os.open(str(dst), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "wb") as out:
+            out.write(content)
+
     def check_p3_baseline(self) -> None:
         self._section("P3 — work directory, baseline snapshot, config backup")
 
-        # rotate a previous work directory instead of deleting it (it may hold a config backup)
+        # The work dir holds a backup of the possibly-credential-bearing grok config, so it must be
+        # private. A default work dir is a fresh 0700 mkdtemp; a user-supplied one is validated.
         if self.config.work_dir.exists():
-            rotated = self.config.work_dir.with_name(f"{self.config.work_dir.name}.prev.{int(time.time())}")
-            self.config.work_dir.rename(rotated)
-            print(f"moved previous run to {rotated} (preserves its config backup)")
-        self.config.evidence_dir.mkdir(parents=True)
-        self.config.hook_home.mkdir(parents=True)
-
-        # back up the grok configuration before anything may mutate it
-        if self.config.grok_config_path.exists():
-            shutil.copy2(self.config.grok_config_path, self.config.config_backup_path)
+            self._require_private_dir(self.config.work_dir)
         else:
-            self.config.config_backup_path.write_text("", encoding="utf-8")
+            self.config.work_dir.mkdir(mode=0o700, parents=True)
+        self.config.evidence_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.config.hook_home.mkdir(mode=0o700, parents=True, exist_ok=True)
+
+        # Back up the grok configuration before anything may mutate it — but only when we might mutate
+        # it. --hooks-only never touches the config, so it must not copy the credentials at all.
+        if self.config.hooks_only:
+            self._baseline_mcp_list = self._grok("mcp", "list").output
+            self._write_evidence("P3-baseline-mcp-list.txt", self._baseline_mcp_list)
+            self._record("P3", Status.PASS, "hooks-only: baseline captured, config left untouched (no backup)")
+            return
+
+        self._backup_config_private()
 
         # snapshot the MCP baseline and refuse to run against a pre-existing serena registration
         baseline = self._grok("mcp", "list")
         self._baseline_mcp_list = baseline.output
         self._write_evidence("P3-baseline-mcp-list.txt", self._baseline_mcp_list)
         print(self._baseline_mcp_list.strip())
-        if not self.config.hooks_only and "serena" in self._baseline_mcp_list:
+        if "serena" in self._baseline_mcp_list:
             self._record("P3", Status.FAIL, "a serena MCP entry is already registered in Grok — refusing to touch it")
             raise AbortError(
                 "remove it first if it is a leftover:  grok mcp remove --scope user serena  "
@@ -671,7 +742,7 @@ class GrokLiveTest:
         asserts the presence/absence of the given tool names.
         """
         self._section(f"{check_id} — {title}")
-        with open(self.config.evidence_dir / f"{check_id}-server.log", "w", encoding="utf-8") as stderr_log:
+        with self._open_evidence(f"{check_id}-server.log") as stderr_log:
             probe = McpStdioProbe(self._server_argv(with_project), cwd=cwd, stderr_log=stderr_log)
             try:
                 init_params = {
@@ -766,19 +837,14 @@ class GrokLiveTest:
 
         # if the spawn seems to time out, retry with the docs-recommended startup timeout;
         # 'grok mcp add' has no flag for it, so it must be inserted into the config directly
-        if not self._doctor_looks_healthy(doctor) and self.config.grok_config_path.exists():
-            config_text = self.config.grok_config_path.read_text(encoding="utf-8")
-            section_header = f"[mcp_servers.{LIVE_MCP_SERVER_NAME}]"
-            if section_header in config_text:
-                config_text = config_text.replace(section_header, f"{section_header}\nstartup_timeout_sec = 15", 1)
-                self.config.grok_config_path.write_text(config_text, encoding="utf-8")
-                doctor = self._grok("mcp", "doctor", LIVE_MCP_SERVER_NAME, "--json", timeout=180)
-                evidence.append("--- with startup_timeout_sec=15 ---\n" + doctor.output)
-                if self._doctor_looks_healthy(doctor):
-                    self._finding(
-                        "grok's default MCP startup timeout is too low for Serena; the docs recommend startup_timeout_sec=15 "
-                        "for manual TOML configuration, and the setup handler may want to write it as well"
-                    )
+        if not self._doctor_looks_healthy(doctor) and self._insert_startup_timeout_sec(15):
+            doctor = self._grok("mcp", "doctor", LIVE_MCP_SERVER_NAME, "--json", timeout=180)
+            evidence.append("--- with startup_timeout_sec=15 ---\n" + doctor.output)
+            if self._doctor_looks_healthy(doctor):
+                self._finding(
+                    "grok's default MCP startup timeout is too low for Serena; the docs recommend startup_timeout_sec=15 "
+                    "for manual TOML configuration, and the setup handler may want to write it as well"
+                )
 
         self._write_evidence("M3-doctor.txt", "\n".join(evidence))
         if self._doctor_looks_healthy(doctor):
@@ -825,7 +891,7 @@ class GrokLiveTest:
         :param context: the Serena context to start the server with
         :return: ``(output_schema, call_result)``, or None if the probe failed (a FAIL is recorded)
         """
-        with open(self.config.evidence_dir / f"{check_id}-{context}-server.log", "w", encoding="utf-8") as stderr_log:
+        with self._open_evidence(f"{check_id}-{context}-server.log") as stderr_log:
             probe = McpStdioProbe(self._server_argv(with_project=True, context=context), cwd=self.config.repo_root, stderr_log=stderr_log)
             try:
                 init_params = {
@@ -955,27 +1021,43 @@ class GrokLiveTest:
             self._record("C1", Status.SKIP, "no baseline was captured (aborted before P3)")
             return
 
+        backup_exists = self.config.config_backup_path.exists()
         final_list = self._grok("mcp", "list").output
         self._write_evidence("C1-final-mcp-list.txt", final_list)
         print(final_list.strip())
         if final_list == self._baseline_mcp_list:
+            if not backup_exists:
+                self._record("C1", Status.PASS, "mcp list matches the baseline; config was not modified (hooks-only, no backup)")
+                return
             backup_matches = (
                 self.config.grok_config_path.exists()
                 and self.config.grok_config_path.read_bytes() == self.config.config_backup_path.read_bytes()
             )
             note = "byte-identical to the backup" if backup_matches else "differs from the backup only in formatting (mcp list matches)"
             self._record("C1", Status.PASS, f"mcp list matches the baseline; config {note}")
+            self._discard_config_backup()
             return
 
         # the removals did not return to baseline: restore the backup outright
+        if not backup_exists:
+            self._record("C1", Status.FAIL, "state diverged but no config backup exists to restore — MANUAL ATTENTION")
+            return
         shutil.copy2(self.config.config_backup_path, self.config.grok_config_path)
         restored_list = self._grok("mcp", "list").output
         if restored_list == self._baseline_mcp_list:
             self._record("C1", Status.PASS, "state diverged after removals; restored the config backup — baseline verified")
+            self._discard_config_backup()
         else:
             self._record(
                 "C1", Status.FAIL, f"could not restore the baseline — MANUAL ATTENTION, backup at {self.config.config_backup_path}"
             )
+
+    def _discard_config_backup(self) -> None:
+        """Remove the config backup once the baseline is confirmed intact, so no credential copy persists."""
+        try:
+            self.config.config_backup_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
     # ------------------------------------------------------------------ orchestration
 
@@ -1031,6 +1113,7 @@ class GrokLiveTest:
         lines += ["", f"Evidence: {self.config.evidence_dir}/", ""]
         report_path = self.config.work_dir / "report.md"
         report_path.write_text("\n".join(lines), encoding="utf-8")
+        os.chmod(report_path, 0o600)
         return report_path
 
 

@@ -90,10 +90,10 @@ class PreToolUseHook(Hook, ABC):
 
         def to_json_string(self, client: HookClient) -> str:
             if client == HookClient.GROK:
-                hook_output: dict[str, str] = {"decision": self.permission_decision}
+                grok_output: dict[str, str] = {"decision": self.permission_decision}
                 if self.permission_decision == "deny":
-                    hook_output["reason"] = self.permission_decision_reason
-                return json.dumps(hook_output)
+                    grok_output["reason"] = self.permission_decision_reason
+                return json.dumps(grok_output)
 
             hook_output = {
                 "hookSpecificOutput": {
