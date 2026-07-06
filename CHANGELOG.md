@@ -68,6 +68,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - `Java`: invalidate JDTLS workspace cache when Java import settings change #1576
   - `Java`: use `JAVA_HOME` for Gradle import when `use_system_java_home` is enabled and `gradle_java_home`
     is unset. #1657
+  - `Java`: stop hard-ignoring directories named `target`/`build`/`bin`/`out`/`classes`/`dist`/`lib` in
+    `EclipseJDTLS`. These are all valid Java package identifiers, so ignoring them by name hid legitimate
+    source from the symbol tools even when they were not gitignored. Removed the hardcoded override; real
+    build output is already excluded via `.gitignore`. #1645
   - Improve quoting of arguments in shell executions
   - Add **LaTeX** support (experimental) via [texlab](https://github.com/latex-lsp/texlab).
   - PHP: add support for PHPantom as alternative to the already supported PHP LS #1554.

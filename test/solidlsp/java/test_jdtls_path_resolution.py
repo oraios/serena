@@ -615,3 +615,32 @@ class TestComputeWorkspaceHash:
         configured_hash = EclipseJDTLS.DependencyProvider._compute_workspace_hash(self.REPO, self.DEFAULT_LAUNCHER, settings)
 
         assert configured_hash != legacy_hash
+
+
+# ----------------------------------------------------------------------------
+# is_ignored_dirname (directory-traversal filter)
+# ----------------------------------------------------------------------------
+
+
+class TestIsIgnoredDirname:
+    """Regression for #1645: the Java language server must not hard-ignore directories whose names
+    collide with build-tool output (``lib``, ``dist``, ``classes``, ``out``, ...). Those are all
+    valid Java package identifiers, so ignoring them by name hid legitimate source from the symbol
+    tools even when ``git check-ignore`` reported nothing. Real build output is already filtered via
+    ``.gitignore``, so directory traversal should only skip the language-agnostic
+    ``_ALWAYS_IGNORED_DIRS`` (VCS/venv/cache/IDE internals) inherited from the base language server.
+    """
+
+    @pytest.fixture
+    def jdtls(self) -> EclipseJDTLS:
+        # is_ignored_dirname only reads the class-level _ALWAYS_IGNORED_DIRS, so an uninitialized
+        # instance is sufficient here (no Java or JDTLS process required).
+        return object.__new__(EclipseJDTLS)
+
+    @pytest.mark.parametrize("dirname", ["lib", "dist", "classes", "out", "target", "build", "bin"])
+    def test_valid_package_dirnames_are_not_ignored(self, jdtls: EclipseJDTLS, dirname: str) -> None:
+        assert jdtls.is_ignored_dirname(dirname) is False
+
+    @pytest.mark.parametrize("dirname", [".git", ".venv", ".idea", ".serena", ".mypy_cache"])
+    def test_always_ignored_dirs_are_still_ignored(self, jdtls: EclipseJDTLS, dirname: str) -> None:
+        assert jdtls.is_ignored_dirname(dirname) is True

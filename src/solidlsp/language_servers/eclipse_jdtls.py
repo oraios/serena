@@ -254,24 +254,6 @@ class EclipseJDTLS(SolidLanguageServer):
         ls_resources_dir = self.ls_resources_dir(self._solidlsp_settings)
         return self.DependencyProvider(self._custom_settings, ls_resources_dir, self._solidlsp_settings, self.repository_root_path)
 
-    @override
-    def is_ignored_dirname(self, dirname: str) -> bool:
-        # Ignore common Java build directories from different build tools:
-        # - Maven: target
-        # - Gradle: build, .gradle
-        # - Eclipse: bin, .settings
-        # - IntelliJ IDEA: out, .idea
-        # - General: classes, dist, lib
-        return super().is_ignored_dirname(dirname) or dirname in [
-            "target",  # Maven
-            "build",  # Gradle
-            "bin",  # Eclipse
-            "out",  # IntelliJ IDEA
-            "classes",  # General
-            "dist",  # General
-            "lib",  # General
-        ]
-
     class DependencyProvider(LanguageServerDependencyProvider):
         def __init__(
             self,
