@@ -695,8 +695,8 @@ The following settings are supported for the Java language server:
 | `maven_user_settings` | `~/.m2/settings.xml` | Path to Maven `settings.xml` |
 | `gradle_user_home` | `~/.gradle` | Path to Gradle user home directory |
 | `gradle_wrapper_enabled` | `false` | Use the project's Gradle wrapper (`gradlew`) instead of the bundled Gradle distribution. Enable this for projects with custom plugins or repositories. |
-| `gradle_java_home` | `null` | Path to the JDK used by Gradle. When unset, Gradle uses the bundled JRE. |
-| `use_system_java_home` | `false` | Use the system's `JAVA_HOME` environment variable for JDTLS itself. Enable this if your project requires a specific JDK vendor or version for Gradle's JDK checks. |
+| `gradle_java_home` | `null` | Path to the JDK used by Gradle. When unset, Gradle uses `JAVA_HOME` if `use_system_java_home` is enabled and `JAVA_HOME` is set; otherwise it falls back to Serena's bundled JRE. |
+| `use_system_java_home` | `false` | Use the system's `JAVA_HOME` environment variable for JDTLS itself and, when `gradle_java_home` is unset, Gradle import. Enable this if your project requires a specific JDK vendor or version for Gradle's JDK checks. |
 | `gradle_version` | `8.14.2` | (vscode-java mode only) Override the Gradle distribution version Serena downloads by default. |
 | `vscode_java_version` | `1.54.0-923` | (vscode-java mode only) Override the bundled `vscode-java` runtime bundle version Serena downloads by default. |
 | `intellicode_version` | `1.2.30` | (vscode-java mode only) Override the IntelliCode VSIX version Serena downloads by default. |

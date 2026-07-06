@@ -62,6 +62,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - `JuliaLanguageServer`: Fix the stdio MCP server exiting right after `initialize` ("tools fetch failed")
     when `julia` is enabled. #1577
   - `Java`: invalidate JDTLS workspace cache when Java import settings change #1576
+  - `Java`: use `JAVA_HOME` for Gradle import when `use_system_java_home` is enabled and `gradle_java_home`
+    is unset. #1657
   - Improve quoting of arguments in shell executions
   - Add **LaTeX** support (experimental) via [texlab](https://github.com/latex-lsp/texlab).
   - PHP: add support for PHPantom as alternative to the already supported PHP LS #1554.
