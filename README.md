@@ -247,10 +247,28 @@ Follow the link for specific instructions on how to set up Serena for Claude Cod
 > [!TIP]
 > While getting started quickly is easy, Serena is a powerful toolkit with many configuration options.
 > We highly recommend reading through the [user guide](https://oraios.github.io/serena/02-usage/000_intro.html) to get the most out of Serena.
-> 
+>
 > Specifically, we recommend to read about ...
 >   * [Serena's project-based workflow](https://oraios.github.io/serena/02-usage/040_workflow.html) and
 >   * [configuring Serena](https://oraios.github.io/serena/02-usage/050_configuration.html).
+
+## Test Suite
+
+The test suite uses pytest with language-specific markers. By default, tests for languages whose runtimes are not installed on the host are skipped via the `addopts` in `pyproject.toml`.
+
+```bash
+# Run the default (filtered) test suite
+uv run python -m pytest test -q
+
+# Run tests for a specific language
+uv run python -m pytest -m "python"
+uv run python -m pytest -m "typescript and not slow"
+
+# Run all tests (including those requiring missing runtimes)
+uv run python -m pytest test -q -m ''
+```
+
+Markers are defined in `[tool.pytest.ini_options]` in `pyproject.toml`. The default exclusion list covers: go, csharp, powershell, terraform, zig, systemverilog, matlab, fortran, haskell, ocaml, scala, erlang, fsharp, ada, pascal, lean4, solidity, ansible, msl, bsl, julia, r, crystal, clojure, cue, groovy, kotlin, php, perl, swift, nix, dart, rego, al, hlsl, haxe.
 
 ## User Guide
 

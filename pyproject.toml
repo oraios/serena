@@ -317,7 +317,12 @@ max-complexity = 20
 "test/solidlsp/bsl/**" = ["RUF001", "RUF002", "RUF003"]
 
 [tool.pytest.ini_options]
-addopts = "--snapshot-patch-pycharm-diff"
+# Default: skip language servers requiring external runtimes not installed on this machine.
+# (Go, .NET, PowerShell, Terraform, Zig, MATLAB, Fortran, Haskell, OCaml, Scala, Erlang,
+#  F#, Ada, Pascal, Lean 4, Solidity, Ansible, BSL, Julia, R, Crystal, Clojure, CUE, Groovy,
+#  Kotlin, PHP, Perl, Swift, Nix, Dart, Rego, AL, HLSL, SystemVerilog)
+# To run a specific language suite: pytest -m "python" or pytest -m "go and not slow"
+addopts = "--snapshot-patch-pycharm-diff -m 'not go and not csharp and not powershell and not terraform and not zig and not systemverilog and not matlab and not fortran and not haskell and not ocaml and not scala and not erlang and not fsharp and not ada and not pascal and not lean4 and not solidity and not ansible and not msl and not bsl and not julia and not r and not crystal and not clojure and not cue and not groovy and not kotlin and not php and not perl and not swift and not nix and not dart and not rego and not al and not hlsl and not haxe'"
 markers = [
   "clojure: language server running for Clojure",
   "crystal: language server running for Crystal",
