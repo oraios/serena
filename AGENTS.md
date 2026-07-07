@@ -1,3 +1,5 @@
-Relevant information about the project is in .serena/memories. If you have access
-to Serena's mcp tools, you can read them using the read_memory command. Otherwise
-you can just read them using normal file reading tools. 
+MANDATORY: When accessing project context or relevant information stored in .serena/memories,
+ALWAYS use Serena's read_memory MCP tool instead of reading files directly. This is required
+to optimize token usage and reduce context bloat.
+
+Only fall back to normal file reading tools if the read_memory tool is unavailable.
