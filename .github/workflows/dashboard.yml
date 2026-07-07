@@ -1,0 +1,38 @@
+name: Dashboard
+
+on:
+  pull_request:
+    paths:
+      - 'dashboard/**'
+      - 'src/serena/resources/dashboard/**'
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
+      - name: Fail if committed build output is stale
+        run: git diff --exit-code -- ../src/serena/resources/dashboard
