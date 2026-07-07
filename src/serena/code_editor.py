@@ -268,24 +268,26 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
             self._file_buffer.contents = contents
 
         def delete_text_between_positions(self, start_pos: PositionInFile, end_pos: PositionInFile) -> None:
-            self._lang_server.delete_text_between_positions(self.relative_path, start_pos.to_lsp_position(), end_pos.to_lsp_position())
+            self._lang_server.documents.delete_text_between_positions(
+                self.relative_path, start_pos.to_lsp_position(), end_pos.to_lsp_position()
+            )
 
         def insert_text_at_position(self, pos: PositionInFile, text: str) -> None:
-            self._lang_server.insert_text_at_position(self.relative_path, pos.line, pos.col, text)
+            self._lang_server.documents.insert_text_at_position(self.relative_path, pos.line, pos.col, text)
 
         def apply_text_edits(self, text_edits: list[ls_types.TextEdit]) -> None:
-            return self._lang_server.apply_text_edits_to_file(self.relative_path, text_edits)
+            return self._lang_server.documents.apply_text_edits_to_file(self.relative_path, text_edits)
 
     @contextmanager
     def _open_file_context(self, relative_path: str) -> Iterator["CodeEditor.EditedFile"]:
         lang_server = self._get_language_server(relative_path)
-        with lang_server.open_file(relative_path) as file_buffer:
+        with lang_server.documents.open_file(relative_path) as file_buffer:
             yield self.EditedFile(lang_server, relative_path, file_buffer)
 
     def _get_code_file_content(self, relative_path: str) -> str:
         """Get the content of a file using the language server."""
         lang_server = self._get_language_server(relative_path)
-        return lang_server.language_server.retrieve_full_file_content(relative_path)
+        return lang_server.documents.retrieve_full_file_content(relative_path)
 
     def _find_unique_symbol(self, name_path: str, relative_file_path: str) -> LanguageServerSymbol:
         return self._symbol_retriever.find_unique(name_path, within_relative_path=relative_file_path)

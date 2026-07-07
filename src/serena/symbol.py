@@ -681,7 +681,7 @@ class LanguageServerSymbolRetriever:
             file_hover_lookups = 0
 
             ls = self.get_language_server(file_path)
-            with ls.open_file(file_path) as file_buffer:
+            with ls.documents.open_file(file_path) as file_buffer:
                 for sym in file_symbols:
                     # Check budget before starting a new hover request
                     # symbol_info_budget_seconds=0 disables the budget mechanism (the first inequality)
@@ -858,7 +858,7 @@ class LanguageServerSymbolRetriever:
         assert symbol_location.line is not None
         assert symbol_location.column is not None
         lang_server = self.get_language_server(symbol_location.relative_path)
-        references = lang_server.request_referencing_symbols(
+        references = lang_server.symbol_query_service.request_referencing_symbols(
             relative_file_path=symbol_location.relative_path,
             line=symbol_location.line,
             column=symbol_location.column,
@@ -927,7 +927,7 @@ class LanguageServerSymbolRetriever:
         assert symbol_location.line is not None
         assert symbol_location.column is not None
         lang_server = self.get_language_server(symbol_location.relative_path)
-        implementing_symbols = lang_server.request_implementing_symbols(
+        implementing_symbols = lang_server.symbol_query_service.request_implementing_symbols(
             relative_file_path=symbol_location.relative_path,
             line=symbol_location.line,
             column=symbol_location.column,
@@ -959,7 +959,7 @@ class LanguageServerSymbolRetriever:
         :return: the defining symbol, or None if no definition could be resolved.
         """
         lang_server = self.get_language_server(relative_file_path)
-        defining_symbol = lang_server.request_defining_symbol(
+        defining_symbol = lang_server.symbol_query_service.request_defining_symbol(
             relative_file_path=relative_file_path,
             line=line,
             column=column,
@@ -1021,7 +1021,7 @@ class LanguageServerSymbolRetriever:
         :return: the owning symbol, or None if no symbol could be resolved.
         """
         lang_server = self.get_language_server(relative_file_path)
-        symbol_dict = lang_server.request_symbol_at_location(
+        symbol_dict = lang_server.symbol_query_service.request_symbol_at_location(
             relative_file_path=relative_file_path,
             line=line,
             column=column,
@@ -1096,7 +1096,7 @@ class LanguageServerSymbolRetriever:
             assert symbol_location.line is not None
             assert symbol_location.column is not None
             lang_server = self.get_language_server(symbol_location.relative_path)
-            symbol_dict = lang_server.request_symbol_at_location(
+            symbol_dict = lang_server.symbol_query_service.request_symbol_at_location(
                 relative_file_path=symbol_location.relative_path,
                 line=symbol_location.line,
                 column=symbol_location.column,

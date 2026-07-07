@@ -392,6 +392,16 @@ class SolidLanguageServer(ABC):
         """Live view of open file buffers (delegated to the documents collaborator after Phase 3)."""
         return self._documents.buffers
 
+    @property
+    def documents(self) -> OpenDocuments:
+        """Access the OpenDocuments collaborator (Phase 3 deep module)."""
+        return self._documents
+
+    @property
+    def symbol_query_service(self) -> SymbolQueryService:
+        """Access the SymbolQueryService collaborator (Phase 5 deep module)."""
+        return self._symbol_query
+
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         """
         Creates the dependency provider for this language server.
@@ -1984,6 +1994,8 @@ ReferencesLocationRequest = SolidLanguageServer.ReferencesLocationRequest
 __all__ = [
     "DefinitionLocationRequest",
     "ImplementationLocationRequest",
+    "OpenDocuments",
     "ReferencesLocationRequest",
     "SymbolLocationRequest",
+    "SymbolQueryService",
 ]

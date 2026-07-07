@@ -706,7 +706,7 @@ class SafeDeleteSymbol(Tool, ToolMarkerSymbolicEdit):
             f"Symbol {name_path_pattern} has no identifier position, this is likely a bug."
         )
         lang_server = ls_symbol_retriever.get_language_server(symbol_rel_path)
-        references_locations = lang_server.request_references(symbol_rel_path, symbol_line, symbol_col)
+        references_locations = lang_server.symbol_query_service.request_references(symbol_rel_path, symbol_line, symbol_col)
         file_to_lines: dict[str, list[int]] = defaultdict(list)
         if references_locations:
             for ref_loc in references_locations:
