@@ -2873,6 +2873,15 @@ google = [
     { name = "google-genai" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "poethepoet" },
+    { name = "pytest" },
+    { name = "pytest-xdist" },
+    { name = "ruff" },
+    { name = "ty" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "agno", marker = "extra == 'agno'", specifier = "==2.5.10" },
@@ -2934,6 +2943,15 @@ requires-dist = [
     { name = "wheel", marker = "extra == 'dev'", specifier = "==0.46.3" },
 ]
 provides-extras = ["dev", "agno", "google"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "poethepoet", specifier = ">=0.36.0" },
+    { name = "pytest", specifier = ">=8.4.1" },
+    { name = "pytest-xdist", specifier = ">=3.8.0" },
+    { name = "ruff", specifier = ">=0.12.5" },
+    { name = "ty", specifier = ">=0.0.24" },
+]
 
 [[package]]
 name = "setuptools"

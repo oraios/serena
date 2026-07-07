@@ -5,7 +5,6 @@ import logging
 import os
 import pathlib
 import shutil
-import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Hashable, Iterator, Sequence
@@ -25,6 +24,7 @@ from serena.util.text_utils import MatchedConsecutiveLines
 from solidlsp import ls_types
 from solidlsp.initialize_params import DefaultInitializeParamsBuilder, InitializeParamsBuilder
 from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
+from solidlsp.ls_diagnostics import PublishedDiagnosticsHub  # re-exported for backward-compat (Phase 1 shim)
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_process import LanguageServerInterface, StdioLanguageServer
 from solidlsp.ls_types import UnifiedSymbolInformation
@@ -699,10 +699,9 @@ class SolidLanguageServer(ABC):
         """
         identifies the language server (not to be confused with the language id passed to the language server)
         """
-        self._published_diagnostics: dict[str, list[ls_types.Diagnostic]] = {}
-        self._published_diagnostics_generation_by_uri: dict[str, int] = {}
-        self._published_diagnostics_generation = 0
-        self._published_diagnostics_condition = threading.Condition()
+        # Diagnostics coordination is delegated to a deep collaborator.
+        # The hub owns the canonicalization, generation counters, storage, and condition variable.
+        self._diagnostics_hub = PublishedDiagnosticsHub()
 
         # initialise symbol caches
         self.cache_dir = Path(self._solidlsp_settings.project_data_path) / self.CACHE_FOLDER_NAME / self.language_id
@@ -820,87 +819,19 @@ class SolidLanguageServer(ABC):
         language-specific notification handlers.
         """
         if method == "textDocument/publishDiagnostics":
-            self._store_published_diagnostics(params)
+            # Delegate storage + generation/notify to the diagnostics hub (deep module).
+            self._diagnostics_hub.record(params)
 
-    def _store_published_diagnostics(self, params: Any) -> None:
-        """
-        Store diagnostics received through ``textDocument/publishDiagnostics``.
-        """
-        if not isinstance(params, dict):
-            return
-
-        uri = params.get("uri")
-        diagnostics = params.get("diagnostics")
-        if not isinstance(uri, str) or not isinstance(diagnostics, list):
-            return
-
-        normalized_diagnostics: list[ls_types.Diagnostic] = []
-        for diagnostic in diagnostics:
-            if not isinstance(diagnostic, dict):
-                continue
-            if "message" not in diagnostic or "range" not in diagnostic:
-                continue
-
-            normalized_diagnostic: ls_types.Diagnostic = {
-                "uri": uri,
-                "message": diagnostic["message"],
-                "range": diagnostic["range"],
-            }
-            severity = diagnostic.get("severity")
-            if isinstance(severity, int):
-                normalized_diagnostic["severity"] = ls_types.DiagnosticSeverity(severity)
-
-            code = diagnostic.get("code")
-            if isinstance(code, int | str):
-                normalized_diagnostic["code"] = code
-
-            if "source" in diagnostic:
-                normalized_diagnostic["source"] = diagnostic["source"]
-            normalized_diagnostics.append(ls_types.Diagnostic(**normalized_diagnostic))
-
-        # canonicalize the key so lookups using URIs produced by pathlib.Path.as_uri() match
-        # what servers publish (e.g. file:///c%3A/... or file:///c:/... vs. file:///C:/...)
-        key = self._canonicalize_published_diagnostics_uri(uri)
-
-        with self._published_diagnostics_condition:
-            self._published_diagnostics_generation += 1
-            self._published_diagnostics[key] = normalized_diagnostics
-            self._published_diagnostics_generation_by_uri[key] = self._published_diagnostics_generation
-            self._published_diagnostics_condition.notify_all()
+    # _store_published_diagnostics removed in Phase 1: logic moved to PublishedDiagnosticsHub.record().
 
     @staticmethod
     def _canonicalize_published_diagnostics_uri(uri: str) -> str:
-        """
-        Canonicalizes a ``file://`` URI so that diagnostics published by language servers
-        and lookups based on ``pathlib.Path.as_uri()`` agree on the same key.
-
-        On Windows, servers may publish under ``file:///c%3A/...`` or ``file:///c:/...`` while
-        ``pathlib.Path.as_uri()`` produces ``file:///C:/...``. The canonical form uses an
-        upper-case drive letter and a plain colon.
-        """
-        if os.name != "nt" or not uri.startswith("file:///"):
-            return uri
-
-        # extract the segment after "file:///" up to the next slash and look for a drive letter
-        prefix = "file:///"
-        rest = uri[len(prefix) :]
-        slash = rest.find("/")
-        head = rest if slash < 0 else rest[:slash]
-        tail = "" if slash < 0 else rest[slash:]
-
-        if (len(head) >= 2 and head[0].isalpha() and head[1] == ":") or (
-            len(head) >= 4 and head[0].isalpha() and head[1:4].lower() == "%3a"
-        ):
-            head = head[0].upper() + ":"
-        else:
-            return uri
-
-        return prefix + head + tail
+        """Compatibility wrapper delegating to PublishedDiagnosticsHub canonicalization."""
+        return PublishedDiagnosticsHub._canonicalize_uri(uri)
 
     def _get_published_diagnostics_generation(self, uri: str) -> int:
-        key = self._canonicalize_published_diagnostics_uri(uri)
-        with self._published_diagnostics_condition:
-            return self._published_diagnostics_generation_by_uri.get(key, -1)
+        # Delegate to the hub (owns generation map + canonicalization).
+        return self._diagnostics_hub.get_generation(uri)
 
     def _wait_for_published_diagnostics(
         self,
@@ -908,26 +839,12 @@ class SolidLanguageServer(ABC):
         after_generation: int,
         timeout: float,
     ) -> list[ls_types.Diagnostic] | None:
-        key = self._canonicalize_published_diagnostics_uri(uri)
-        deadline = perf_counter() + timeout
-        with self._published_diagnostics_condition:
-            while True:
-                current_generation = self._published_diagnostics_generation_by_uri.get(key, -1)
-                if current_generation > after_generation:
-                    return list(self._published_diagnostics.get(key, []))
-
-                remaining_timeout = deadline - perf_counter()
-                if remaining_timeout <= 0:
-                    return None
-                self._published_diagnostics_condition.wait(timeout=remaining_timeout)
+        # Delegate wait to the hub (owns condition variable and per-URI generation).
+        return self._diagnostics_hub.wait_for(uri, after_generation, timeout)
 
     def _get_cached_published_diagnostics(self, uri: str) -> list[ls_types.Diagnostic] | None:
-        key = self._canonicalize_published_diagnostics_uri(uri)
-        with self._published_diagnostics_condition:
-            diagnostics = self._published_diagnostics.get(key)
-            if diagnostics is None:
-                return None
-            return list(diagnostics)
+        # Delegate cache lookup to the hub.
+        return self._diagnostics_hub.get_cached(uri)
 
     @staticmethod
     def _diagnostic_matches_range(diagnostic: ls_types.Diagnostic, start_line: int, end_line: int) -> bool:

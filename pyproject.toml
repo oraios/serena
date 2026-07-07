@@ -391,3 +391,12 @@ skip = '.git*,*.svg,*.lock,*.min.*,*test_memories_manager.py'
 check-hidden = true
 ignore-regex = '\.\w+'
 ignore-words-list = 'paket,EDN,als,ue'
+
+[dependency-groups]
+dev = [
+    "poethepoet>=0.36.0",
+    "pytest>=8.4.1",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.12.5",
+    "ty>=0.0.24",
+]
