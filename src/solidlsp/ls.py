@@ -1,5 +1,4 @@
 import dataclasses
-import hashlib
 import json
 import logging
 import os
@@ -25,6 +24,12 @@ from solidlsp import ls_types
 from solidlsp.initialize_params import DefaultInitializeParamsBuilder, InitializeParamsBuilder
 from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
 from solidlsp.ls_diagnostics import PublishedDiagnosticsHub  # re-exported for backward-compat (Phase 1 shim)
+
+# Phase 3 re-export: LSPFileBuffer remains importable from solidlsp.ls (no adapter/serena changes required)
+from solidlsp.ls_documents import (
+    LSPFileBuffer,
+    OpenDocuments,
+)
 from solidlsp.ls_exceptions import SolidLSPException
 
 # Phase 2 re-exports: provider classes remain importable from solidlsp.ls for adapter compatibility
@@ -38,7 +43,7 @@ from solidlsp.ls_launch import (
 )
 from solidlsp.ls_process import LanguageServerInterface, StdioLanguageServer
 from solidlsp.ls_types import UnifiedSymbolInformation
-from solidlsp.ls_utils import FileUtils, PathUtils, TextUtils
+from solidlsp.ls_utils import FileUtils, PathUtils
 from solidlsp.lsp_protocol_handler import lsp_types
 from solidlsp.lsp_protocol_handler import lsp_types as LSPTypes
 from solidlsp.lsp_protocol_handler.lsp_constants import LSPConstants
@@ -80,107 +85,6 @@ class ReferenceInSymbol:
     symbol: ls_types.UnifiedSymbolInformation
     line: int
     character: int
-
-
-class LSPFileBuffer:
-    """
-    This class is used to store the contents of an open LSP file in memory.
-    """
-
-    def __init__(
-        self,
-        abs_path: Path,
-        uri: str,
-        encoding: str,
-        version: int,
-        language_id: str,
-        ref_count: int,
-        language_server: "SolidLanguageServer",
-        open_in_ls: bool = True,
-    ) -> None:
-        self.abs_path = abs_path
-        self.language_server = language_server
-        self.uri = uri
-        self._read_file_modified_date: float | None = None
-        self._contents: str | None = None
-        self.version = version
-        self.language_id = language_id
-        self.ref_count = ref_count
-        self.encoding = encoding
-        self._content_hash: str | None = None
-        self._is_open_in_ls = False
-        if open_in_ls:
-            self._open_in_ls()
-
-    def _open_in_ls(self) -> None:
-        """
-        Open the file in the language server if it is not already open.
-        """
-        if self._is_open_in_ls:
-            return
-        self._is_open_in_ls = True
-        self.language_server.server.notify.did_open_text_document(
-            {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
-                LSPConstants.TEXT_DOCUMENT: {
-                    LSPConstants.URI: self.uri,
-                    LSPConstants.LANGUAGE_ID: self.language_id,
-                    LSPConstants.VERSION: 0,
-                    LSPConstants.TEXT: self.contents,
-                }
-            }
-        )
-
-    def close(self) -> None:
-        if self._is_open_in_ls:
-            self.language_server.server.notify.did_close_text_document(
-                {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
-                    LSPConstants.TEXT_DOCUMENT: {
-                        LSPConstants.URI: self.uri,
-                    }
-                }
-            )
-
-    def ensure_open_in_ls(self) -> None:
-        """Ensure that the file is opened in the language server."""
-        self._open_in_ls()
-
-    @property
-    def contents(self) -> str:
-        file_modified_date = self.abs_path.stat().st_mtime
-
-        # if contents are cached, check if they are stale (file modification since last read) and invalidate if so
-        if self._contents is not None:
-            assert self._read_file_modified_date is not None
-            if file_modified_date > self._read_file_modified_date:
-                self._contents = None
-
-        if self._contents is None:
-            self._read_file_modified_date = file_modified_date
-            self._contents = FileUtils.read_file(str(self.abs_path), self.encoding)
-            self._content_hash = None
-
-        return self._contents
-
-    @contents.setter
-    def contents(self, new_contents: str) -> None:
-        """
-        Sets new contents for the file buffer (in-memory change only).
-        Persistence of the change to disk must be handled separately.
-
-        :param new_contents: the new contents to set
-        """
-        self._contents = new_contents
-        self._content_hash = None
-
-    @property
-    def content_hash(self) -> str:
-        if self._content_hash is None:
-            self._content_hash = hashlib.md5(self.contents.encode(self.encoding)).hexdigest()
-        return self._content_hash
-
-    def split_lines(self) -> list[str]:
-        """Splits the contents of the file into lines."""
-        return self.contents.split("\n")
 
 
 class SymbolBody(ToStringMixin):
@@ -467,7 +371,6 @@ class SolidLanguageServer(ABC):
         """
         default language identifier to be passed to the language server in `textDocument/didOpen` notifications.
         """
-        self.open_file_buffers: dict[str, LSPFileBuffer] = {}
         self.language = self.get_language_enum_instance()
         """
         identifies the language server (not to be confused with the language id passed to the language server)
@@ -514,6 +417,20 @@ class SolidLanguageServer(ABC):
         """
         self.server.on_any_notification(self._observe_server_notification)
 
+        # Phase 3: delegate open document management to OpenDocuments (deep module).
+        # The collaborator owns buffers, refcounting, didOpen/didChange/didClose, and mutations.
+        # We pass a narrow notifier (the low-level notify object) instead of a broad facade reference.
+        self._documents = OpenDocuments(
+            root_path=self.repository_root_path,
+            encoding=self._encoding,
+            resolve_uri=self._resolve_file_uri,
+            get_language_id=self._get_language_id_for_file,
+            path_contains_dots=SolidLanguageServer._path_contains_dots,
+            is_server_started=lambda: bool(self.server_started),
+            notifier=self.server.notify,
+            owner=self,
+        )
+
         # Set up the pathspec matcher for the ignored paths
         # for all absolute paths in ignored_paths, convert them to relative paths
         processed_patterns = []
@@ -542,6 +459,11 @@ class SolidLanguageServer(ABC):
         The (user-provided) language server-specific settings.
         """
         return self._custom_settings
+
+    @property
+    def open_file_buffers(self) -> dict[str, LSPFileBuffer]:
+        """Live view of open file buffers (delegated to the documents collaborator after Phase 3)."""
+        return self._documents.buffers
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         """
@@ -989,22 +911,10 @@ class SolidLanguageServer(ABC):
             rel_path = os.path.relpath(source_file, self.repository_root_path)
             log.info("Opening %s to trigger project loading for %s", rel_path, os.path.basename(additional_workspace))
 
-            abs_path = pathlib.Path(source_file).resolve()
-            uri = abs_path.as_uri()
-            language_id = self._get_language_id_for_file(rel_path)
-
+            pathlib.Path(source_file).resolve()  # ensure resolved for workspace checks performed by register_permanent_buffer
             self._signal_expect_indexing()
-            fb = LSPFileBuffer(
-                abs_path=abs_path,
-                uri=uri,
-                encoding=self._encoding,
-                version=0,
-                language_id=language_id,
-                ref_count=1,
-                language_server=self,
-                open_in_ls=True,
-            )
-            self.open_file_buffers[uri] = fb
+            # Register via the documents collaborator (Phase 3). It keeps the buffer open for the LS lifetime.
+            self._documents.register_permanent_buffer(rel_path)
             opened_count += 1
 
         if opened_count > 0:
@@ -1139,45 +1049,9 @@ class SolidLanguageServer(ABC):
             Set this to False to read the local file buffer without notifying the LS; the file can
             be opened in the LS later by calling the `ensure_open_in_ls` method on the returned LSPFileBuffer.
         """
-        if not self.server_started:
-            log.error("open_file called before Language Server started")
-            raise SolidLSPException("Language Server not started")
-
-        absolute_file_path = Path(self.repository_root_path, relative_file_path)
-        if self._path_contains_dots(relative_file_path):
-            absolute_file_path = absolute_file_path.resolve()
-        uri = absolute_file_path.as_uri()
-
-        if uri in self.open_file_buffers:
-            fb = self.open_file_buffers[uri]
-            assert fb.uri == uri
-            assert fb.ref_count >= 1
-
-            fb.ref_count += 1
-            if open_in_ls:
-                fb.ensure_open_in_ls()
-        else:
-            version = 0
-            language_id = self._get_language_id_for_file(relative_file_path)
-            fb = LSPFileBuffer(
-                abs_path=absolute_file_path,
-                uri=uri,
-                encoding=self._encoding,
-                version=version,
-                language_id=language_id,
-                ref_count=1,
-                language_server=self,
-                open_in_ls=open_in_ls,
-            )
-            self.open_file_buffers[uri] = fb
-
-        try:
+        # Delegated to OpenDocuments (Phase 3). Behavior and protocol are preserved.
+        with self._documents.open_file(relative_file_path, open_in_ls=open_in_ls) as fb:
             yield fb
-        finally:
-            fb.ref_count -= 1
-            if fb.ref_count == 0:
-                fb.close()
-                del self.open_file_buffers[uri]
 
     @contextmanager
     def _open_file_context(
@@ -1192,15 +1066,9 @@ class SolidLanguageServer(ABC):
             Set this to False to read the local file buffer without notifying the LS; the file can
             be opened in the LS later by calling the `ensure_open_in_ls` method on the returned LSPFileBuffer.
         """
-        if file_buffer is not None:
-            expected_uri = self._resolve_file_uri(relative_file_path)
-            assert file_buffer.uri == expected_uri, f"Inconsistency between provided {file_buffer.uri=} and {expected_uri=}"
-            if open_in_ls:
-                file_buffer.ensure_open_in_ls()
-            yield file_buffer
-        else:
-            with self.open_file(relative_file_path, open_in_ls=open_in_ls) as fb:
-                yield fb
+        # Delegated to OpenDocuments (Phase 3).
+        with self._documents._open_file_context(relative_file_path, file_buffer=file_buffer, open_in_ls=open_in_ls) as fb:
+            yield fb
 
     def insert_text_at_position(self, relative_file_path: str, line: int, column: int, text_to_be_inserted: str) -> ls_types.Position:
         """
@@ -1212,38 +1080,9 @@ class SolidLanguageServer(ABC):
         :param column: The column number at which text should be inserted.
         :param text_to_be_inserted: The text to insert.
         """
-        if not self.server_started:
-            log.error("insert_text_at_position called before Language Server started")
-            raise SolidLSPException("Language Server not started")
-
-        uri = self._resolve_file_uri(relative_file_path)
-
-        # Ensure the file is open
-        assert uri in self.open_file_buffers
-
-        file_buffer = self.open_file_buffers[uri]
-        file_buffer.version += 1
-
-        new_contents, new_l, new_c = TextUtils.insert_text_at_position(file_buffer.contents, line, column, text_to_be_inserted)
-        file_buffer.contents = new_contents
-        self.server.notify.did_change_text_document(
-            {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
-                LSPConstants.TEXT_DOCUMENT: {
-                    LSPConstants.VERSION: file_buffer.version,
-                    LSPConstants.URI: file_buffer.uri,
-                },
-                LSPConstants.CONTENT_CHANGES: [
-                    {
-                        LSPConstants.RANGE: {
-                            "start": {"line": line, "character": column},
-                            "end": {"line": line, "character": column},
-                        },
-                        "text": text_to_be_inserted,
-                    }
-                ],
-            }
-        )
-        return ls_types.Position(line=new_l, character=new_c)
+        # Delegated to OpenDocuments (Phase 3). Returns a Position dict (cast to ls_types.Position by callers).
+        pos = self._documents.insert_text_at_position(relative_file_path, line, column, text_to_be_inserted)
+        return ls_types.Position(line=pos["line"], character=pos["character"])
 
     def delete_text_between_positions(
         self,
@@ -1254,31 +1093,8 @@ class SolidLanguageServer(ABC):
         """
         Delete text between the given start and end positions in the given file and return the deleted text.
         """
-        if not self.server_started:
-            log.error("delete_text_between_positions called before Language Server started")
-            raise SolidLSPException("Language Server not started")
-
-        uri = self._resolve_file_uri(relative_file_path)
-
-        # Ensure the file is open
-        assert uri in self.open_file_buffers
-
-        file_buffer = self.open_file_buffers[uri]
-        file_buffer.version += 1
-        new_contents, deleted_text = TextUtils.delete_text_between_positions(
-            file_buffer.contents, start_line=start["line"], start_col=start["character"], end_line=end["line"], end_col=end["character"]
-        )
-        file_buffer.contents = new_contents
-        self.server.notify.did_change_text_document(
-            {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
-                LSPConstants.TEXT_DOCUMENT: {
-                    LSPConstants.VERSION: file_buffer.version,
-                    LSPConstants.URI: file_buffer.uri,
-                },
-                LSPConstants.CONTENT_CHANGES: [{LSPConstants.RANGE: {"start": start, "end": end}, "text": ""}],
-            }
-        )
-        return deleted_text
+        # Delegated to OpenDocuments (Phase 3).
+        return self._documents.delete_text_between_positions(relative_file_path, start, end)
 
     def _send_definition_request(self, definition_params: DefinitionParams) -> Definition | list[LocationLink] | None:
         return self.server.send.definition(definition_params)
@@ -1570,10 +1386,8 @@ class SolidLanguageServer(ABC):
         """
         Retrieve the full content of the given file.
         """
-        if os.path.isabs(file_path):
-            file_path = os.path.relpath(file_path, self.repository_root_path)
-        with self.open_file(file_path) as file_data:
-            return file_data.contents
+        # Delegated to OpenDocuments (Phase 3).
+        return self._documents.retrieve_full_file_content(file_path)
 
     def retrieve_content_around_line(
         self, relative_file_path: str, line: int, context_lines_before: int = 0, context_lines_after: int = 0
@@ -2969,17 +2783,8 @@ class SolidLanguageServer(ABC):
         :param relative_path: The relative path of the file to edit
         :param edits: List of TextEdit dictionaries to apply
         """
-        with self.open_file(relative_path):
-            # Sort edits by position (latest first) to avoid position shifts
-            sorted_edits = sorted(edits, key=lambda e: (e["range"]["start"]["line"], e["range"]["start"]["character"]), reverse=True)
-
-            for edit in sorted_edits:
-                start_pos = ls_types.Position(line=edit["range"]["start"]["line"], character=edit["range"]["start"]["character"])
-                end_pos = ls_types.Position(line=edit["range"]["end"]["line"], character=edit["range"]["end"]["character"])
-
-                # Delete the old text and insert the new text
-                self.delete_text_between_positions(relative_path, start_pos, end_pos)
-                self.insert_text_at_position(relative_path, start_pos["line"], start_pos["character"], edit["newText"])
+        # Delegated to OpenDocuments (Phase 3).
+        self._documents.apply_text_edits_to_file(relative_path, edits)
 
     def start(self) -> "SolidLanguageServer":
         """
