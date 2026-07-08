@@ -626,7 +626,7 @@ class SearchForPatternTool(Tool):
                 path: [{"line": m["line"], "text": str(m["text"])[:_TEXT_TRUNCATE]} for m in lines]
                 for path, lines in match_lines_by_file.items()
             }
-            return f"Result too long. Use read_file with line ranges below:\n{self._to_json(compact)}"
+            return f"Match locations per file (line + matched text):\n{self._to_json(compact)}"
 
         def make_line_numbers_only() -> str:
             """Match locations as bare line numbers (no text)."""
