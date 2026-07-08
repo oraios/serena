@@ -46,6 +46,11 @@ Some languages require additional installations or setup steps, as noted.
   the upstream `@ansible/ansible-language-server@1.2.3` supports hover, completion, definition,
   semantic tokens, and validation; document symbols, workspace symbols, references, and rename
   are not supported by this version)
+* **Astro**
+  (requires Node.js v18+ and npm; supports `.astro` components plus TypeScript/JavaScript files via
+  `@astrojs/language-server`; a companion `typescript-language-server` configured with `@astrojs/ts-plugin`
+  is spawned automatically for cross-file go-to-definition, references, and rename across `.ts`/`.js` and
+  `.astro` files; use language `astro` for Astro projects instead of also enabling `typescript`)
 * **Bash**
 * **BSL** (1C:Enterprise / OneScript)  
   (requires Java 21+ on PATH; uses [bsl-language-server](https://github.com/1c-syntax/bsl-language-server) by 1c-syntax; the JAR is auto-downloaded and SHA-256-verified for the bundled default version; supports `.bsl` and `.os` files; configure optional `ls_path` or `bsl_ls_version` under `ls_specific_settings.bsl`)
