@@ -3,6 +3,8 @@ import os
 import pickle
 import shutil
 import sys
+import threading
+import queue
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
@@ -29,8 +31,37 @@ class HookClient(Enum):
 
 class Hook(ABC):
     def __init__(self, client: HookClient):
-        raw = sys.stdin.read()
-        input_data = json.loads(raw)
+        input_data = {}
+        q = queue.Queue()
+        def _reader():
+            try:
+                data = ""
+                decoder = json.JSONDecoder()
+                while True:
+                    char = sys.stdin.read(1)
+                    if not char:
+                        break
+                    data += char
+                    s = data.strip()
+                    if not s:
+                        continue
+                    try:
+                        obj, _ = decoder.raw_decode(s)
+                        if obj is not None:
+                            q.put(obj)
+                            return
+                    except json.JSONDecodeError:
+                        pass
+            except Exception:
+                pass
+        t = threading.Thread(target=_reader)
+        t.daemon = True
+        t.start()
+        try:
+            input_data = q.get(timeout=1.0)
+        except queue.Empty:
+            input_data = {}
+
         self._input_data = input_data
         self._client = client
 
