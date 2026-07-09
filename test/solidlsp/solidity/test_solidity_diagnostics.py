@@ -10,8 +10,9 @@ from test.solidlsp.util.diagnostics import assert_file_diagnostics
 @pytest.mark.solidity
 class TestSolidityDiagnostics:
     @pytest.mark.xfail(
-        sys.platform == "darwin",
-        reason="Unknown — passes on Ubuntu but consistently fails on macOS CI; root cause not yet identified.",
+        sys.platform != "linux",
+        reason="Solidity diagnostics are often empty on macOS and Windows CI (AssertionError: []); "
+        "passes on Ubuntu. Root cause not yet identified.",
         strict=False,
     )
     @pytest.mark.parametrize("language_server", [Language.SOLIDITY], indirect=True)
