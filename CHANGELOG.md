@@ -48,6 +48,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Make tool call errors surface explicitly as errors at the MCP protocol level
 
 * Language Servers:
+  - Fix: `SolidLanguageServer.is_ignored_path` raised `FileNotFoundError` for paths that are not present
+    on disk, crashing symbol tools when a language server reported locations of generated files
+    (e.g. JDTLS reporting Lombok-generated classes under `target/classes`). Missing paths are now
+    classified by the usual ignore rules, and symbol locations resolving to non-existent files are skipped.
   - C/C++ (clangd): improve support and documentation for Unreal Engine 5 projects.
   - HLSL (`shader-language-server`): pass `--locked` to `cargo install` when building from source
     on macOS (and in the manual-install instructions), honoring the crate's packaged `Cargo.lock`.
