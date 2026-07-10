@@ -1,0 +1,18 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import { createCounter } from '../stores/counter';
+import { formatNumber } from '../utils/format';
+
+const counter = createCounter();
+---
+
+<Layout title="Home">
+  <Header siteName="Test Site" />
+  <main>
+    <h1>Welcome</h1>
+    <p>Count: {formatNumber(counter.count)}</p>
+  </main>
+  <Footer />
+</Layout>

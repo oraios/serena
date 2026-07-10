@@ -48,6 +48,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Make tool call errors surface explicitly as errors at the MCP protocol level
 
 * Language Servers:
+  - Add support for **Astro** (`@astrojs/language-server`) with a companion `typescript-language-server`
+    (configured with `@astrojs/ts-plugin`) for cross-file go-to-definition, references and rename between
+    `.ts`/`.js` and `.astro` files. Requires Node.js v18+ and npm; dependencies auto-install on first use.
+    Use language `astro` instead of also enabling `typescript`.
   - C/C++ (clangd): improve support and documentation for Unreal Engine 5 projects.
   - HLSL (`shader-language-server`): pass `--locked` to `cargo install` when building from source
     on macOS (and in the manual-install instructions), honoring the crate's packaged `Cargo.lock`.
