@@ -303,6 +303,52 @@ class TestListMemoriesFollowsSymlinks:
         assert manager.load_memory("submodule/nested/sub_b") == "# b"
 
 
+class TestGetMemoryFilePathContainment:
+    """Regression: :meth:`MemoryManager.get_memory_file_path` must never return a path outside the
+    memories sandbox. An *absolute* memory name (e.g. ``/etc/cron.d/backdoor``) previously caused
+    ``pathlib`` to discard the base directory and reset to the absolute path, escaping
+    ``.serena/memories``. Since save/load/delete/move all route through this method, that let an
+    agent read, write, or delete arbitrary ``*.md`` files outside the sandbox. The guard must also
+    hold for the ``global/...`` branch, and the existing ``..`` rejection must keep working.
+    """
+
+    def test_absolute_project_memory_name_escapes_sandbox_is_rejected(self, fs_manager: MemoryManager, tmp_path) -> None:
+        # An absolute name pointing outside the memories dir. On the buggy code this silently
+        # returned a path under ``escape_target`` (outside ``memories``); the fix rejects it.
+        escape = str(tmp_path / "escape_target" / "backdoor")
+        with pytest.raises(ValueError):
+            fs_manager.get_memory_file_path(escape)
+
+    def test_absolute_project_memory_name_system_path_is_rejected(self, fs_manager: MemoryManager) -> None:
+        with pytest.raises(ValueError):
+            fs_manager.get_memory_file_path("/etc/cron.d/backdoor")
+
+    def test_absolute_global_memory_name_is_rejected(self, fs_manager: MemoryManager, tmp_path, monkeypatch) -> None:
+        # "global//etc/..." routes through the global branch; the empty segment / absolute sub-name
+        # must be rejected there too. Redirect the global dir so the test never touches the real one.
+        monkeypatch.setattr(fs_manager, "_global_memory_dir", tmp_path / "global")
+        with pytest.raises(ValueError):
+            fs_manager.get_memory_file_path("global//etc/cron.d/backdoor")
+
+    def test_dotdot_segment_still_rejected(self, fs_manager: MemoryManager) -> None:
+        # the pre-existing guard must keep working
+        with pytest.raises(ValueError):
+            fs_manager.get_memory_file_path("../../etc/passwd")
+
+    @pytest.mark.parametrize("name", ["notes", "topic/notes", "a/b/c/deep", "mem:topic/foo.md"])
+    def test_accepted_project_names_resolve_inside_memories_dir(self, fs_manager: MemoryManager, name: str) -> None:
+        assert fs_manager._project_memory_dir is not None
+        path = fs_manager.get_memory_file_path(name)
+        assert path.resolve().is_relative_to(fs_manager._project_memory_dir.resolve())
+
+    def test_accepted_global_name_resolves_inside_global_dir(self, fs_manager: MemoryManager, tmp_path, monkeypatch) -> None:
+        global_dir = tmp_path / "global"
+        global_dir.mkdir()
+        monkeypatch.setattr(fs_manager, "_global_memory_dir", global_dir)
+        path = fs_manager.get_memory_file_path("global/topic/notes")
+        assert path.resolve().is_relative_to(global_dir.resolve())
+
+
 class TestValidateReferentialIntegrity:
     def test_clean_report_when_all_references_resolve(self, fs_manager: MemoryManager) -> None:
         _write(fs_manager, "auth", "# auth notes")

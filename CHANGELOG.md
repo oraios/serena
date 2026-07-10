@@ -101,6 +101,8 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Memories:
   - Make memory iteration follow symbolic links 
+  - Fix: a memory name that was absolute (e.g. `/etc/cron.d/backdoor`) or contained empty path
+    segments could write outside the `memories` folder.
 
 * Dependencies:
   - Add dependency `oslex`
