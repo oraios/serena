@@ -3,6 +3,9 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - Fix: `FilenameMatcher.string_contains_relevant_filename` applied case-folding with an inverted
+    condition (folded the input when `case_sensitive=True` instead of when `False`), so it could
+    mismatch in both modes. It now folds consistently with `is_relevant_filename`. Added unit tests.
   - Add notion of trusted projects via new global configuration setting `trusted_project_path_patterns`.
     Current effects:
     - `ls_specific_settings` defined in project configurations will only be applied for trusted projects

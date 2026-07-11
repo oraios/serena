@@ -40,7 +40,7 @@ class FilenameMatcher:
         a *complete* extension — i.e. the extension must either end the string or be followed
         by a non-extension-character (anything other than a letter, digit, or underscore).
         """
-        if self._case_sensitive:
+        if not self._case_sensitive:
             string = string.lower()
         for ext in self._file_extensions:
             if re.search(rf"{re.escape(ext)}(?:\W|$)", string):
