@@ -237,7 +237,21 @@ class TextUtils:
         :return: a tuple containing the modified text and the deleted text
         """
         del_start_idx = TextUtils.get_index_from_line_col(text, start_line, start_col)
-        del_end_idx = TextUtils.get_index_from_line_col(text, end_line, end_col)
+        try:
+            del_end_idx = TextUtils.get_index_from_line_col(text, end_line, end_col)
+        except InvalidTextLocationError:
+            # Deleting through the final line addresses the position one line past the
+            # last line (line == number of lines, col 0). When the file has no trailing
+            # newline there is no closing newline to count, so get_index_from_line_col
+            # cannot resolve it; that position means "end of file". Clamp to len(text).
+            # (insert_text_at_position handles the same past-EOF position.)
+            text_stepper = TextStepper(text)
+            text_stepper.process_all()
+            num_lines_in_text = text_stepper.line + 1
+            if end_line == num_lines_in_text and end_col == 0:
+                del_end_idx = len(text)
+            else:
+                raise
 
         deleted_text = text[del_start_idx:del_end_idx]
         new_text = text[:del_start_idx] + text[del_end_idx:]

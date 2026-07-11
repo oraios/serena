@@ -38,6 +38,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Use LSP-compliant line splitting ("\n", "\r\n" and "\r" can define line breaks); previously only "\n" considered
   - Fix: Apply consistent line splitting across tools, uniformly applying the LSP splitting semantics; 
     affects `search_text` used by `search_for_pattern` tool (reported in #1684)
+  - Fix in `TextUtils` (used by editors): Deleting up to the end of the file, referencing the line one past 
+    the end of the file (particularly for files with no newline at end of file) raised `InvalidTextLocationError`
+    instead of accepting the deletion (change in `TextUtils.delete_text_between_positions`,
+    which now accepts the end position similar to `insert_text_at_position`).
   - Fix: glob pattern expansion in `expand_braces` did not terminate with empty or unbalanced braces #1690
 
 * CLI:
