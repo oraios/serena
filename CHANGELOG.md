@@ -47,8 +47,13 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Allow `query_project` tool to access read-only tools that are not enabled in the current configuration
   - Make tool call errors surface explicitly as errors at the MCP protocol level
 
-* Language Servers:
-  - C/C++ (clangd): improve support and documentation for Unreal Engine 5 projects.
+ * Language Servers:
+   - Rust (`rust-analyzer`): prevent an indefinite startup hang by adding a timeout to the readiness
+     wait (proceeds with a warning if the server never signals `quiescent`); harden the
+     `language/status` and `experimental/serverStatus` notification handlers against missing keys; and
+     relax the over-strict `completionProvider` capability check (an exact-equality assertion) to a
+     non-fatal warning, so upstream capability changes no longer crash initialization.
+   - C/C++ (clangd): improve support and documentation for Unreal Engine 5 projects.
   - HLSL (`shader-language-server`): pass `--locked` to `cargo install` when building from source
     on macOS (and in the manual-install instructions), honoring the crate's packaged `Cargo.lock`.
     Without it, fresh dependency resolution pulled in shader-sense 1.4.0, which no longer compiles

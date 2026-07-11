@@ -676,9 +676,8 @@ class RustAnalyzer(SolidLanguageServer):
         """
 
         def register_capability_handler(params: dict) -> None:
-            assert "registrations" in params
-            for registration in params["registrations"]:
-                if registration["method"] == "workspace/executeCommand":
+            for registration in params.get("registrations", []):
+                if registration.get("method") == "workspace/executeCommand":
                     self.initialize_searcher_command_available.set()
                     self.resolve_main_method_available.set()
             return
@@ -687,7 +686,7 @@ class RustAnalyzer(SolidLanguageServer):
             # TODO: Should we wait for
             # server -> client: {'jsonrpc': '2.0', 'method': 'language/status', 'params': {'type': 'ProjectStatus', 'message': 'OK'}}
             # Before proceeding?
-            if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
+            if params.get("type") == "ServiceReady" and params.get("message") == "ServiceReady":
                 self.service_ready_event.set()
 
         def execute_client_command_handler(params: dict) -> list:
@@ -697,7 +696,7 @@ class RustAnalyzer(SolidLanguageServer):
             return
 
         def check_experimental_status(params: dict) -> None:
-            if params["quiescent"] == True:
+            if params.get("quiescent") is True:
                 self.server_ready.set()
 
         def window_log_message(msg: dict) -> None:
@@ -718,13 +717,25 @@ class RustAnalyzer(SolidLanguageServer):
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
-        assert init_response["capabilities"]["textDocumentSync"]["change"] == 2  # type: ignore
-        assert "completionProvider" in init_response["capabilities"]
-        assert init_response["capabilities"]["completionProvider"] == {
-            "resolveProvider": True,
-            "triggerCharacters": [":", ".", "'", "("],
-            "completionItem": {"labelDetailsSupport": True},
-        }
+        # Validate key server capabilities. These are sanity checks, not hard requirements:
+        # rust-analyzer may evolve its advertised capabilities across versions, so a mismatch is
+        # logged rather than asserted. (An over-strict equality check on completionProvider here
+        # previously crashed startup whenever upstream added or changed a completionProvider field.)
+        capabilities = init_response.get("capabilities", {}) if isinstance(init_response, dict) else {}
+        text_document_sync = capabilities.get("textDocumentSync")
+        change_kind = text_document_sync.get("change") if isinstance(text_document_sync, dict) else text_document_sync
+        if change_kind != 2:
+            log.warning("rust-analyzer: unexpected textDocumentSync.change=%r (expected 2 = incremental)", change_kind)
+        if "completionProvider" not in capabilities:
+            log.warning("rust-analyzer: server did not advertise a completionProvider capability")
         self.server.notify.initialized({})
 
-        self.server_ready.wait()
+        # Wait for rust-analyzer to finish initial indexing (it emits experimental/serverStatus with
+        # quiescent=true when ready). Use a timeout so a server that crashes or never signals
+        # readiness cannot hang startup indefinitely (previously this waited with no timeout).
+        _SERVER_READY_TIMEOUT = 120.0
+        log.info("Waiting for rust-analyzer to signal readiness (quiescent)...")
+        if self.server_ready.wait(timeout=_SERVER_READY_TIMEOUT):
+            log.info("rust-analyzer ready")
+        else:
+            log.warning("rust-analyzer did not signal readiness within %.0fs; proceeding anyway", _SERVER_READY_TIMEOUT)
