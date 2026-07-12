@@ -100,7 +100,9 @@ class MatchedConsecutiveLines:
     def from_file_contents(
         cls, file_contents: str, line: int, context_lines_before: int = 0, context_lines_after: int = 0, source_file_path: str | None = None
     ) -> Self:
-        line_contents = file_contents.split("\n")
+        # Same "\n" line decomposition as search_text, via the shared helper, so both
+        # agree on line content for a given line number regardless of CRLF/other breaks.
+        line_contents = TextUtils.split_lines(file_contents)
         start_lineno = max(0, line - context_lines_before)
         end_lineno = min(len(line_contents) - 1, line + context_lines_after)
         text_lines: list[TextLine] = []
@@ -169,15 +171,10 @@ def search_text(
         raise ValueError("Pass either content or source_file_path")
 
     matches = []
-    # Split on "\n" only, to stay consistent with the line numbering below
-    # (start_line_num = content[:start_pos].count("\n")). str.splitlines() also
-    # breaks on \r, \v, \f, \x1c-\x1e, \x85 and the Unicode line separators, which
-    # would desync lines[line_num] from the count("\n")-based index, and diverges
-    # from the "\n" convention used by from_file_contents and the edit tools.
-    # Drop a single trailing "\r" per line so Windows CRLF (and lone-CR) endings
-    # render without it; this leaves the line count unchanged, so line numbers stay
-    # "\n"-based and keep matching the count("\n") index.
-    lines = [line[:-1] if line.endswith("\r") else line for line in content.split("\n")]
+    # Decompose with the shared TextUtils.split_lines helper so the content indexed here
+    # stays consistent with the count("\n")-based line numbers below and with the same
+    # convention used by from_file_contents and the edit tools (see TextUtils.split_lines).
+    lines = TextUtils.split_lines(content)
     total_lines = len(lines)
 
     # Convert pattern to a compiled regex if it's a string

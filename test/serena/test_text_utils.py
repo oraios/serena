@@ -4,7 +4,8 @@ from collections.abc import Callable
 import pytest
 
 from serena.util.file_proxy import FileCollection, FileProxy
-from serena.util.text_utils import LineType, MultiFileContentReplacer, glob_to_regex, search_files, search_text
+from serena.util.text_utils import LineType, MatchedConsecutiveLines, MultiFileContentReplacer, glob_to_regex, search_files, search_text
+from solidlsp.ls_utils import TextUtils
 
 
 class TestSearchText:
@@ -242,6 +243,19 @@ class TestSearchText:
         assert matched.line_number == 2
         assert matched.line_content == "TARGET_here"
 
+    def test_search_text_and_from_file_contents_agree_on_line_content(self):
+        """search_text and MatchedConsecutiveLines.from_file_contents must return the same
+        content for a given line number. Both now route through TextUtils.split_lines, so a
+        line break that only one of them recognized (form feed here) can no longer desync them.
+        """
+        # CRLF endings plus a form feed: without the shared helper, from_file_contents would keep the
+        # trailing "\r" and search_text (str.splitlines) would break on the form feed, so they disagreed.
+        content = "alpha\r\nbeta\x0cgamma\r\nTARGET_here\r\nomega\r\n"
+        search_match = search_text("TARGET_here", content=content)[0].matched_lines[0]
+        from_file = MatchedConsecutiveLines.from_file_contents(content, line=search_match.line_number).matched_lines[0]
+        assert from_file.line_number == search_match.line_number
+        assert from_file.line_content == search_match.line_content == "TARGET_here"
+
     def test_search_text_no_matches(self):
         """Test searching with a pattern that doesn't match anything."""
         content = """
@@ -255,6 +269,25 @@ class TestSearchText:
         matches = search_text("missing_function", content=content)
 
         assert len(matches) == 0
+
+
+class TestSplitLines:
+    r"""TextUtils.split_lines is the shared "\n" decomposition backing search_text and from_file_contents."""
+
+    def test_line_count_matches_newline_count(self):
+        r"""len(split_lines(text)) == text.count("\n") + 1, so an index of prefix.count("\n") is always valid."""
+        for text in ["", "a", "a\nb", "a\nb\n", "a\r\nb\r\n", "a\x0cb\nc"]:
+            assert len(TextUtils.split_lines(text)) == text.count("\n") + 1
+
+    def test_strips_single_trailing_carriage_return_per_line(self):
+        assert TextUtils.split_lines("a\r\nb\r\n") == ["a", "b", ""]
+        assert TextUtils.split_lines("a\r") == ["a"]
+
+    def test_does_not_break_on_non_newline_separators(self):
+        """Form feed, vertical tab and a mid-line lone CR are content, not line breaks."""
+        assert TextUtils.split_lines("a\x0cb") == ["a\x0cb"]
+        assert TextUtils.split_lines("a\x0bb") == ["a\x0bb"]
+        assert TextUtils.split_lines("a\rb") == ["a\rb"]
 
 
 # Mock file reader that always returns matching content

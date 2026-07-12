@@ -70,6 +70,19 @@ class TextUtils:
         return idx
 
     @staticmethod
+    def split_lines(text: str) -> list[str]:
+        r"""
+        Splits text into lines using the "\n" convention that this class' line/column indexing relies on
+        (get_index_from_line_col, get_line_col_from_index), so a line index computed as ``prefix.count("\n")``
+        always addresses the matching entry. The number of returned lines equals ``text.count("\n") + 1``.
+
+        Unlike ``str.splitlines()``, this does not treat "\r", form feed, vertical tab or the Unicode line
+        separators as line breaks (which would desync the content from the newline-based line number). A single
+        trailing "\r" per line is dropped so Windows CRLF endings do not leak into the returned content.
+        """
+        return [line[:-1] if line.endswith("\r") else line for line in text.split("\n")]
+
+    @staticmethod
     def _get_updated_position_from_line_and_column_and_edit(l: int, c: int, text_to_be_inserted: str) -> tuple[int, int]:
         """
         Utility function to get the position of the cursor after inserting text at a given line and column.
