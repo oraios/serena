@@ -1031,6 +1031,7 @@ Supported settings:
 | `typescript_language_server_version` | `5.1.3` | Override the bundled `typescript-language-server` npm package version Serena installs when `ls_path` is not set. |
 | `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
 | `indexing_timeout` | `30.0` | Timeout in seconds for waiting on tsserver's `$/progress` project-indexing signal (both at startup and before the first cross-file reference query). If indexing does not complete within this window, Serena logs a warning and proceeds anyway. Increase it for very large projects. |
+| `server_ready_timeout` | `10.0` | Timeout in seconds for waiting on the server-ready signal after initialization. If the signal does not arrive within this window, Serena logs a message and proceeds anyway. |
 
 #### Svelte
 
@@ -1048,7 +1049,14 @@ Supported settings:
 | `typescript_language_server_version` | `5.1.3` (falls back to `ls_specific_settings.typescript.typescript_language_server_version`) | Override the `typescript-language-server` npm package version for the companion server. |
 | `typescript_svelte_plugin_version` | `0.3.52` | Override the `typescript-svelte-plugin` npm package version used for `.svelte`-aware TS resolution. |
 | `npm_registry` | `null` | Override the npm registry Serena uses for all managed installs. |
+| `indexing_timeout` | `120.0` (falls back to `ls_specific_settings.typescript.indexing_timeout`) | Timeout in seconds for the companion TS server to finish indexing `.svelte` files. On timeout, startup fails with a diagnostic indexing-state summary instead of serving cross-file results from a partially indexed program. |
 | `initialization_options_configuration` | `{}` | Deep-merge overrides for any of the ten plugin configuration sections (`svelte`, `prettier`, `emmet`, `typescript`, `javascript`, `js/ts`, `css`, `less`, `scss`, `html`). |
+
+Unlike the plain TypeScript server, the companion is strict about readiness: it raises on server-ready and
+indexing timeouts instead of proceeding with a cold or partially indexed program (which would silently degrade
+cross-file renames and references). The companion reads `server_ready_timeout` and `indexing_timeout` from
+`ls_specific_settings.typescript` with raised defaults (30s and 120s respectively); `ls_specific_settings.svelte.indexing_timeout`
+takes precedence for the `.svelte`-file indexing wait.
 
 All four packages are tracked via a version file; changing any version setting triggers a clean reinstall.
 

@@ -382,7 +382,9 @@ markers = [
 
 [tool.codespell]
 # Ref: https://github.com/codespell-project/codespell#using-a-config-file
-skip = '.git*,*.svg,*.lock,*.min.*,*test_memories_manager.py'
+# We skip third-party test fixture repositories entirely (they contain
+# external package lockfiles, minified code, and arbitrary dependency strings).
+skip = '.git*,*.svg,*.lock,*.min.*,*test_memories_manager.py,./test/resources/repos'
 check-hidden = true
 ignore-regex = '\.\w+'
 ignore-words-list = 'paket,EDN,als,ue'

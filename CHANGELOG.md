@@ -71,6 +71,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     processed by the Svelte LS instead of the TypeScript LS.
   - `SvelteLanguageServer`: Fix document-symbol requests for TypeScript/JavaScript files returning empty
     results in svelte-only mode (`languages: [svelte]`. #1552
+  - Svelte + TypeScript: make companion TypeScript server raise on readiness and indexing timeouts (instead
+    of silent "proceeding anyway"), so that partial indexing surfaces as a clear failure instead of flaky/wrong
+    cross-file results; add configurable timeouts (`server_ready_timeout`, `indexing_timeout`)
+    and overridable timeout hooks (base TS stays permissive). Svelte test fixture now uses `npm ci` +
+    committed `package-lock.json`.
   - `JuliaLanguageServer`: Fix the stdio MCP server exiting right after `initialize` ("tools fetch failed")
     when `julia` is enabled. #1577
   - `Java`: invalidate JDTLS workspace cache when Java import settings change #1576
