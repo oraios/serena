@@ -1300,7 +1300,7 @@ class SerenaAgent:
         if project_instance is not None:
             log.info(f"Found registered project '{project_instance.project_name}' at path {project_instance.project_root}")
         elif os.path.isdir(project_root_or_name):
-            project_instance = self.serena_config.add_project_from_path(project_root_or_name)
+            project_instance = self.serena_config.add_project_from_path(project_root_or_name, asynchronous_autogen=True)
             log.info(f"Added new project {project_instance.project_name} for path {project_instance.project_root}")
 
         if project_instance is None:

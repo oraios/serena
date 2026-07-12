@@ -3,6 +3,8 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - Speed up MCP startup when auto-creating projects at startup (e.g. using `--project-from-cwd`) by
+    determining the project's languages in a background thread #1683
   - Fix: in `glob_to_regex` / `search_text(is_glob=True)`, a `?` wildcard matched two characters instead
     of one (it emitted `..` rather than `.`); it now matches a single character, consistent with the
     `?` semantics documented for `glob_match` and the `test_??.py` example in `search_text`'s docstring.
