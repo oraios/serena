@@ -1367,26 +1367,27 @@ class SolidLanguageServer(ABC):
         Determine if a path should be ignored based on file type
         and ignore patterns.
 
+        Missing paths are classified without raising, since language servers may report
+        locations of generated files that are not present on disk (e.g. compiled classes
+        under build output). A missing path is treated as a file if its name has a suffix
+        and as a directory otherwise; directory-only ignore patterns (e.g. ``build/``)
+        match only existing directories.
+
         :param relative_path: Relative path to check
         :param ignore_unsupported_files: whether files that are not supported source files should be ignored
 
         :return: True if the path should be ignored, False otherwise
         """
         abs_path = os.path.join(self.repository_root_path, relative_path)
-        if not os.path.exists(abs_path):
-            raise FileNotFoundError(f"File {abs_path} not found, the ignore check cannot be performed")
-
-        # Check file extension if it's a file
-        is_file = os.path.isfile(abs_path)
-        if is_file and ignore_unsupported_files:
-            fn_matcher = self.get_source_fn_matcher()
-            if not fn_matcher.is_relevant_filename(abs_path):
-                return True
-
-        # Create normalized path for consistent handling
         rel_path = Path(relative_path)
 
-        # Check each part of the path against always fulfilled ignore conditions
+        # determine whether the path is a file: from the filesystem if the path exists, lexically otherwise
+        exists = os.path.exists(abs_path)
+        if not exists:
+            log.debug("Path %s does not exist; the ignore check is performed on the path itself", abs_path)
+        is_file = os.path.isfile(abs_path) if exists else bool(rel_path.suffix)
+
+        # check each directory component against always-ignored dirnames
         dir_parts = rel_path.parts
         if is_file:
             dir_parts = dir_parts[:-1]
@@ -1394,6 +1395,12 @@ class SolidLanguageServer(ABC):
             if not part:  # Skip empty parts (e.g., from leading '/')
                 continue
             if self.is_ignored_dirname(part):
+                return True
+
+        # apply the unsupported-extension rule to files
+        if is_file and ignore_unsupported_files:
+            fn_matcher = self.get_source_fn_matcher()
+            if not fn_matcher.is_relevant_filename(abs_path):
                 return True
 
         return match_path(relative_path, self.get_ignore_spec(), root_path=self.repository_root_path)
@@ -1665,6 +1672,12 @@ class SolidLanguageServer(ABC):
                     self.request_name,
                     abs_path,
                 )
+                return None
+
+            # skip locations of generated files that are not present on disk
+            # (language servers may report e.g. compiled classes under build output)
+            if not os.path.exists(abs_path):
+                log.info("%s found symbol at non-existent path: %s", self.request_name, abs_path)
                 return None
 
             if self.skip_ignored_paths and self.language_server.is_ignored_path(rel_path_str):
