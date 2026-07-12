@@ -248,9 +248,9 @@ class TestSearchText:
         content for a given line number. Both now route through TextUtils.split_lines, so a
         line break that only one of them recognized (form feed here) can no longer desync them.
         """
-        # CRLF endings plus a form feed: without the shared helper, from_file_contents would keep the
-        # trailing "\r" and search_text (str.splitlines) would break on the form feed, so they disagreed.
-        content = "alpha\r\nbeta\x0cgamma\r\nTARGET_here\r\nomega\r\n"
+        # A form feed mid-file: without the shared helper, search_text (str.splitlines) broke on it
+        # and shifted its line index, while from_file_contents (split("\n")) did not, so they disagreed.
+        content = "alpha\nbeta\x0cgamma\ndelta\nTARGET_here\nomega\n"
         search_match = search_text("TARGET_here", content=content)[0].matched_lines[0]
         from_file = MatchedConsecutiveLines.from_file_contents(content, line=search_match.line_number).matched_lines[0]
         assert from_file.line_number == search_match.line_number
@@ -279,9 +279,10 @@ class TestSplitLines:
         for text in ["", "a", "a\nb", "a\nb\n", "a\r\nb\r\n", "a\x0cb\nc"]:
             assert len(TextUtils.split_lines(text)) == text.count("\n") + 1
 
-    def test_strips_single_trailing_carriage_return_per_line(self):
-        assert TextUtils.split_lines("a\r\nb\r\n") == ["a", "b", ""]
-        assert TextUtils.split_lines("a\r") == ["a"]
+    def test_splits_only_on_newline(self):
+        r"""Only "\n" is a break; "\r" is left in place (trimming it for display is the caller's job)."""
+        assert TextUtils.split_lines("a\r\nb\r\n") == ["a\r", "b\r", ""]
+        assert TextUtils.split_lines("a\r") == ["a\r"]
 
     def test_does_not_break_on_non_newline_separators(self):
         """Form feed, vertical tab and a mid-line lone CR are content, not line breaks."""

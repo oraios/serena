@@ -77,10 +77,11 @@ class TextUtils:
         always addresses the matching entry. The number of returned lines equals ``text.count("\n") + 1``.
 
         Unlike ``str.splitlines()``, this does not treat "\r", form feed, vertical tab or the Unicode line
-        separators as line breaks (which would desync the content from the newline-based line number). A single
-        trailing "\r" per line is dropped so Windows CRLF endings do not leak into the returned content.
+        separators as line breaks, which would desync the content from the newline-based line number. It also
+        leaves any "\r" in place; trimming a trailing carriage return for display is the caller's concern
+        (search_text does this), not part of the shared line convention.
         """
-        return [line[:-1] if line.endswith("\r") else line for line in text.split("\n")]
+        return text.split("\n")
 
     @staticmethod
     def _get_updated_position_from_line_and_column_and_edit(l: int, c: int, text_to_be_inserted: str) -> tuple[int, int]:

@@ -100,8 +100,8 @@ class MatchedConsecutiveLines:
     def from_file_contents(
         cls, file_contents: str, line: int, context_lines_before: int = 0, context_lines_after: int = 0, source_file_path: str | None = None
     ) -> Self:
-        # Same "\n" line decomposition as search_text, via the shared helper, so both
-        # agree on line content for a given line number regardless of CRLF/other breaks.
+        # Same "\n" line decomposition as search_text, via the shared helper, so both index
+        # a given line number the same way (unaffected by form feeds / other non-"\n" breaks).
         line_contents = TextUtils.split_lines(file_contents)
         start_lineno = max(0, line - context_lines_before)
         end_lineno = min(len(line_contents) - 1, line + context_lines_after)
@@ -174,7 +174,10 @@ def search_text(
     # Decompose with the shared TextUtils.split_lines helper so the content indexed here
     # stays consistent with the count("\n")-based line numbers below and with the same
     # convention used by from_file_contents and the edit tools (see TextUtils.split_lines).
-    lines = TextUtils.split_lines(content)
+    # Trim a trailing "\r" per line so CRLF content renders without carriage returns, matching
+    # the display str.splitlines() used to give here; this strip is search-display-specific and
+    # deliberately not baked into the shared helper.
+    lines = [line[:-1] if line.endswith("\r") else line for line in TextUtils.split_lines(content)]
     total_lines = len(lines)
 
     # Convert pattern to a compiled regex if it's a string

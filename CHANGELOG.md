@@ -7,9 +7,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     line numbers with `count("\n")`; a file containing a form feed, vertical tab, lone carriage return or
     Unicode line separator would desync the two, so a match's reported line content came from a different
     line than its reported line number. Line decomposition is now centralized in a shared
-    `TextUtils.split_lines` helper (splitting on `"\n"`, dropping a trailing `"\r"` for Windows CRLF) that
-    backs both `search_text` and `from_file_contents`, so the split and the newline-based line count cannot
-    diverge again and both agree on a line's content for a given line number.
+    `TextUtils.split_lines` helper (splitting on `"\n"` only) that backs both `search_text` and
+    `from_file_contents`, so the split and the newline-based line count cannot diverge again.
+    `search_text` additionally trims a trailing `"\r"` per line for display (Windows CRLF), matching
+    what `str.splitlines()` used to give there.
   - Fix: in `glob_to_regex` / `search_text(is_glob=True)`, a `?` wildcard matched two characters instead
     of one (it emitted `..` rather than `.`); it now matches a single character, consistent with the
     `?` semantics documented for `glob_match` and the `test_??.py` example in `search_text`'s docstring.
