@@ -3,6 +3,9 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - Fix: in `glob_to_regex` / `search_text(is_glob=True)`, a `?` wildcard matched two characters instead
+    of one (it emitted `..` rather than `.`); it now matches a single character, consistent with the
+    `?` semantics documented for `glob_match` and the `test_??.py` example in `search_text`'s docstring.
   - Add notion of trusted projects via new global configuration setting `trusted_project_path_patterns`.
     Current effects:
     - `ls_specific_settings` defined in project configurations will only be applied for trusted projects
