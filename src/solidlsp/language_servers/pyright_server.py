@@ -16,6 +16,7 @@ from solidlsp.settings import SolidLSPSettings
 log = logging.getLogger(__name__)
 
 PYRIGHT_VERSION = "1.1.403"
+PYRIGHT_INITIAL_ANALYSIS_TIMEOUT = 60.0
 
 
 class PyrightServer(SolidLanguageServer):
@@ -102,6 +103,12 @@ class PyrightServer(SolidLanguageServer):
             },
         }
         return initialize_params
+
+    def _wait_for_initial_analysis(self, timeout: float = PYRIGHT_INITIAL_ANALYSIS_TIMEOUT) -> None:
+        if self.analysis_complete.wait(timeout=timeout):
+            log.info("Pyright initial analysis complete, server ready")
+        else:
+            log.warning("Timeout waiting for Pyright analysis completion, proceeding anyway")
 
     def _start_server(self) -> None:
         """
@@ -232,9 +239,4 @@ class PyrightServer(SolidLanguageServer):
         # Wait for Pyright to complete its initial workspace analysis
         # This prevents zombie processes by ensuring background tasks finish
         log.info("Waiting for Pyright to complete initial workspace analysis...")
-        if self.analysis_complete.wait(timeout=5.0):
-            log.info("Pyright initial analysis complete, server ready")
-        else:
-            log.warning("Timeout waiting for Pyright analysis completion, proceeding anyway")
-            # Fallback: assume analysis is complete after timeout
-            self.analysis_complete.set()
+        self._wait_for_initial_analysis()

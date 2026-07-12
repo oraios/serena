@@ -51,6 +51,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Make tool call errors surface explicitly as errors at the MCP protocol level
 
 * Language Servers:
+  - Pyright: wait up to 60 seconds for initial workspace analysis and keep readiness pending after a timeout, avoiding premature empty results on large workspaces.
   - Fix: `SolidLanguageServer.is_ignored_path` raised `FileNotFoundError` for paths that are not present
     on disk, crashing symbol tools when a language server reported locations of generated files
     (e.g. JDTLS reporting Lombok-generated classes under `target/classes`). Missing paths are now
