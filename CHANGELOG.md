@@ -3,6 +3,9 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - Fix: in `glob_to_regex` / `search_text(is_glob=True)`, a `?` wildcard matched two characters instead
+    of one (it emitted `..` rather than `.`); it now matches a single character, consistent with the
+    `?` semantics documented for `glob_match` and the `test_??.py` example in `search_text`'s docstring.
   - Add notion of trusted projects via new global configuration setting `trusted_project_path_patterns`.
     Current effects:
     - `ls_specific_settings` defined in project configurations will only be applied for trusted projects
@@ -47,13 +50,13 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Allow `query_project` tool to access read-only tools that are not enabled in the current configuration
   - Make tool call errors surface explicitly as errors at the MCP protocol level
 
- * Language Servers:
-   - Rust (`rust-analyzer`): prevent an indefinite startup hang by adding a timeout to the readiness
-     wait (proceeds with a warning if the server never signals `quiescent`); harden the
-     `language/status` and `experimental/serverStatus` notification handlers against missing keys; and
-     relax the over-strict `completionProvider` capability check (an exact-equality assertion) to a
-     non-fatal warning, so upstream capability changes no longer crash initialization.
-   - C/C++ (clangd): improve support and documentation for Unreal Engine 5 projects.
+* Language Servers:
+  - Fix: `SolidLanguageServer.is_ignored_path` raised `FileNotFoundError` for paths that are not present
+    on disk, crashing symbol tools when a language server reported locations of generated files
+    (e.g. JDTLS reporting Lombok-generated classes under `target/classes`). Missing paths are now
+    classified by the usual ignore rules, and symbol locations resolving to non-existent files are skipped.
+  - Solidity: fix diagnostics intermittently coming back empty on slow or cold environments (macOS/Windows CI).
+  - C/C++ (clangd): improve support and documentation for Unreal Engine 5 projects.
   - HLSL (`shader-language-server`): pass `--locked` to `cargo install` when building from source
     on macOS (and in the manual-install instructions), honoring the crate's packaged `Cargo.lock`.
     Without it, fresh dependency resolution pulled in shader-sense 1.4.0, which no longer compiles
@@ -68,6 +71,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     processed by the Svelte LS instead of the TypeScript LS.
   - `SvelteLanguageServer`: Fix document-symbol requests for TypeScript/JavaScript files returning empty
     results in svelte-only mode (`languages: [svelte]`. #1552
+  - Svelte + TypeScript: make companion TypeScript server raise on readiness and indexing timeouts (instead
+    of silent "proceeding anyway"), so that partial indexing surfaces as a clear failure instead of flaky/wrong
+    cross-file results; add configurable timeouts (`server_ready_timeout`, `indexing_timeout`)
+    and overridable timeout hooks (base TS stays permissive). Svelte test fixture now uses `npm ci` +
+    committed `package-lock.json`.
   - `JuliaLanguageServer`: Fix the stdio MCP server exiting right after `initialize` ("tools fetch failed")
     when `julia` is enabled. #1577
   - `Java`: invalidate JDTLS workspace cache when Java import settings change #1576
