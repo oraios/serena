@@ -1,0 +1,195 @@
+"""
+Provides GraphQL support via the ``graphql-language-service-cli`` npm package
+(https://github.com/graphql/graphql-language-service), whose ``graphql-lsp`` binary
+implements the Language Server Protocol.
+
+The server resolves schema/operation relationships through graphql-config: it looks
+for a ``.graphqlrc.yml`` / ``graphql.config.{yml,yaml,json,js,ts}`` (or a ``graphql``
+key in ``package.json``) at the workspace root to learn where the schema and the
+GraphQL documents live. Cross-file navigation (go-to-definition from an operation
+field into the schema type that declares it, find-references of a type across the
+schema) only works once that config is present and points at the schema.
+
+Caveats:
+    * ``graphql-language-service-cli`` declares ``graphql`` as a *peer* dependency, so we
+      install both packages into the managed directory.
+    * Without a graphql-config file at the project root, only single-file features
+      (document symbols within one file) are reliable.
+    * Language is registered as experimental.
+"""
+# SPDX-License-Identifier: MIT
+
+from __future__ import annotations
+
+import logging
+import os
+import shutil
+import threading
+
+from overrides import override
+
+from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
+from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
+from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.settings import SolidLSPSettings
+
+log = logging.getLogger(__name__)
+
+# graphql-language-service-cli provides the `graphql-lsp` binary.
+DEFAULT_PACKAGE_VERSION = "3.5.0"
+# `graphql` is a peer dependency of graphql-language-service-cli and must be installed alongside it.
+DEFAULT_GRAPHQL_VERSION = "16.9.0"
+LS_BIN_NAME = "graphql-lsp"
+
+
+class GraphQLLanguageServer(SolidLanguageServer):
+    """
+    GraphQL language server using ``graphql-language-service-cli`` (``graphql-lsp``).
+
+    ``ls_specific_settings["graphql"]`` keys:
+        * ``graphql_language_service_version``: version of ``graphql-language-service-cli``
+          to install (default: ``3.5.0``).
+        * ``graphql_version``: version of the peer ``graphql`` package (default: ``16.9.0``).
+        * ``npm_registry``: optional alternative npm registry URL.
+    """
+
+    def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
+        super().__init__(
+            config,
+            repository_root_path,
+            None,
+            "graphql",
+            solidlsp_settings,
+        )
+        self.server_ready = threading.Event()
+
+    @override
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
+
+    @override
+    def is_ignored_dirname(self, dirname: str) -> bool:
+        return super().is_ignored_dirname(dirname) or dirname in ["node_modules"]
+
+    class DependencyProvider(LanguageServerDependencyProviderSinglePath):
+        def _get_or_install_core_dependency(self) -> str:
+            assert shutil.which("node") is not None, "node is not installed or isn't in PATH. Please install NodeJS and try again."
+            assert shutil.which("npm") is not None, "npm is not installed or isn't in PATH. Please install npm and try again."
+
+            package_version = self._custom_settings.get("graphql_language_service_version", DEFAULT_PACKAGE_VERSION)
+            graphql_version = self._custom_settings.get("graphql_version", DEFAULT_GRAPHQL_VERSION)
+            npm_registry = self._custom_settings.get("npm_registry")
+
+            ls_dirname = f"graphql-lsp-{package_version}"
+            install_dir = os.path.join(self._ls_resources_dir, ls_dirname)
+            executable_path = os.path.join(install_dir, "node_modules", ".bin", LS_BIN_NAME)
+            if os.name == "nt":
+                executable_path += ".cmd"
+
+            if not os.path.exists(executable_path):
+                log.info("Installing graphql-language-service-cli@%s (with graphql@%s)...", package_version, graphql_version)
+                deps = RuntimeDependencyCollection(
+                    [
+                        # graphql (the peer dependency) is installed first so the CLI's peer requirement
+                        # is already satisfied when it is added.
+                        RuntimeDependency(
+                            id="graphql",
+                            description="graphql (peer dependency of graphql-language-service-cli)",
+                            command=build_npm_install_command("graphql", graphql_version, npm_registry),
+                            platform_id="any",
+                        ),
+                        RuntimeDependency(
+                            id="graphql-language-service-cli",
+                            description="GraphQL language server (graphql-lsp)",
+                            command=build_npm_install_command("graphql-language-service-cli", package_version, npm_registry),
+                            platform_id="any",
+                        ),
+                    ]
+                )
+                deps.install(install_dir)
+
+            if not os.path.exists(executable_path):
+                raise FileNotFoundError(
+                    f"{LS_BIN_NAME} executable not found at {executable_path}; "
+                    f"npm install of graphql-language-service-cli@{package_version} did not produce the expected binary."
+                )
+            return executable_path
+
+        def _create_launch_command(self, core_path: str) -> list[str]:
+            # `server -m stream` runs the LSP over stdio (stdin/stdout).
+            return [core_path, "server", "-m", "stream"]
+
+    def _create_base_initialize_params(self) -> dict:
+        initialize_params: dict = {
+            "locale": "en",
+            "capabilities": {
+                "textDocument": {
+                    "synchronization": {"didSave": True, "dynamicRegistration": True},
+                    "completion": {"dynamicRegistration": True, "completionItem": {"snippetSupport": True}},
+                    "definition": {"dynamicRegistration": True},
+                    "references": {"dynamicRegistration": True},
+                    "documentSymbol": {
+                        "dynamicRegistration": True,
+                        "hierarchicalDocumentSymbolSupport": True,
+                        "symbolKind": {"valueSet": list(range(1, 27))},
+                    },
+                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                },
+                "workspace": {
+                    "workspaceFolders": True,
+                    "didChangeConfiguration": {"dynamicRegistration": True},
+                    "symbol": {"dynamicRegistration": True},
+                },
+            },
+        }
+        return initialize_params
+
+    @staticmethod
+    def _handle_workspace_configuration(params: dict) -> list[dict]:
+        # graphql-language-service-server issues workspace/configuration after initialize to
+        # fetch its ``graphql-config`` settings. The LSP contract requires one response entry
+        # per requested item; leaving it unanswered stops the server from building its schema
+        # cache, which makes documentSymbol / definition come back empty. We reply with an
+        # empty settings object per item so the server falls back to the on-disk
+        # ``.graphqlrc`` / ``graphql.config.*`` it discovers at the workspace root.
+        items = params.get("items", []) if isinstance(params, dict) else []
+        return [{} for _ in items] or [{}]
+
+    def _start_server(self) -> None:
+        def do_nothing(_params: dict) -> None:
+            return
+
+        def window_log_message(msg: dict) -> None:
+            log.info("LSP: window/logMessage: %s", msg)
+            # graphql-language-service-server builds its schema/document caches asynchronously
+            # (triggered by the workspace/didChangeConfiguration we send below) and only sets
+            # its internal `_isInitialized` flag once they are ready. Until then documentSymbol
+            # requests short-circuit to []. It logs this exact line when the caches are ready,
+            # so we use it as the readiness signal.
+            if "caches initialized" in str(msg.get("message", "")).lower():
+                self.server_ready.set()
+
+        self.server.on_notification("window/logMessage", window_log_message)
+        self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
+        self.server.on_notification("$/progress", do_nothing)
+        self.server.on_request("client/registerCapability", lambda _params: None)
+        self.server.on_request("workspace/configuration", self._handle_workspace_configuration)
+
+        log.info("Starting graphql-language-service-cli (graphql-lsp)")
+        self.server.start()
+        init_params = self._create_initialize_params()
+        init_response = self.server.send.initialize(init_params)
+        log.debug("GraphQL LS initialize response: %s", init_response)
+        assert "completionProvider" in init_response["capabilities"], "GraphQL LSP did not advertise completionProvider"
+        self.server.notify.initialized({})
+
+        # Eagerly trigger cache initialization: the server (re)builds its caches on
+        # workspace/didChangeConfiguration without needing any file to be opened first.
+        # Doing this here — and waiting for the readiness log — avoids a race where the
+        # very first documentSymbol request arrives before the caches exist and returns [].
+        self.server.notify.workspace_did_change_configuration({"settings": {}})
+        if not self.server_ready.wait(timeout=30.0):
+            log.warning("Timed out waiting for GraphQL language server caches to initialize; proceeding anyway")
+            self.server_ready.set()
+        else:
+            log.info("GraphQL language server caches initialized")
