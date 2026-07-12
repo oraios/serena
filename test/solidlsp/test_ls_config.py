@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from solidlsp.ls_config import FilenameMatcher
 
 
