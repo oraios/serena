@@ -12,7 +12,7 @@ from typing import Any
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import DidChangeConfigurationParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -20,15 +20,26 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
+# Defaults handed to Perl::LanguageServer via its `perl.fileFilter` / `perl.ignoreDirs` settings.
+# Exposed for override via `ls_specific_settings["perl"]`. Extensions added via `file_filter` are
+# also synced into Language.PERL.get_source_fn_matcher() (a cached singleton) so Serena's symbol
+# index and the language server agree on which files are Perl sources (#1449).
+_DEFAULT_FILE_FILTER: list[str] = [".pm", ".pl", ".t"]
+_DEFAULT_IGNORE_DIRS: list[str] = [".git", ".svn", "blib", "local", ".carton", "vendor", "_build", "cover_db"]
+
 
 class PerlLanguageServer(SolidLanguageServer):
     """
     Provides Perl specific instantiation of the LanguageServer class using Perl::LanguageServer.
-    """
 
-    # Keep in sync with Language.PERL.get_source_fn_matcher() in solidlsp/ls_config.py:
-    # extensions missing here are invisible to Perl::LanguageServer's project index.
-    _FILE_FILTER: list = [".pm", ".pl", ".t"]
+    You can pass the following entries in ``ls_specific_settings["perl"]``:
+        - file_filter: List of file extensions (with leading dot) that Perl::LanguageServer should
+          index, e.g. ``[".pm", ".pl", ".t", ".cgi"]``. Defaults to ``[".pm", ".pl", ".t"]``.
+          The same extensions are added to Serena's Perl source-file matcher, so ``find_symbol``
+          and symbol indexing treat them consistently (see #1449).
+        - ignore_dirs: Directory names Perl::LanguageServer should skip when indexing. Defaults to
+          ``[".git", ".svn", "blib", "local", ".carton", "vendor", "_build", "cover_db"]``.
+    """
 
     @staticmethod
     def _get_perl_version() -> str | None:
@@ -101,6 +112,31 @@ class PerlLanguageServer(SolidLanguageServer):
 
         return "perl -MPerl::LanguageServer -e 'Perl::LanguageServer::run'"
 
+    @staticmethod
+    def _resolve_filter_settings(solidlsp_settings: SolidLSPSettings) -> tuple[list[str], list[str]]:
+        """Resolve the ``fileFilter`` / ``ignoreDirs`` to hand to Perl::LanguageServer.
+
+        Reads optional overrides from ``ls_specific_settings["perl"]`` (keys ``file_filter`` and
+        ``ignore_dirs``); falls back to the defaults otherwise. Extracted as a pure function so the
+        configuration plumbing can be unit-tested without starting the language server.
+        """
+        perl_settings = solidlsp_settings.get_ls_specific_settings(Language.PERL)
+        file_filter = perl_settings.get("file_filter", list(_DEFAULT_FILE_FILTER))
+        ignore_dirs = perl_settings.get("ignore_dirs", list(_DEFAULT_IGNORE_DIRS))
+        return file_filter, ignore_dirs
+
+    @staticmethod
+    def _sync_source_fn_matcher(file_filter: list[str]) -> None:
+        """Keep Serena's Perl source-file matcher in sync with the LS ``fileFilter``.
+
+        ``Language.PERL.get_source_fn_matcher()`` is a ``@cache``d per-language singleton, so adding
+        the configured extensions here propagates to every consumer of the matcher — symbol index
+        traversal (``project.is_ignored_path``), the LS ignore check (``ls.is_ignored_path``), and
+        language composition detection. Without this, ``find_symbol`` would not surface symbols in
+        files whose extensions were added to ``file_filter`` (#1449).
+        """
+        Language.PERL.get_source_fn_matcher().add_extensions(*file_filter)
+
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         # Setup runtime dependencies before initializing
         perl_ls_cmd = self._setup_runtime_dependencies()
@@ -109,6 +145,10 @@ class PerlLanguageServer(SolidLanguageServer):
             config, repository_root_path, ProcessLaunchInfo(cmd=perl_ls_cmd, cwd=repository_root_path), "perl", solidlsp_settings
         )
         self.request_id = 0
+        self._file_filter, self._ignore_dirs = self._resolve_filter_settings(solidlsp_settings)
+        # Sync Serena's source-file matcher with the configured extensions so find_symbol and the
+        # language server agree on which files are Perl sources (see #1449).
+        self._sync_source_fn_matcher(self._file_filter)
 
     def _create_base_initialize_params(self) -> dict:
         """
@@ -153,8 +193,8 @@ class PerlLanguageServer(SolidLanguageServer):
 
             perl_config = {
                 "perlInc": [self.repository_root_path, "."],
-                "fileFilter": self._FILE_FILTER,
-                "ignoreDirs": [".git", ".svn", "blib", "local", ".carton", "vendor", "_build", "cover_db"],
+                "fileFilter": self._file_filter,
+                "ignoreDirs": self._ignore_dirs,
             }
 
             return [perl_config]
@@ -189,8 +229,8 @@ class PerlLanguageServer(SolidLanguageServer):
             "settings": {
                 "perl": {
                     "perlInc": [self.repository_root_path, "."],
-                    "fileFilter": self._FILE_FILTER,
-                    "ignoreDirs": [".git", ".svn", "blib", "local", ".carton", "vendor", "_build", "cover_db"],
+                    "fileFilter": self._file_filter,
+                    "ignoreDirs": self._ignore_dirs,
                 }
             }
         }

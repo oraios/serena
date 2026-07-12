@@ -56,6 +56,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     (e.g. JDTLS reporting Lombok-generated classes under `target/classes`). Missing paths are now
     classified by the usual ignore rules, and symbol locations resolving to non-existent files are skipped.
   - Solidity: fix diagnostics intermittently coming back empty on slow or cold environments (macOS/Windows CI).
+  - Perl: expose `file_filter` and `ignore_dirs` via `ls_specific_settings["perl"]`, so projects with
+    non-standard extensions (e.g. `.cgi`, `.psgi`) can make those files visible to Perl::LanguageServer.
+    Configured extensions are also synced into the Perl source-file matcher (now a cached singleton),
+    keeping `find_symbol` / symbol indexing consistent with the LS; the matcher is reset on every
+    language server activation so one project's reconfiguration does not leak into the next.
+    `FilenameMatcher` gains `add_extensions` / `reset` methods. Defaults are unchanged. #1449
   - C/C++ (clangd): improve support and documentation for Unreal Engine 5 projects.
   - HLSL (`shader-language-server`): pass `--locked` to `cargo install` when building from source
     on macOS (and in the manual-install instructions), honoring the crate's packaged `Cargo.lock`.

@@ -699,6 +699,11 @@ class SolidLanguageServer(ABC):
         """
         identifies the language server (not to be confused with the language id passed to the language server)
         """
+        # The source filename matcher is a @cache'd per-language singleton. A previous project may
+        # have extended it (e.g. Perl's file_filter adding .cgi); reset it here so every activation
+        # starts from the language's default extensions, then language-server subclasses re-apply
+        # their own settings during the rest of __init__.
+        self.language.get_source_fn_matcher().reset()
         self._published_diagnostics: dict[str, list[ls_types.Diagnostic]] = {}
         self._published_diagnostics_generation_by_uri: dict[str, int] = {}
         self._published_diagnostics_generation = 0
