@@ -216,6 +216,21 @@ class TestSearchText:
         assert len(matches) == 1
         assert "value_cat_end" in matches[0].lines[0].line_content
 
+    def test_search_text_line_content_aligns_with_line_number_over_special_whitespace(self):
+        """A non-newline line break before the match must not desync the returned line
+        content from the reported line number. str.splitlines() also breaks on form feed
+        (and vertical tab, carriage return, U+2028, etc.) while the line index is computed
+        with count of newlines only; the two decompositions must agree.
+        """
+        # The \x0c (form feed) after 'beta' is a line break for splitlines() but not for
+        # count("\n"). The match is on line 3 (0-based) under the newline convention.
+        content = "alpha\nbeta\x0cgamma\ndelta\nTARGET_here\nomega\n"
+        matches = search_text("TARGET_here", content=content)
+        assert len(matches) == 1
+        matched = matches[0].matched_lines[0]
+        assert matched.line_number == 3
+        assert matched.line_content == "TARGET_here"
+
     def test_search_text_no_matches(self):
         """Test searching with a pattern that doesn't match anything."""
         content = """

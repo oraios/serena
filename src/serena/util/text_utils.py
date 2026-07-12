@@ -169,7 +169,12 @@ def search_text(
         raise ValueError("Pass either content or source_file_path")
 
     matches = []
-    lines = content.splitlines()
+    # Split on "\n" only, to stay consistent with the line numbering below
+    # (start_line_num = content[:start_pos].count("\n")). str.splitlines() also
+    # breaks on \r, \v, \f, \x1c-\x1e, \x85 and the Unicode line separators, which
+    # would desync lines[line_num] from the count("\n")-based index, and diverges
+    # from the "\n" convention used by from_file_contents and the edit tools.
+    lines = content.split("\n")
     total_lines = len(lines)
 
     # Convert pattern to a compiled regex if it's a string

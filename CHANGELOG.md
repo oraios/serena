@@ -3,6 +3,11 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - Fix: `search_text` (used by `search_for_pattern`) split lines with `str.splitlines()` while computing
+    line numbers with `count("\n")`; a file containing a form feed, vertical tab, lone carriage return or
+    Unicode line separator would desync the two, so a match's reported line content came from a different
+    line than its reported line number. It now splits on `"\n"`, consistent with the line numbering and
+    with the convention used by `from_file_contents` and the edit tools.
   - Fix: in `glob_to_regex` / `search_text(is_glob=True)`, a `?` wildcard matched two characters instead
     of one (it emitted `..` rather than `.`); it now matches a single character, consistent with the
     `?` semantics documented for `glob_match` and the `test_??.py` example in `search_text`'s docstring.
