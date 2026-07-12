@@ -174,7 +174,10 @@ def search_text(
     # breaks on \r, \v, \f, \x1c-\x1e, \x85 and the Unicode line separators, which
     # would desync lines[line_num] from the count("\n")-based index, and diverges
     # from the "\n" convention used by from_file_contents and the edit tools.
-    lines = content.split("\n")
+    # Drop a single trailing "\r" per line so Windows CRLF (and lone-CR) endings
+    # render without it; this leaves the line count unchanged, so line numbers stay
+    # "\n"-based and keep matching the count("\n") index.
+    lines = [line[:-1] if line.endswith("\r") else line for line in content.split("\n")]
     total_lines = len(lines)
 
     # Convert pattern to a compiled regex if it's a string

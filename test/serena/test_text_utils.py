@@ -231,6 +231,17 @@ class TestSearchText:
         assert matched.line_number == 3
         assert matched.line_content == "TARGET_here"
 
+    def test_search_text_crlf_line_content_has_no_trailing_carriage_return(self):
+        """On Windows CRLF content, the reported line must not carry a trailing carriage
+        return, while its line number stays consistent with the newline-count convention.
+        """
+        content = "alpha\nbeta\nTARGET_here\nomega\n".replace("\n", "\r\n")
+        matches = search_text("TARGET_here", content=content)
+        assert len(matches) == 1
+        matched = matches[0].matched_lines[0]
+        assert matched.line_number == 2
+        assert matched.line_content == "TARGET_here"
+
     def test_search_text_no_matches(self):
         """Test searching with a pattern that doesn't match anything."""
         content = """
