@@ -124,7 +124,7 @@ def glob_to_regex(glob_pat: str) -> str:
         if ch == "*":
             regex_parts.append(".*")
         elif ch == "?":
-            regex_parts.append("..")
+            regex_parts.append(".")
         elif ch == "\\":
             i += 1
             if i < len(glob_pat):

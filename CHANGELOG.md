@@ -3,6 +3,9 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - Fix: in `glob_to_regex` / `search_text(is_glob=True)`, a `?` wildcard matched two characters instead
+    of one (it emitted `..` rather than `.`); it now matches a single character, consistent with the
+    `?` semantics documented for `glob_match` and the `test_??.py` example in `search_text`'s docstring.
   - Add notion of trusted projects via new global configuration setting `trusted_project_path_patterns`.
     Current effects:
     - `ls_specific_settings` defined in project configurations will only be applied for trusted projects
@@ -52,6 +55,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     on disk, crashing symbol tools when a language server reported locations of generated files
     (e.g. JDTLS reporting Lombok-generated classes under `target/classes`). Missing paths are now
     classified by the usual ignore rules, and symbol locations resolving to non-existent files are skipped.
+  - Solidity: fix diagnostics intermittently coming back empty on slow or cold environments (macOS/Windows CI).
   - C/C++ (clangd): improve support and documentation for Unreal Engine 5 projects.
   - HLSL (`shader-language-server`): pass `--locked` to `cargo install` when building from source
     on macOS (and in the manual-install instructions), honoring the crate's packaged `Cargo.lock`.
@@ -105,6 +109,8 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Memories:
   - Make memory iteration follow symbolic links 
+  - Fix: a memory name that was absolute (e.g. `/etc/cron.d/backdoor`) or contained empty path
+    segments could write outside the `memories` folder.
 
 * Dependencies:
   - Add dependency `oslex`

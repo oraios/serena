@@ -97,7 +97,7 @@ dev = [
   "pyasn1==0.6.3",
   "PyJWT==2.12.0",
 ]
-agno = ["agno==2.5.10", "sqlalchemy==2.0.41"]  # agno bumped for session state overwrite CVE
+agno = ["agno==2.6.6", "sqlalchemy==2.0.41"]  # agno bumped for session state overwrite CVE
 google = ["google-genai==1.27.0"]
 
 [project.urls]

@@ -1,9 +1,10 @@
+import re
 from collections.abc import Callable
 
 import pytest
 
 from serena.util.file_proxy import FileCollection, FileProxy
-from serena.util.text_utils import LineType, MultiFileContentReplacer, search_files, search_text
+from serena.util.text_utils import LineType, MultiFileContentReplacer, glob_to_regex, search_files, search_text
 
 
 class TestSearchText:
@@ -200,6 +201,20 @@ class TestSearchText:
         matches_curly = search_text("*{bar}*", content=content, is_glob=True, multiline=False)
         assert len(matches_curly) == 1
         assert "{bar}" in matches_curly[0].lines[0].line_content
+
+    def test_glob_to_regex_question_matches_single_char(self):
+        """A glob '?' matches exactly one character, matching glob_match's documented semantics."""
+        rx = glob_to_regex("a?c")
+        assert re.fullmatch(rx, "abc") is not None
+        assert re.fullmatch(rx, "ac") is None
+        assert re.fullmatch(rx, "abbc") is None
+
+    def test_search_text_glob_question_single_char(self):
+        """search_text('c?t', is_glob=True) must match 'cat' (one char), not 'coat' (two chars)."""
+        content = "value_cat_end\nvalue_coat_end"
+        matches = search_text("c?t", content=content, is_glob=True, multiline=False)
+        assert len(matches) == 1
+        assert "value_cat_end" in matches[0].lines[0].line_content
 
     def test_search_text_no_matches(self):
         """Test searching with a pattern that doesn't match anything."""
