@@ -211,7 +211,7 @@ class TestSearchText:
 
     def test_search_text_glob_question_single_char(self):
         """search_text('c?t', is_glob=True) must match 'cat' (one char), not 'coat' (two chars)."""
-        content = "\n".join(["value_cat_end", "value_coat_end"])
+        content = "value_cat_end\nvalue_coat_end"
         matches = search_text("c?t", content=content, is_glob=True, multiline=False)
         assert len(matches) == 1
         assert "value_cat_end" in matches[0].lines[0].line_content
