@@ -108,9 +108,7 @@ class TestQmlLanguageServer:
         assert references, f"Expected non-empty references for CustomComponent, got {references=}"
 
         ref_files = {loc["uri"].split("/")[-1] for loc in references}
-        assert "UserComponent.qml" in ref_files, (
-            f"Expected at least one reference in UserComponent.qml, got {ref_files}"
-        )
+        assert "UserComponent.qml" in ref_files, f"Expected at least one reference in UserComponent.qml, got {ref_files}"
 
     @pytest.mark.parametrize("language_server", [Language.QML], indirect=True)
     def test_file_diagnostics(self, language_server: SolidLanguageServer) -> None:
