@@ -107,6 +107,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add configuration option `jetbrains_launch_command`, allowing Serena to spawn IDE instances automatically
     upon project activation
   - Fix: `jet_brains_list_inspections` failed when only default parameters were used #1615 
+  - Fix: `jet_brains_run_inspections` returned incorrectly transformed data (malforming snake-case conversion applied to all keys)
 
 * Dashboard:
   - Make list of trusted hosts configurable, fixing host validation introduced in v1.5.2 allowing only
