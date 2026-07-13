@@ -91,22 +91,6 @@ class TypeHierarchyResponse(TypedDict):
     num_levels_not_included: NotRequired[int]
 
 
-class InspectionResultDTO(TypedDict):
-    inspection_name: str
-    severity: str
-    message: str
-    relative_path: str
-    start_line: int
-    end_line: int
-    start_col: NotRequired[int]
-    end_col: NotRequired[int]
-    quick_fix_available: NotRequired[bool]
-
-
-class RunInspectionsResponse(TypedDict):
-    inspections: list[InspectionResultDTO]
-
-
 class InspectionInfoDTO(TypedDict):
     name: str
     group_path: str

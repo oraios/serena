@@ -686,7 +686,7 @@ class JetBrainsPluginClient(ToStringMixin):
         inspection_names: list[str] | None = None,
         start_line: int | None = None,
         end_line: int | None = None,
-    ) -> jb.RunInspectionsResponse:
+    ) -> dict:
         """
         Runs IDE inspections on the given file and returns the results.
 
@@ -695,6 +695,9 @@ class JetBrainsPluginClient(ToStringMixin):
         :param inspection_names: optional list of specific inspection names to run
         :param start_line: optional start line to restrict the inspection range
         :param end_line: optional end line to restrict the inspection range
+        :return: the inspection results as a dictionary.
+            NOTE: The response is currently *not* a well-defined DTO, because it stores variable data in keys.
+            Consequently, the `pythonify` option is disabled for this request, and the response is returned as-is.
         """
         request_data: dict[str, Any] = {
             "relativePath": relative_path,
@@ -707,7 +710,7 @@ class JetBrainsPluginClient(ToStringMixin):
             request_data["startLine"] = start_line
         if end_line is not None:
             request_data["endLine"] = end_line
-        return cast(jb.RunInspectionsResponse, self._make_request("POST", "/runInspectionsOnFile", request_data, pythonify=False))
+        return self._make_request("POST", "/runInspectionsOnFile", request_data, pythonify=False)
 
     def list_inspections(
         self,
