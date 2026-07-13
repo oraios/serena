@@ -93,6 +93,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     build output is already excluded via `.gitignore`. #1645
   - Improve quoting of arguments in shell executions
   - Add **LaTeX** support (experimental) via [texlab](https://github.com/latex-lsp/texlab).
+  - Add **QML** support via Qt's [`qmlls`](https://doc.qt.io/qt-6/qtqml-tool-qmlls.html) language
+    server (requires Qt 6 with `qmlls`/`qmlls6` on PATH). #1381
   - PHP: add support for PHPantom as alternative to the already supported PHP LS #1554.
   - Add new launch command customization options: `ls_args`, `ls_extra_args` and `ls_base_cmd`
   - Add new configuration option `ls_workspace_folders` to allow indexed source folders to be specified

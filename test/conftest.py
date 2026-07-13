@@ -254,6 +254,7 @@ Flag indicating whether the tests are running in the GitHub CI environment.
 
 is_windows = platform.system() == "Windows"
 is_macos = platform.system() == "Darwin"
+is_linux = platform.system() == "Linux"
 
 
 _LANGUAGE_PYTEST_MARKERS: dict[Language, list[MarkDecorator | Mark]] = {
@@ -407,6 +408,11 @@ def _determine_disabled_languages() -> list[Language]:
         result.append(Language.REGO)
     if _sh.which("elm") is None and not is_ci:
         result.append(Language.ELM)
+    # qmlls is installed (standalone build; see pytest.yml) only on the Ubuntu other-langs CI batch. It is
+    # expected there, so a missing binary on Linux CI is NOT skipped here -- the test runs and fails loudly,
+    # catching a CI setup regression. On Windows/macOS CI (never installed) and off-CI without the binary it skips.
+    if (_sh.which("qmlls6") is None and _sh.which("qmlls") is None) and not (is_ci and is_linux):
+        result.append(Language.QML)
 
     # === 3. Disabled wherever the precondition is missing (including on CI) ===
     # 3a. Platform precondition: these language servers have no native Windows support.

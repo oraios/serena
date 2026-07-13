@@ -64,9 +64,10 @@ jobs:
     env:
       MARKERS_JVM: "java or csharp or fsharp or kotlin or scala or groovy or clojure or bsl"
       MARKERS_NATIVE: "cpp or rust or go or zig or pascal or swift"  # swift is macOS-only (skips elsewhere via the guard)
-      # other-langs: grab-bag + scripting languages + haskell. Haskell (GHC/HLS) is installed only on
-      # Linux -- it's too slow/expensive to build on the macOS runner -- and skips on Windows+macOS via the guard.
-      MARKERS_OTHER_LANGS: "ruby or php or lua or luau or bash or powershell or elixir or erlang or dart or haxe or haskell or terraform or rego or ansible or yaml or toml or markdown or latex or crystal or cue or fortran or ada or matlab or systemverilog or hlsl or msl or al"
+      # other-langs: grab-bag + scripting languages + haskell + qml. Haskell (GHC/HLS) and qml (qmlls) are
+      # installed only on Linux -- too slow/expensive to build on the macOS runner (Haskell), or not worth
+      # the cost of a cross-OS Qt pull (qmlls) -- and skip on Windows+macOS via the central conftest guard.
+      MARKERS_OTHER_LANGS: "ruby or php or lua or luau or bash or powershell or elixir or erlang or dart or haxe or haskell or terraform or rego or ansible or yaml or toml or markdown or latex or crystal or cue or fortran or ada or matlab or systemverilog or hlsl or msl or al or qml"
       # niche: slow, mostly-cached toolchains. ocaml + haskell are the two slowest -- kept in separate
       # batches (ocaml here, haskell in other-langs). nix + perl skip on Windows via the guard.
       MARKERS_NICHE: "julia or r or perl or lean4 or nix or ocaml"
@@ -418,6 +419,28 @@ jobs:
             mv regal.exe "$HOME/bin/"
             echo "$HOME/bin" >> $GITHUB_PATH
           fi
+      - name: Install qmlls (QML Language Server)
+        # qmlls needs Qt 6.6+ for textDocument/documentSymbol (the feature these tests assert); Ubuntu
+        # noble's apt only has Qt 6.4.2, whose qmlls returns -32601 "method not found" for it. So install
+        # the official standalone build (TheQtCompanyRnD/qmlls-workflow, linked from the Qt docs) -- an 8 MB
+        # single binary built from recent Qt dev. Restricted to Linux (a cross-OS Qt pull isn't worth it);
+        # QML skips on Windows/macOS via the conftest guard. libodbc2 is its only non-bundled runtime dep.
+        if: matrix.batch == 'other-langs' && runner.os == 'Linux'
+        shell: bash
+        run: |
+          QMLLS_VERSION="0.7"
+          QMLLS_DIR="$HOME/.qmlls"
+          mkdir -p "$QMLLS_DIR"
+          curl -fsSL -o /tmp/qmlls.zip "https://github.com/TheQtCompanyRnD/qmlls-workflow/releases/download/${QMLLS_VERSION}/qmllanguageserver-linux-x64-${QMLLS_VERSION}.zip"
+          unzip -o /tmp/qmlls.zip -d "$QMLLS_DIR" >/dev/null
+          rm /tmp/qmlls.zip
+          chmod +x "$QMLLS_DIR/qmlls"
+          # libodbc.so.2 is qmlls's only non-bundled runtime dep; install only if absent on the image.
+          ldconfig -p | grep -q 'libodbc.so.2' || { sudo apt-get update && sudo apt-get install -y libodbc2; }
+          # Fail loudly if any shared lib is still unresolved (e.g. a missing runtime dep).
+          missing="$(ldd "$QMLLS_DIR/qmlls" | grep 'not found' || true)"
+          [ -z "$missing" ] || { echo "ERROR: qmlls has unresolved runtime libs:"; echo "$missing"; exit 1; }
+          echo "$QMLLS_DIR" >> "$GITHUB_PATH"
       - name: Cache Free Pascal Compiler
         if: matrix.batch == 'native'
         id: cache-fpc

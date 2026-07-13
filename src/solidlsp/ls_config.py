@@ -173,6 +173,11 @@ class Language(str, Enum):
     The editor must already be running with its built-in LSP enabled (default).
     Supports .gd and .gdscript files.
     """
+    QML = "qml"
+    """QML language server using Qt's qmlls (or qmlls6).
+    Supports .qml files. Requires Qt 6 installation providing qmlls on PATH.
+    See https://doc.qt.io/qt-6/qtqml-tool-qmlls.html
+    """
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -557,6 +562,8 @@ class Language(str, Enum):
                 return FilenameMatcher(".ads", ".adb", ".ada", case_sensitive=False)
             case self.GDSCRIPT:
                 return FilenameMatcher(".gd", ".gdscript")
+            case self.QML:
+                return FilenameMatcher(".qml")
             case self.HTML:
                 return FilenameMatcher(".html", ".htm")
             case self.SCSS:
@@ -836,6 +843,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.godot_language_server import GodotLanguageServer
 
                 return GodotLanguageServer
+            case self.QML:
+                from solidlsp.language_servers.qml_language_server import QmlLanguageServer
+
+                return QmlLanguageServer
             case self.HTML:
                 from solidlsp.language_servers.vscode_html_language_server import VsCodeHtmlLanguageServer
 

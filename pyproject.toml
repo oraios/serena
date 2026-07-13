@@ -378,6 +378,7 @@ markers = [
   "scss: language server running for SCSS / Sass / CSS (some-sass-language-server)",
   "angular: language server running for Angular (uses @angular/language-server + @angular/language-service tsserver plugin)",
   "ada: language server running for Ada / SPARK (uses AdaCore Ada Language Server)",
+  "qml: language server running for QML (uses Qt's qmlls)",
 ]
 
 [tool.codespell]
