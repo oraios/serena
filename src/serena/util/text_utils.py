@@ -100,7 +100,7 @@ class MatchedConsecutiveLines:
     def from_file_contents(
         cls, file_contents: str, line: int, context_lines_before: int = 0, context_lines_after: int = 0, source_file_path: str | None = None
     ) -> Self:
-        line_contents = file_contents.split("\n")
+        line_contents = TextUtils.split_lines(file_contents)
         start_lineno = max(0, line - context_lines_before)
         end_lineno = min(len(line_contents) - 1, line + context_lines_after)
         text_lines: list[TextLine] = []
@@ -169,7 +169,7 @@ def search_text(
         raise ValueError("Pass either content or source_file_path")
 
     matches = []
-    lines = content.splitlines()
+    lines = TextUtils.split_lines(content)
     total_lines = len(lines)
 
     # Convert pattern to a compiled regex if it's a string
@@ -185,8 +185,8 @@ def search_text(
         end_pos = match.end()
 
         # Find the line numbers for the start and end positions
-        start_line_num = content[:start_pos].count("\n")
-        end_line_num = content[:end_pos].count("\n")
+        start_line_num = TextUtils.get_line_from_index(content, start_pos)
+        end_line_num = TextUtils.get_line_from_index(content, end_pos)
 
         # Calculate the range of lines to include in the context
         context_start = max(0, start_line_num - context_lines_before)
