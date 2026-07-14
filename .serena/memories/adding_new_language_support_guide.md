@@ -49,8 +49,8 @@ To implement a new language server using the DependencyProvider pattern:
     final launch command
 
 - **`LanguageServerDependencyProviderSinglePath`** - Alternative to inheriting from `...BaseCommand` directly for the case
-  of a single core dependency (e.g., an executable or JAR file); mostly present in existing implementations - for new
-  implementations, prefer `...BaseCommand`
+  of a single core dependency (e.g., an executable or JAR file); use when the single path is not used directly as a base command
+  otherwise inherit from `...BaseCommand` directly
   - Implement `_get_or_install_core_dependency()` to return the path to the core dependency, downloading/installing it automatically if necessary
   - Implement `_create_launch_command(core_path)` to build the full command from the core path
   - Reference implementations: `TypeScriptLanguageServer`, `Intelephense`, `ClojureLSP`, `ClangdLanguageServer`
@@ -60,7 +60,6 @@ To implement a new language server using the DependencyProvider pattern:
   - Reference implementations: `EclipseJDTLS`, `CSharpLanguageServer`, `MatlabLanguageServer`
 
 **Implementation Pointers::**
-  - When returning the command, prefer the list-based representation for robustness
   - Override `create_launch_command_env` if the launch command needs environment variables to be set (defaults to `{}` in the base implementation)
 
 You should look at at least one existing implementation of each base class to understand how they work.
