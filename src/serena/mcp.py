@@ -396,7 +396,7 @@ class SerenaMCPFactory:
 
         :param mcp_server: the MCP server instance to configure
         """
-        openai_tool_compatible = self.context.name in ["chatgpt", "codex", "oaicompat-agent"]
+        openai_tool_compatible = self.context.name in ["chatgpt", "codex", "oaicompat-agent", "globalcheck"]
         assert self.agent is not None
         context = self.agent.get_context()
         self._set_mcp_tools(mcp_server, openai_tool_compatible=openai_tool_compatible, structured_output=context.structured_tool_output)
