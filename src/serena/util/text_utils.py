@@ -216,18 +216,22 @@ def expand_braces(pattern: str) -> list[str]:
     Handles multiple brace sets as well.
     """
     patterns = [pattern]
-    while any("{" in p for p in patterns):
+    while any("{" in p or "}" in p for p in patterns):
         new_patterns = []
         for p in patterns:
-            match = re.search(r"\{([^{}]+)\}", p)
+            match = re.search(r"\{([^{}]*)\}", p)
             if match:
+                options_expr = match.group(1)
+                if not options_expr:
+                    raise ValueError(f"Invalid glob brace expression in {pattern!r}: empty braces are not allowed")
+
                 prefix = p[: match.start()]
                 suffix = p[match.end() :]
-                options = match.group(1).split(",")
+                options = options_expr.split(",")
                 for option in options:
                     new_patterns.append(f"{prefix}{option}{suffix}")
             else:
-                new_patterns.append(p)
+                raise ValueError(f"Invalid glob brace expression in {pattern!r}: unmatched brace")
         patterns = new_patterns
     return patterns
 

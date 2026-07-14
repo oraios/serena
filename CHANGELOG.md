@@ -38,6 +38,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Use LSP-compliant line splitting ("\n", "\r\n" and "\r" can define line breaks); previously only "\n" considered
   - Fix: Apply consistent line splitting across tools, uniformly applying the LSP splitting semantics; 
     affects `search_text` used by `search_for_pattern` tool (reported in #1684)
+  - Fix: glob pattern expansion in `expand_braces` did not terminate with empty or unbalanced braces #1690
 
 * CLI:
   - Fix `--project-from-cwd` hijacking git worktrees nested under a Serena project. `find_project_root`
