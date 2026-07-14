@@ -606,6 +606,21 @@ class TestExpandBraces:
 
         assert sorted(expand_braces(pattern)) == sorted(expected)
 
+    @pytest.mark.parametrize(
+        "pattern",
+        [
+            "src/{}.py",
+            "src/{utils,models",
+            "src/utils,models}.py",
+        ],
+    )
+    def test_expand_braces_rejects_malformed_braces(self, pattern):
+        """Malformed brace globs should fail instead of looping forever."""
+        from serena.util.text_utils import expand_braces
+
+        with pytest.raises(ValueError, match="Invalid glob brace expression"):
+            expand_braces(pattern)
+
 
 class TestMultiFileContentReplacer:
     FILES = [
