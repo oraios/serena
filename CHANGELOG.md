@@ -33,6 +33,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - During project creation, language composition percentages are now computed relative to the total number 
     of recognised source files instead of all files, i.e. unrecognised files are ignored in the percentage 
     computation.
+  - Fix: Use LSP-compliant line splitting ("\n", "\r\n" and "\r" can define line breaks)
 
 * CLI:
   - Fix `--project-from-cwd` hijacking git worktrees nested under a Serena project. `find_project_root`

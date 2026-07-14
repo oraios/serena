@@ -31,6 +31,114 @@ class InvalidTextLocationError(Exception):
     pass
 
 
+class TextStepper:
+    def __init__(self, chars: str):
+        self._chars = chars
+        self._len = len(chars)
+        self.line = 0
+        """
+        the current 0-based line index
+        """
+        self.col = 0
+        """
+        the current 0-based column index
+        """
+        self.idx = 0
+        """
+        the current 0-based index in the full text.
+        The index specifies the next character to be processed, i.e. if this is
+        the length of the text, then the end of the text has been reached.
+        It specifies a location in the same way as a cursor insertion position:
+        cursor at the very beginning (idx=0) means insert before the first character.
+        """
+        self._is_newline = False
+        """
+        whether the last step was a line break
+        """
+        self._prev_line_start_idx = 0
+        """
+        start index of the last fully processed line (inclusive)    
+        """
+        self._prev_line_end_idx = 0
+        """
+        end of the last fully processed line (exclusive), excluding newline characters
+        """
+        self._line_start_idx = 0
+        """
+        start of the current, not yet completed line (inclusive)
+        """
+
+    def _get_char(self, idx: int) -> str | None:
+        if idx < 0 or idx >= self._len:
+            return None
+        return self._chars[idx]
+
+    def step(self) -> bool:
+        """
+        Processes the next character/newline sequence in the text
+
+        :return: True if processing was possible, False if the end of the text was reached
+        """
+        if self.idx >= self._len:
+            return False
+
+        # process next character/newline sequence
+        # Note: LSP defines that a newline is given by either "\n", "\r\n", or "\r" on its own
+        # Reference: https://microsoft.github.io/language-server-protocol/specifications/lsp/3.18/specification/#textDocuments
+        idx_before = self.idx
+        c = self._chars[self.idx]
+        self.idx += 1
+        is_newline = False
+        if c == "\n":
+            is_newline = True
+        elif c == "\r":
+            is_newline = True
+            if self._get_char(self.idx) == "\n":
+                self.idx += 1  # skip an additional character
+
+        self._is_newline = is_newline
+        if is_newline:
+            self.line += 1
+            self.col = 0
+            self._prev_line_end_idx = idx_before
+            self._prev_line_start_idx = self._line_start_idx
+            self._line_start_idx = self.idx
+        else:
+            self.col += 1
+        return True
+
+    def process_all(self):
+        """
+        Processes all characters in the text, updating the line and column numbers accordingly.
+        """
+        while self.step():
+            pass
+
+    def _get_last_line(self, with_end: bool) -> str:
+        """
+        Returns the last line processed, optionally including the newline character(s) at the end
+        """
+        start_idx = self._prev_line_start_idx
+        end_idx = self._prev_line_end_idx if not with_end else self._line_start_idx
+        return self._chars[start_idx:end_idx]
+
+    def process_all_gather_lines(self, with_ends: bool) -> list[str]:
+        """
+        Processes all characters in the text and returns a list of lines
+
+        :param with_ends: whether to include the newline character(s) at the end of each line
+        :return: the list of lines
+        """
+        lines = []
+        while self.step():
+            if self._is_newline:
+                lines.append(self._get_last_line(with_end=with_ends))
+        # add the last line (which was not followed by a newline), even if empty
+        last_line = self._chars[self._line_start_idx :]
+        lines.append(last_line)
+        return lines
+
+
 class TextUtils:
     """
     Utilities for text operations.
@@ -39,54 +147,68 @@ class TextUtils:
     @staticmethod
     def get_line_col_from_index(text: str, index: int) -> tuple[int, int]:
         """
-        Returns the zero-indexed line and column number of the given index in the given text
+        :param text: the text in which the index is to be located
+        :param index: the 0-based index in the text
+        :return: a tuple (0-based line number, 0-based column number) corresponding to the index in the text
         """
-        l = 0
-        c = 0
-        idx = 0
-        while idx < index:
-            if text[idx] == "\n":
-                l += 1
-                c = 0
-            else:
-                c += 1
-            idx += 1
+        text_stepper = TextStepper(text)
+        while text_stepper.idx < index:
+            if not text_stepper.step():
+                raise InvalidTextLocationError
+        return text_stepper.line, text_stepper.col
 
-        return l, c
+    @classmethod
+    def get_line_from_index(cls, text: str, index: int) -> int:
+        """
+        :param text: the text in which the index is to be located
+        :param index: the 0-based index in the text
+        :return: the 0-based line number corresponding to the index in the text
+        """
+        return cls.get_line_col_from_index(text, index)[0]
 
     @staticmethod
     def get_index_from_line_col(text: str, line: int, col: int) -> int:
         """
-        Returns the index of the given zero-indexed line and column number in the given text
+        :param text: the text in which the coordinates are to be located
+        :param line: the 0-based line number
+        :param col: the 0-based column number
+        :return: the corresponding 0-based index in the text
         """
-        idx = 0
-        while line > 0:
-            if idx >= len(text):
+        text_stepper = TextStepper(text)
+        while text_stepper.line < line:
+            if not text_stepper.step():
                 raise InvalidTextLocationError
-            if text[idx] == "\n":
-                line -= 1
-            idx += 1
-        idx += col
+        idx = text_stepper.idx + col
         return idx
 
     @staticmethod
     def _get_updated_position_from_line_and_column_and_edit(l: int, c: int, text_to_be_inserted: str) -> tuple[int, int]:
         """
-        Utility function to get the position of the cursor after inserting text at a given line and column.
+        :param l: the 0-based line number before the edit
+        :param c: the 0-based column number before the edit
+        :param text_to_be_inserted: the text that was inserted at the given position
+        :return: the updated 0-based line and column numbers after the edit (end of insertion)
         """
-        num_newlines_in_gen_text = text_to_be_inserted.count("\n")
-        if num_newlines_in_gen_text > 0:
-            l += num_newlines_in_gen_text
-            c = len(text_to_be_inserted.split("\n")[-1])
+        text_stepper = TextStepper(text_to_be_inserted)
+        text_stepper.process_all()
+        if text_stepper.line > 0:
+            l += text_stepper.line
+            c = text_stepper.col
         else:
-            c += len(text_to_be_inserted)
-        return (l, c)
+            c += text_stepper.col
+        return l, c
 
     @staticmethod
     def delete_text_between_positions(text: str, start_line: int, start_col: int, end_line: int, end_col: int) -> tuple[str, str]:
         """
         Deletes the text between the given start and end positions.
-        Returns the modified text and the deleted text.
+
+        :param text: the original text
+        :param start_line: the 0-based line number of the start position
+        :param start_col: the 0-based column number of the start position
+        :param end_line: the 0-based line number of the end position
+        :param end_col: the 0-based column number of the end position
+        :return: a tuple containing the modified text and the deleted text
         """
         del_start_idx = TextUtils.get_index_from_line_col(text, start_line, start_col)
         del_end_idx = TextUtils.get_index_from_line_col(text, end_line, end_col)
@@ -98,13 +220,21 @@ class TextUtils:
     @staticmethod
     def insert_text_at_position(text: str, line: int, col: int, text_to_be_inserted: str) -> tuple[str, int, int]:
         """
-        Inserts the given text at the given line and column.
-        Returns the modified text and the new line and column.
+        Inserts the given text at the given position and returns the
+
+        :param text: the original text
+        :param line: the 0-based line number where the text should be inserted
+        :param col: the 0-based column number where the text should be inserted
+        :param text_to_be_inserted: the text to be inserted
+        :return: a tuple containing the modified text, the updated line number, and the updated column number
+            (position after the inserted text)
         """
         try:
             change_index = TextUtils.get_index_from_line_col(text, line, col)
         except InvalidTextLocationError:
-            num_lines_in_text = text.count("\n") + 1
+            text_stepper = TextStepper(text)
+            text_stepper.process_all()
+            num_lines_in_text = text_stepper.line + 1
             max_line = num_lines_in_text - 1
             if line == max_line + 1 and col == 0:  # trying to insert at new line after full text
                 # insert at end, adding missing newline
@@ -125,13 +255,21 @@ class TextUtils:
         end_idx = TextUtils.get_index_from_line_col(text, end_line, end_col)
         return text[start_idx:end_idx]
 
-    @staticmethod
-    def get_text_in_lines_range(text: str, start_line: int, end_line: int) -> str:
+    @classmethod
+    def get_text_in_lines_range(cls, text: str, start_line: int, end_line: int) -> str:
         """
         Returns the text encompassed by the given start and end lines (inclusive).
         """
-        lines = text.splitlines(keepends=True)
+        lines = cls.split_lines(text, with_ends=True)
         return "".join(lines[start_line : end_line + 1])
+
+    @staticmethod
+    def split_lines(text: str, with_ends: bool = False) -> list[str]:
+        """
+        Splits the given text into lines, optionally including the newline character(s) at the end of each line.
+        """
+        text_stepper = TextStepper(text)
+        return text_stepper.process_all_gather_lines(with_ends=with_ends)
 
 
 class PathUtils:
