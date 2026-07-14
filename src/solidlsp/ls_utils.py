@@ -51,19 +51,19 @@ class TextStepper:
         It specifies a location in the same way as a cursor insertion position:
         cursor at the very beginning (idx=0) means insert before the first character.
         """
-        self._is_newline = False
+        self.is_newline = False
         """
-        whether the last step was a line break
+        whether the last step processed a full line ending in a line break
         """
-        self._prev_line_start_idx = 0
+        self.prev_line_start_idx = 0
         """
         start index of the last fully processed line (inclusive)    
         """
-        self._prev_line_end_idx = 0
+        self.prev_line_end_idx = 0
         """
         end of the last fully processed line (exclusive), excluding newline characters
         """
-        self._line_start_idx = 0
+        self.line_start_idx = 0
         """
         start of the current, not yet completed line (inclusive)
         """
@@ -73,53 +73,61 @@ class TextStepper:
             return None
         return self._chars[idx]
 
-    def step(self) -> bool:
+    def step_line(self) -> bool:
         """
-        Processes the next character/newline sequence in the text
+        Processes the next line in the text, advancing past the next newline sequence or,
+        if no further newline is present, to the end of the text.
 
-        :return: True if processing was possible, False if the end of the text was reached
+        :return: True if processing was possible, False if the end of the text had already been reached
+            (idx not advanced)
         """
         if self.idx >= self._len:
             return False
 
-        # process next character/newline sequence
+        # find the next newline sequence
         # Note: LSP defines that a newline is given by either "\n", "\r\n", or "\r" on its own
         # Reference: https://microsoft.github.io/language-server-protocol/specifications/lsp/3.18/specification/#textDocuments
-        idx_before = self.idx
-        c = self._chars[self.idx]
-        self.idx += 1
-        is_newline = False
-        if c == "\n":
-            is_newline = True
-        elif c == "\r":
-            is_newline = True
-            if self._get_char(self.idx) == "\n":
-                self.idx += 1  # skip an additional character
+        # The search for "\r" is bounded by the position of the next "\n".
+        lf_idx = self._chars.find("\n", self.idx)
+        cr_idx = self._chars.find("\r", self.idx, lf_idx if lf_idx != -1 else self._len)
+        if cr_idx != -1:
+            newline_start_idx = cr_idx
+            newline_end_idx = cr_idx + 2 if self._get_char(cr_idx + 1) == "\n" else cr_idx + 1
+        elif lf_idx != -1:
+            newline_start_idx = lf_idx
+            newline_end_idx = lf_idx + 1
+        else:
+            newline_start_idx = None
+            newline_end_idx = None
 
-        self._is_newline = is_newline
-        if is_newline:
+        # advance past the newline sequence or, in its absence, consume the trailing line
+        if newline_start_idx is not None and newline_end_idx is not None:
+            self.idx = newline_end_idx
             self.line += 1
             self.col = 0
-            self._prev_line_end_idx = idx_before
-            self._prev_line_start_idx = self._line_start_idx
-            self._line_start_idx = self.idx
+            self.is_newline = True
+            self.prev_line_start_idx = self.line_start_idx
+            self.prev_line_end_idx = newline_start_idx
+            self.line_start_idx = newline_end_idx
         else:
-            self.col += 1
+            self.idx = self._len
+            self.col = self._len - self.line_start_idx
+            self.is_newline = False
         return True
 
     def process_all(self):
         """
         Processes all characters in the text, updating the line and column numbers accordingly.
         """
-        while self.step():
+        while self.step_line():
             pass
 
     def _get_last_line(self, with_end: bool) -> str:
         """
         Returns the last line processed, optionally including the newline character(s) at the end
         """
-        start_idx = self._prev_line_start_idx
-        end_idx = self._prev_line_end_idx if not with_end else self._line_start_idx
+        start_idx = self.prev_line_start_idx
+        end_idx = self.prev_line_end_idx if not with_end else self.line_start_idx
         return self._chars[start_idx:end_idx]
 
     def process_all_gather_lines(self, with_ends: bool) -> list[str]:
@@ -130,12 +138,14 @@ class TextStepper:
         :return: the list of lines
         """
         lines = []
-        while self.step():
-            if self._is_newline:
+        while self.step_line():
+            if self.is_newline:
                 lines.append(self._get_last_line(with_end=with_ends))
+
         # add the last line (which was not followed by a newline), even if empty
-        last_line = self._chars[self._line_start_idx :]
+        last_line = self._chars[self.line_start_idx :]
         lines.append(last_line)
+
         return lines
 
 
@@ -151,10 +161,25 @@ class TextUtils:
         :param index: the 0-based index in the text
         :return: a tuple (0-based line number, 0-based column number) corresponding to the index in the text
         """
+        # step over full lines; once the line containing the index has been processed, compute
+        # the position from the difference to the respective line's start index
         text_stepper = TextStepper(text)
-        while text_stepper.idx < index:
-            if not text_stepper.step():
-                raise InvalidTextLocationError
+        while text_stepper.step_line():
+            if text_stepper.idx > index:
+                if text_stepper.is_newline:
+                    # position was stepped over as part of the previous line
+                    if index > text_stepper.prev_line_end_idx:
+                        # edge case: the index points into a multi-character newline sequence ("\r\n");
+                        # map this to the beginning of the following line
+                        return text_stepper.line, 0
+                    return text_stepper.line - 1, index - text_stepper.prev_line_start_idx
+                else:
+                    # position was stepped over as part of the current line (which was not followed by a newline)
+                    return text_stepper.line, index - text_stepper.line_start_idx
+
+        # handle the case where the end of the text was reached without stepping past the index
+        if index > text_stepper.idx:
+            raise InvalidTextLocationError
         return text_stepper.line, text_stepper.col
 
     @classmethod
@@ -174,12 +199,13 @@ class TextUtils:
         :param col: the 0-based column number
         :return: the corresponding 0-based index in the text
         """
+        # step over full lines until the requested line is reached
         text_stepper = TextStepper(text)
         while text_stepper.line < line:
-            if not text_stepper.step():
+            if not text_stepper.step_line():
                 raise InvalidTextLocationError
-        idx = text_stepper.idx + col
-        return idx
+
+        return text_stepper.line_start_idx + col
 
     @staticmethod
     def _get_updated_position_from_line_and_column_and_edit(l: int, c: int, text_to_be_inserted: str) -> tuple[int, int]:

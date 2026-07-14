@@ -20,6 +20,8 @@ class TestTextUtils:
             assert lines[i][len(self.LINE) :] == ending
 
     def test_line_col_from_idx(self):
+        assert TextUtils.get_line_col_from_index(self.LINE, 0) == (0, 0)
+        assert TextUtils.get_line_col_from_index(self.LINE, 1) == (0, 1)
         assert TextUtils.get_line_col_from_index(self.TEXT, 0) == (0, 0)
         assert TextUtils.get_line_col_from_index(self.TEXT, 1) == (0, 1)
         assert TextUtils.get_line_col_from_index(self.TEXT, 3 + 1 + 1) == (1, 1)
