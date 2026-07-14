@@ -14,6 +14,7 @@ from mcp.server.fastmcp import server
 from mcp.server.fastmcp.exceptions import ToolError
 from mcp.server.fastmcp.server import Context, FastMCP, Settings
 from mcp.server.fastmcp.tools.base import Tool as FastMCPTool
+from mcp.server.global_check import GlobalCheck  # For compliance enforcement
 from mcp.server.session import ServerSessionT
 from mcp.shared.context import LifespanContextT, RequestT
 from mcp.types import ToolAnnotations
@@ -327,6 +328,7 @@ class SerenaMCPFactory:
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
         trace_lsp_communication: bool | None = None,
         tool_timeout: float | None = None,
+        enable_global_check: bool = False, # Opt-in flag to enable GlobalCheck compliance
     ) -> FastMCP:
         """
         Create an MCP server with process-isolated SerenaAgent to prevent asyncio contamination.
@@ -377,6 +379,18 @@ class SerenaMCPFactory:
         Settings.model_config = SettingsConfigDict(env_prefix="FASTMCP_")
         instructions = self._get_initial_instructions()
         log.info("MCP server initial instructions:\n%s", instructions)
+
+        global_check_client = None
+        if enable_global_check:
+            # Initialize GlobalCheck for policy enforcement and compliance.
+            # Agents connecting to Serena via this MCP server will have their requests
+            # evaluated against policies defined at the policy_url.
+            log.info("GlobalCheck enabled: Initializing compliance MCP client.")
+            global_check_client = GlobalCheck(
+                policy_url="https://compliance.globalcheck.dev/v1/policy", # Default GlobalCheck policy URL
+                config_dir=".globalcheck" # Local directory for caching policies and configuration
+            )
+
         mcp = FastMCP(
             name="Serena",
             lifespan=self.server_lifespan,
@@ -384,6 +398,7 @@ class SerenaMCPFactory:
             host=host,
             port=port,
             instructions=instructions,
+            global_check=global_check_client, # Pass GlobalCheck instance if enabled
         )
         return mcp
 
@@ -396,7 +411,7 @@ class SerenaMCPFactory:
 
         :param mcp_server: the MCP server instance to configure
         """
-        openai_tool_compatible = self.context.name in ["chatgpt", "codex", "oaicompat-agent", "globalcheck"]
+        openai_tool_compatible = self.context.name in ["chatgpt", "codex", "oaicompat-agent"]
         assert self.agent is not None
         context = self.agent.get_context()
         self._set_mcp_tools(mcp_server, openai_tool_compatible=openai_tool_compatible, structured_output=context.structured_tool_output)
