@@ -733,14 +733,10 @@ class SolidLanguageServer(ABC):
         else:
             logging_fn = None
 
-        # create the LanguageServerHandler, which provides the functionality to start the language server and communicate with it,
-        # preparing the launch command beforehand
+        # create the low-level server interface, potentially installing dependencies and launching a subprocess
+        self._process_launch_info: ProcessLaunchInfo | None = process_launch_info
         self._dependency_provider: LanguageServerDependencyProvider | None = None
-        if process_launch_info is None:
-            self._dependency_provider = self._create_dependency_provider()
-            process_launch_info = self._create_process_launch_info()
-        log.debug(f"Creating language server instance with {language_id=} and process launch info: {process_launch_info}")
-        self.server = self._create_language_server_interface(process_launch_info, logging_fn)
+        self.server = self._create_language_server_interface(logging_fn)
         """
         the low-level language server interface
         """
@@ -786,15 +782,23 @@ class SolidLanguageServer(ABC):
             f"{self.__class__.__name__} must implement _create_dependency_provider() or pass process_launch_info to __init__()"
         )
 
+    def _get_dependency_provider(self) -> LanguageServerDependencyProvider:
+        if self._dependency_provider is None:
+            self._dependency_provider = self._create_dependency_provider()
+        return self._dependency_provider
+
     def _create_process_launch_info(self) -> ProcessLaunchInfo:
-        assert self._dependency_provider is not None
-        cmd = self._dependency_provider.create_launch_command()
-        env = self._dependency_provider.create_launch_command_env()
+        dependency_provider = self._get_dependency_provider()
+        cmd = dependency_provider.create_launch_command()
+        env = dependency_provider.create_launch_command_env()
         return ProcessLaunchInfo(cmd=cmd, cwd=self.repository_root_path, env=env)
 
-    def _create_language_server_interface(
-        self, process_launch_info: ProcessLaunchInfo, logging_fn: Callable[[str, str, StringDict | str], None] | None
-    ) -> LanguageServerInterface:
+    def _get_process_launch_info(self) -> ProcessLaunchInfo:
+        if self._process_launch_info is None:
+            self._process_launch_info = self._create_process_launch_info()
+        return self._process_launch_info
+
+    def _create_language_server_interface(self, logging_fn: Callable[[str, str, StringDict | str], None] | None) -> LanguageServerInterface:
         """
         Creates the low-level language server interface for LSP communication.
 
@@ -803,10 +807,12 @@ class SolidLanguageServer(ABC):
         The default implementation creates a StdioLanguageServer, but subclasses can override this method to create a different type
         of interface if needed.
 
-        :param process_launch_info: process launch information
         :param logging_fn: the trace logging function
         :return: the interface
         """
+        language_id = self.language_id
+        process_launch_info = self._get_process_launch_info()
+        log.debug(f"Creating language server instance with {language_id=} and {process_launch_info}")
         return StdioLanguageServer(
             process_launch_info,
             language=self.language,
