@@ -24,6 +24,8 @@ class PyrightServer(SolidLanguageServer):
     Contains various configurations and settings specific to Python.
     """
 
+    _TIMEOUT_FOR_INITIAL_ANALYSIS = 60.0
+
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
         Creates a PyrightServer instance. This class is not meant to be instantiated directly.
@@ -231,8 +233,8 @@ class PyrightServer(SolidLanguageServer):
 
         # Wait for Pyright to complete its initial workspace analysis
         # This prevents zombie processes by ensuring background tasks finish
-        log.info("Waiting for Pyright to complete initial workspace analysis...")
-        if self.analysis_complete.wait(timeout=5.0):
+        log.info(f"Waiting up to {self._TIMEOUT_FOR_INITIAL_ANALYSIS}s for Pyright to complete initial workspace analysis...")
+        if self.analysis_complete.wait(timeout=self._TIMEOUT_FOR_INITIAL_ANALYSIS):
             log.info("Pyright initial analysis complete, server ready")
         else:
             log.warning("Timeout waiting for Pyright analysis completion, proceeding anyway")

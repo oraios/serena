@@ -102,6 +102,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     the repository. #1627
   - Rename configuration option `additional_workspace_folders` to `ls_additional_workspace_folders`
     and support the option across all language servers (previously limited to TypeScript).
+  - `Pyright`: bump timeout for waiting for initial analysis from 5s to 60s.
 
 * JetBrains:
   - Add configuration option `jetbrains_launch_command`, allowing Serena to spawn IDE instances automatically
