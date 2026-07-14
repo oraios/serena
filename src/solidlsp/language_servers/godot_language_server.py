@@ -13,7 +13,7 @@ from collections.abc import Callable
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_process import LanguageServerInterface, TCPConnectionInfo, TCPLanguageServer
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo, StringDict
+from solidlsp.lsp_protocol_handler.server import StringDict
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ class GodotLanguageServer(SolidLanguageServer):
         self._configured_request_timeout: float | None = None
 
         # Dummy ProcessLaunchInfo — _create_language_server_interface() ignores it
-        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=""), "gdscript", solidlsp_settings)
+        super().__init__(config, repository_root_path, None, "gdscript", solidlsp_settings)
 
     def set_request_timeout(self, timeout: float | None) -> None:
         """Cap the timeout at the value configured in ls_specific_settings, if set."""
@@ -73,11 +73,7 @@ class GodotLanguageServer(SolidLanguageServer):
             pass
         return None
 
-    def _create_language_server_interface(
-        self,
-        process_launch_info: ProcessLaunchInfo,
-        logging_fn: Callable[[str, str, StringDict | str], None] | None,
-    ) -> LanguageServerInterface:
+    def _create_language_server_interface(self, logging_fn: Callable[[str, str, StringDict | str], None] | None) -> LanguageServerInterface:
         settings = self._custom_settings or {}
         port = settings.get("port", DEFAULT_GODOT_LS_PORT)
         request_timeout = settings.get("request_timeout", DEFAULT_GODOT_REQUEST_TIMEOUT)
