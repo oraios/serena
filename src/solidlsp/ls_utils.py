@@ -179,7 +179,7 @@ class TextUtils:
 
         # handle the case where the end of the text was reached without stepping past the index
         if index > text_stepper.idx:
-            raise InvalidTextLocationError
+            raise InvalidTextLocationError(f"{index=}")
         return text_stepper.line, text_stepper.col
 
     @classmethod
@@ -203,7 +203,7 @@ class TextUtils:
         text_stepper = TextStepper(text)
         while text_stepper.line < line:
             if not text_stepper.step_line():
-                raise InvalidTextLocationError
+                raise InvalidTextLocationError("{line=}, {col=}")
 
         return text_stepper.line_start_idx + col
 
