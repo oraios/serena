@@ -56,6 +56,10 @@ jobs:
   cpu:
     name: ${{ matrix.batch }} (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # Backstop against hung jobs: without this, GitHub's default limit is 6 hours (observed in
+    # run 29064865197, where a hung job burned the full 6h). Healthy runs peak at ~16 minutes
+    # warm-cache; 60 leaves ample headroom for cache-cold runs.
+    timeout-minutes: 60
     # Marker groups are defined once here and combined in the "Compute marker expression" step.
     # The catch-all batch is derived as the negation of all named groups, so adding a language to
     # any group automatically removes it from catch-all -- the partition can never desync, and no
