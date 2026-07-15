@@ -21,6 +21,7 @@ from serena.util.text_utils import (
     expand_braces,
     glob_match,
 )
+from solidlsp.ls_utils import TextUtils
 
 
 class ReadFileTool(Tool):
@@ -42,8 +43,10 @@ class ReadFileTool(Tool):
         """
         self.project.validate_relative_path(relative_path, require_not_ignored=True)
 
+        # read lines, using the same (LSP-compliant) notion of line breaks as the line-based editing tools
         result = self.project.read_file(relative_path)
-        result_lines = result.splitlines()
+        result_lines = TextUtils.split_lines(result)
+
         if end_line is None:
             result_lines = result_lines[start_line:]
         else:
