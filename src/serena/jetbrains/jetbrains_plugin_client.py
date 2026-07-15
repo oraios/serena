@@ -417,6 +417,8 @@ class JetBrainsPluginClient(ToStringMixin):
         :param include_location: whether to include symbol location information
         :param search_deps: whether to also search in dependencies
         """
+        if "*" in name_path:
+            self._require_version_at_least(2023, 3, 1)
         request_data = {
             "namePath": name_path,
             "relativePath": relative_path,
