@@ -263,9 +263,12 @@ class TextUtils:
             num_lines_in_text = text_stepper.line + 1
             max_line = num_lines_in_text - 1
             if line == max_line + 1 and col == 0:  # trying to insert at new line after full text
-                # insert at end, adding missing newline
+                # insert at end, adding missing newline and adjusting insertion position
+                # to the actual end coordinates of the text
                 change_index = len(text)
                 text_to_be_inserted = "\n" + text_to_be_inserted
+                line = text_stepper.line
+                col = text_stepper.col
             else:
                 raise
         new_text = text[:change_index] + text_to_be_inserted + text[change_index:]
