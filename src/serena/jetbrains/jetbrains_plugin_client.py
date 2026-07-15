@@ -686,6 +686,7 @@ class JetBrainsPluginClient(ToStringMixin):
         :param start_line: optional start line to restrict the inspection range
         :param end_line: optional end line to restrict the inspection range
         """
+        self._require_version_at_least(2023, 2, 14)
         request_data: dict[str, Any] = {
             "relativePath": relative_path,
         }
@@ -710,6 +711,7 @@ class JetBrainsPluginClient(ToStringMixin):
         :param language: optional language to filter inspections by (e.g. "Java", "Python")
         :param group_path_contains: optional substring to filter inspection group paths
         """
+        self._require_version_at_least(2023, 2, 14)
         request_data: dict[str, Any] = {}
         if language is not None:
             request_data["language"] = language
