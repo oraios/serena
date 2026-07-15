@@ -2,14 +2,20 @@
 Configuration objects for language servers
 """
 
+import logging
+import os
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
+from functools import cache
+from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
 if TYPE_CHECKING:
     from solidlsp import SolidLanguageServer
+
+log = logging.getLogger(__name__)
 
 
 class FilenameMatcher:
@@ -20,6 +26,38 @@ class FilenameMatcher:
         """
         self._file_extensions = list(set(file_extensions)) if case_sensitive else list(set(ext.lower() for ext in file_extensions))
         self._case_sensitive = case_sensitive
+        # Snapshot of the initial configuration, used by ``reset``. Relevant for matchers that are
+        # per-language singletons (``Language.get_source_fn_matcher`` is ``@cache``d): extensions added
+        # via ``add_extensions`` for one project must not leak into the next, so the singleton is reset
+        # to this snapshot at every language server initialisation.
+        self._initial_file_extensions = list(self._file_extensions)
+
+    def reset(self) -> None:
+        """
+        Restore the matcher to its initial set of extensions (as provided at construction).
+
+        Undoes any extensions added via :meth:`add_extensions`. Intended for the per-language
+        singleton matchers, which are reset at the start of every language server initialisation so
+        that a previous project's reconfiguration does not leak into a newly activated one.
+        """
+        self._file_extensions = list(self._initial_file_extensions)
+
+    def add_extensions(self, *file_extensions: str) -> None:
+        """
+        Add further file extensions to this matcher (idempotent).
+
+        This is intended for matchers that are per-language singletons, i.e. those returned by
+        :meth:`Language.get_source_fn_matcher` (which is ``@cache``d): extensions that a user
+        configures for a language server (e.g. ``.cgi`` for Perl) can be added here so that every
+        consumer of the matcher — symbol index traversal, ignore checks, language composition —
+        treats the same set of files as sources, staying in sync with the language server.
+
+        :param file_extensions: the additional file extensions, e.g. ``.cgi``
+        """
+        for ext in file_extensions:
+            norm = ext if self._case_sensitive else ext.lower()
+            if norm not in self._file_extensions:
+                self._file_extensions.append(norm)
 
     def is_relevant_filename(self, fn: str) -> bool:
         if not self._case_sensitive:
@@ -34,7 +72,7 @@ class FilenameMatcher:
         a *complete* extension — i.e. the extension must either end the string or be followed
         by a non-extension-character (anything other than a letter, digit, or underscore).
         """
-        if self._case_sensitive:
+        if not self._case_sensitive:
             string = string.lower()
         for ext in self._file_extensions:
             if re.search(rf"{re.escape(ext)}(?:\W|$)", string):
@@ -134,6 +172,11 @@ class Language(str, Enum):
     Connects to the Godot editor's built-in LSP server over TCP (port 6008).
     The editor must already be running with its built-in LSP enabled (default).
     Supports .gd and .gdscript files.
+    """
+    QML = "qml"
+    """QML language server using Qt's qmlls (or qmlls6).
+    Supports .qml files. Requires Qt 6 installation providing qmlls on PATH.
+    See https://doc.qt.io/qt-6/qtqml-tool-qmlls.html
     """
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
@@ -305,6 +348,8 @@ class Language(str, Enum):
         """
         return self.get_ls_class().supports_implementation_request()
 
+    # NOTE: Caching results in a singleton per enum item, which is a precondition for persistent configuration of the matcher.
+    @cache
     def get_source_fn_matcher(self) -> FilenameMatcher:
         match self:
             case self.PYTHON | self.PYTHON_JEDI | self.PYTHON_TY | self.PYTHON_PYREFLY:
@@ -517,6 +562,8 @@ class Language(str, Enum):
                 return FilenameMatcher(".ads", ".adb", ".ada", case_sensitive=False)
             case self.GDSCRIPT:
                 return FilenameMatcher(".gd", ".gdscript")
+            case self.QML:
+                return FilenameMatcher(".qml")
             case self.HTML:
                 return FilenameMatcher(".html", ".htm")
             case self.SCSS:
@@ -796,6 +843,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.godot_language_server import GodotLanguageServer
 
                 return GodotLanguageServer
+            case self.QML:
+                from solidlsp.language_servers.qml_language_server import QmlLanguageServer
+
+                return QmlLanguageServer
             case self.HTML:
                 from solidlsp.language_servers.vscode_html_language_server import VsCodeHtmlLanguageServer
 
@@ -826,13 +877,28 @@ class Language(str, Enum):
         raise ValueError(f"Unhandled language server class: {ls_class}")
 
 
-@dataclass
+@dataclass(frozen=True)
 class LanguageServerConfig:
     """
-    Configuration parameters
+    Configuration parameters for a language server instance
     """
 
     code_language: Language
+    """
+    defines the language server to use
+    """
+    workspace_folders: list[str] = field(default_factory=lambda: ["."])
+    """
+    list of workspace folders to be used by the language server and to be fully indexed by SolidLSP.
+    Paths can either be absolute or relative to the project root.
+    These folders must be descendants of the project root.
+    """
+    additional_workspace_folders: list[str] = field(default_factory=list)
+    """
+    list of additional workspace folders to be passed to the language server, but which are not to be indexed by SolidLSP. 
+    Paths can either be absolute or relative to the project root.
+    These folders can potentially be outside of the project root, e.g. for cross-package reference support.
+    """
     trace_lsp_communication: bool = False
     start_independent_lsp_process: bool = True
     ignored_paths: list[str] = field(default_factory=list)
@@ -845,3 +911,38 @@ class LanguageServerConfig:
         import inspect
 
         return cls(**{k: v for k, v in env.items() if k in inspect.signature(cls).parameters})
+
+    @staticmethod
+    def _absolute_workspace_folders(folders: list[str], project_root: str) -> list[str]:
+        abs_workspace_folders = []
+        for path in folders:
+            if os.path.isabs(path):
+                abs_path = str(Path(path).resolve())
+            else:
+                abs_path = os.path.realpath(os.path.join(project_root, path))
+            if not os.path.exists(abs_path):
+                log.error("Workspace folder does not exist: %s; skipping", abs_path)
+                continue
+            if abs_path in abs_workspace_folders:
+                log.warning("Duplicate workspace folder: %s; skipping", abs_path)
+                continue
+            abs_workspace_folders.append(abs_path)
+        return abs_workspace_folders
+
+    def get_absolute_workspace_folders(self, project_root: str) -> list[str]:
+        """
+        Get the absolute paths of the workspace folders, resolving relative paths against the project root.
+
+        :param project_root: The root path of the project
+        :return: List of absolute workspace folder paths
+        """
+        return self._absolute_workspace_folders(self.workspace_folders, project_root)
+
+    def get_absolute_additional_workspace_folders(self, project_root: str) -> list[str]:
+        """
+        Get the absolute paths of the additional workspace folders, resolving relative paths against the project root.
+
+        :param project_root: The root path of the project
+        :return: List of absolute additional workspace folder paths
+        """
+        return self._absolute_workspace_folders(self.additional_workspace_folders, project_root)

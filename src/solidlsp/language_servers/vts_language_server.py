@@ -6,17 +6,14 @@ which provides TypeScript language server functionality via VSCode's TypeScript 
 
 import logging
 import os
-import pathlib
 import shutil
 import threading
-from typing import cast
 
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import PlatformId, PlatformUtils
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -141,16 +138,20 @@ class VtsLanguageServer(SolidLanguageServer):
             raise ValueError(f"ls_specific_settings.typescript_vts.initialization_options must be a dict, got {type(opts).__name__}")
         return opts
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the VTS Language Server.
 
         If ``initialization_options`` is set in ``ls_specific_settings["typescript_vts"]``,
         it is forwarded verbatim as LSP ``initializationOptions``.
         """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params: dict = {
             "locale": "en",
+            "initializationOptions": {
+                "preferences": {
+                    "disableAutomaticTypingAcquisition": True,
+                },
+            },
             "capabilities": {
                 "textDocument": {
                     "synchronization": {"didSave": True, "dynamicRegistration": True},
@@ -172,22 +173,13 @@ class VtsLanguageServer(SolidLanguageServer):
                     "configuration": True,  # This might be needed for vtsls
                 },
             },
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
         }
 
         if self._initialization_options:
             log.info("Forwarding user-provided initializationOptions to vtsls: %s", self._initialization_options)
             initialize_params["initializationOptions"] = self._initialization_options
 
-        return cast(InitializeParams, initialize_params)
+        return initialize_params
 
     def _start_server(self) -> None:
         """
@@ -244,7 +236,7 @@ class VtsLanguageServer(SolidLanguageServer):
 
         log.info("Starting VTS server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)

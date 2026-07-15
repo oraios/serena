@@ -63,6 +63,7 @@ from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import Language
 from solidlsp.util import subprocess_util
+from solidlsp.util.subprocess_util import terminate_process_tree_with_kill_fallback
 
 if TYPE_CHECKING:
     from serena.gui_log_viewer import GuiLogViewer
@@ -640,12 +641,10 @@ class SerenaAgent:
         # determine the effective language backend for this session.
         # If a startup project is provided and has a per-project override, use it; otherwise use the global config.
         # Since we don't want to change the toolset after startup, the language backend cannot be changed within a running Serena session
-        self._language_backend = self.serena_config.language_backend
-        if registered_project_to_activate is not None and registered_project_to_activate.project_config.language_backend is not None:
-            self._language_backend = registered_project_to_activate.project_config.language_backend
-            log.info(f"Using language backend as configured in project.yml: {self._language_backend.name}")
-        else:
-            log.info(f"Using language backend from global configuration: {self._language_backend.name}")
+        self._language_backend = self.serena_config.determine_language_backend(
+            project_config=registered_project_to_activate.project_config if registered_project_to_activate is not None else None,
+            log_choice=True,
+        )
 
         # create the tool names mapping for prompts
         self._prompt_tool_names_mapping = self._create_prompt_tool_names_mapping(self._language_backend)
@@ -1202,6 +1201,7 @@ class SerenaAgent:
             self._update_active_tools()
 
         def init_project_services() -> None:
+            self._run_project_activation_command(project)
             self._init_active_project_language_backend()
 
         # initialise the project's language backend in the background
@@ -1215,6 +1215,48 @@ class SerenaAgent:
             self._dashboard_manager.update_active_project(self._active_project)
 
         return True
+
+    @staticmethod
+    def _run_project_activation_command(project: Project) -> None:
+        """
+        Runs the given project's activation_command (if set and the project is trusted).
+        Failures are logged.
+        """
+        activation_command = project.project_config.activation_command
+        if not activation_command:
+            return
+        if not project.is_trusted():
+            log.warning(
+                f"Project path {project.project_root} is not trusted, ignoring activation_command "
+                "from project configuration. To trust the project, modify the trusted path patterns "
+                "in the global configuration."
+            )
+            return
+        timeout = project.project_config.activation_command_timeout
+        cmd = subprocess_util.convert_shell_cmd(activation_command)
+        log.info(f"Running activation_command for project '{project.project_name}': {cmd}")
+        try:
+            with LogTime("Project activation command", logger=log):
+                p = subprocess.Popen(
+                    cmd,
+                    shell=True,
+                    cwd=project.project_root,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    **subprocess_util.subprocess_kwargs(),
+                )
+                try:
+                    _, stderr = p.communicate(timeout=timeout)
+                    if p.returncode != 0:
+                        log.error(f"activation_command for project '{project.project_name}' failed (exit {p.returncode}): {stderr.strip()}")
+                except subprocess.TimeoutExpired:
+                    log.error(
+                        f"Activation_command for project '{project.project_name}' timed out after "
+                        f"{timeout}s; terminating process and continuing with backend initialisation."
+                    )
+                    terminate_process_tree_with_kill_fallback(p, terminate_timeout=5.0, process_name="activation_command")
+        except Exception:
+            log.exception(f"Unexpected error running activation_command for project '{project.project_name}'")
 
     def _init_active_project_language_backend(self) -> None:
         """
@@ -1258,7 +1300,7 @@ class SerenaAgent:
         if project_instance is not None:
             log.info(f"Found registered project '{project_instance.project_name}' at path {project_instance.project_root}")
         elif os.path.isdir(project_root_or_name):
-            project_instance = self.serena_config.add_project_from_path(project_root_or_name)
+            project_instance = self.serena_config.add_project_from_path(project_root_or_name, asynchronous_autogen=True)
             log.info(f"Added new project {project_instance.project_name} for path {project_instance.project_root}")
 
         if project_instance is None:

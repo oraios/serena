@@ -21,6 +21,7 @@ from solidlsp.language_servers.eclipse_jdtls import (
     JDTLS_CONFIG_DIR_BY_PLATFORM,
     JDTLS_MIN_JDK_VERSION,
     EclipseJDTLS,
+    RuntimeDependencyPaths,
 )
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.settings import SolidLSPSettings
@@ -52,6 +53,144 @@ def _make_fake_jdtls_install(
         for config_name in set(JDTLS_CONFIG_DIR_BY_PLATFORM.values()):
             (root / config_name).mkdir(exist_ok=True)
     return root
+
+
+def _make_runtime_dependency_paths(root: Path) -> RuntimeDependencyPaths:
+    """
+    Build minimal runtime dependency paths for initialize-parameter tests.
+
+    :param root: Root directory under which fake runtime files are created.
+    :return: Runtime paths sufficient for ``EclipseJDTLS._create_base_initialize_params``.
+    """
+    jre_home = root / "jre-home"
+    jre_home.mkdir(parents=True)
+    jre_bin = jre_home / "bin"
+    jre_bin.mkdir()
+    jre_path = jre_bin / _JAVA_EXE_NAME
+    jre_path.touch()
+
+    gradle_path = root / "gradle"
+    gradle_path.mkdir()
+
+    launcher = root / "jdtls-launcher.jar"
+    launcher.touch()
+    config = root / "config"
+    config.mkdir()
+    lombok = root / "lombok.jar"
+    lombok.touch()
+
+    return RuntimeDependencyPaths(
+        jre_path=str(jre_path),
+        jre_home_path=str(jre_home),
+        jdtls_launcher_jar_path=str(launcher),
+        jdtls_readonly_config_path=str(config),
+        lombok_jar_path=str(lombok),
+        gradle_path=str(gradle_path),
+    )
+
+
+def _make_uninitialized_jdtls(
+    repository_root: Path, custom_settings: dict[str, object], runtime_dependency_paths: RuntimeDependencyPaths
+) -> EclipseJDTLS:
+    """
+    Build an EclipseJDTLS instance without starting dependency setup or JDTLS.
+
+    :param repository_root: Repository root reported to initialization-parameter generation.
+    :param custom_settings: Java language-server settings to attach to the instance.
+    :param runtime_dependency_paths: Runtime paths to attach to the instance.
+    :return: Partially initialized server suitable for pure parameter-generation tests.
+    """
+    server = object.__new__(EclipseJDTLS)
+    server.repository_root_path = str(repository_root)
+    server._custom_settings = SolidLSPSettings.CustomLSSettings(custom_settings)
+    server.runtime_dependency_paths = runtime_dependency_paths
+    return server
+
+
+def _gradle_java_home(initialize_params: dict) -> str:
+    """
+    Return the Gradle Java home from initialize parameters.
+
+    :param initialize_params: JDTLS initialize-parameter payload.
+    :return: Configured Gradle Java home.
+    """
+    return initialize_params["initializationOptions"]["settings"]["java"]["import"]["gradle"]["java"]["home"]
+
+
+# ----------------------------------------------------------------------------
+# Gradle Java-home initialize settings
+# ----------------------------------------------------------------------------
+
+
+class TestGradleJavaHomeInitializeSettings:
+    def test_explicit_gradle_java_home_takes_precedence_over_java_home(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Verify explicit Gradle Java home wins over system ``JAVA_HOME``."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+        explicit_gradle_jdk = tmp_path / "explicit-gradle-jdk"
+        explicit_gradle_jdk.mkdir()
+        env_jdk = tmp_path / "env-jdk"
+        env_jdk.mkdir()
+        monkeypatch.setenv("JAVA_HOME", str(env_jdk))
+
+        server = _make_uninitialized_jdtls(
+            repo,
+            {"gradle_java_home": str(explicit_gradle_jdk), "use_system_java_home": True},
+            runtime_paths,
+        )
+
+        assert _gradle_java_home(server._create_base_initialize_params()) == str(explicit_gradle_jdk)
+
+    def test_uses_java_home_for_gradle_when_system_java_home_enabled(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Verify Gradle import uses system ``JAVA_HOME`` when the system setting is enabled."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+        env_jdk = tmp_path / "env-jdk"
+        env_jdk.mkdir()
+        monkeypatch.setenv("JAVA_HOME", str(env_jdk))
+
+        server = _make_uninitialized_jdtls(repo, {"use_system_java_home": True}, runtime_paths)
+
+        assert _gradle_java_home(server._create_base_initialize_params()) == str(env_jdk)
+
+    def test_uses_bundled_runtime_for_gradle_when_system_java_home_disabled(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Verify Gradle import uses the bundled runtime when system Java home is disabled."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+        env_jdk = tmp_path / "env-jdk"
+        env_jdk.mkdir()
+        monkeypatch.setenv("JAVA_HOME", str(env_jdk))
+
+        server = _make_uninitialized_jdtls(repo, {"use_system_java_home": False}, runtime_paths)
+
+        assert _gradle_java_home(server._create_base_initialize_params()) == runtime_paths.jre_path
+
+    def test_uses_bundled_runtime_for_gradle_when_requested_java_home_is_unset(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Verify Gradle import falls back to the bundled runtime when ``JAVA_HOME`` is unset."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+        monkeypatch.delenv("JAVA_HOME", raising=False)
+
+        server = _make_uninitialized_jdtls(repo, {"use_system_java_home": True}, runtime_paths)
+
+        assert _gradle_java_home(server._create_base_initialize_params()) == runtime_paths.jre_path
+
+    def test_missing_explicit_gradle_java_home_raises(self, tmp_path: Path) -> None:
+        """Verify missing explicit Gradle Java home remains a configuration error."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+
+        server = _make_uninitialized_jdtls(repo, {"gradle_java_home": str(tmp_path / "missing-jdk")}, runtime_paths)
+
+        with pytest.raises(FileNotFoundError, match="Gradle Java home not found"):
+            server._create_base_initialize_params()
 
 
 # ----------------------------------------------------------------------------
@@ -476,3 +615,32 @@ class TestComputeWorkspaceHash:
         configured_hash = EclipseJDTLS.DependencyProvider._compute_workspace_hash(self.REPO, self.DEFAULT_LAUNCHER, settings)
 
         assert configured_hash != legacy_hash
+
+
+# ----------------------------------------------------------------------------
+# is_ignored_dirname (directory-traversal filter)
+# ----------------------------------------------------------------------------
+
+
+class TestIsIgnoredDirname:
+    """Regression for #1645: the Java language server must not hard-ignore directories whose names
+    collide with build-tool output (``lib``, ``dist``, ``classes``, ``out``, ...). Those are all
+    valid Java package identifiers, so ignoring them by name hid legitimate source from the symbol
+    tools even when ``git check-ignore`` reported nothing. Real build output is already filtered via
+    ``.gitignore``, so directory traversal should only skip the language-agnostic
+    ``_ALWAYS_IGNORED_DIRS`` (VCS/venv/cache/IDE internals) inherited from the base language server.
+    """
+
+    @pytest.fixture
+    def jdtls(self) -> EclipseJDTLS:
+        # is_ignored_dirname only reads the class-level _ALWAYS_IGNORED_DIRS, so an uninitialized
+        # instance is sufficient here (no Java or JDTLS process required).
+        return object.__new__(EclipseJDTLS)
+
+    @pytest.mark.parametrize("dirname", ["lib", "dist", "classes", "out", "target", "build", "bin"])
+    def test_valid_package_dirnames_are_not_ignored(self, jdtls: EclipseJDTLS, dirname: str) -> None:
+        assert jdtls.is_ignored_dirname(dirname) is False
+
+    @pytest.mark.parametrize("dirname", [".git", ".venv", ".idea", ".serena", ".mypy_cache"])
+    def test_always_ignored_dirs_are_still_ignored(self, jdtls: EclipseJDTLS, dirname: str) -> None:
+        assert jdtls.is_ignored_dirname(dirname) is True

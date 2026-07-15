@@ -397,7 +397,7 @@ Add the `serena` MCP server configuration
       "command": "serena",
       "args": [
         "start-mcp-server",
-        "--context=claude-desktop"
+        "--context=desktop-app"
       ]
     }
   }

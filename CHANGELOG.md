@@ -3,9 +3,20 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - Speed up MCP startup when auto-creating projects at startup (e.g. using `--project-from-cwd`) by
+    determining the project's languages in a background thread #1683
+  - Fix: in `glob_to_regex` / `search_text(is_glob=True)`, a `?` wildcard matched two characters instead
+    of one (it emitted `..` rather than `.`); it now matches a single character, consistent with the
+    `?` semantics documented for `glob_match` and the `test_??.py` example in `search_text`'s docstring.
   - Add notion of trusted projects via new global configuration setting `trusted_project_path_patterns`.
     Current effects:
-    - `ls_specific_settings` defined in project configurations will only be applied for trusted projects    
+    - `ls_specific_settings` defined in project configurations will only be applied for trusted projects
+    - `activation_command` (and `activation_command_timeout`) defined in project configurations will only
+      be executed for trusted projects: an optional shell command run in the project root before the
+      language backend initialises (e.g. to generate source files a language server needs to index).
+      Exit code is the primary completion signal; `activation_command_timeout` (default 180s) is a safety
+      backstop — on expiry the process is killed and activation continues. Failures and timeouts are
+      logged but do not abort activation.
   - Fix: context or mode argument referencing a known name (e.g. `--context anitgravity`) could result in   
     incorrect file access if a corresponding local file existed (e.g. `./antigravity` binary);
     file access is now guarded with path detection (file ending or path separator must be present)
@@ -18,6 +29,16 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Update prompts/instructions: Serena instructions manual, modes (editing, interactive) 
   - Allow structured tool output to be configured on a per-context basis, disabling it for Claude Code
     (which does not correctly unpack structured output) #1042
+  - Fix: Project-specific filtering of files for source files ignored the language backend. 
+    The check is really only possible for LSP. 
+  - Fix: File system permission errors during gitignore scanning were not caught #1624
+  - During project creation, language composition percentages are now computed relative to the total number 
+    of recognised source files instead of all files, i.e. unrecognised files are ignored in the percentage 
+    computation.
+  - Fix: Use LSP-compliant line splitting ("\n", "\r\n" and "\r" can define line breaks); previously only "\n" considered
+  - Fix: Apply consistent line splitting across tools, uniformly applying the LSP splitting semantics; 
+    affects `search_text` used by `search_for_pattern` tool (reported in #1684)
+  - Fix: glob pattern expansion in `expand_braces` did not terminate with empty or unbalanced braces #1690
 
 * CLI:
   - Fix `--project-from-cwd` hijacking git worktrees nested under a Serena project. `find_project_root`
@@ -36,24 +57,64 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Make tool call errors surface explicitly as errors at the MCP protocol level
 
 * Language Servers:
+  - Fix: `SolidLanguageServer.is_ignored_path` raised `FileNotFoundError` for paths that are not present
+    on disk, crashing symbol tools when a language server reported locations of generated files
+    (e.g. JDTLS reporting Lombok-generated classes under `target/classes`). Missing paths are now
+    classified by the usual ignore rules, and symbol locations resolving to non-existent files are skipped.
+  - Solidity: fix diagnostics intermittently coming back empty on slow or cold environments (macOS/Windows CI).
+  - Perl: expose `file_filter` and `ignore_dirs` via `ls_specific_settings["perl"]`, so projects with
+    non-standard extensions (e.g. `.cgi`, `.psgi`) can make those files visible to Perl::LanguageServer.
+    Configured extensions are also synced into the Perl source-file matcher (now a cached singleton),
+    keeping `find_symbol` / symbol indexing consistent with the LS; the matcher is reset on every
+    language server activation so one project's reconfiguration does not leak into the next.
+    `FilenameMatcher` gains `add_extensions` / `reset` methods. Defaults are unchanged. #1449
   - C/C++ (clangd): improve support and documentation for Unreal Engine 5 projects.
+  - HLSL (`shader-language-server`): pass `--locked` to `cargo install` when building from source
+    on macOS (and in the manual-install instructions), honoring the crate's packaged `Cargo.lock`.
+    Without it, fresh dependency resolution pulled in shader-sense 1.4.0, which no longer compiles
+    against the pinned shader_language_server 1.3.1, breaking the macOS CI job.
   - `typescript_vts`: Add `initialization_options` setting in `ls_specific_settings.typescript_vts`. 
     Enables Yarn PnP setups with `typescript.tsdk` pointing at the Yarn-generated SDK.
+  - TypeScript/VTS: disable automatic typing acquisition during initialization (no network
+    downloads at startup) and replace the fixed 2-second cross-file reference wait with
+    event-based `$/progress` indexing tracking (configurable `indexing_timeout`, default 30s)
   - C#: minor fixes in Omnisharp and Roslyn that prevented startup on some systems #1617
   - `SvelteLanguageServer`: Fix diagnostics requests for TypeScript/JavaScript files incorrectly being
     processed by the Svelte LS instead of the TypeScript LS.
   - `SvelteLanguageServer`: Fix document-symbol requests for TypeScript/JavaScript files returning empty
     results in svelte-only mode (`languages: [svelte]`. #1552
+  - Svelte + TypeScript: make companion TypeScript server raise on readiness and indexing timeouts (instead
+    of silent "proceeding anyway"), so that partial indexing surfaces as a clear failure instead of flaky/wrong
+    cross-file results; add configurable timeouts (`server_ready_timeout`, `indexing_timeout`)
+    and overridable timeout hooks (base TS stays permissive). Svelte test fixture now uses `npm ci` +
+    committed `package-lock.json`.
   - `JuliaLanguageServer`: Fix the stdio MCP server exiting right after `initialize` ("tools fetch failed")
     when `julia` is enabled. #1577
   - `Java`: invalidate JDTLS workspace cache when Java import settings change #1576
+  - `Java`: use `JAVA_HOME` for Gradle import when `use_system_java_home` is enabled and `gradle_java_home`
+    is unset. #1657
+  - `Java`: stop hard-ignoring directories named `target`/`build`/`bin`/`out`/`classes`/`dist`/`lib` in
+    `EclipseJDTLS`. These are all valid Java package identifiers, so ignoring them by name hid legitimate
+    source from the symbol tools even when they were not gitignored. Removed the hardcoded override; real
+    build output is already excluded via `.gitignore`. #1645
   - Improve quoting of arguments in shell executions
   - Add **LaTeX** support (experimental) via [texlab](https://github.com/latex-lsp/texlab).
+  - Add **QML** support via Qt's [`qmlls`](https://doc.qt.io/qt-6/qtqml-tool-qmlls.html) language
+    server (requires Qt 6 with `qmlls`/`qmlls6` on PATH). #1381
   - PHP: add support for PHPantom as alternative to the already supported PHP LS #1554.
+  - Add new launch command customization options: `ls_args`, `ls_extra_args` and `ls_base_cmd`
+  - Add new configuration option `ls_workspace_folders` to allow indexed source folders to be specified
+    explicitly. In monorepos, this allows the set of indexed folders to be restricted to a subset of
+    the repository. #1627
+  - Rename configuration option `additional_workspace_folders` to `ls_additional_workspace_folders`
+    and support the option across all language servers (previously limited to TypeScript).
+  - `Pyright`: bump timeout for waiting for initial analysis from 5s to 60s.
 
 * JetBrains:
   - Add configuration option `jetbrains_launch_command`, allowing Serena to spawn IDE instances automatically
     upon project activation
+  - Fix: `jet_brains_list_inspections` failed when only default parameters were used #1615 
+  - Fix: `jet_brains_run_inspections` returned incorrectly transformed data (malforming snake-case conversion applied to all keys)
 
 * Dashboard:
   - Make list of trusted hosts configurable, fixing host validation introduced in v1.5.2 allowing only
@@ -69,6 +130,8 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Memories:
   - Make memory iteration follow symbolic links 
+  - Fix: a memory name that was absolute (e.g. `/etc/cron.d/backdoor`) or contained empty path
+    segments could write outside the `memories` folder.
 
 * Dependencies:
   - Add dependency `oslex`

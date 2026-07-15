@@ -22,7 +22,7 @@ from solidlsp.ls import (
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_types import Hover
-from solidlsp.lsp_protocol_handler.lsp_types import DiagnosticSeverity, InitializeParams
+from solidlsp.lsp_protocol_handler.lsp_types import DiagnosticSeverity
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -202,13 +202,11 @@ class HaxeLanguageServer(SolidLanguageServer):
             "dump",
         ]
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """Return initialize params for the Haxe Language Server.
 
         displayArguments are resolved from user-configured buildFile or auto-discovered .hxml files.
         """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
-
         # 1. Check for user-configured .hxml path
         configured_build_file = self._custom_settings.get("buildFile")
         if configured_build_file:
@@ -216,7 +214,7 @@ class HaxeLanguageServer(SolidLanguageServer):
             display_arguments = [configured_build_file]
         else:
             # 2. Auto-discover .hxml files recursively
-            display_arguments = self._discover_hxml_file(repository_absolute_path)
+            display_arguments = self._discover_hxml_file(self.repository_root_path)
 
         init_options: dict = {"displayArguments": display_arguments}
         rename_source_folders = self._custom_settings.get("renameSourceFolders")
@@ -258,17 +256,8 @@ class HaxeLanguageServer(SolidLanguageServer):
                 },
             },
             "initializationOptions": init_options,
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
         }
-        return initialize_params  # type: ignore[return-value]
+        return initialize_params
 
     @staticmethod
     def _discover_hxml_file(repository_absolute_path: str) -> list[str]:
@@ -377,7 +366,7 @@ class HaxeLanguageServer(SolidLanguageServer):
 
         log.info("Starting Haxe server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         self.server.send.initialize(initialize_params)

@@ -9,15 +9,12 @@ pragmas/aspects in source rather than file extension, so a single
 
 import logging
 import os
-import pathlib
 import threading
-from typing import cast
 
 from overrides import override
 
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
@@ -155,15 +152,9 @@ class AdaLanguageServer(SolidLanguageServer):
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
-    def _get_initialize_params(self) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """Returns the initialization params for the Ada Language Server."""
-        repository_absolute_path = self.repository_root_path
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
-
         result = {
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
             "capabilities": {
                 "workspace": {
                     "applyEdit": True,
@@ -188,9 +179,8 @@ class AdaLanguageServer(SolidLanguageServer):
             },
             "initializationOptions": {},
             "trace": "off",
-            "workspaceFolders": [{"uri": root_uri, "name": os.path.basename(repository_absolute_path)}],
         }
-        return cast(InitializeParams, result)
+        return result
 
     def _start_server(self) -> None:
         """Start the Ada Language Server process and complete the LSP handshake."""
@@ -213,7 +203,7 @@ class AdaLanguageServer(SolidLanguageServer):
         log.info("Starting ada_language_server process")
         self.server.start()
 
-        initialize_params = self._get_initialize_params()
+        initialize_params = self._create_initialize_params()
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
 

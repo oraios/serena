@@ -607,3 +607,51 @@ class TestMemoriesManagerCustomPath:
         manager.save_memory("topic_b", "content b", is_tool_context=False)
         memories = manager.list_project_memories()
         assert sorted(memories.get_full_list()) == ["topic_a", "topic_b"]
+
+
+class TestProjectConfigActivationCommand:
+    """Tests for the activation_command and activation_command_timeout fields."""
+
+    def _base_data(self) -> dict:
+        data, _ = ProjectConfig._load_yaml_dict(PROJECT_TEMPLATE_FILE)
+        data["project_name"] = "test"
+        data["languages"] = ["python"]
+        return data
+
+    def test_activation_command_defaults_to_none(self):
+        config = ProjectConfig(project_name="test", languages=[Language.PYTHON])
+        assert config.activation_command is None
+
+    def test_activation_command_timeout_default(self):
+        config = ProjectConfig(project_name="test", languages=[Language.PYTHON])
+        assert config.activation_command_timeout == 180.0
+
+    def test_activation_command_parsed_from_dict(self):
+        data = self._base_data()
+        data["activation_command"] = "npx nx run-many -t build"
+        data["activation_command_timeout"] = 300
+        config = ProjectConfig._from_dict(data, local_override_keys=[])
+        assert config.activation_command == "npx nx run-many -t build"
+        assert config.activation_command_timeout == 300.0
+
+    def test_activation_command_defaults_when_absent(self):
+        data = self._base_data()
+        data.pop("activation_command", None)
+        data.pop("activation_command_timeout", None)
+        config = ProjectConfig._from_dict(data, local_override_keys=[])
+        assert config.activation_command is None
+        assert config.activation_command_timeout == 180.0
+
+    def test_activation_command_timeout_zero_raises(self):
+        data = self._base_data()
+        data["activation_command"] = "echo hi"
+        data["activation_command_timeout"] = 0
+        with pytest.raises(ValueError, match="activation_command_timeout must be positive"):
+            ProjectConfig._from_dict(data, local_override_keys=[])
+
+    def test_activation_command_timeout_negative_raises(self):
+        data = self._base_data()
+        data["activation_command"] = "echo hi"
+        data["activation_command_timeout"] = -10
+        with pytest.raises(ValueError, match="activation_command_timeout must be positive"):
+            ProjectConfig._from_dict(data, local_override_keys=[])

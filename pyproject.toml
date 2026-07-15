@@ -97,7 +97,7 @@ dev = [
   "pyasn1==0.6.3",
   "PyJWT==2.12.0",
 ]
-agno = ["agno==2.5.10", "sqlalchemy==2.0.41"]  # agno bumped for session state overwrite CVE
+agno = ["agno==2.6.6", "sqlalchemy==2.0.41"]  # agno bumped for session state overwrite CVE
 google = ["google-genai==1.27.0"]
 
 [project.urls]
@@ -173,6 +173,7 @@ format = ["_ruff_fix", "_ruff_format"]
 _ty_core = "ty check src/serena src/solidlsp"
 _ty_test = "ty check test --exclude test/resources"
 type-check = ["_ty_core", "_ty_test"]
+ty = ["type-check"]
 # docs
 _autogen_docs = "python docs/autogen_docs.py"
 _sphinx_build = "sphinx-build -b html docs docs/_build -W --keep-going"
@@ -377,11 +378,14 @@ markers = [
   "scss: language server running for SCSS / Sass / CSS (some-sass-language-server)",
   "angular: language server running for Angular (uses @angular/language-server + @angular/language-service tsserver plugin)",
   "ada: language server running for Ada / SPARK (uses AdaCore Ada Language Server)",
+  "qml: language server running for QML (uses Qt's qmlls)",
 ]
 
 [tool.codespell]
 # Ref: https://github.com/codespell-project/codespell#using-a-config-file
-skip = '.git*,*.svg,*.lock,*.min.*,*test_memories_manager.py'
+# We skip third-party test fixture repositories entirely (they contain
+# external package lockfiles, minified code, and arbitrary dependency strings).
+skip = '.git*,*.svg,*.lock,*.min.*,*test_memories_manager.py,./test/resources/repos'
 check-hidden = true
 ignore-regex = '\.\w+'
 ignore-words-list = 'paket,EDN,als,ue'

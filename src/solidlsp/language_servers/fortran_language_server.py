@@ -3,8 +3,6 @@ Fortran Language Server implementation using fortls.
 """
 
 import logging
-import os
-import pathlib
 import re
 
 from overrides import override
@@ -19,7 +17,6 @@ from solidlsp.ls import (
     SolidLanguageServer,
 )
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -190,10 +187,8 @@ class FortranLanguageServer(SolidLanguageServer):
             version_setting_key="fortls_version",
         )
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """Initialize params for Fortran Language Server."""
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params = {
             "locale": "en",
             "capabilities": {
@@ -231,17 +226,8 @@ class FortranLanguageServer(SolidLanguageServer):
                     },
                 },
             },
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
         }
-        return initialize_params  # type: ignore[return-value]
+        return initialize_params
 
     def _start_server(self) -> None:
         """Start Fortran Language Server process."""
@@ -264,7 +250,7 @@ class FortranLanguageServer(SolidLanguageServer):
         log.info("Starting Fortran Language Server (fortls) process")
         self.server.start()
 
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
         log.info("Sending initialize request to Fortran Language Server")
 
         init_response = self.server.send.initialize(initialize_params)

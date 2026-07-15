@@ -303,7 +303,15 @@ class JetBrainsPluginClient(ToStringMixin):
                 f"{self._plugin_version}. Ask the user to update the plugin!"
             )
 
-    def _make_request(self, method: str, endpoint: str, data: Optional[dict] = None) -> dict[str, Any]:
+    def _make_request(self, method: str, endpoint: str, data: Optional[dict] = None, pythonify: bool = True) -> dict[str, Any]:
+        """
+        :param method: the HTTP method to use ("GET" or "POST")
+        :param endpoint: the endpoint to call (e.g., "/findSymbol")
+        :param data: the data to send in the request body (for POST requests)
+        :param pythonify: whether to recursively "pythonify" the response object, converting all keys to snake_case.
+            This must not be enabled if *any* key contains variable data rather (and therefore isn't a well-defined DTO structure).
+        :return: the response as a dictionary
+        """
         url = f"{self._base_url}{endpoint}"
 
         response: Response | None = None
@@ -320,7 +328,11 @@ class JetBrainsPluginClient(ToStringMixin):
 
             # Try to parse JSON response
             try:
-                return self._pythonify_response(response.json())
+                response_json = response.json()
+                if pythonify:
+                    return self._pythonify_response(response_json)
+                else:
+                    return response_json
             except json.JSONDecodeError:
                 # If response is not JSON, return raw text
                 return {"response": response.text}
@@ -676,7 +688,7 @@ class JetBrainsPluginClient(ToStringMixin):
         inspection_names: list[str] | None = None,
         start_line: int | None = None,
         end_line: int | None = None,
-    ) -> jb.RunInspectionsResponse:
+    ) -> dict:
         """
         Runs IDE inspections on the given file and returns the results.
 
@@ -685,6 +697,9 @@ class JetBrainsPluginClient(ToStringMixin):
         :param inspection_names: optional list of specific inspection names to run
         :param start_line: optional start line to restrict the inspection range
         :param end_line: optional end line to restrict the inspection range
+        :return: the inspection results as a dictionary.
+            NOTE: The response is currently *not* a well-defined DTO, because it stores variable data in keys.
+            Consequently, the `pythonify` option is disabled for this request, and the response is returned as-is.
         """
         self._require_version_at_least(2023, 2, 14)
         request_data: dict[str, Any] = {
@@ -698,7 +713,7 @@ class JetBrainsPluginClient(ToStringMixin):
             request_data["startLine"] = start_line
         if end_line is not None:
             request_data["endLine"] = end_line
-        return cast(jb.RunInspectionsResponse, self._make_request("POST", "/runInspectionsOnFile", request_data))
+        return self._make_request("POST", "/runInspectionsOnFile", request_data, pythonify=False)
 
     def list_inspections(
         self,

@@ -5,14 +5,12 @@ texlab is downloaded as a prebuilt binary from the latex-lsp/texlab GitHub relea
 
 import logging
 import os
-from typing import cast
 
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_utils import PathUtils, PlatformUtils
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.ls_utils import PlatformUtils
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -134,15 +132,10 @@ class TexlabLanguageServer(SolidLanguageServer):
             solidlsp_settings,
         )
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """Returns the initialize params for the texlab Language Server."""
-        root_uri = PathUtils.path_to_uri(repository_absolute_path)
         result = {
-            "processId": os.getpid(),
             "locale": "en",
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
             "capabilities": {
                 "textDocument": {
                     "synchronization": {"didSave": True, "dynamicRegistration": True},
@@ -159,14 +152,8 @@ class TexlabLanguageServer(SolidLanguageServer):
                 },
                 "workspace": {"workspaceFolders": True, "didChangeConfiguration": {"dynamicRegistration": True}},
             },
-            "workspaceFolders": [
-                {
-                    "name": os.path.basename(repository_absolute_path),
-                    "uri": root_uri,
-                }
-            ],
         }
-        return cast(InitializeParams, result)
+        return result
 
     def _start_server(self) -> None:
         """Start the texlab server process."""
@@ -187,7 +174,7 @@ class TexlabLanguageServer(SolidLanguageServer):
 
         log.info("Starting texlab server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to texlab and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
