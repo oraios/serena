@@ -1124,17 +1124,11 @@ class MemoryCommands(AutoRegisteringGroup):
         exist at the configured location). Never auto-creates the ``.serena`` directory —
         if no project configuration is found, the user is directed at ``serena project create``.
         """
-        from serena.project import Project
-
         serena_config = SerenaConfig.from_config_file()
-        project_path = os.path.abspath(project)
-        try:
-            proj = Project.load(project_path, serena_config=serena_config, autogenerate=False)
-        except FileNotFoundError as e:
-            raise click.UsageError(
-                f"{e}\nNo Serena project found at {project_path}. Create one first with:\n  serena project create {project_path}"
-            ) from e
-        return proj.memory_manager
+        registered_project = serena_config.get_registered_project(project)
+        if registered_project is None:
+            raise click.UsageError(f"No Serena project found for '{project}'. Create one first.")
+        return registered_project.get_project_instance(serena_config).memory_manager
 
     @staticmethod
     @click.command(
