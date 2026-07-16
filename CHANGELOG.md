@@ -15,6 +15,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     break, because the match's exclusive end index was mapped to a line number directly and therefore
     resolved to the start of the following line. The line the match ends on is now determined correctly,
     which also keeps `context_lines_after` aligned.
+  - `safe_delete`: Add heuristic to delete superfluous empty lines after a deletion
 
 * JetBrains:
   - Allow external files from dependencies (specified via references like "<ext:FileUtil.class|472e0a13>") to be

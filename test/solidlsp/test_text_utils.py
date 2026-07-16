@@ -1,6 +1,6 @@
 import pytest
 
-from solidlsp.ls_utils import InvalidTextLocationError, TextUtils
+from solidlsp.ls_utils import InvalidTextLocationError, TextStepper, TextUtils
 
 
 class TestTextUtils:
@@ -34,6 +34,13 @@ class TestTextUtils:
         assert TextUtils.get_index_from_line_col(self.TEXT, 0, 1) == 1
         assert TextUtils.get_index_from_line_col(self.TEXT, 1, 1) == 3 + 1 + 1
         assert TextUtils.get_index_from_line_col(self.TEXT, 2, 1) == 3 + 1 + 3 + 2 + 1
+
+    def test_step_to(self):
+        stepper = TextStepper(self.TEXT)
+        stepper.step_to(2, 1)
+        assert stepper.line == 2
+        assert stepper.col == 1
+        assert stepper.idx == 3 + 1 + 3 + 2 + 1
 
     def test_insert_text_at_index(self):
         insertion = "XXX"
