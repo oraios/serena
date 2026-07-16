@@ -32,7 +32,7 @@ from solidlsp.dependency_provider import (
 )
 from solidlsp.initialize_params import DefaultInitializeParamsBuilder, InitializeParamsBuilder
 from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
-from solidlsp.ls_exceptions import SolidLSPException
+from solidlsp.ls_exceptions import InvalidTextLocationError, SolidLSPException
 from solidlsp.ls_process import LanguageServerInterface, StdioLanguageServer
 from solidlsp.ls_types import UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils, PathUtils, TextUtils
@@ -209,17 +209,38 @@ class SymbolBody(ToStringMixin):
         return ["_lines"]
 
     def get_text(self) -> str:
+        end_line = self._end_line
+        end_col = self._end_col
+        if end_line >= len(self._lines):
+            if end_line == len(self._lines) and end_col == 0:
+                # LSP convention: a range covering whole lines through EOF sometimes ends
+                # at the start of the following, non-existent line (exactly one line past
+                # the last valid index, at column 0). That is well-defined: it means
+                # "through EOF", so treat it as ending at the end of the actual last line.
+                end_line = len(self._lines) - 1
+                end_col = len(self._lines[end_line])
+            else:
+                # Any other out-of-range end position (further past EOF, or exactly one
+                # line past EOF but not at column 0) is not the well-defined convention
+                # above; applying the same correction there would silently assume that
+                # a column meant for a nonexistent line still applies to the corrected
+                # one, which can produce a garbage body. Reject it instead of guessing.
+                raise InvalidTextLocationError(
+                    f"Symbol range end (line {self._end_line}, col {self._end_col}) is out of bounds "
+                    f"for a file with {len(self._lines)} lines"
+                )
+
         # extract relevant lines
-        symbol_body = "\n".join(self._lines[self._start_line : self._end_line + 1])
+        symbol_body = "\n".join(self._lines[self._start_line : end_line + 1])
 
         # remove leading content from the first line
         symbol_body = symbol_body[self._start_col :]
 
         # remove trailing content from the last line
-        last_line = self._lines[self._end_line]
-        trailing_length = len(last_line) - self._end_col
+        last_line = self._lines[end_line]
+        trailing_length = len(last_line) - end_col
         if trailing_length > 0:
-            symbol_body = symbol_body[: -(len(last_line) - self._end_col)]
+            symbol_body = symbol_body[: -(len(last_line) - end_col)]
 
         return symbol_body
 
