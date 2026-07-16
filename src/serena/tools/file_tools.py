@@ -620,13 +620,34 @@ class SearchForPatternTool(Tool):
         # shortened result closures, from least to most aggressive shortening
         _TEXT_TRUNCATE = 60
 
-        def make_lines_only() -> str:
-            """Match locations with line number and truncated matched text."""
+        def render_first_lines(truncate: bool) -> str:
+            """Render each match's first line, either in full or truncated to a fixed length."""
+
+            def entry_text(text: str) -> str:
+                if truncate and len(text) > _TEXT_TRUNCATE:
+                    return text[:_TEXT_TRUNCATE] + "..."
+                return text
+
             compact = {
-                path: [{"line": m["line"], "text": str(m["text"])[:_TEXT_TRUNCATE]} for m in lines]
+                path: [{"line": m["line"], "text": entry_text(str(m["text"]))} for m in lines]
                 for path, lines in match_lines_by_file.items()
             }
-            return f"Match locations per file (line + matched text):\n{self._to_json(compact)}"
+            if truncate:
+                header = (
+                    f"Matched lines (text over {_TEXT_TRUNCATE} chars is truncated, marked with a trailing '...'); "
+                    "use read_file with the line numbers for full content:"
+                )
+            else:
+                header = "Matched lines per file; use read_file with the line numbers for surrounding context:"
+            return f"{header}\n{self._to_json(compact)}"
+
+        def make_first_lines_full() -> str:
+            """Match locations with each match's full first line."""
+            return render_first_lines(truncate=False)
+
+        def make_first_lines_truncated() -> str:
+            """Match locations with each match's first line truncated to a fixed length."""
+            return render_first_lines(truncate=True)
 
         def make_line_numbers_only() -> str:
             """Match locations as bare line numbers (no text)."""
@@ -644,5 +665,11 @@ class SearchForPatternTool(Tool):
         return self._limit_length(
             result,
             max_answer_chars,
-            shortened_result_factories=[make_lines_only, make_line_numbers_only, make_per_file_counts, make_summary],
+            shortened_result_factories=[
+                make_first_lines_full,
+                make_first_lines_truncated,
+                make_line_numbers_only,
+                make_per_file_counts,
+                make_summary,
+            ],
         )

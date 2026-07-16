@@ -92,9 +92,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add tool parameter alias support, adding `name_path` as an alias for `name_path_pattern` in `find_symbol` tools
   - Allow `query_project` tool to access read-only tools that are not enabled in the current configuration
   - Make tool call errors surface explicitly as errors at the MCP protocol level
-  - `search_for_pattern`: on overflow, the shortening chain now emits an intermediate stage with each
-    match's line number plus its matched text (truncated) before falling back to bare line numbers,
-    so agents can pick the right match without re-reading files. #1640
+  - `search_for_pattern`: on overflow, the shortening chain now emits each match's first line (full when
+    it fits, otherwise truncated with a trailing '...' and a note) before falling back to bare line
+    numbers, so agents can pick the right match without re-reading files. #1640
 
 * Language Servers:
   - Fix: `SolidLanguageServer.is_ignored_path` raised `FileNotFoundError` for paths that are not present
