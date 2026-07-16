@@ -125,11 +125,13 @@ Some languages require additional installations or setup steps, as noted.
   we also support [Phpactor](https://github.com/phpactor/phpactor) (language `php_phpactor`), which requires PHP 8.1+;
   and the experimental [PHPantom](https://github.com/PHPantom-dev/phpantom_lsp) backend (language `php_phpantom`)
 * **Python**
-  (by default, uses [Pyright](https://github.com/microsoft/pyright) (language `python`);
+  (by default, uses [Pyright](https://github.com/microsoft/pyright) (language `python`), with
+  [BasedPyright](https://github.com/DetachHead/basedpyright) selectable under the same language key via
+  `ls_specific_settings.python.language_server: basedpyright`;
   alternatives: [ty](https://github.com/astral-sh/ty) (language `python_ty`),
   [pyrefly](https://github.com/facebook/pyrefly) (language `python_pyrefly`),
   [Jedi](https://github.com/palotas/jedi-language-server) (language `python_jedi`);
-  ty and pyrefly require `uv`/`uvx` in PATH)
+  Pyright, BasedPyright, ty, and pyrefly require `uv`/`uvx` in PATH)
 * **QML**
   (requires Qt 6, provides `qmlls` or `qmlls6` on PATH; see the [Qt qmlls documentation](https://doc.qt.io/qt-6/qtqml-tool-qmlls.html))
 * **R**  

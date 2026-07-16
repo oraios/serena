@@ -5,7 +5,8 @@ Provides Python specific instantiation of the LanguageServer class. Contains var
 import logging
 import re
 import threading
-from typing import cast
+from dataclasses import dataclass
+from typing import Literal, cast
 
 from overrides import override
 
@@ -16,6 +17,39 @@ from solidlsp.settings import SolidLSPSettings
 log = logging.getLogger(__name__)
 
 PYRIGHT_VERSION = "1.1.403"
+BASEDPYRIGHT_VERSION = "1.39.9"
+
+_PyrightBackendName = Literal["pyright", "basedpyright"]
+
+
+@dataclass(frozen=True)
+class _PyrightBackend:
+    name: _PyrightBackendName
+    display_name: str
+    package: str
+    entrypoint: str
+    default_version: str
+    version_setting_key: str
+
+
+_PYRIGHT_BACKENDS: dict[_PyrightBackendName, _PyrightBackend] = {
+    "pyright": _PyrightBackend(
+        name="pyright",
+        display_name="Pyright",
+        package="pyright",
+        entrypoint="pyright-langserver",
+        default_version=PYRIGHT_VERSION,
+        version_setting_key="pyright_version",
+    ),
+    "basedpyright": _PyrightBackend(
+        name="basedpyright",
+        display_name="BasedPyright",
+        package="basedpyright",
+        entrypoint="basedpyright-langserver",
+        default_version=BASEDPYRIGHT_VERSION,
+        version_setting_key="basedpyright_version",
+    ),
+}
 
 
 class PyrightServer(SolidLanguageServer):
@@ -31,26 +65,43 @@ class PyrightServer(SolidLanguageServer):
         Creates a PyrightServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
+        custom_settings = solidlsp_settings.get_ls_specific_settings(config.code_language)
+        self._backend = self._resolve_backend(custom_settings.get("language_server", "pyright"))
         super().__init__(
             config,
             repository_root_path,
             None,
             "python",
             solidlsp_settings,
+            cache_version_raw_document_symbols=("pyright-backend", self._backend.name),
         )
 
         # Event to signal when initial workspace analysis is complete
         self.analysis_complete = threading.Event()
         self.found_source_files = False
 
+    @staticmethod
+    def _resolve_backend(language_server: object) -> _PyrightBackend:
+        valid_choices = ", ".join(repr(name) for name in _PYRIGHT_BACKENDS)
+        if not isinstance(language_server, str):
+            raise ValueError(
+                "Invalid ls_specific_settings.python.language_server value "
+                f"{language_server!r}: expected a string with one of these values: {valid_choices}"
+            )
+        if language_server not in _PYRIGHT_BACKENDS:
+            raise ValueError(
+                f"Invalid ls_specific_settings.python.language_server value {language_server!r}: expected one of: {valid_choices}"
+            )
+        return _PYRIGHT_BACKENDS[cast(_PyrightBackendName, language_server)]
+
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return LanguageServerDependencyProviderUvx(
             self._custom_settings,
             self._ls_resources_dir,
-            package="pyright",
-            entrypoint="pyright-langserver",
-            default_version=PYRIGHT_VERSION,
-            version_setting_key="pyright_version",
+            package=self._backend.package,
+            entrypoint=self._backend.entrypoint,
+            default_version=self._backend.default_version,
+            version_setting_key=self._backend.version_setting_key,
             extra_args=("--stdio",),
         )
 
@@ -107,9 +158,9 @@ class PyrightServer(SolidLanguageServer):
 
     def _start_server(self) -> None:
         """
-        Starts the Pyright Language Server and waits for initial workspace analysis to complete.
+        Starts the selected Pyright-compatible language server and waits for initial workspace analysis to complete.
 
-        This prevents zombie processes by ensuring Pyright has finished its initial background
+        This prevents zombie processes by ensuring the language server has finished its initial background
         tasks before we consider the server ready.
 
         Usage:
@@ -122,6 +173,7 @@ class PyrightServer(SolidLanguageServer):
         # LanguageServer has been shutdown cleanly
         ```
         """
+        backend_display_name = self._backend.display_name
 
         def execute_client_command_handler(params: dict) -> list:
             return []
@@ -131,8 +183,8 @@ class PyrightServer(SolidLanguageServer):
 
         def window_log_message(msg: dict) -> None:
             """
-            Monitor Pyright's log messages to detect when initial analysis is complete.
-            Pyright logs "Found X source files" when it finishes scanning the workspace.
+            Monitor language server log messages to detect when initial analysis is complete.
+            Both supported backends log "Found X source files" when they finish scanning the workspace.
             """
             message_text = msg.get("message", "")
             log.info(f"LSP: window/logMessage: {message_text}")
@@ -140,7 +192,7 @@ class PyrightServer(SolidLanguageServer):
             # Look for "Found X source files" which indicates workspace scanning is complete
             # Unfortunately, pyright is unreliable and there seems to be no better way
             if re.search(r"Found \d+ source files?", message_text):
-                log.info("Pyright workspace scanning complete")
+                log.info("%s workspace scanning complete", backend_display_name)
                 self.found_source_files = True
                 self.analysis_complete.set()
 
@@ -166,14 +218,14 @@ class PyrightServer(SolidLanguageServer):
 
             # logging the progress transition
             if progress_kind == "begin":
-                log.info("Pyright progress started: %s", progress_label)
+                log.info("%s progress started: %s", backend_display_name, progress_label)
                 return
 
             if progress_kind == "report":
-                log.debug("Pyright progress update: %s", progress_label)
+                log.debug("%s progress update: %s", backend_display_name, progress_label)
                 return
 
-            log.info("Pyright progress finished: %s", progress_label)
+            log.info("%s progress finished: %s", backend_display_name, progress_label)
             self.analysis_complete.set()
 
         def pyright_begin_progress(params: object | None) -> None:
@@ -213,15 +265,15 @@ class PyrightServer(SolidLanguageServer):
         self.server.on_notification("language/actionableNotification", do_nothing)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
 
-        log.info("Starting pyright-langserver server process")
+        log.info("Starting %s server process", self._backend.entrypoint)
         self.server.start()
 
         # Send proper initialization parameters
         initialize_params = self._create_initialize_params()
 
-        log.info("Sending initialize request from LSP client to pyright server and awaiting response")
+        log.info("Sending initialize request from LSP client to %s server and awaiting response", backend_display_name)
         init_response = self.server.send.initialize(initialize_params)
-        log.info(f"Received initialize response from pyright server: {init_response}")
+        log.info("Received initialize response from %s server: %s", backend_display_name, init_response)
 
         # Verify that the server supports our required features
         assert "textDocumentSync" in init_response["capabilities"]
@@ -231,12 +283,16 @@ class PyrightServer(SolidLanguageServer):
         # Complete the initialization handshake
         self.server.notify.initialized({})
 
-        # Wait for Pyright to complete its initial workspace analysis
+        # Wait for the selected backend to complete its initial workspace analysis
         # This prevents zombie processes by ensuring background tasks finish
-        log.info(f"Waiting up to {self._TIMEOUT_FOR_INITIAL_ANALYSIS}s for Pyright to complete initial workspace analysis...")
+        log.info(
+            "Waiting up to %ss for %s to complete initial workspace analysis...",
+            self._TIMEOUT_FOR_INITIAL_ANALYSIS,
+            backend_display_name,
+        )
         if self.analysis_complete.wait(timeout=self._TIMEOUT_FOR_INITIAL_ANALYSIS):
-            log.info("Pyright initial analysis complete, server ready")
+            log.info("%s initial analysis complete, server ready", backend_display_name)
         else:
-            log.warning("Timeout waiting for Pyright analysis completion, proceeding anyway")
+            log.warning("Timeout waiting for %s analysis completion, proceeding anyway", backend_display_name)
             # Fallback: assume analysis is complete after timeout
             self.analysis_complete.set()

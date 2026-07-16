@@ -938,16 +938,32 @@ Supported settings:
 
 #### Python
 
-Serena uses Pyright for the `python` language key.
+Serena uses Pyright by default for the `python` language key. You can instead select
+[BasedPyright](https://github.com/DetachHead/basedpyright) without changing the language key:
+
+```yaml
+languages: [python]
+ls_specific_settings:
+  python:
+    language_server: basedpyright
+    basedpyright_version: "1.39.9"
+```
 
 Supported settings:
 
 | Setting | Default | Description |
 |---|---|---|
-| `ls_path` | current Python executable | Override the Python interpreter Serena uses to run `-m pyright.langserver`. |
+| `language_server` | `pyright` | Select `pyright` or `basedpyright`. |
+| `pyright_version` | `1.1.403` | Override the exact Pyright package version Serena launches through `uvx` / `uv x`. |
+| `basedpyright_version` | `1.39.9` | Override the exact BasedPyright package version Serena launches through `uvx` / `uv x`. |
+| `ls_path` | managed executable | Override the selected server executable (`pyright-langserver` or `basedpyright-langserver`) and bypass the managed `uvx` / `uv x` invocation. The default `--stdio` argument is still applied. |
 
-Note:
-- There is currently no separate `python_ty` language key in Serena's current SolidLSP implementation.
+The generic [language-server launch settings](override-ls-path), including `ls_base_cmd`, `ls_args`,
+and `ls_extra_args`, also apply. `ls_args` replaces the default arguments, while `ls_extra_args`
+appends to them.
+
+The alternative Python backends remain separate language keys: `python_ty`, `python_pyrefly`, and
+`python_jedi`.
 
 #### Ruby
 
