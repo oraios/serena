@@ -2,6 +2,8 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+# v1.6.0 (2026-07-16)
+
 * General:
   - Speed up MCP startup when auto-creating projects at startup (e.g. using `--project-from-cwd`) by
     determining the project's languages in a background thread #1683
