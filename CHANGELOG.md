@@ -21,6 +21,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     resolved to the start of the following line. The line the match ends on is now determined correctly,
     which also keeps `context_lines_after` aligned.
   - `safe_delete`: Add heuristic to delete superfluous empty lines after a deletion
+  - `search_for_pattern`: on overflow, the shortening chain now emits each match's first line (full when
+    it fits, otherwise truncated with a trailing '...' and a note) before falling back to bare line
+    numbers, so agents can pick the right match without re-reading files. #1640
 
 * JetBrains:
   - Allow external files from dependencies (specified via references like "<ext:FileUtil.class|472e0a13>") to be
@@ -92,9 +95,6 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add tool parameter alias support, adding `name_path` as an alias for `name_path_pattern` in `find_symbol` tools
   - Allow `query_project` tool to access read-only tools that are not enabled in the current configuration
   - Make tool call errors surface explicitly as errors at the MCP protocol level
-  - `search_for_pattern`: on overflow, the shortening chain now emits each match's first line (full when
-    it fits, otherwise truncated with a trailing '...' and a note) before falling back to bare line
-    numbers, so agents can pick the right match without re-reading files. #1640
 
 * Language Servers:
   - Fix: `SolidLanguageServer.is_ignored_path` raised `FileNotFoundError` for paths that are not present
