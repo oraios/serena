@@ -21,14 +21,10 @@ from urllib.parse import urlparse
 import charset_normalizer
 import requests
 
-from solidlsp.ls_exceptions import SolidLSPException
+from solidlsp.ls_exceptions import InvalidTextLocationError, SolidLSPException
 from solidlsp.ls_types import UnifiedSymbolInformation
 
 log = logging.getLogger(__name__)
-
-
-class InvalidTextLocationError(Exception):
-    pass
 
 
 class TextStepper:

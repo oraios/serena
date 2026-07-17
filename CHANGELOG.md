@@ -9,6 +9,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     reached Serena's in-memory file contents, where the rest of the code assumes LF-normalized text and
     the `line_ending` setting is meant to be the single point of line-ending translation on write. The
     fallback now normalizes line endings to LF, consistently with the primary path.
+  - Fix: a symbol whose LSP range ended exactly one line past EOF, at column 0 (the convention for
+    a range covering whole lines through the end of the file), raised `IndexError` in
+    `SymbolBody.get_text`. That one well-defined case is now corrected to end at the actual last
+    line; any other out-of-range end position now raises `InvalidTextLocationError` instead,
+    rather than guessing at a body that could be wrong #1498
 
 * Tools:
   - Fix: `search_for_pattern` marked one line too many as matched whenever a match ended with a line
