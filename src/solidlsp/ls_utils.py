@@ -122,6 +122,21 @@ class TextStepper:
             self.is_newline = False
         return True
 
+    def step_to(self, line: int, col: int):
+        """
+        Steps through the text until the given line and column are reached, or until the end of the text is reached.
+
+        :param line: the 0-based line number to step to
+        :param col: the 0-based column number to step to
+        """
+        while self.line < line:
+            if not self.step_line():
+                break
+        if self.line != line:
+            raise InvalidTextLocationError
+        self.idx += col
+        self.col = col
+
     def process_all(self):
         """
         Processes all characters in the text, updating the line and column numbers accordingly.
@@ -129,7 +144,7 @@ class TextStepper:
         while self.step_line():
             pass
 
-    def _get_last_line(self, with_end: bool) -> str:
+    def get_last_line(self, with_end: bool) -> str:
         """
         Returns the last line processed, optionally including the newline character(s) at the end
         """
@@ -147,7 +162,7 @@ class TextStepper:
         lines = []
         while self.step_line():
             if self.is_newline:
-                lines.append(self._get_last_line(with_end=with_ends))
+                lines.append(self.get_last_line(with_end=with_ends))
 
         # add the last line (which was not followed by a newline), even if empty
         last_line = self._chars[self.line_start_idx :]

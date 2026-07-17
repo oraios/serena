@@ -23,11 +23,6 @@
   typed_module_var: int = 42
   
   
-  # Regular class with class and instance variables
-  
-  
-  
-  # Dataclass with variables
   @dataclass
   class VariableDataclass:
       """Dataclass that contains various fields."""
@@ -43,7 +38,6 @@
       status: str = "pending"
   
   
-  # Function that uses the module variables
   def use_module_variables():
       """Function that uses module-level variables."""
       result = module_var + " used in function"
@@ -68,8 +62,6 @@
 # name: test_delete_symbol[test_case1]
   '''
   import { ConsoleGreeter, Greeter } from "./formatters";
-  
-  
   
   export function helperFunction() {
       const demo = new DemoClass(42);
@@ -334,7 +326,6 @@
   typed_module_var: int = 42
   
   
-  # Regular class with class and instance variables
   class VariableContainer:
       """Class that contains various variables."""
   
@@ -373,7 +364,6 @@
           return result, other_result
   
   
-  # Dataclass with variables
   @dataclass
   class VariableDataclass:
       """Dataclass that contains various fields."""
@@ -389,7 +379,6 @@
       status: str = "pending"
   
   
-  # Function that uses the module variables
   def use_module_variables():
       """Function that uses module-level variables."""
       result = module_var + " used in function"
@@ -438,7 +427,6 @@
   typed_module_var: int = 42
   
   
-  # Regular class with class and instance variables
   class VariableContainer:
       """Class that contains various variables."""
   
@@ -477,7 +465,6 @@
           return result, other_result
   
   
-  # Dataclass with variables
   @dataclass
   class VariableDataclass:
       """Dataclass that contains various fields."""
@@ -493,7 +480,6 @@
       status: str = "pending"
   
   
-  # Function that uses the module variables
   def new_inserted_function():
       print("This is a new function inserted before another.")
   
@@ -1138,7 +1124,6 @@
   typed_module_var: int = 42
   
   
-  # Regular class with class and instance variables
   class VariableContainer:
       """Class that contains various variables."""
   
@@ -1177,7 +1162,6 @@
           return result, other_result
   
   
-  # Dataclass with variables
   @dataclass
   class VariableDataclass:
       """Dataclass that contains various fields."""
@@ -1197,7 +1181,6 @@
       pass
   
   
-  # Function that uses the module variables
   def use_module_variables():
       """Function that uses module-level variables."""
       result = module_var + " used in function"
@@ -1243,7 +1226,6 @@
   typed_module_var: int = 42
   
   
-  # Regular class with class and instance variables
   class VariableContainer:
       """Class that contains various variables."""
   
@@ -1282,7 +1264,6 @@
           return result, other_result
   
   
-  # Dataclass with variables
   class NewInsertedClass:
       pass
   
@@ -1302,7 +1283,6 @@
       status: str = "pending"
   
   
-  # Function that uses the module variables
   def use_module_variables():
       """Function that uses module-level variables."""
       result = module_var + " used in function"
@@ -1531,7 +1511,6 @@
   renamed_typed_module_var: int = 42
   
   
-  # Regular class with class and instance variables
   class VariableContainer:
       """Class that contains various variables."""
   
@@ -1570,7 +1549,6 @@
           return result, other_result
   
   
-  # Dataclass with variables
   @dataclass
   class VariableDataclass:
       """Dataclass that contains various fields."""
@@ -1586,7 +1564,6 @@
       status: str = "pending"
   
   
-  # Function that uses the module variables
   def use_module_variables():
       """Function that uses module-level variables."""
       result = module_var + " used in function"
@@ -1632,7 +1609,6 @@
   typed_module_var: int = 42
   
   
-  # Regular class with class and instance variables
   class VariableContainer:
       """Class that contains various variables."""
   
@@ -1671,7 +1647,6 @@
           return result, other_result
   
   
-  # Dataclass with variables
   @dataclass
   class VariableDataclass:
       """Dataclass that contains various fields."""
@@ -1687,7 +1662,6 @@
       status: str = "pending"
   
   
-  # Function that uses the module variables
   def use_module_variables():
       """Function that uses module-level variables."""
       result = module_var + " used in function"

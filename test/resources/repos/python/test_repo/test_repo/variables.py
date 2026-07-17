@@ -20,7 +20,6 @@ reassignable_module_var = 20  # Reassigned
 typed_module_var: int = 42
 
 
-# Regular class with class and instance variables
 class VariableContainer:
     """Class that contains various variables."""
 
@@ -59,7 +58,6 @@ class VariableContainer:
         return result, other_result
 
 
-# Dataclass with variables
 @dataclass
 class VariableDataclass:
     """Dataclass that contains various fields."""
@@ -75,7 +73,6 @@ class VariableDataclass:
     status: str = "pending"
 
 
-# Function that uses the module variables
 def use_module_variables():
     """Function that uses module-level variables."""
     result = module_var + " used in function"
