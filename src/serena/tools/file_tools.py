@@ -593,10 +593,6 @@ class SearchForPatternTool(Tool):
         if relative_path:
             self.project.validate_relative_path(relative_path, require_not_ignored=True)
 
-        abs_path = os.path.join(self.get_project_root(), relative_path)
-        if not os.path.exists(abs_path):
-            raise FileNotFoundError(f"Relative path {relative_path} does not exist.")
-
         matches = self.project.search_project_files_for_pattern(
             pattern=substring_pattern,
             relative_path=relative_path,
