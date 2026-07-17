@@ -49,8 +49,8 @@ def test_download_file_verified_writes_decoded_response_body(tmp_path: Path) -> 
 # and the content is long enough for encoding detection to be reliable.
 _CP1252_LINES = [
     "# -*- coding: cp1252 -*-",
-    "# Autor: José Fernández",
-    "# Copyright (c) 2019 Müller & Söhne GmbH. Alle Rechte vorbehalten.",
+    "# Author: José Fernández",
+    "# Copyright (c) 2019 Müller & Söhne GmbH.",
     "",
     "import os",
     "",
