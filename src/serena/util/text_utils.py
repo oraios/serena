@@ -187,6 +187,10 @@ def search_text(
         # Find the line numbers for the start and end positions
         start_line_num = TextUtils.get_line_from_index(content, start_pos)
         end_line_num = TextUtils.get_line_from_index(content, end_pos)
+        if end_line_num > start_line_num and TextUtils.get_line_col_from_index(content, end_pos)[1] == 0:
+            # `end_pos` is exclusive, so if it is at the start of a line, the match ends with the
+            # preceding line's newline and does not extend into the line that `end_pos` points to
+            end_line_num -= 1
 
         # Calculate the range of lines to include in the context
         context_start = max(0, start_line_num - context_lines_before)
