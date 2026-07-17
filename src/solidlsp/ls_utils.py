@@ -32,6 +32,13 @@ class InvalidTextLocationError(Exception):
 
 
 class TextStepper:
+    r"""
+    A utility class for stepping through a text string line by line, keeping track of the current line and column numbers.
+
+    It handles the newline sequences "\n", "\r\n", and "\r" as defined by the Language Server Protocol (LSP).
+    However, note that files read through `FileUtils.read_file` will contain only "\n" (LF).
+    """
+
     def __init__(self, chars: str):
         self._chars = chars
         self._len = len(chars)
