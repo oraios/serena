@@ -23,6 +23,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     - used in `JetBrainsFindDeclarationTool`
     when using plugin version 2023.3.3+
 
+* Dependencies:
+  - Bump mcp from 1.27.0 to 1.28.1
+
 # v1.6.0 (2026-07-16)
 
 * General:
