@@ -21,6 +21,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     resolved to the start of the following line. The line the match ends on is now determined correctly,
     which also keeps `context_lines_after` aligned.
   - `safe_delete`: Add heuristic to delete superfluous empty lines after a deletion
+  - `search_for_pattern`: on overflow, the shortening chain now emits each match's first line (full when
+    it fits, otherwise truncated with a trailing '...' and a note) before falling back to bare line
+    numbers, so agents can pick the right match without re-reading files. #1640
 
 * JetBrains:
   - Allow external files from dependencies (specified via references like "<ext:FileUtil.class|472e0a13>") to be

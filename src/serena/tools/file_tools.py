@@ -611,15 +611,48 @@ class SearchForPatternTool(Tool):
             file_to_matches[match.source_file_path].append(match.to_display_string())
 
         # capture lightweight match data for shortening before serialization
-        match_lines_by_file: dict[str, list[int]] = defaultdict(list)
+        match_lines_by_file: dict[str, list[dict[str, int | str]]] = defaultdict(list)
         for match in matches:
             assert match.source_file_path is not None
-            match_lines_by_file[match.source_file_path].append(match.matched_lines[0].line_number)
+            first = match.matched_lines[0]
+            match_lines_by_file[match.source_file_path].append({"line": first.line_number, "text": first.line_content.strip()})
 
         # shortened result closures, from least to most aggressive shortening
-        def make_lines_only() -> str:
-            """Match locations without surrounding context"""
-            return f"Match lines per file:\n{self._to_json(match_lines_by_file)}"
+        _TEXT_TRUNCATE = 60
+
+        def render_first_lines(truncate: bool) -> str:
+            """Render each match's first line, either in full or truncated to a fixed length."""
+
+            def entry_text(text: str) -> str:
+                if truncate and len(text) > _TEXT_TRUNCATE:
+                    return text[:_TEXT_TRUNCATE] + "..."
+                return text
+
+            compact = {
+                path: [{"line": m["line"], "text": entry_text(str(m["text"]))} for m in lines]
+                for path, lines in match_lines_by_file.items()
+            }
+            if truncate:
+                header = (
+                    f"Matched lines (text over {_TEXT_TRUNCATE} chars is truncated, marked with a trailing '...'); "
+                    "use read_file with the line numbers for full content:"
+                )
+            else:
+                header = "Matched lines per file; use read_file with the line numbers for surrounding context:"
+            return f"{header}\n{self._to_json(compact)}"
+
+        def make_first_lines_full() -> str:
+            """Match locations with each match's full first line."""
+            return render_first_lines(truncate=False)
+
+        def make_first_lines_truncated() -> str:
+            """Match locations with each match's first line truncated to a fixed length."""
+            return render_first_lines(truncate=True)
+
+        def make_line_numbers_only() -> str:
+            """Match locations as bare line numbers (no text)."""
+            numbers = {path: [m["line"] for m in lines] for path, lines in match_lines_by_file.items()}
+            return f"Match lines per file:\n{self._to_json(numbers)}"
 
         def make_per_file_counts() -> str:
             counts = {path: len(lines) for path, lines in match_lines_by_file.items()}
@@ -630,5 +663,13 @@ class SearchForPatternTool(Tool):
 
         result = self._to_json(file_to_matches)
         return self._limit_length(
-            result, max_answer_chars, shortened_result_factories=[make_lines_only, make_per_file_counts, make_summary]
+            result,
+            max_answer_chars,
+            shortened_result_factories=[
+                make_first_lines_full,
+                make_first_lines_truncated,
+                make_line_numbers_only,
+                make_per_file_counts,
+                make_summary,
+            ],
         )
