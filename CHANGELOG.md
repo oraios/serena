@@ -2,6 +2,14 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Fix: `FileUtils.read_file`'s `charset_normalizer` fallback (used when a file cannot be decoded with
+    the project's configured `encoding`) decoded the raw bytes directly and therefore skipped the
+    universal-newline translation that the primary read path applies. CR characters from disk thus
+    reached Serena's in-memory file contents, where the rest of the code assumes LF-normalized text and
+    the `line_ending` setting is meant to be the single point of line-ending translation on write. The
+    fallback now normalizes line endings to LF, consistently with the primary path.
+
 * JetBrains:
   - Allow external files from dependencies (specified via references like "<ext:FileUtil.class|472e0a13>") to be
     - read via `ReadFileTool` 
@@ -43,7 +51,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - During project creation, language composition percentages are now computed relative to the total number 
     of recognised source files instead of all files, i.e. unrecognised files are ignored in the percentage 
     computation.
-  - Fix: Use LSP-compliant line splitting ("\n", "\r\n" and "\r" can define line breaks); previously only "\n" considered
+  - Consider all LSP-compliant line endings ("\n", "\r\n" and "\r") in `TextUtils`, noting that 
+    only "\n" appears in files read by `FileUtils.read_file` (Serena's default reading mechanism)
   - Fix: Apply consistent line splitting across tools, uniformly applying the LSP splitting semantics; 
     affects `search_text` used by `search_for_pattern` tool (reported in #1684)
   - Fix in `TextUtils` (used by editors): Deleting up to the end of the file, referencing the line one past 
