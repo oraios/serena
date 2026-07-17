@@ -20,6 +20,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Allow external files from dependencies (specified via references like "<ext:FileUtil.class|472e0a13>") to be
     - read via `ReadFileTool` 
     - searched via `SearchForPatternTool`
+    - used in `JetBrainsFindDeclarationTool`
     when using plugin version 2023.3.3+
 
 # v1.6.0 (2026-07-16)

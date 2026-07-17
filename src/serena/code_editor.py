@@ -13,6 +13,7 @@ from solidlsp.ls import LSPFileBuffer
 from solidlsp.ls_utils import PathUtils, TextUtils
 
 from .project import Project
+from .util.file_proxy import FileProxy
 
 log = logging.getLogger(__name__)
 TSymbol = TypeVar("TSymbol", bound=Symbol)
@@ -78,6 +79,8 @@ class CodeEditor(Generic[TSymbol], ABC):
         """
         Context manager for editing a file.
         """
+        if FileProxy.is_external_path(relative_path):
+            raise ValueError(f"Cannot edit external file: {relative_path}")
         with self._open_file_context(relative_path) as edited_file:
             yield edited_file
             # save the file
@@ -400,8 +403,7 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
             super().__init__(relative_path)
             path = os.path.join(project.project_root, relative_path)
             log.info("Editing file: %s", path)
-            with open(path, encoding=project.project_config.encoding) as f:
-                self._content = f.read()
+            self._content = FileProxy.from_project_relative_path(project, relative_path).get_contents()
 
         def get_contents(self) -> str:
             return self._content
