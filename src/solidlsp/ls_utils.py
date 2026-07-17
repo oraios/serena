@@ -380,6 +380,9 @@ class FileUtils:
         Reads the file at the given path using the given encoding and returns the contents as a string.
         If decoding fails, tries to detect the encoding using charset_normalizer.
 
+        Line endings are normalized to LF (universal newlines), irrespective of the encoding
+        used to decode the file.
+
         Raises FileNotFoundError if the file does not exist.
         """
         if not os.path.exists(file_path):
@@ -396,7 +399,10 @@ class FileUtils:
                     log.warning(
                         f"Could not decode {file_path} with encoding='{encoding}'; using best match '{match.encoding}' instead",
                     )
-                    return match.raw.decode(match.encoding)
+                    # Decoding the raw bytes bypasses the universal-newline translation that the
+                    # open() call above applies, so normalize explicitly to keep both paths equivalent.
+                    decoded = match.raw.decode(match.encoding)
+                    return decoded.replace("\r\n", "\n").replace("\r", "\n")
                 raise ude
         except Exception as exc:
             log.error(f"Failed to read '{file_path}' with encoding '{encoding}': {exc}")

@@ -2,6 +2,14 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Fix: `FileUtils.read_file`'s `charset_normalizer` fallback (used when a file cannot be decoded with
+    the project's configured `encoding`) decoded the raw bytes directly and therefore skipped the
+    universal-newline translation that the primary read path applies. CR characters from disk thus
+    reached Serena's in-memory file contents, where the rest of the code assumes LF-normalized text and
+    the `line_ending` setting is meant to be the single point of line-ending translation on write. The
+    fallback now normalizes line endings to LF, consistently with the primary path.
+
 # v1.6.0 (2026-07-16)
 
 * General:
