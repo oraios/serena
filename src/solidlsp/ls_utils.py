@@ -210,7 +210,7 @@ class TextUtils:
         text_stepper = TextStepper(text)
         while text_stepper.line < line:
             if not text_stepper.step_line():
-                raise InvalidTextLocationError("{line=}, {col=}")
+                raise InvalidTextLocationError(f"{line=}, {col=}")
 
         return text_stepper.line_start_idx + col
 
