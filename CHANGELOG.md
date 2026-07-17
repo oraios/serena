@@ -10,6 +10,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     the `line_ending` setting is meant to be the single point of line-ending translation on write. The
     fallback now normalizes line endings to LF, consistently with the primary path.
 
+* Tools:
+  - Fix: `search_for_pattern` marked one line too many as matched whenever a match ended with a line
+    break, because the match's exclusive end index was mapped to a line number directly and therefore
+    resolved to the start of the following line. The line the match ends on is now determined correctly,
+    which also keeps `context_lines_after` aligned.
+
 * JetBrains:
   - Allow external files from dependencies (specified via references like "<ext:FileUtil.class|472e0a13>") to be
     - read via `ReadFileTool` 
