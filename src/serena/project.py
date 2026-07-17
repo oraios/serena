@@ -1,267 +1,31 @@
 import logging
 import os
-import re
-import shutil
 import threading
-from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import pathspec
 from sensai.util.logging import LogTime
 from sensai.util.string import TextBuilder, ToStringMixin
 
 from serena.config.serena_config import (
+    LanguageBackend,
     ProjectConfig,
+    ProjectConfigAutoGenerationMode,
     SerenaConfig,
-    SerenaPaths,
 )
-from serena.constants import SERENA_FILE_ENCODING
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
-from serena.util.file_system import GitignoreParser, match_path
-from serena.util.text_utils import ContentReplacer, MatchedConsecutiveLines, search_files
+from serena.memories.memory_manager import MemoryManager
+from serena.util.file_proxy import FileCollection, FileProxy
+from serena.util.file_system import GitignoreParser, match_path, scan_directory
+from serena.util.text_utils import MatchedConsecutiveLines, search_files
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from solidlsp.ls_utils import FileUtils
 
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
 
 log = logging.getLogger(__name__)
-
-
-class MemoriesManager:
-    GLOBAL_TOPIC = "global"
-    _global_memory_dir = SerenaPaths().global_memories_path
-
-    def __init__(
-        self,
-        serena_data_folder: str | Path | None,
-        read_only_memory_patterns: Sequence[str] = (),
-        ignored_memory_patterns: Sequence[str] = (),
-    ):
-        """
-        :param serena_data_folder: the absolute path to the project's .serena data folder
-        :param read_only_memory_patterns: whether to allow writing global memories in tool execution contexts
-        :param ignored_memory_patterns: regex patterns for memories to completely exclude from listing, reading, and writing.
-            Matching memories will not appear in list_memories or activate_project output and cannot be accessed
-            via read_memory or write_memory. Use read_file on the raw path to access ignored memory files.
-        """
-        self._project_memory_dir: Path | None = None
-        if serena_data_folder is not None:
-            self._project_memory_dir = Path(serena_data_folder) / "memories"
-            self._project_memory_dir.mkdir(parents=True, exist_ok=True)
-        self._encoding = SERENA_FILE_ENCODING
-        self._read_only_memory_patterns = [re.compile(pattern) for pattern in set(read_only_memory_patterns)]
-        self._ignored_memory_patterns = [re.compile(pattern) for pattern in set(ignored_memory_patterns)]
-
-    def _is_read_only_memory(self, name: str) -> bool:
-        for pattern in self._read_only_memory_patterns:
-            if pattern.fullmatch(name):
-                return True
-        return False
-
-    def _is_ignored_memory(self, name: str) -> bool:
-        for pattern in self._ignored_memory_patterns:
-            if pattern.fullmatch(name):
-                return True
-        return False
-
-    def _check_not_ignored(self, name: str) -> None:
-        if self._is_ignored_memory(name):
-            raise ValueError(
-                f"Memory '{name}' matches an ignored_memory_patterns pattern and cannot be accessed. "
-                f"Use the read_file tool on the raw file path instead."
-            )
-
-    def _is_global(self, name: str) -> bool:
-        return name == self.GLOBAL_TOPIC or name.startswith(self.GLOBAL_TOPIC + "/")
-
-    def get_memory_file_path(self, name: str) -> Path:
-        # Strip .md extension if present
-        name = name.replace(".md", "").replace(os.sep, "/")
-        parts = name.split("/")
-        if ".." in parts:
-            raise ValueError(f"Memory name cannot contain '..' segments for security reasons. Got: {name}")
-
-        if self._is_global(name):
-            if name == self.GLOBAL_TOPIC:
-                raise ValueError(
-                    f'Bare "{self.GLOBAL_TOPIC}" is not a valid memory name. Use "{self.GLOBAL_TOPIC}/<name>" to address a global memory.'
-                )
-            # Strip "global/" prefix and resolve against global dir
-            sub_name = name[len(self.GLOBAL_TOPIC) + 1 :]
-            parts = sub_name.split("/")
-            filename = f"{parts[-1]}.md"
-            if len(parts) > 1:
-                subdir = self._global_memory_dir / "/".join(parts[:-1])
-                subdir.mkdir(parents=True, exist_ok=True)
-                return subdir / filename
-            return self._global_memory_dir / filename
-
-        # Project-local memory
-        assert self._project_memory_dir is not None, "Project dir was not passed at initialization"
-
-        filename = f"{parts[-1]}.md"
-
-        if len(parts) > 1:
-            # Create subdirectory path
-            subdir = self._project_memory_dir / "/".join(parts[:-1])
-            subdir.mkdir(parents=True, exist_ok=True)
-            return subdir / filename
-
-        return self._project_memory_dir / filename
-
-    def _check_write_access(self, name: str, is_tool_context: bool) -> None:
-        # in tool context, memories can be read-only
-        if is_tool_context and self._is_read_only_memory(name):
-            raise PermissionError(f"Attempted to write to read_only memory: '{name}')")
-
-    def load_memory(self, name: str) -> str:
-        self._check_not_ignored(name)
-        memory_file_path = self.get_memory_file_path(name)
-        if not memory_file_path.exists():
-            return f"Memory file {name} not found, consider creating it with the `write_memory` tool if you need it."
-        with open(memory_file_path, encoding=self._encoding) as f:
-            return f.read()
-
-    def save_memory(self, name: str, content: str, is_tool_context: bool) -> str:
-        self._check_not_ignored(name)
-        self._check_write_access(name, is_tool_context)
-        memory_file_path = self.get_memory_file_path(name)
-        with open(memory_file_path, "w", encoding=self._encoding) as f:
-            f.write(content)
-        return f"Memory {name} written."
-
-    class MemoriesList:
-        def __init__(self) -> None:
-            self.memories: list[str] = []
-            self.read_only_memories: list[str] = []
-
-        def __len__(self) -> int:
-            return len(self.memories) + len(self.read_only_memories)
-
-        def add(self, memory_name: str, is_read_only: bool) -> None:
-            if is_read_only:
-                self.read_only_memories.append(memory_name)
-            else:
-                self.memories.append(memory_name)
-
-        def extend(self, other: "MemoriesManager.MemoriesList") -> None:
-            self.memories.extend(other.memories)
-            self.read_only_memories.extend(other.read_only_memories)
-
-        def to_dict(self) -> dict[str, list[str]]:
-            result = {}
-            if self.memories:
-                result["memories"] = sorted(self.memories)
-            if self.read_only_memories:
-                result["read_only_memories"] = sorted(self.read_only_memories)
-            return result
-
-        def get_full_list(self) -> list[str]:
-            return sorted(self.memories + self.read_only_memories)
-
-    def _list_memories(self, search_dir: Path, base_dir: Path, prefix: str = "") -> MemoriesList:
-        result = self.MemoriesList()
-        if not search_dir.exists():
-            return result
-        for md_file in search_dir.rglob("*.md"):
-            rel = str(md_file.relative_to(base_dir).with_suffix("")).replace(os.sep, "/")
-            memory_name = prefix + rel
-            if self._is_ignored_memory(memory_name):
-                continue
-            result.add(memory_name, is_read_only=self._is_read_only_memory(memory_name))
-        return result
-
-    def list_global_memories(self, subtopic: str = "") -> MemoriesList:
-        dir_path = self._global_memory_dir
-        if subtopic:
-            dir_path = dir_path / subtopic.replace("/", os.sep)
-        return self._list_memories(dir_path, self._global_memory_dir, self.GLOBAL_TOPIC + "/")
-
-    def list_project_memories(self, topic: str = "") -> MemoriesList:
-        assert self._project_memory_dir is not None, "Project dir was not passed at initialization"
-        dir_path = self._project_memory_dir
-        if topic:
-            dir_path = dir_path / topic.replace("/", os.sep)
-        return self._list_memories(dir_path, self._project_memory_dir)
-
-    def list_memories(self, topic: str = "") -> MemoriesList:
-        """
-        Lists all memories, optionally filtered by topic.
-        If the topic is omitted, both global and project-specific memories are returned.
-        """
-        memories: MemoriesManager.MemoriesList
-
-        if topic:
-            if self._is_global(topic):
-                topic_parts = topic.split("/")
-                subtopic = "/".join(topic_parts[1:])
-                memories = self.list_global_memories(subtopic=subtopic)
-            else:
-                memories = self.list_project_memories(topic=topic)
-        else:
-            memories = self.list_project_memories()
-            memories.extend(self.list_global_memories())
-
-        return memories
-
-    def delete_memory(self, name: str, is_tool_context: bool) -> str:
-        self._check_not_ignored(name)
-        self._check_write_access(name, is_tool_context)
-        memory_file_path = self.get_memory_file_path(name)
-        if not memory_file_path.exists():
-            return f"Memory {name} not found."
-        memory_file_path.unlink()
-        return f"Memory {name} deleted."
-
-    def move_memory(self, old_name: str, new_name: str, is_tool_context: bool) -> str:
-        """
-        Rename or move a memory file.
-        Moving between global and project scope (e.g. "global/foo" -> "bar") is supported.
-        """
-        self._check_not_ignored(old_name)
-        self._check_not_ignored(new_name)
-        self._check_write_access(new_name, is_tool_context)
-
-        old_path = self.get_memory_file_path(old_name)
-        new_path = self.get_memory_file_path(new_name)
-
-        if not old_path.exists():
-            raise FileNotFoundError(f"Memory {old_name} not found.")
-        if new_path.exists():
-            raise FileExistsError(f"Memory {new_name} already exists.")
-
-        new_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(old_path, new_path)
-
-        return f"Memory renamed from {old_name} to {new_name}."
-
-    def edit_memory(
-        self, name: str, needle: str, repl: str, mode: Literal["literal", "regex"], allow_multiple_occurrences: bool, is_tool_context: bool
-    ) -> str:
-        """
-        Edit a memory by replacing content matching a pattern.
-
-        :param name: the memory name
-        :param needle: the string or regex to search for
-        :param repl: the replacement string
-        :param mode: "literal" or "regex"
-        :param allow_multiple_occurrences:
-        """
-        self._check_not_ignored(name)
-        self._check_write_access(name, is_tool_context)
-        memory_file_path = self.get_memory_file_path(name)
-        if not memory_file_path.exists():
-            raise FileNotFoundError(f"Memory {name} not found.")
-        with open(memory_file_path, encoding=self._encoding) as f:
-            original_content = f.read()
-        replacer = ContentReplacer(mode=mode, allow_multiple_occurrences=allow_multiple_occurrences)
-        updated_content = replacer.replace(original_content, needle, repl)
-        with open(memory_file_path, "w", encoding=self._encoding) as f:
-            f.write(updated_content)
-        return f"Memory {name} edited successfully."
 
 
 class Project(ToStringMixin):
@@ -282,7 +46,7 @@ class Project(ToStringMixin):
 
         read_only_memory_patterns = serena_config.read_only_memory_patterns + project_config.read_only_memory_patterns
         ignored_memory_patterns = serena_config.ignored_memory_patterns + project_config.ignored_memory_patterns
-        self.memories_manager = MemoriesManager(
+        self.memory_manager = MemoryManager(
             self._serena_data_folder,
             read_only_memory_patterns=read_only_memory_patterns,
             ignored_memory_patterns=ignored_memory_patterns,
@@ -358,18 +122,28 @@ class Project(ToStringMixin):
     def project_name(self) -> str:
         return self.project_config.project_name
 
+    @property
+    def language_backend(self) -> LanguageBackend:
+        # The backend configuration is fundamentally owned by the agent, so it takes
+        # precedence. (Note: The agent does not necessary honour the project's choice,
+        # as it may be invalid.)
+        if self._agent is not None:
+            return self._agent.get_language_backend()
+        else:
+            return self.serena_config.determine_language_backend(self.project_config)
+
     @classmethod
     def load(
         cls,
         project_root: str | Path,
         serena_config: "SerenaConfig",
-        autogenerate: bool = True,
+        autogen: ProjectConfigAutoGenerationMode = ProjectConfigAutoGenerationMode.SYNCHRONOUS,
     ) -> "Project":
         assert serena_config is not None
         project_root = Path(project_root).resolve()
         if not project_root.exists():
             raise FileNotFoundError(f"Project root not found: {project_root}")
-        project_config = ProjectConfig.load(project_root, serena_config=serena_config, autogenerate=autogenerate)
+        project_config = ProjectConfig.load(project_root, serena_config=serena_config, autogen=autogen)
         return Project(project_root=str(project_root), project_config=project_config, serena_config=serena_config)
 
     def save_config(self) -> None:
@@ -384,15 +158,23 @@ class Project(ToStringMixin):
     def path_to_project_yml(self) -> str:
         return self.serena_config.get_project_yml_location(self.project_root)
 
+    def is_trusted(self) -> bool:
+        """
+        Checks whether the project is trusted, based on the global configuration.
+
+        :return: True if the project is trusted, False otherwise
+        """
+        return self.serena_config.is_trusted_project_path(self.project_root)
+
     def read_file(self, relative_path: str) -> str:
         """
-        Reads a file relative to the project root.
+        Reads a project file.
 
-        :param relative_path: the path to the file relative to the project root
+        :param relative_path: the path to the file relative to the project root or an external
+            path token like "<ext:FileUtil.class|472e0a13>"
         :return: the content of the file
         """
-        abs_path = Path(self.project_root) / relative_path
-        return FileUtils.read_file(str(abs_path), self.project_config.encoding)
+        return FileProxy.from_project_relative_path(self, relative_path).get_contents()
 
     @property
     def _ignore_spec(self) -> pathspec.PathSpec:
@@ -429,8 +211,8 @@ class Project(ToStringMixin):
 
     def _is_ignored_relative_path(self, relative_path: str | Path, ignore_non_source_files: bool = True) -> bool:
         """
-        Determine whether an existing path should be ignored based on file type and ignore patterns.
-        Raises `FileNotFoundError` if the path does not exist.
+        Determine whether a path should be ignored based on file type and ignore patterns.
+        Returns False for non-existent paths since they cannot be matched by ignore patterns.
 
         :param relative_path: Relative path to check
         :param ignore_non_source_files: whether files that are not source files (according to the file masks
@@ -446,19 +228,23 @@ class Project(ToStringMixin):
 
         abs_path = os.path.join(self.project_root, relative_path)
         if not os.path.exists(abs_path):
-            raise FileNotFoundError(f"File {abs_path} not found, the ignore check cannot be performed")
+            log.debug(f"Path {abs_path} does not exist, skipping ignore check")
+            return False
 
-        # Check file extension if it's a file
-        is_file = os.path.isfile(abs_path)
-        if is_file and ignore_non_source_files:
-            is_file_in_supported_language = False
-            for language in self.project_config.languages:
-                fn_matcher = language.get_source_fn_matcher()
-                if fn_matcher.is_relevant_filename(abs_path):
-                    is_file_in_supported_language = True
-                    break
-            if not is_file_in_supported_language:
-                return True
+        # check code file restriction (depending on backend)
+        if ignore_non_source_files:
+            # apply restriction only for LSP backend, which enumerates known languages
+            # and therefore can determine whether a file is a source file or not
+            if self.language_backend.is_lsp():
+                if os.path.isfile(abs_path):
+                    is_file_in_supported_language = False
+                    for language in self.project_config.languages:
+                        fn_matcher = language.get_source_fn_matcher()
+                        if fn_matcher.is_relevant_filename(abs_path):
+                            is_file_in_supported_language = True
+                            break
+                    if not is_file_in_supported_language:
+                        return True
 
         # Create normalized path for consistent handling
         rel_path = Path(relative_path)
@@ -522,16 +308,18 @@ class Project(ToStringMixin):
 
     def validate_relative_path(self, relative_path: str, require_not_ignored: bool = False) -> None:
         """
-        Validates that the given relative path to an existing file/dir is safe to read or edit,
-        meaning it's inside the project directory.
-
-        Passing a path to a non-existing file will lead to a `FileNotFoundError`.
+        Validates that the given relative path is within the project directory
+        (and, optionally, not ignored according to the project's ignore settings),
+        raising a ValueError if the validation fails.
 
         :param relative_path: the path to validate, relative to the project root
         :param require_not_ignored: if True, the path must not be ignored according to the project's ignore settings
         """
+        if FileProxy.is_external_path(relative_path):
+            return
+
         if not self.is_path_in_project(relative_path):
-            raise ValueError(f"{relative_path=} points to path outside of the repository root; cannot access for safety reasons")
+            raise ValueError(f"{relative_path=} points outside the project root ({self.project_root})")
 
         if require_not_ignored:
             if self.is_ignored_path(relative_path):
@@ -574,7 +362,35 @@ class Project(ToStringMixin):
                         )
             return rel_file_paths
 
-    def search_source_files_for_pattern(
+    def _create_file_collection(self, relative_path: str, code_files_only: bool) -> FileCollection:
+        if FileProxy.is_external_path(relative_path):
+            # single external path: create appropriate proxy
+            file_collection = FileCollection([FileProxy.from_project_relative_path(self, relative_path)])
+        else:
+            # path is a local project path
+            abs_path = os.path.join(self.project_root, relative_path)
+            if not os.path.exists(abs_path):
+                raise FileNotFoundError(f"Relative path {relative_path} does not exist.")
+
+            if code_files_only:
+                relative_file_paths = self.gather_source_files(relative_path=relative_path)
+                file_collection = FileCollection.from_local_project_paths(relative_file_paths, self)
+            else:
+                abs_path = os.path.join(self.project_root, relative_path)
+                if os.path.isfile(abs_path):
+                    rel_paths_to_search = [relative_path]
+                else:
+                    _dirs, rel_paths_to_search = scan_directory(
+                        path=abs_path,
+                        recursive=True,
+                        is_ignored_dir=self.is_ignored_path,
+                        is_ignored_file=self.is_ignored_path,
+                        relative_to=self.project_root,
+                    )
+                file_collection = FileCollection.from_local_project_paths(rel_paths_to_search, self)
+        return file_collection
+
+    def search_project_files_for_pattern(
         self,
         pattern: str,
         relative_path: str = "",
@@ -582,6 +398,8 @@ class Project(ToStringMixin):
         context_lines_after: int = 0,
         paths_include_glob: str | None = None,
         paths_exclude_glob: str | None = None,
+        multiline: bool = True,
+        code_files_only: bool = True,
     ) -> list[MatchedConsecutiveLines]:
         """
         Search for a pattern across all (non-ignored) source files
@@ -592,18 +410,18 @@ class Project(ToStringMixin):
         :param context_lines_after: Number of lines of context to include after each match
         :param paths_include_glob: Glob pattern to filter which files to include in the search
         :param paths_exclude_glob: Glob pattern to filter which files to exclude from the search. Takes precedence over paths_include_glob.
+        :param multiline: Whether to compile the regex with the DOTALL flag (``.`` matches newlines).
         :return: List of matched consecutive lines with context
         """
-        relative_file_paths = self.gather_source_files(relative_path=relative_path)
+        file_collection = self._create_file_collection(relative_path, code_files_only)
         return search_files(
-            relative_file_paths,
+            file_collection,
             pattern,
-            root_path=self.project_root,
-            file_reader=self.read_file,
             context_lines_before=context_lines_before,
             context_lines_after=context_lines_after,
             paths_include_glob=paths_include_glob,
             paths_exclude_glob=paths_exclude_glob,
+            multiline=multiline,
         )
 
     def retrieve_content_around_line(
@@ -635,6 +453,10 @@ class Project(ToStringMixin):
         :return: the language server manager, which is also stored in the project instance
         """
         try:
+            # ensure that the project configuration, particularly the list of languages is complete,
+            # despite asynchronous first-time project configuration generation (which may not have completed yet)
+            self.project_config.await_asynchronous_completion()
+
             # determine timeout to use for LS calls
             tool_timeout = self.serena_config.tool_timeout
             if tool_timeout is None or tool_timeout < 0:
@@ -652,15 +474,23 @@ class Project(ToStringMixin):
 
             log.info(f"Creating language server manager for {self.project_root}")
             self._language_server_manager_init_error = None
-            ls_specific_settings = {**self.serena_config.ls_specific_settings, **self.project_config.ls_specific_settings}
+            ls_specific_settings = dict(self.serena_config.ls_specific_settings)
+            if self.project_config.ls_specific_settings:
+                if self.is_trusted():
+                    ls_specific_settings.update(self.project_config.ls_specific_settings)
+                else:
+                    log.warning(
+                        f"Project path {self.project_root} is not trusted, ignoring LS-specific settings from project configuration. "
+                        "To trust the project, modify the trusted path patterns in the global configuration."
+                    )
             factory = LanguageServerFactory(
                 project_root=self.project_root,
+                project_config=self.project_config,
                 project_data_path=self._serena_data_folder,
                 encoding=self.project_config.encoding,
                 ignored_patterns=self._ignored_patterns,
                 ls_timeout=ls_timeout,
                 ls_specific_settings=ls_specific_settings,
-                additional_workspace_folders=self.project_config.additional_workspace_folders,
                 trace_lsp_communication=self.serena_config.trace_lsp_communication,
             )
             self.language_server_manager = LanguageServerManager.from_languages(self.project_config.languages, factory)

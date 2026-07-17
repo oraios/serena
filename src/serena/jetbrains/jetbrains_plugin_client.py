@@ -105,7 +105,12 @@ class JetBrainsPluginClientManager:
                 futures.append(future)
         return futures
 
-    def find_client(self, project_root: Path) -> "JetBrainsPluginClient":
+    def find_client(self, project_root: Path, log_warning: bool = True) -> "JetBrainsPluginClient":
+        """
+        :param project_root: the project root path to find a plugin instance for
+        :param log_warning: whether to log a warning if no matching plugin instance is found
+        :return: the instance
+        """
         plugin_paths_found = []
         for future in self._submit_scan():
             client = future.result()
@@ -114,12 +119,13 @@ class JetBrainsPluginClientManager:
             elif client.project_root is not None:
                 plugin_paths_found.append(client.project_root)
 
-        log.warning(
-            "Searched for Serena JetBrains plugin service for project at %s but found no matching service. "
-            "Found plugin instances for the following project paths: %s",
-            project_root,
-            plugin_paths_found,
-        )
+        if log_warning:
+            log.warning(
+                "Searched for Serena JetBrains plugin service for project at %s but found no matching service. "
+                "Found plugin instances for the following project paths: %s",
+                project_root,
+                plugin_paths_found,
+            )
         raise ServerNotFoundError(
             f"Found no Serena service in a JetBrains IDE instance for the project at {project_root}. "
             "STOP. Do not attempt any other tools or workarounds. Ask the user to open this folder as a project in a JetBrains IDE "
@@ -219,7 +225,7 @@ class JetBrainsPluginClient(ToStringMixin):
         return ["_port", "project_root", "_plugin_version"]
 
     @classmethod
-    def from_project(cls, project: Project) -> Self:
+    def from_project(cls, project: Project, log_warning: bool = True) -> "JetBrainsPluginClient":
         resolved_path = Path(project.project_root).resolve()
 
         if cls._last_port is not None:
@@ -227,7 +233,7 @@ class JetBrainsPluginClient(ToStringMixin):
             if client.matches(resolved_path):
                 return client
 
-        client = JetBrainsPluginClientManager().find_client(resolved_path)
+        client = JetBrainsPluginClientManager().find_client(resolved_path, log_warning=log_warning)
         cls._last_port = client._port
         return client
 
@@ -297,7 +303,15 @@ class JetBrainsPluginClient(ToStringMixin):
                 f"{self._plugin_version}. Ask the user to update the plugin!"
             )
 
-    def _make_request(self, method: str, endpoint: str, data: Optional[dict] = None) -> dict[str, Any]:
+    def _make_request(self, method: str, endpoint: str, data: Optional[dict] = None, pythonify: bool = True) -> dict[str, Any]:
+        """
+        :param method: the HTTP method to use ("GET" or "POST")
+        :param endpoint: the endpoint to call (e.g., "/findSymbol")
+        :param data: the data to send in the request body (for POST requests)
+        :param pythonify: whether to recursively "pythonify" the response object, converting all keys to snake_case.
+            This must not be enabled if *any* key contains variable data rather (and therefore isn't a well-defined DTO structure).
+        :return: the response as a dictionary
+        """
         url = f"{self._base_url}{endpoint}"
 
         response: Response | None = None
@@ -305,8 +319,8 @@ class JetBrainsPluginClient(ToStringMixin):
             if method.upper() == "GET":
                 response = self._session.get(url, timeout=self._timeout)
             elif method.upper() == "POST":
-                json_data = json.dumps(data) if data else None
-                response = self._session.post(url, data=json_data, timeout=self._timeout)
+                data_dict = data if data is not None else {}
+                response = self._session.post(url, data=json.dumps(data_dict), timeout=self._timeout)
             else:
                 raise ValueError(f"Unsupported HTTP method: {method}")
 
@@ -314,7 +328,11 @@ class JetBrainsPluginClient(ToStringMixin):
 
             # Try to parse JSON response
             try:
-                return self._pythonify_response(response.json())
+                response_json = response.json()
+                if pythonify:
+                    return self._pythonify_response(response_json)
+                else:
+                    return response_json
             except json.JSONDecodeError:
                 # If response is not JSON, return raw text
                 return {"response": response.text}
@@ -349,7 +367,7 @@ class JetBrainsPluginClient(ToStringMixin):
         """
         to_snake_case = lambda s: "".join(["_" + c.lower() if c.isupper() else c for c in s])
 
-        def convert(x):  # type: ignore
+        def convert(x):
             if isinstance(x, dict):
                 return {to_snake_case(k): convert(v) for k, v in x.items()}
             elif isinstance(x, list):
@@ -411,6 +429,8 @@ class JetBrainsPluginClient(ToStringMixin):
         :param include_location: whether to include symbol location information
         :param search_deps: whether to also search in dependencies
         """
+        if "*" in name_path:
+            self._require_version_at_least(2023, 3, 1)
         request_data = {
             "namePath": name_path,
             "relativePath": relative_path,
@@ -668,7 +688,7 @@ class JetBrainsPluginClient(ToStringMixin):
         inspection_names: list[str] | None = None,
         start_line: int | None = None,
         end_line: int | None = None,
-    ) -> jb.RunInspectionsResponse:
+    ) -> dict:
         """
         Runs IDE inspections on the given file and returns the results.
 
@@ -677,7 +697,11 @@ class JetBrainsPluginClient(ToStringMixin):
         :param inspection_names: optional list of specific inspection names to run
         :param start_line: optional start line to restrict the inspection range
         :param end_line: optional end line to restrict the inspection range
+        :return: the inspection results as a dictionary.
+            NOTE: The response is currently *not* a well-defined DTO, because it stores variable data in keys.
+            Consequently, the `pythonify` option is disabled for this request, and the response is returned as-is.
         """
+        self._require_version_at_least(2023, 2, 14)
         request_data: dict[str, Any] = {
             "relativePath": relative_path,
         }
@@ -689,7 +713,7 @@ class JetBrainsPluginClient(ToStringMixin):
             request_data["startLine"] = start_line
         if end_line is not None:
             request_data["endLine"] = end_line
-        return cast(jb.RunInspectionsResponse, self._make_request("POST", "/runInspectionsOnFile", request_data))
+        return self._make_request("POST", "/runInspectionsOnFile", request_data, pythonify=False)
 
     def list_inspections(
         self,
@@ -702,6 +726,7 @@ class JetBrainsPluginClient(ToStringMixin):
         :param language: optional language to filter inspections by (e.g. "Java", "Python")
         :param group_path_contains: optional substring to filter inspection group paths
         """
+        self._require_version_at_least(2023, 2, 14)
         request_data: dict[str, Any] = {}
         if language is not None:
             request_data["language"] = language
@@ -709,11 +734,21 @@ class JetBrainsPluginClient(ToStringMixin):
             request_data["groupPathContains"] = group_path_contains
         return cast(jb.ListInspectionsResponse, self._make_request("POST", "/listInspections", request_data))
 
+    def read_file(self, relative_path: str) -> str:
+        self._require_version_at_least(2023, 3, 3)
+        request_data = {
+            "relativePath": relative_path,
+        }
+        response = self._make_request("POST", "/readFile", request_data)
+        if "content" not in response:
+            raise PluginServerError(f"Unexpected response from readFile: {response}")
+        return response["content"]
+
     def close(self) -> None:
         self._session.close()
 
     def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):  # type: ignore
+    def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()

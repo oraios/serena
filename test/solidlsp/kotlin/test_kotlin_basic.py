@@ -6,14 +6,15 @@ from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
-from test.conftest import is_ci
+from test.conftest import language_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
 # Kotlin LSP (IntelliJ-based, pre-alpha v261) crashes on JVM restart under CI resource constraints
 # (2 CPUs, 7GB RAM). First start succeeds but subsequent starts fail with cancelled (-32800).
 # Tests pass reliably on developer machines. See PR #1061 for investigation details.
-@pytest.mark.skipif(is_ci, reason="Kotlin LSP JVM restart is unstable on CI runners")
+# (The CI quarantine lives centrally in test/conftest.py::_determine_disabled_languages.)
+@pytest.mark.skipif(not language_tests_enabled(Language.KOTLIN), reason="Kotlin tests are disabled")
 @pytest.mark.kotlin
 class TestKotlinLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.KOTLIN], indirect=True)

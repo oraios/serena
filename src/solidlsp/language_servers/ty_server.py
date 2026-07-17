@@ -8,16 +8,11 @@ You can pass the following entries in ``ls_specific_settings["python_ty"]``:
 """
 
 import logging
-import os
-import pathlib
-import shutil
-from typing import cast
 
 from typing_extensions import override
 
-from solidlsp.ls import LanguageServerDependencyProvider, SolidLanguageServer
+from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderUvx, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -44,28 +39,15 @@ class TyLanguageServer(SolidLanguageServer):
         )
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
-        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
-
-    class DependencyProvider(LanguageServerDependencyProvider):
-        def create_launch_command(self) -> list[str]:
-            # respecting an explicit override
-            ls_path = self._custom_settings.get("ls_path")
-            if ls_path is not None:
-                return [ls_path, "server"]
-
-            ty_version = self._custom_settings.get("ty_version", TY_VERSION)
-
-            # preferring uvx for on-demand execution
-            uvx_path = os.environ.get("UVX") or shutil.which("uvx")
-            if uvx_path is not None:
-                return [uvx_path, "--from", f"ty=={ty_version}", "ty", "server"]
-
-            # falling back to uv's uvx-compatible subcommand when only `uv` is available
-            uv_path = shutil.which("uv")
-            if uv_path is not None:
-                return [uv_path, "x", "--from", f"ty=={ty_version}", "ty", "server"]
-
-            raise RuntimeError("Could not find 'uvx' or 'uv' in PATH.\nInstall uv or provide ls_specific_settings.python_ty.ls_path.")
+        return LanguageServerDependencyProviderUvx(
+            self._custom_settings,
+            self._ls_resources_dir,
+            package="ty",
+            entrypoint="ty",
+            default_version=TY_VERSION,
+            version_setting_key="ty_version",
+            extra_args=("server",),
+        )
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -75,17 +57,11 @@ class TyLanguageServer(SolidLanguageServer):
     def _get_language_id_for_file(self, relative_file_path: str) -> str:
         return "python"
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Ty language server.
         """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params = {
-            "processId": os.getpid(),
-            "clientInfo": {"name": "Serena", "version": "0.1.0"},
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
             "capabilities": {
                 "workspace": {
                     "workspaceEdit": {"documentChanges": True},
@@ -115,9 +91,8 @@ class TyLanguageServer(SolidLanguageServer):
                     "publishDiagnostics": {"relatedInformation": True},
                 },
             },
-            "workspaceFolders": [{"uri": root_uri, "name": os.path.basename(repository_absolute_path)}],
         }
-        return cast(InitializeParams, initialize_params)
+        return initialize_params
 
     def _start_server(self) -> None:
         """
@@ -144,7 +119,7 @@ class TyLanguageServer(SolidLanguageServer):
         # starting and initializing the server
         log.info("Starting ty language server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to ty server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)

@@ -7,14 +7,19 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
-from test.conftest import find_identifier_position, get_repo_path, is_ci, language_has_verified_implementation_support
+from test.conftest import (
+    find_identifier_position,
+    get_repo_path,
+    language_has_verified_implementation_support,
+    language_tests_enabled,
+)
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
+# Currently, most F# tests fail (regression/instability), so the suite is disabled on CI.
+pytestmark = [pytest.mark.fsharp, pytest.mark.skipif(not language_tests_enabled(Language.FSHARP), reason="F# tests are disabled")]
 
-# Currently, most F# tests fail, there seems to be a regression or instability.
-@pytest.mark.fsharp
-@pytest.mark.skipif(is_ci, reason="F# language server is currently unreliable")
+
 class TestFSharpLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
@@ -80,7 +85,6 @@ class TestFSharpLanguageServer:
         for expected in expected_symbols:
             assert expected in symbol_names, f"{expected} function not found in Calculator.fs symbols"
 
-    @pytest.mark.xfail(is_ci, reason="Test is flaky")  # TODO: Re-enable if the LS can be made more reliable #1040
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test finding references using symbol selection range."""
@@ -117,7 +121,6 @@ class TestFSharpLanguageServer:
         for expected in expected_symbols:
             assert expected in symbol_names, f"{expected} not found in Person.fs symbols"
 
-    @pytest.mark.xfail(is_ci, reason="Test is flaky")  # TODO: Re-enable if the LS can be made more reliable #1040
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
     def test_find_referencing_symbols_across_files(self, language_server: SolidLanguageServer) -> None:
         """Test finding references to Calculator functions across files."""
@@ -140,7 +143,6 @@ class TestFSharpLanguageServer:
         # The subtract function should be referenced in Program.fs
         assert any("Program.fs" in ref.get("relativePath", "") for ref in refs), "Program.fs should reference subtract function"
 
-    @pytest.mark.xfail(is_ci, reason="Test is flaky")  # TODO: Re-enable if the LS can be made more reliable #1040
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
     def test_go_to_definition(self, language_server: SolidLanguageServer) -> None:
         """Test go-to-definition functionality."""
@@ -154,7 +156,6 @@ class TestFSharpLanguageServer:
         # We should get at least some definitions
         assert len(definitions) >= 0, "Should get definitions (even if empty for complex cases)"
 
-    @pytest.mark.xfail(is_ci, reason="Test is flaky")  # TODO: Re-enable if the LS can be made more reliable #1040
     @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
     def test_hover_information(self, language_server: SolidLanguageServer) -> None:
         """Test hover information functionality."""

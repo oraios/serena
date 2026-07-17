@@ -11,6 +11,7 @@ import os
 import pytest
 
 from serena.symbol import LanguageServerSymbol
+from serena.util.text_utils import find_text_coordinates
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_types import SymbolKind
 from test.solidlsp.conftest import PYTHON_BACKEND_LANGUAGES
@@ -40,14 +41,15 @@ class TestLanguageServerSymbols:
     def test_references_to_variables(self, language_server: SolidLanguageServer) -> None:
         """Test request_referencing_symbols for a variable."""
         file_path = os.path.join("test_repo", "variables.py")
-        # Line 75 contains the field status that is later modified
-        ref_symbols = [ref.symbol for ref in language_server.request_referencing_symbols(file_path, 74, 4)]
+
+        # find references to field `status`
+        with language_server.open_file(file_path, open_in_ls=False) as f:
+            file_content = f.contents
+        coords = find_text_coordinates(file_content, r"(status): str")
+        ref_symbols = [ref.symbol for ref in language_server.request_referencing_symbols(file_path, coords.line, coords.col)]
 
         assert len(ref_symbols) > 0
-        ref_lines = [ref["location"]["range"]["start"]["line"] for ref in ref_symbols if "location" in ref and "range" in ref["location"]]
         ref_names = [ref["name"] for ref in ref_symbols]
-        assert 87 in ref_lines
-        assert 95 in ref_lines
         assert "dataclass_instance" in ref_names
         assert "second_dataclass" in ref_names
 

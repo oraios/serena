@@ -2,14 +2,20 @@
 Configuration objects for language servers
 """
 
+import logging
+import os
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
+from functools import cache
+from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
 if TYPE_CHECKING:
     from solidlsp import SolidLanguageServer
+
+log = logging.getLogger(__name__)
 
 
 class FilenameMatcher:
@@ -20,6 +26,38 @@ class FilenameMatcher:
         """
         self._file_extensions = list(set(file_extensions)) if case_sensitive else list(set(ext.lower() for ext in file_extensions))
         self._case_sensitive = case_sensitive
+        # Snapshot of the initial configuration, used by ``reset``. Relevant for matchers that are
+        # per-language singletons (``Language.get_source_fn_matcher`` is ``@cache``d): extensions added
+        # via ``add_extensions`` for one project must not leak into the next, so the singleton is reset
+        # to this snapshot at every language server initialisation.
+        self._initial_file_extensions = list(self._file_extensions)
+
+    def reset(self) -> None:
+        """
+        Restore the matcher to its initial set of extensions (as provided at construction).
+
+        Undoes any extensions added via :meth:`add_extensions`. Intended for the per-language
+        singleton matchers, which are reset at the start of every language server initialisation so
+        that a previous project's reconfiguration does not leak into a newly activated one.
+        """
+        self._file_extensions = list(self._initial_file_extensions)
+
+    def add_extensions(self, *file_extensions: str) -> None:
+        """
+        Add further file extensions to this matcher (idempotent).
+
+        This is intended for matchers that are per-language singletons, i.e. those returned by
+        :meth:`Language.get_source_fn_matcher` (which is ``@cache``d): extensions that a user
+        configures for a language server (e.g. ``.cgi`` for Perl) can be added here so that every
+        consumer of the matcher — symbol index traversal, ignore checks, language composition —
+        treats the same set of files as sources, staying in sync with the language server.
+
+        :param file_extensions: the additional file extensions, e.g. ``.cgi``
+        """
+        for ext in file_extensions:
+            norm = ext if self._case_sensitive else ext.lower()
+            if norm not in self._file_extensions:
+                self._file_extensions.append(norm)
 
     def is_relevant_filename(self, fn: str) -> bool:
         if not self._case_sensitive:
@@ -34,7 +72,7 @@ class FilenameMatcher:
         a *complete* extension — i.e. the extension must either end the string or be followed
         by a non-extension-character (anything other than a letter, digit, or underscore).
         """
-        if self._case_sensitive:
+        if not self._case_sensitive:
             string = string.lower()
         for ext in self._file_extensions:
             if re.search(rf"{re.escape(ext)}(?:\W|$)", string):
@@ -68,6 +106,7 @@ class Language(str, Enum):
     SWIFT = "swift"
     BASH = "bash"
     CRYSTAL = "crystal"
+    CUE = "cue"
     ZIG = "zig"
     LUA = "lua"
     LUAU = "luau"
@@ -93,6 +132,11 @@ class Language(str, Enum):
     LEAN4 = "lean4"
     GROOVY = "groovy"
     VUE = "vue"
+    SVELTE = "svelte"
+    """Svelte language server using svelte-language-server.
+    Supports .svelte Single File Components plus TypeScript and JavaScript
+    files in Svelte projects. Requires Node.js v18+ and npm.
+    """
     POWERSHELL = "powershell"
     PASCAL = "pascal"
     """Pascal Language Server (pasls) for Free Pascal and Lazarus projects.
@@ -110,6 +154,30 @@ class Language(str, Enum):
     Uses a custom LSP server based on pygls. Automatically sets up
     a virtual environment with pygls dependencies on first use.
     """
+    BSL = "bsl"
+    """BSL Language Server for 1C:Enterprise and OneScript languages.
+    Uses bsl-language-server by 1c-syntax. Automatically downloads the JAR.
+    Supports .bsl and .os files. Requires Java 21+ on PATH.
+    """
+    ADA = "ada"
+    """Ada / SPARK language server using AdaCore's Ada Language Server (ALS).
+    Supports .ads (specs), .adb (bodies), and .ada files. Auto-downloads the
+    ALS binary from AdaCore's GitHub releases. Works best with a .gpr GNAT
+    project file at the repository root. SPARK files are handled transparently
+    by the same server, since SPARK is distinguished by pragmas/aspects in
+    source rather than by file extension.
+    """
+    GDSCRIPT = "gdscript"
+    """GDScript language server for Godot Engine projects (Godot 3 and 4).
+    Connects to the Godot editor's built-in LSP server over TCP (port 6008).
+    The editor must already be running with its built-in LSP enabled (default).
+    Supports .gd and .gdscript files.
+    """
+    QML = "qml"
+    """QML language server using Qt's qmlls (or qmlls6).
+    Supports .qml files. Requires Qt 6 installation providing qmlls on PATH.
+    See https://doc.qt.io/qt-6/qtqml-tool-qmlls.html
+    """
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -117,6 +185,8 @@ class Language(str, Enum):
     """Jedi language server for Python (instead of pyright, which is the default)"""
     PYTHON_TY = "python_ty"
     """Ty language server for Python (instead of pyright, which is the default)."""
+    PYTHON_PYREFLY = "python_pyrefly"
+    """Pyrefly language server for Python (instead of pyright, which is the default)."""
     CSHARP_OMNISHARP = "csharp_omnisharp"
     """OmniSharp language server for C# (instead of the default csharp-ls by microsoft).
     Currently has problems with finding references, and generally seems less stable and performant.
@@ -129,10 +199,19 @@ class Language(str, Enum):
     """Phpactor language server for PHP (instead of Intelephense, which is the default).
     Requires PHP 8.1+ on the system. Fully open-source (MIT license).
     """
+    PHP_PHPANTOM = "php_phpantom"
+    """PHPantom language server for PHP (instead of Intelephense, which is the default).
+    Uses the open-source Rust-based phpantom_lsp binary and can be auto-downloaded.
+    """
     MARKDOWN = "markdown"
     """Marksman language server for Markdown (experimental).
     Must be explicitly specified as the main language, not auto-detected.
     This is an edge case primarily useful when working on documentation-heavy projects.
+    """
+    LATEX = "latex"
+    """texlab language server for LaTeX/BibTeX (experimental).
+    Must be explicitly specified as the main language, not auto-detected.
+    Provides sectioning-hierarchy document symbols plus label/citation definitions and references.
     """
     YAML = "yaml"
     """YAML language server (experimental).
@@ -219,10 +298,13 @@ class Language(str, Enum):
             self.TYPESCRIPT_VTS,
             self.PYTHON_JEDI,
             self.PYTHON_TY,
+            self.PYTHON_PYREFLY,
             self.CSHARP_OMNISHARP,
             self.RUBY_SOLARGRAPH,
             self.PHP_PHPACTOR,
+            self.PHP_PHPANTOM,
             self.MARKDOWN,
+            self.LATEX,
             self.YAML,
             self.JSON,
             self.TOML,
@@ -238,7 +320,7 @@ class Language(str, Enum):
         """Whether the supported language should be considered a programming language.
         Solidlsp supports languages like markdown or json, this method returns False for them.
         """
-        return self not in frozenset((self.MARKDOWN, self.JSON, self.TOML, self.YAML, self.ANSIBLE))
+        return self not in frozenset((self.MARKDOWN, self.LATEX, self.JSON, self.TOML, self.YAML, self.ANSIBLE))
 
     def __str__(self) -> str:
         return self.value
@@ -253,8 +335,8 @@ class Language(str, Enum):
         # We assign lower priority to languages that are supersets of others, such that
         # the "larger" language is only chosen when it matches more strongly
         match self:
-            # languages that are supersets of others (Vue is superset of TypeScript/JavaScript)
-            case self.VUE:
+            # languages that are supersets of others (Vue/Svelte are supersets of TypeScript/JavaScript)
+            case self.VUE | self.SVELTE:
                 return 1
             # regular languages
             case _:
@@ -266,9 +348,11 @@ class Language(str, Enum):
         """
         return self.get_ls_class().supports_implementation_request()
 
+    # NOTE: Caching results in a singleton per enum item, which is a precondition for persistent configuration of the matcher.
+    @cache
     def get_source_fn_matcher(self) -> FilenameMatcher:
         match self:
-            case self.PYTHON | self.PYTHON_JEDI | self.PYTHON_TY:
+            case self.PYTHON | self.PYTHON_JEDI | self.PYTHON_TY | self.PYTHON_PYREFLY:
                 return FilenameMatcher(".py", ".pyi")
             case self.JAVA:
                 return FilenameMatcher(".java")
@@ -325,6 +409,11 @@ class Language(str, Enum):
                     # OpenCL
                     ".cl",
                     ".clcpp",
+                    # Arduino sketch: not in clang's extension table, but it is C++.
+                    # Routing it here lets clangd serve symbols; the project must
+                    # tell clangd it is C++ (a .clangd with CompileFlags Add: [-xc++],
+                    # or a compile DB), since the clang driver can't infer a job from .ino.
+                    ".ino",
                     case_sensitive=False,
                 )
             case self.CPP_CCLS:
@@ -350,13 +439,15 @@ class Language(str, Enum):
                     # Objective-C
                     ".m",
                     ".mm",
+                    # Arduino sketch (C++); see note in the CPP case above.
+                    ".ino",
                     case_sensitive=False,
                 )
             case self.KOTLIN:
                 return FilenameMatcher(".kt", ".kts")
             case self.DART:
                 return FilenameMatcher(".dart")
-            case self.PHP | self.PHP_PHPACTOR:
+            case self.PHP | self.PHP_PHPACTOR | self.PHP_PHPANTOM:
                 return FilenameMatcher(".php")
             case self.R:
                 return FilenameMatcher(".R", ".r", ".Rmd", ".Rnw")
@@ -376,6 +467,8 @@ class Language(str, Enum):
                 return FilenameMatcher(".sh", ".bash")
             case self.CRYSTAL:
                 return FilenameMatcher(".cr")
+            case self.CUE:
+                return FilenameMatcher(".cue")
             case self.YAML:
                 return FilenameMatcher(".yaml", ".yml")
             case self.JSON:
@@ -402,6 +495,8 @@ class Language(str, Enum):
                 return FilenameMatcher(".rego")
             case self.MARKDOWN:
                 return FilenameMatcher(".md", ".markdown")
+            case self.LATEX:
+                return FilenameMatcher(".tex", ".bib", ".sty", ".cls")
             case self.SCALA:
                 return FilenameMatcher(".scala", ".sbt")
             case self.JULIA:
@@ -420,6 +515,12 @@ class Language(str, Enum):
                     for postfix in ["x", ""]:
                         for base_pattern in ["ts", "js"]:
                             path_patterns.append(f".{prefix}{base_pattern}{postfix}")
+                return FilenameMatcher(*path_patterns)
+            case self.SVELTE:
+                path_patterns = [".svelte"]
+                for prefix in ["c", "m", ""]:
+                    for base_pattern in ["ts", "js"]:
+                        path_patterns.append(f".{prefix}{base_pattern}")
                 return FilenameMatcher(*path_patterns)
             case self.POWERSHELL:
                 return FilenameMatcher(".ps1", ".psm1", ".psd1")
@@ -455,6 +556,14 @@ class Language(str, Enum):
                 return FilenameMatcher(".yaml", ".yml")
             case self.MSL:
                 return FilenameMatcher(".mrc")
+            case self.BSL:
+                return FilenameMatcher(".bsl", ".os")
+            case self.ADA:
+                return FilenameMatcher(".ads", ".adb", ".ada", case_sensitive=False)
+            case self.GDSCRIPT:
+                return FilenameMatcher(".gd", ".gdscript")
+            case self.QML:
+                return FilenameMatcher(".qml")
             case self.HTML:
                 return FilenameMatcher(".html", ".htm")
             case self.SCSS:
@@ -488,6 +597,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.ty_server import TyLanguageServer
 
                 return TyLanguageServer
+            case self.PYTHON_PYREFLY:
+                from solidlsp.language_servers.pyrefly_server import PyreflyLanguageServer
+
+                return PyreflyLanguageServer
             case self.JAVA:
                 from solidlsp.language_servers.eclipse_jdtls import EclipseJDTLS
 
@@ -520,6 +633,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.vue_language_server import VueLanguageServer
 
                 return VueLanguageServer
+            case self.SVELTE:
+                from solidlsp.language_servers.svelte_language_server import SvelteLanguageServer
+
+                return SvelteLanguageServer
             case self.GO:
                 from solidlsp.language_servers.gopls import Gopls
 
@@ -552,6 +669,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.phpactor import PhpactorServer
 
                 return PhpactorServer
+            case self.PHP_PHPANTOM:
+                from solidlsp.language_servers.phpantom import PHPantomServer
+
+                return PHPantomServer
             case self.PERL:
                 from solidlsp.language_servers.perl_language_server import PerlLanguageServer
 
@@ -584,6 +705,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.crystal_language_server import CrystalLanguageServer
 
                 return CrystalLanguageServer
+            case self.CUE:
+                from solidlsp.language_servers.cue_language_server import CueLanguageServer
+
+                return CueLanguageServer
             case self.YAML:
                 from solidlsp.language_servers.yaml_language_server import YamlLanguageServer
 
@@ -601,7 +726,7 @@ class Language(str, Enum):
 
                 return ZigLanguageServer
             case self.NIX:
-                from solidlsp.language_servers.nixd_ls import NixLanguageServer  # type: ignore
+                from solidlsp.language_servers.nixd_ls import NixLanguageServer
 
                 return NixLanguageServer
             case self.LUA:
@@ -634,6 +759,10 @@ class Language(str, Enum):
                 from solidlsp.language_servers.marksman import Marksman
 
                 return Marksman
+            case self.LATEX:
+                from solidlsp.language_servers.texlab_language_server import TexlabLanguageServer
+
+                return TexlabLanguageServer
             case self.R:
                 from solidlsp.language_servers.r_language_server import RLanguageServer
 
@@ -702,6 +831,22 @@ class Language(str, Enum):
                 from solidlsp.language_servers.msl_language_server import MslLanguageServer
 
                 return MslLanguageServer
+            case self.BSL:
+                from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
+
+                return BSLLanguageServer
+            case self.ADA:
+                from solidlsp.language_servers.ada_language_server import AdaLanguageServer
+
+                return AdaLanguageServer
+            case self.GDSCRIPT:
+                from solidlsp.language_servers.godot_language_server import GodotLanguageServer
+
+                return GodotLanguageServer
+            case self.QML:
+                from solidlsp.language_servers.qml_language_server import QmlLanguageServer
+
+                return QmlLanguageServer
             case self.HTML:
                 from solidlsp.language_servers.vscode_html_language_server import VsCodeHtmlLanguageServer
 
@@ -732,13 +877,28 @@ class Language(str, Enum):
         raise ValueError(f"Unhandled language server class: {ls_class}")
 
 
-@dataclass
+@dataclass(frozen=True)
 class LanguageServerConfig:
     """
-    Configuration parameters
+    Configuration parameters for a language server instance
     """
 
     code_language: Language
+    """
+    defines the language server to use
+    """
+    workspace_folders: list[str] = field(default_factory=lambda: ["."])
+    """
+    list of workspace folders to be used by the language server and to be fully indexed by SolidLSP.
+    Paths can either be absolute or relative to the project root.
+    These folders must be descendants of the project root.
+    """
+    additional_workspace_folders: list[str] = field(default_factory=list)
+    """
+    list of additional workspace folders to be passed to the language server, but which are not to be indexed by SolidLSP. 
+    Paths can either be absolute or relative to the project root.
+    These folders can potentially be outside of the project root, e.g. for cross-package reference support.
+    """
     trace_lsp_communication: bool = False
     start_independent_lsp_process: bool = True
     ignored_paths: list[str] = field(default_factory=list)
@@ -751,3 +911,38 @@ class LanguageServerConfig:
         import inspect
 
         return cls(**{k: v for k, v in env.items() if k in inspect.signature(cls).parameters})
+
+    @staticmethod
+    def _absolute_workspace_folders(folders: list[str], project_root: str) -> list[str]:
+        abs_workspace_folders = []
+        for path in folders:
+            if os.path.isabs(path):
+                abs_path = str(Path(path).resolve())
+            else:
+                abs_path = os.path.realpath(os.path.join(project_root, path))
+            if not os.path.exists(abs_path):
+                log.error("Workspace folder does not exist: %s; skipping", abs_path)
+                continue
+            if abs_path in abs_workspace_folders:
+                log.warning("Duplicate workspace folder: %s; skipping", abs_path)
+                continue
+            abs_workspace_folders.append(abs_path)
+        return abs_workspace_folders
+
+    def get_absolute_workspace_folders(self, project_root: str) -> list[str]:
+        """
+        Get the absolute paths of the workspace folders, resolving relative paths against the project root.
+
+        :param project_root: The root path of the project
+        :return: List of absolute workspace folder paths
+        """
+        return self._absolute_workspace_folders(self.workspace_folders, project_root)
+
+    def get_absolute_additional_workspace_folders(self, project_root: str) -> list[str]:
+        """
+        Get the absolute paths of the additional workspace folders, resolving relative paths against the project root.
+
+        :param project_root: The root path of the project
+        :return: List of absolute additional workspace folder paths
+        """
+        return self._absolute_workspace_folders(self.additional_workspace_folders, project_root)

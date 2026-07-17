@@ -4,7 +4,6 @@ Provides PHP specific instantiation of the LanguageServer class using Phpactor.
 
 import logging
 import os
-import pathlib
 import re
 import shutil
 import stat
@@ -15,7 +14,6 @@ from overrides import override
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import FileUtils
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -122,15 +120,11 @@ class PhpactorServer(SolidLanguageServer):
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialization params for the Phpactor Language Server.
         """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params = {
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
             "capabilities": {
                 "textDocument": {
                     "synchronization": {"didSave": True, "dynamicRegistration": True},
@@ -145,19 +139,13 @@ class PhpactorServer(SolidLanguageServer):
                     "didChangeConfiguration": {"dynamicRegistration": True},
                 },
             },
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
             "initializationOptions": {
                 "language_server_phpstan.enabled": False,
                 "language_server_psalm.enabled": False,
                 "language_server_php_cs_fixer.enabled": False,
             },
         }
-        return initialize_params  # type: ignore
+        return initialize_params
 
     def _start_server(self) -> None:
         """Start Phpactor server process."""
@@ -178,7 +166,7 @@ class PhpactorServer(SolidLanguageServer):
 
         log.info("Starting Phpactor server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)

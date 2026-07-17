@@ -5,27 +5,35 @@ import logging
 import os
 import pathlib
 import shutil
-import subprocess
 import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Hashable, Iterator
+from collections.abc import Callable, Hashable, Iterator
 from contextlib import contextmanager
 from copy import copy
+from dataclasses import dataclass
 from pathlib import Path, PurePath
 from time import monotonic, perf_counter, sleep
 from typing import Any, Self, Union, cast
 
 import pathspec
+from sensai.util.helper import mark_used
 from sensai.util.pickle import getstate, load_pickle
 from sensai.util.string import ToStringMixin
 
 from serena.util.file_system import match_path
 from serena.util.text_utils import MatchedConsecutiveLines
 from solidlsp import ls_types
+from solidlsp.dependency_provider import (
+    LanguageServerDependencyProvider,
+    LanguageServerDependencyProviderBaseCommand,
+    LanguageServerDependencyProviderSinglePath,
+    LanguageServerDependencyProviderUvx,
+)
+from solidlsp.initialize_params import DefaultInitializeParamsBuilder, InitializeParamsBuilder
 from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
-from solidlsp.ls_exceptions import SolidLSPException
-from solidlsp.ls_process import LanguageServerProcess
+from solidlsp.ls_exceptions import InvalidTextLocationError, SolidLSPException
+from solidlsp.ls_process import LanguageServerInterface, StdioLanguageServer
 from solidlsp.ls_types import UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils, PathUtils, TextUtils
 from solidlsp.lsp_protocol_handler import lsp_types
@@ -36,6 +44,7 @@ from solidlsp.lsp_protocol_handler.lsp_types import (
     DefinitionParams,
     DocumentSymbol,
     ImplementationParams,
+    InitializeParams,
     LocationLink,
     RenameParams,
     SymbolInformation,
@@ -56,6 +65,14 @@ The `DocumentSymbol` is the preferred type, but the legacy type `SymbolInformati
 """
 
 log = logging.getLogger(__name__)
+
+# backward compatibility (support old imports of these classes from this module)
+mark_used(
+    LanguageServerDependencyProvider,
+    LanguageServerDependencyProviderBaseCommand,
+    LanguageServerDependencyProviderUvx,
+    LanguageServerDependencyProviderSinglePath,
+)
 
 _debug_enabled = log.isEnabledFor(logging.DEBUG)
 """Serves as a flag that triggers additional computation when debug logging is enabled."""
@@ -108,8 +125,8 @@ class LSPFileBuffer:
             return
         self._is_open_in_ls = True
         self.language_server.server.notify.did_open_text_document(
-            {
-                LSPConstants.TEXT_DOCUMENT: {  # type: ignore
+            {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                LSPConstants.TEXT_DOCUMENT: {
                     LSPConstants.URI: self.uri,
                     LSPConstants.LANGUAGE_ID: self.language_id,
                     LSPConstants.VERSION: 0,
@@ -121,8 +138,8 @@ class LSPFileBuffer:
     def close(self) -> None:
         if self._is_open_in_ls:
             self.language_server.server.notify.did_close_text_document(
-                {
-                    LSPConstants.TEXT_DOCUMENT: {  # type: ignore
+                {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                    LSPConstants.TEXT_DOCUMENT: {
                         LSPConstants.URI: self.uri,
                     }
                 }
@@ -192,17 +209,38 @@ class SymbolBody(ToStringMixin):
         return ["_lines"]
 
     def get_text(self) -> str:
+        end_line = self._end_line
+        end_col = self._end_col
+        if end_line >= len(self._lines):
+            if end_line == len(self._lines) and end_col == 0:
+                # LSP convention: a range covering whole lines through EOF sometimes ends
+                # at the start of the following, non-existent line (exactly one line past
+                # the last valid index, at column 0). That is well-defined: it means
+                # "through EOF", so treat it as ending at the end of the actual last line.
+                end_line = len(self._lines) - 1
+                end_col = len(self._lines[end_line])
+            else:
+                # Any other out-of-range end position (further past EOF, or exactly one
+                # line past EOF but not at column 0) is not the well-defined convention
+                # above; applying the same correction there would silently assume that
+                # a column meant for a nonexistent line still applies to the corrected
+                # one, which can produce a garbage body. Reject it instead of guessing.
+                raise InvalidTextLocationError(
+                    f"Symbol range end (line {self._end_line}, col {self._end_col}) is out of bounds "
+                    f"for a file with {len(self._lines)} lines"
+                )
+
         # extract relevant lines
-        symbol_body = "\n".join(self._lines[self._start_line : self._end_line + 1])
+        symbol_body = "\n".join(self._lines[self._start_line : end_line + 1])
 
         # remove leading content from the first line
         symbol_body = symbol_body[self._start_col :]
 
         # remove trailing content from the last line
-        last_line = self._lines[self._end_line]
-        trailing_length = len(last_line) - self._end_col
+        last_line = self._lines[end_line]
+        trailing_length = len(last_line) - end_col
         if trailing_length > 0:
-            symbol_body = symbol_body[: -(len(last_line) - self._end_col)]
+            symbol_body = symbol_body[: -(len(last_line) - end_col)]
 
         return symbol_body
 
@@ -223,10 +261,10 @@ class SymbolBodyFactory:
             return existing_body
 
         assert "location" in symbol
-        start_line = symbol["location"]["range"]["start"]["line"]  # type: ignore
-        end_line = symbol["location"]["range"]["end"]["line"]  # type: ignore
-        start_col = symbol["location"]["range"]["start"]["character"]  # type: ignore
-        end_col = symbol["location"]["range"]["end"]["character"]  # type: ignore
+        start_line = symbol["location"]["range"]["start"]["line"]
+        end_line = symbol["location"]["range"]["end"]["line"]
+        start_col = symbol["location"]["range"]["start"]["character"]
+        end_col = symbol["location"]["range"]["end"]["character"]
         return SymbolBody(self._lines, start_line, start_col, end_line, end_col)
 
 
@@ -270,74 +308,9 @@ class DocumentSymbols:
         return self._all_symbols, self.root_symbols
 
 
-class LanguageServerDependencyProvider(ABC):
-    """
-    Prepares dependencies for a language server (if any), ultimately enabling the launch command to be constructed
-    and optionally providing environment variables that are necessary for the execution.
-    """
-
-    def __init__(self, custom_settings: SolidLSPSettings.CustomLSSettings, ls_resources_dir: str):
-        self._custom_settings = custom_settings
-        self._ls_resources_dir = ls_resources_dir
-
-    @abstractmethod
-    def create_launch_command(self) -> list[str]:
-        """
-        Creates the launch command for this language server, potentially downloading and installing dependencies
-        beforehand.
-
-        :return: the launch command as a list containing the executable and its arguments
-        """
-
-    def create_launch_command_env(self) -> dict[str, str]:
-        """
-        Provides environment variables to be set when executing the launch command.
-
-        This method is intended to be overridden by subclasses that need to set variables.
-
-        :return: a mapping for variable names to values
-        """
-        return {}
-
-
-class LanguageServerDependencyProviderSinglePath(LanguageServerDependencyProvider, ABC):
-    """
-    Special case of a dependency provider, where there is a single core dependency which provides
-    the basis for the launch command.
-
-    The core dependency's path can be overridden by the user in LS-specific settings (SerenaConfig)
-    via the key "ls_path". If the user provides the key, the specified path is used directly.
-    Otherwise, the provider implementation is called to get or install the core dependency.
-    """
-
-    @abstractmethod
-    def _get_or_install_core_dependency(self) -> str:
-        """
-        Gets the language server's core path, potentially installing dependencies beforehand.
-
-        :return: the core dependency's path (e.g. executable, jar, etc.)
-        """
-
-    def create_launch_command(self) -> list[str]:
-        path = self._custom_settings.get("ls_path", None)
-        if path is not None:
-            core_path = path
-        else:
-            core_path = self._get_or_install_core_dependency()
-        return self._create_launch_command(core_path)
-
-    @abstractmethod
-    def _create_launch_command(self, core_path: str) -> list[str]:
-        """
-        :param core_path: path to the core dependency
-        :return: the launch command as a list containing the executable and its arguments
-        """
-
-
 class SolidLanguageServer(ABC):
     """
-    The LanguageServer class provides a language agnostic interface to the Language Server Protocol.
-    It is used to communicate with Language Servers of different programming languages.
+    High-level abstraction for language server interaction, which wraps the underlying low-level LSP interface
     """
 
     CACHE_FOLDER_NAME = "cache"
@@ -464,10 +437,9 @@ class SolidLanguageServer(ABC):
         repository_root_path = os.path.abspath(repository_root_path)
 
         ls_class = config.code_language.get_ls_class()
-        # For now, we assume that all language server implementations have the same signature of the constructor
-        # (which, unfortunately, differs from the signature of the base class).
-        # If this assumption is ever violated, we need branching logic here.
-        ls = ls_class(config, repository_root_path, solidlsp_settings)  # type: ignore
+        # All language server implementations are required to use the same signature of the constructor
+        # (which differs from the signature of the base class constructor).
+        ls = ls_class(config, repository_root_path, solidlsp_settings)
         ls.set_request_timeout(timeout)
         return ls
 
@@ -485,7 +457,7 @@ class SolidLanguageServer(ABC):
 
         Do not instantiate this class directly. Use `LanguageServer.create` method instead.
 
-        :param config: the global SolidLSP configuration.
+        :param config: the language server's configuration.
         :param repository_root_path: the root path of the repository.
         :param process_launch_info: (DEPRECATED: pass None and implement _create_dependency_provider instead)
             the command used to start the actual language server.
@@ -495,14 +467,19 @@ class SolidLanguageServer(ABC):
             notification by default.
             If the language server uses multiple language identifiers, it must override the method `get_language_id_for_file`
             to provide the appropriate identifier for each type of file.
+        :param solidlsp_settings: the global SolidLSP settings
         :param cache_version_raw_document_symbols: the version, for caching, of the raw document symbols coming
             from this specific language server. This should be incremented by subclasses calling this constructor
             whenever the format of the raw document symbols changes (typically because the language server
             improves/fixes its output).
         """
+        self.config = config
         self._solidlsp_settings = solidlsp_settings
         lang = self.get_language_enum_instance()
         self._custom_settings = solidlsp_settings.get_ls_specific_settings(lang)
+        """
+        the (user-provided) language server-specific settings
+        """
         self._ls_resources_dir = self.ls_resources_dir(solidlsp_settings)
         log.debug(f"Custom config (LS-specific settings) for {lang}: {self._custom_settings}")
         self._encoding = config.encoding
@@ -513,8 +490,19 @@ class SolidLanguageServer(ABC):
         )
 
         self.language_id = language_id
+        """
+        default language identifier to be passed to the language server in `textDocument/didOpen` notifications.
+        """
         self.open_file_buffers: dict[str, LSPFileBuffer] = {}
-        self.language = Language(language_id)
+        self.language = self.get_language_enum_instance()
+        """
+        identifies the language server (not to be confused with the language id passed to the language server)
+        """
+        # The source filename matcher is a @cache'd per-language singleton. A previous project may
+        # have extended it (e.g. Perl's file_filter adding .cgi); reset it here so every activation
+        # starts from the language's default extensions, then language-server subclasses re-apply
+        # their own settings during the rest of __init__.
+        self.language.get_source_fn_matcher().reset()
         self._published_diagnostics: dict[str, list[ls_types.Diagnostic]] = {}
         self._published_diagnostics_generation_by_uri: dict[str, int] = {}
         self._published_diagnostics_generation = 0
@@ -542,22 +530,15 @@ class SolidLanguageServer(ABC):
                 log.debug(f"LSP: {source} -> {target}: {msg!s}")
 
         else:
-            logging_fn = None  # type: ignore
+            logging_fn = None
 
-        # create the LanguageServerHandler, which provides the functionality to start the language server and communicate with it,
-        # preparing the launch command beforehand
+        # create the low-level server interface, potentially installing dependencies and launching a subprocess
+        self._process_launch_info: ProcessLaunchInfo | None = process_launch_info
         self._dependency_provider: LanguageServerDependencyProvider | None = None
-        if process_launch_info is None:
-            self._dependency_provider = self._create_dependency_provider()
-            process_launch_info = self._create_process_launch_info()
-        log.debug(f"Creating language server instance with {language_id=} and process launch info: {process_launch_info}")
-        self.server = LanguageServerProcess(
-            process_launch_info,
-            language=self.language,
-            determine_log_level=self._determine_log_level,
-            logger=logging_fn,
-            start_independent_lsp_process=config.start_independent_lsp_process,
-        )
+        self.server = self._create_language_server_interface(logging_fn)
+        """
+        the low-level language server interface
+        """
         self.server.on_any_notification(self._observe_server_notification)
 
         # Set up the pathspec matcher for the ignored paths
@@ -572,32 +553,74 @@ class SolidLanguageServer(ABC):
         # Create a pathspec matcher from the processed patterns
         self._ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)
 
-        self._request_timeout: float | None = None
-
         self._has_waited_for_cross_file_references = False
 
-        # resolving additional workspace folders
-        self._additional_workspace_abs_paths: list[str] = []
-        _seen: set[str] = set()
-        for additional_workspace_path in self._solidlsp_settings.additional_workspace_folders:
-            if not additional_workspace_path or additional_workspace_path == ".":
-                continue
-            if not os.path.isabs(additional_workspace_path):
-                additional_workspace_abs_path = os.path.realpath(os.path.join(self.repository_root_path, additional_workspace_path))
-            else:
-                additional_workspace_abs_path = str(Path(additional_workspace_path).resolve())
-            if not os.path.isdir(additional_workspace_abs_path):
-                log.error(
-                    "additional_workspace_folders: skipping non-existent directory %s (resolved to %s)",
-                    additional_workspace_abs_path,
-                    additional_workspace_abs_path,
-                )
-                continue
-            if additional_workspace_abs_path in _seen:
-                log.info("additional_workspace_folders: skipping duplicate %s", additional_workspace_path)
-                continue
-            _seen.add(additional_workspace_abs_path)
-            self._additional_workspace_abs_paths.append(additional_workspace_abs_path)
+        self._abs_workspace_folders_indexed = self.config.get_absolute_workspace_folders(self.repository_root_path)
+        self._abs_workspace_folders_additional = self.config.get_absolute_additional_workspace_folders(self.repository_root_path)
+        """
+        additional workspace folders, which are passed to the language server in the initialization request
+        but which are not indexed by SolidLSP, i.e. not traversed for full symbol tree
+        """
+        self._abs_workspace_folders_all = self._abs_workspace_folders_indexed + self._abs_workspace_folders_additional
+
+    @property
+    def custom_settings(self) -> SolidLSPSettings.CustomLSSettings:
+        """
+        The (user-provided) language server-specific settings.
+        """
+        return self._custom_settings
+
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        """
+        Creates the dependency provider for this language server.
+
+        Subclasses should override this method to provide their specific dependency provider.
+        This method is only called if process_launch_info is not passed to __init__.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement _create_dependency_provider() or pass process_launch_info to __init__()"
+        )
+
+    def _get_dependency_provider(self) -> LanguageServerDependencyProvider:
+        if self._dependency_provider is None:
+            self._dependency_provider = self._create_dependency_provider()
+        return self._dependency_provider
+
+    def _create_process_launch_info(self) -> ProcessLaunchInfo:
+        dependency_provider = self._get_dependency_provider()
+        cmd = dependency_provider.create_launch_command()
+        env = dependency_provider.create_launch_command_env()
+        return ProcessLaunchInfo(cmd=cmd, cwd=self.repository_root_path, env=env)
+
+    def _get_process_launch_info(self) -> ProcessLaunchInfo:
+        if self._process_launch_info is None:
+            self._process_launch_info = self._create_process_launch_info()
+        return self._process_launch_info
+
+    def _create_language_server_interface(self, logging_fn: Callable[[str, str, StringDict | str], None] | None) -> LanguageServerInterface:
+        """
+        Creates the low-level language server interface for LSP communication.
+
+        The interface is created but not started.
+
+        The default implementation creates a StdioLanguageServer, but subclasses can override this method to create a different type
+        of interface if needed.
+
+        :param logging_fn: the trace logging function
+        :return: the interface
+        """
+        language_id = self.language_id
+        process_launch_info = self._get_process_launch_info()
+        log.debug(f"Creating language server instance with {language_id=} and {process_launch_info}")
+        return StdioLanguageServer(
+            process_launch_info,
+            language=self.language,
+            determine_log_level=self._determine_log_level,
+            logger=logging_fn,
+            start_independent_lsp_process=self.config.start_independent_lsp_process,
+        )
+
+    # --- diagnostics-related functions ---
 
     def _observe_server_notification(self, method: str, params: Any) -> None:
         """
@@ -939,8 +962,8 @@ class SolidLanguageServer(ABC):
             if self._supports_pull_diagnostics():
                 try:
                     response = self.server.send.text_document_diagnostic(
-                        {
-                            LSPConstants.TEXT_DOCUMENT: {  # type: ignore
+                        {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                            LSPConstants.TEXT_DOCUMENT: {
                                 LSPConstants.URI: uri,
                             }
                         }
@@ -981,23 +1004,6 @@ class SolidLanguageServer(ABC):
 
         return self._filter_diagnostics(ret, start_line, end_line, min_severity)
 
-    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
-        """
-        Creates the dependency provider for this language server.
-
-        Subclasses should override this method to provide their specific dependency provider.
-        This method is only called if process_launch_info is not passed to __init__.
-        """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} must implement _create_dependency_provider() or pass process_launch_info to __init__()"
-        )
-
-    def _create_process_launch_info(self) -> ProcessLaunchInfo:
-        assert self._dependency_provider is not None
-        cmd = self._dependency_provider.create_launch_command()
-        env = self._dependency_provider.create_launch_command_env()
-        return ProcessLaunchInfo(cmd=cmd, cwd=self.repository_root_path, env=env)
-
     def _get_wait_time_for_cross_file_referencing(self) -> float:
         """Meant to be overridden by subclasses for LS that don't have a reliable "finished initializing" signal.
 
@@ -1013,6 +1019,48 @@ class SolidLanguageServer(ABC):
         """Check if a relative path traverses outside the workspace root via '..' components."""
         return ".." in PurePath(relative_file_path).parts
 
+    @dataclass
+    class PathWorkspaceStatus:
+        """
+        Represents the status of a path with respect to the language server's workspace folders.
+        """
+
+        ls: "SolidLanguageServer"
+        resolve_abs_path: Path
+        is_in_workspace_folder: bool
+        workspace_root: str | None = None
+        """
+        the workspace root the path is within/relative to, if any
+        """
+
+        @classmethod
+        def from_abs_resolved_path(cls, path: Path, ls: "SolidLanguageServer") -> "SolidLanguageServer.PathWorkspaceStatus":
+            """
+            :param path: an absolute, resolved Path instance
+            :param ls: the language server instance
+            """
+            for workspace in ls._abs_workspace_folders_all:
+                if path.is_relative_to(workspace):
+                    return SolidLanguageServer.PathWorkspaceStatus(
+                        ls=ls, is_in_workspace_folder=True, workspace_root=workspace, resolve_abs_path=path
+                    )
+            return SolidLanguageServer.PathWorkspaceStatus(ls=ls, is_in_workspace_folder=False, resolve_abs_path=path)
+
+        @classmethod
+        def from_relative_path(cls, relative_path: str, ls: "SolidLanguageServer") -> "SolidLanguageServer.PathWorkspaceStatus":
+            """
+            :param relative_path: a relative path from the repository root
+            :param ls: the language server instance
+            """
+            return cls.from_abs_resolved_path(pathlib.Path(ls.repository_root_path, relative_path).resolve(), ls)
+
+        def check_within_workspace_or_raise(self):
+            if not self.is_in_workspace_folder:
+                raise ValueError(
+                    f"Path {self.resolve_abs_path} is outside of configured workspaces. "
+                    f"Configured workspaces: {self.ls._abs_workspace_folders_all}."
+                )
+
     def _resolve_file_uri(self, relative_file_path: str) -> str:
         """Construct a canonical file URI from a relative path.
 
@@ -1022,35 +1070,8 @@ class SolidLanguageServer(ABC):
         p = pathlib.Path(os.path.join(self.repository_root_path, relative_file_path))
         if self._path_contains_dots(relative_file_path):
             p = p.resolve()
-            is_outside_of_configured_workspaces = True
-            configured_workspaces = [*self._additional_workspace_abs_paths, self.repository_root_path]
-            for workspace in configured_workspaces:
-                if p.is_relative_to(workspace):
-                    is_outside_of_configured_workspaces = False
-                    break
-            if is_outside_of_configured_workspaces:
-                raise ValueError(
-                    f"Path {relative_file_path} contains '..' segments and is outside of configured workspaces. "
-                    f"Configured workspaces: {configured_workspaces}. Resolved path: {p}."
-                )
+            self.PathWorkspaceStatus.from_abs_resolved_path(p, self).check_within_workspace_or_raise()
         return p.as_uri()
-
-    def _build_workspace_folders_param(self, repository_absolute_path: str) -> list[dict[str, str]]:
-        """Build the ``workspaceFolders`` list for LSP initialization.
-
-        Returns a list containing the primary workspace folder followed by any
-        additional workspace folders configured in settings.
-        """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
-        folders: list[dict[str, str]] = [
-            {"uri": root_uri, "name": os.path.basename(repository_absolute_path)},
-        ]
-        for abs_folder in self._additional_workspace_abs_paths:
-            folder_uri = pathlib.Path(abs_folder).as_uri()
-            folders.append({"uri": folder_uri, "name": os.path.basename(abs_folder)})
-        if len(folders) > 1:
-            log.info("LSP multi-root workspace: %d folders", len(folders))
-        return folders
 
     def _activate_additional_workspaces(self) -> None:
         """Open a representative file from each additional workspace folder to
@@ -1065,7 +1086,7 @@ class SolidLanguageServer(ABC):
         enable this feature; the default implementation raises ``NotImplementedError``.
         """
         opened_count = 0
-        for additional_workspace in self._additional_workspace_abs_paths:
+        for additional_workspace in self._abs_workspace_folders_additional:
             source_file = self._find_representative_source_file(additional_workspace)
             if source_file is None:
                 log.warning("No source file found in additional workspace folder: %s", additional_workspace)
@@ -1156,26 +1177,27 @@ class SolidLanguageServer(ABC):
         Determine if a path should be ignored based on file type
         and ignore patterns.
 
+        Missing paths are classified without raising, since language servers may report
+        locations of generated files that are not present on disk (e.g. compiled classes
+        under build output). A missing path is treated as a file if its name has a suffix
+        and as a directory otherwise; directory-only ignore patterns (e.g. ``build/``)
+        match only existing directories.
+
         :param relative_path: Relative path to check
         :param ignore_unsupported_files: whether files that are not supported source files should be ignored
 
         :return: True if the path should be ignored, False otherwise
         """
         abs_path = os.path.join(self.repository_root_path, relative_path)
-        if not os.path.exists(abs_path):
-            raise FileNotFoundError(f"File {abs_path} not found, the ignore check cannot be performed")
-
-        # Check file extension if it's a file
-        is_file = os.path.isfile(abs_path)
-        if is_file and ignore_unsupported_files:
-            fn_matcher = self.get_source_fn_matcher()
-            if not fn_matcher.is_relevant_filename(abs_path):
-                return True
-
-        # Create normalized path for consistent handling
         rel_path = Path(relative_path)
 
-        # Check each part of the path against always fulfilled ignore conditions
+        # determine whether the path is a file: from the filesystem if the path exists, lexically otherwise
+        exists = os.path.exists(abs_path)
+        if not exists:
+            log.debug("Path %s does not exist; the ignore check is performed on the path itself", abs_path)
+        is_file = os.path.isfile(abs_path) if exists else bool(rel_path.suffix)
+
+        # check each directory component against always-ignored dirnames
         dir_parts = rel_path.parts
         if is_file:
             dir_parts = dir_parts[:-1]
@@ -1185,80 +1207,30 @@ class SolidLanguageServer(ABC):
             if self.is_ignored_dirname(part):
                 return True
 
+        # apply the unsupported-extension rule to files
+        if is_file and ignore_unsupported_files:
+            fn_matcher = self.get_source_fn_matcher()
+            if not fn_matcher.is_relevant_filename(abs_path):
+                return True
+
         return match_path(relative_path, self.get_ignore_spec(), root_path=self.repository_root_path)
 
-    def _shutdown(self, timeout: float = 5.0) -> None:
-        """
-        A robust shutdown process designed to terminate cleanly on all platforms, including Windows,
-        by explicitly closing all I/O pipes.
-        """
-        if not self.server.is_running():
-            log.debug("Server process not running, skipping shutdown.")
-            return
-
-        log.info(f"Initiating final robust shutdown with a {timeout}s timeout...")
-        process = self.server.process
-        if process is None:
-            log.debug("Server process is None, cannot shutdown.")
-            return
-
-        # --- Main Shutdown Logic ---
-        # Stage 1: Graceful Termination Request
-        # Send LSP shutdown and close stdin to signal no more input.
-        try:
-            log.debug("Sending LSP shutdown request...")
-            # Use a thread to timeout the LSP shutdown call since it can hang
-            shutdown_thread = threading.Thread(target=self.server.shutdown)
-            shutdown_thread.daemon = True
-            shutdown_thread.start()
-            shutdown_thread.join(timeout=2.0)  # 2 second timeout for LSP shutdown
-
-            if shutdown_thread.is_alive():
-                log.debug("LSP shutdown request timed out, proceeding to terminate...")
-            else:
-                log.debug("LSP shutdown request completed.")
-
-            if process.stdin and not process.stdin.closed:
-                process.stdin.close()
-            log.debug("Stage 1 shutdown complete.")
-        except Exception as e:
-            log.debug(f"Exception during graceful shutdown: {e}")
-            # Ignore errors here, we are proceeding to terminate anyway.
-
-        # Stage 2: Terminate and Wait for Process to Exit
-        log.debug(f"Terminating process {process.pid}, current status: {process.poll()}")
-        process.terminate()
-
-        # Stage 3: Wait for process termination with timeout
-        try:
-            log.debug(f"Waiting for process {process.pid} to terminate...")
-            exit_code = process.wait(timeout=timeout)
-            log.info(f"Language server process terminated successfully with exit code {exit_code}.")
-        except subprocess.TimeoutExpired:
-            # If termination failed, forcefully kill the process
-            log.warning(f"Process {process.pid} termination timed out, killing process forcefully...")
-            process.kill()
-            try:
-                exit_code = process.wait(timeout=2.0)
-                log.info(f"Language server process killed successfully with exit code {exit_code}.")
-            except subprocess.TimeoutExpired:
-                log.error(f"Process {process.pid} could not be killed within timeout.")
-        except Exception as e:
-            log.error(f"Error during process shutdown: {e}")
-
     @contextmanager
-    def start_server(self) -> Iterator["SolidLanguageServer"]:
+    def start_server_context(self) -> Iterator["SolidLanguageServer"]:
         self.start()
-        yield self
-        self.stop()
-
-    def _start_server_process(self) -> None:
-        self.server_started = True
-        self._start_server()
+        try:
+            yield self
+        finally:
+            self.stop()
 
     @abstractmethod
     def _start_server(self) -> None:
-        pass
+        """
+        Starts the low-level language server interface (i.e. self.server).
+
+        This method must ultimately call `self.server.start()` and may perform additional setup before or after starting the server,
+        such as waiting for initialization to complete or activating additional workspaces.
+        """
 
     def _get_language_id_for_file(self, relative_file_path: str) -> str:
         """
@@ -1297,8 +1269,6 @@ class SolidLanguageServer(ABC):
             fb.ref_count += 1
             if open_in_ls:
                 fb.ensure_open_in_ls()
-            yield fb
-            fb.ref_count -= 1
         else:
             version = 0
             language_id = self._get_language_id_for_file(relative_file_path)
@@ -1313,12 +1283,14 @@ class SolidLanguageServer(ABC):
                 open_in_ls=open_in_ls,
             )
             self.open_file_buffers[uri] = fb
-            yield fb
-            fb.ref_count -= 1
 
-        if self.open_file_buffers[uri].ref_count == 0:
-            self.open_file_buffers[uri].close()
-            del self.open_file_buffers[uri]
+        try:
+            yield fb
+        finally:
+            fb.ref_count -= 1
+            if fb.ref_count == 0:
+                fb.close()
+                del self.open_file_buffers[uri]
 
     @contextmanager
     def _open_file_context(
@@ -1368,8 +1340,8 @@ class SolidLanguageServer(ABC):
         new_contents, new_l, new_c = TextUtils.insert_text_at_position(file_buffer.contents, line, column, text_to_be_inserted)
         file_buffer.contents = new_contents
         self.server.notify.did_change_text_document(
-            {
-                LSPConstants.TEXT_DOCUMENT: {  # type: ignore
+            {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                LSPConstants.TEXT_DOCUMENT: {
                     LSPConstants.VERSION: file_buffer.version,
                     LSPConstants.URI: file_buffer.uri,
                 },
@@ -1411,8 +1383,8 @@ class SolidLanguageServer(ABC):
         )
         file_buffer.contents = new_contents
         self.server.notify.did_change_text_document(
-            {
-                LSPConstants.TEXT_DOCUMENT: {  # type: ignore
+            {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                LSPConstants.TEXT_DOCUMENT: {
                     LSPConstants.VERSION: file_buffer.version,
                     LSPConstants.URI: file_buffer.uri,
                 },
@@ -1445,6 +1417,9 @@ class SolidLanguageServer(ABC):
             self._ensure_server_started()
 
             t0 = perf_counter() if _debug_enabled else None
+            # arm indexing tracking before didOpen so that the subsequent wait can
+            # observe the indexing progress triggered by opening the file
+            self.language_server._pre_open_for_cross_file_references()
             with self.language_server.open_file(self.relative_file_path):
                 self.language_server._wait_for_cross_file_references_if_needed()
                 try:
@@ -1507,6 +1482,12 @@ class SolidLanguageServer(ABC):
                     self.request_name,
                     abs_path,
                 )
+                return None
+
+            # skip locations of generated files that are not present on disk
+            # (language servers may report e.g. compiled classes under build output)
+            if not os.path.exists(abs_path):
+                log.info("%s found symbol at non-existent path: %s", self.request_name, abs_path)
                 return None
 
             if self.skip_ignored_paths and self.language_server.is_ignored_path(rel_path_str):
@@ -1595,6 +1576,14 @@ class SolidLanguageServer(ABC):
                 },
             },
         )
+
+    def _pre_open_for_cross_file_references(self) -> None:
+        """Called just before open_file() for requests that may need cross-file indexing.
+
+        Override to pre-arm async indexing tracking before sending didOpen (e.g. clear
+        a threading.Event so a subsequent wait for indexing blocks correctly).
+        The base implementation is a no-op.
+        """
 
     def _wait_for_cross_file_references_if_needed(self) -> None:
         if not self._has_waited_for_cross_file_references:
@@ -1754,15 +1743,15 @@ class SolidLanguageServer(ABC):
                 response = self.server.send.completion(completion_params)
                 if isinstance(response, list):
                     response = {"items": response, "isIncomplete": False}
-                if response is None or not response["isIncomplete"]:  # type: ignore
+                if response is None or not response["isIncomplete"]:
                     break
 
             # TODO: Understand how to appropriately handle `isIncomplete`
-            if response is None or (response["isIncomplete"] and not allow_incomplete):  # type: ignore
+            if response is None or (response["isIncomplete"] and not allow_incomplete):
                 return []
 
             if "items" in response:
-                response = response["items"]  # type: ignore
+                response = response["items"]
 
             response = cast(list[LSPTypes.CompletionItem], response)
 
@@ -1780,8 +1769,8 @@ class SolidLanguageServer(ABC):
 
                 if "label" in item:
                     completion_item["completionText"] = item["label"]
-                    completion_item["kind"] = item["kind"]  # type: ignore
-                elif "insertText" in item:  # type: ignore
+                    completion_item["kind"] = item["kind"]
+                elif "insertText" in item:
                     completion_item["completionText"] = item["insertText"]
                     completion_item["kind"] = item["kind"]
                 elif "textEdit" in item and "newText" in item["textEdit"]:
@@ -1965,9 +1954,9 @@ class SolidLanguageServer(ABC):
                     item["location"] = tree_location
                 location = item["location"]
                 if "absolutePath" not in location:
-                    location["absolutePath"] = absolute_path  # type: ignore
+                    location["absolutePath"] = absolute_path
                 if "relativePath" not in location:
-                    location["relativePath"] = relative_file_path  # type: ignore
+                    location["relativePath"] = relative_file_path
 
                 item["body"] = self.create_symbol_body(item, factory=body_factory)
 
@@ -2009,7 +1998,7 @@ class SolidLanguageServer(ABC):
                     if "children" in usymbol:
                         usymbol["children"] = convert_symbols_with_common_parent(usymbol["children"], usymbol)  # type: ignore
                     else:
-                        usymbol["children"] = []  # type: ignore
+                        usymbol["children"] = []
                     unified_symbols.append(usymbol)
                 return unified_symbols
 
@@ -2040,25 +2029,17 @@ class SolidLanguageServer(ABC):
             If a directory is passed, all files within this directory will be considered.
         :return: A list of root symbols representing the top-level packages/modules in the project.
         """
-        if within_relative_path is not None:
-            within_abs_path = os.path.join(self.repository_root_path, within_relative_path)
-            if not os.path.exists(within_abs_path):
-                raise FileNotFoundError(f"File or directory not found: {within_abs_path}")
-            if os.path.isfile(within_abs_path):
-                if self.is_ignored_path(within_relative_path):
-                    log.warning(
-                        "File %s is ignored by ignore patterns but was explicitly requested; proceeding anyway.",
-                        within_relative_path,
-                    )
-                root_nodes = self.request_document_symbols(within_relative_path).root_symbols
-                return root_nodes
 
         # Helper function to recursively process directories
-        def process_directory(rel_dir_path: str) -> list[ls_types.UnifiedSymbolInformation]:
-            abs_dir_path = self.repository_root_path if rel_dir_path == "." else os.path.join(self.repository_root_path, rel_dir_path)
+        def process_directory(abs_dir_path: str) -> list[ls_types.UnifiedSymbolInformation]:
             abs_dir_path = os.path.realpath(abs_dir_path)
 
-            if self.is_ignored_path(str(Path(abs_dir_path).relative_to(self.repository_root_path))):
+            rel_dir_path: str | None
+            try:
+                rel_dir_path = str(Path(abs_dir_path).relative_to(self.repository_root_path))
+            except ValueError:  # not relative to repository root
+                rel_dir_path = None
+            if rel_dir_path and self.is_ignored_path(rel_dir_path):
                 log.debug("Skipping directory: %s (because it should be ignored)", rel_dir_path)
                 return []
 
@@ -2069,7 +2050,7 @@ class SolidLanguageServer(ABC):
                 return []
 
             # Create package symbol for directory
-            package_symbol = ls_types.UnifiedSymbolInformation(  # type: ignore
+            package_symbol = ls_types.UnifiedSymbolInformation(
                 name=os.path.basename(abs_dir_path),
                 kind=ls_types.SymbolKind.Package,
                 location=ls_types.Location(
@@ -2105,7 +2086,7 @@ class SolidLanguageServer(ABC):
                     continue
 
                 if os.path.isdir(contained_dir_or_file_abs_path):
-                    child_symbols = process_directory(contained_dir_or_file_rel_path)
+                    child_symbols = process_directory(contained_dir_or_file_abs_path)
                     package_symbol["children"].extend(child_symbols)
                     for child in child_symbols:
                         child["parent"] = package_symbol
@@ -2117,7 +2098,7 @@ class SolidLanguageServer(ABC):
 
                         # Create file symbol, link with children
                         file_range = self._get_range_from_file_content(file_data.contents)
-                        file_symbol = ls_types.UnifiedSymbolInformation(  # type: ignore
+                        file_symbol = ls_types.UnifiedSymbolInformation(
                             name=os.path.splitext(contained_dir_or_file_name)[0],
                             kind=ls_types.SymbolKind.File,
                             range=file_range,
@@ -2155,9 +2136,23 @@ class SolidLanguageServer(ABC):
 
             return result
 
-        # Start from the root or the specified directory
-        start_rel_path = within_relative_path or "."
-        return process_directory(start_rel_path)
+        if within_relative_path:
+            within_abs_path = os.path.join(self.repository_root_path, within_relative_path)
+            if not os.path.exists(within_abs_path):
+                raise FileNotFoundError(f"File or directory not found: {within_abs_path}")
+            if self.is_ignored_path(within_relative_path):
+                raise ValueError(f"Explicitly requested symbols in '{within_relative_path}' while the path is ignored")
+            if os.path.isfile(within_abs_path):
+                root_nodes = self.request_document_symbols(within_relative_path).root_symbols
+                return root_nodes
+            else:
+                self.PathWorkspaceStatus.from_abs_resolved_path(Path(within_abs_path).resolve(), self).check_within_workspace_or_raise()
+                return process_directory(within_abs_path)
+        else:
+            full_result = []
+            for root in self.config.get_absolute_workspace_folders(self.repository_root_path):
+                full_result.extend(process_directory(root))
+            return full_result
 
     @staticmethod
     def _get_range_from_file_content(file_content: str) -> ls_types.Range:
@@ -2969,7 +2964,7 @@ class SolidLanguageServer(ABC):
                             migrated_cache[new_cache_key] = (file_hash, root_symbols)
                             num_symbols_migrated += len(all_symbols)
                     log.info("Migrated %d document symbols from legacy cache", num_symbols_migrated)
-                    self._raw_document_symbols_cache = migrated_cache  # type: ignore
+                    self._raw_document_symbols_cache = migrated_cache
                     self._raw_document_symbols_cache_is_modified = True
                     self._save_raw_document_symbols_cache()
                     legacy_cache_file.unlink()
@@ -3112,7 +3107,8 @@ class SolidLanguageServer(ABC):
         :return: self for method chaining
         """
         log.info(f"Starting language server with language {self.language_server.language} for {self.language_server.repository_root_path}")
-        self._start_server_process()
+        self.server_started = True
+        self._start_server()
         return self
 
     def stop(self, shutdown_timeout: float = 2.0) -> None:
@@ -3123,16 +3119,18 @@ class SolidLanguageServer(ABC):
         :param shutdown_timeout: time, in seconds, to wait for the server to shutdown gracefully before killing it
         """
         try:
-            self._shutdown(timeout=shutdown_timeout)
+            self.server.stop(timeout=shutdown_timeout)
         except Exception as e:
             log.warning(f"Exception while shutting down language server: {e}")
+        finally:
+            self.server_started = False
 
     @property
     def language_server(self) -> Self:
         return self
 
     @property
-    def handler(self) -> LanguageServerProcess:
+    def handler(self) -> LanguageServerInterface:
         """Access the underlying language server handler.
 
         Useful for advanced operations like sending custom commands
@@ -3142,3 +3140,33 @@ class SolidLanguageServer(ABC):
 
     def is_running(self) -> bool:
         return self.server.is_running()
+
+    def _create_initialize_params_builder(self) -> InitializeParamsBuilder:
+        return DefaultInitializeParamsBuilder(self)
+
+    @abstractmethod
+    def _create_base_initialize_params(self) -> dict | InitializeParams:
+        """
+        Subclasses should override this method to provide server-specific InitializeParams settings,
+        which provide the basis for the InitializeParams object sent to the language server during initialization.
+
+        The returned dictionary is passed to the builder constructed by _create_initialize_params_builder()
+        in order to create the final InitializeParams object.
+
+        The default builder implementation already sets the following keys, so implementations of this method
+        should not set them:
+
+        - processId
+        - rootPath
+        - rootUri
+        - clientInfo
+        - workspaceFolders
+
+        :return: the base InitializeParams settings
+        """
+
+    def _create_initialize_params(self) -> InitializeParams:
+        """
+        Create the InitializeParams object to send to the language server during initialization.
+        """
+        return self._create_initialize_params_builder().with_base_options(self._create_base_initialize_params()).build()

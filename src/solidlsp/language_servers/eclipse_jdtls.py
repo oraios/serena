@@ -4,6 +4,7 @@ Provides Java specific instantiation of the LanguageServer class. Contains vario
 
 import dataclasses
 import hashlib
+import json
 import logging
 import os
 import pathlib
@@ -24,7 +25,7 @@ from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_types import UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils, PlatformUtils
-from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, InitializeParams, SymbolInformation
+from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, SymbolInformation
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -179,8 +180,10 @@ class EclipseJDTLS(SolidLanguageServer):
         - maven_user_settings: Path to Maven settings.xml file (default: ~/.m2/settings.xml)
         - gradle_user_home: Path to Gradle user home directory (default: ~/.gradle)
         - gradle_wrapper_enabled: Whether to use the project's Gradle wrapper (default: false)
-        - gradle_java_home: Path to JDK for Gradle (default: null, uses bundled JRE)
-        - use_system_java_home: Whether to use the system's JAVA_HOME for JDTLS itself (default: false)
+        - gradle_java_home: Path to JDK for Gradle (default: null, falls back to JAVA_HOME when
+              use_system_java_home is true, then the bundled JRE)
+        - use_system_java_home: Whether to use the system's JAVA_HOME for JDTLS itself and, when
+              gradle_java_home is unset, Gradle import (default: false)
         - jdtls_xmx: Maximum heap size for the JDTLS server JVM (default: "3G")
         - jdtls_xms: Initial heap size for the JDTLS server JVM (default: "100m")
         - intellicode_xmx: Maximum heap size for the IntelliCode embedded JVM (default: "1G")
@@ -216,7 +219,7 @@ class EclipseJDTLS(SolidLanguageServer):
         # gradle_user_home: 'C:\\Users\\YourName\\.gradle'  # Windows (use single quotes!)
         gradle_wrapper_enabled: true  # set to true for projects with custom plugins/repositories
         gradle_java_home: "/path/to/jdk"  # set to override Gradle's JDK
-        use_system_java_home: true  # set to true to use system JAVA_HOME for JDTLS
+        use_system_java_home: true  # set to true to use system JAVA_HOME for JDTLS and Gradle fallback
         jdtls_xmx: "3G"  # maximum heap size for the JDTLS server JVM
         jdtls_xms: "100m"  # initial heap size for the JDTLS server JVM
         intellicode_xmx: "1G"  # maximum heap size for the IntelliCode embedded JVM
@@ -250,24 +253,6 @@ class EclipseJDTLS(SolidLanguageServer):
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         ls_resources_dir = self.ls_resources_dir(self._solidlsp_settings)
         return self.DependencyProvider(self._custom_settings, ls_resources_dir, self._solidlsp_settings, self.repository_root_path)
-
-    @override
-    def is_ignored_dirname(self, dirname: str) -> bool:
-        # Ignore common Java build directories from different build tools:
-        # - Maven: target
-        # - Gradle: build, .gradle
-        # - Eclipse: bin, .settings
-        # - IntelliJ IDEA: out, .idea
-        # - General: classes, dist, lib
-        return super().is_ignored_dirname(dirname) or dirname in [
-            "target",  # Maven
-            "build",  # Gradle
-            "bin",  # Eclipse
-            "out",  # IntelliJ IDEA
-            "classes",  # General
-            "dist",  # General
-            "lib",  # General
-        ]
 
     class DependencyProvider(LanguageServerDependencyProvider):
         def __init__(
@@ -772,16 +757,41 @@ class EclipseJDTLS(SolidLanguageServer):
             """
             Compute the JDTLS workspace directory name.
 
-            Default mode hashes the project path only — preserves backwards compatibility with
-            workspaces created before upstream-JDTLS support. Upstream mode (when ``jdtls_path``
-            is set) mixes in the launcher path so switching between default and upstream
-            installations (or between different upstream JDTLS versions) lands in a separate
-            ws_dir and avoids stale OSGi configs blocking startup.
+            The launcher jar path is mixed in so that switching JDTLS versions (default
+            vscode-java VSIX bump or upstream install change) lands in a separate ws_dir
+            and avoids stale OSGi configs from the previous version blocking startup.
+
+            Workspace-affecting settings are also mixed in so changing Maven/Gradle/JDK
+            inputs lands in a fresh workspace instead of silently reusing stale import
+            state from a previous configuration.
+
+            Exception: legacy default-mode users on INITIAL_VSCODE_JAVA_VERSION keep the
+            original ``md5(repository_root_path)`` format *until* one of the tracked
+            workspace-affecting settings is set. This preserves existing caches for the
+            old default setup while still fixing stale-workspace bugs once users opt into
+            custom Java import settings.
             """
-            if custom_settings.get("jdtls_path"):
-                ws_hash_input = (repository_root_path + "|" + jdtls_launcher_jar_path).encode()
-            else:
+            workspace_setting_keys = (
+                "maven_user_settings",
+                "gradle_user_home",
+                "gradle_wrapper_enabled",
+                "gradle_java_home",
+                "java_home",
+                "use_system_java_home",
+                "maven_offline",
+            )
+            workspace_settings = {key: custom_settings.settings[key] for key in workspace_setting_keys if key in custom_settings.settings}
+            workspace_settings_json = json.dumps(workspace_settings, sort_keys=True, separators=(",", ":"))
+
+            is_legacy_initial = (
+                not custom_settings.get("jdtls_path")
+                and custom_settings.get("vscode_java_version", DEFAULT_VSCODE_JAVA_VERSION) == INITIAL_VSCODE_JAVA_VERSION
+                and not workspace_settings
+            )
+            if is_legacy_initial:
                 ws_hash_input = repository_root_path.encode()
+            else:
+                ws_hash_input = (repository_root_path + "|" + jdtls_launcher_jar_path + "|" + workspace_settings_json).encode()
             return hashlib.md5(ws_hash_input).hexdigest()
 
         def create_launch_command(self) -> list[str]:
@@ -878,15 +888,47 @@ class EclipseJDTLS(SolidLanguageServer):
             log.info(f"Using bundled JRE for JDTLS: {java_home}")
             return {"syntaxserver": "false", "JAVA_HOME": java_home}
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    def _resolve_gradle_java_home(self) -> str:
+        """
+        Resolve the Java home configured for JDTLS Gradle import settings.
+
+        :return: Java home selected from explicit Gradle override, system ``JAVA_HOME`` when enabled, or bundled runtime.
+        :raises FileNotFoundError: If an explicitly configured ``gradle_java_home`` path does not exist.
+        """
+        # explicit Gradle override...
+        gradle_java_home = self._custom_settings.get("gradle_java_home")
+        if gradle_java_home is not None:
+            if not os.path.exists(gradle_java_home):
+                error_msg = (
+                    f"Gradle Java home not found: {gradle_java_home}. "
+                    f"Fix: update path in ~/.serena/serena_config.yml (ls_specific_settings -> java -> gradle_java_home), "
+                    f"or remove the setting to use JAVA_HOME or the bundled JRE fallback"
+                )
+                log.error(error_msg)
+                raise FileNotFoundError(error_msg)
+            log.info(f"Using Gradle Java home from custom location: {gradle_java_home}")
+            return gradle_java_home
+
+        # system JAVA_HOME fallback...
+        use_system_java_home = self._custom_settings.get("use_system_java_home", False)
+        if use_system_java_home:
+            system_java_home = os.environ.get("JAVA_HOME")
+            if system_java_home:
+                log.info(f"Using system JAVA_HOME for Gradle: {system_java_home}")
+                return system_java_home
+            log.warning("use_system_java_home is set but JAVA_HOME is not set in environment, falling back to bundled JRE for Gradle")
+
+        # bundled runtime fallback...
+        log.info(f"Using bundled JRE for Gradle: {self.runtime_dependency_paths.jre_path}")
+        return self.runtime_dependency_paths.jre_path
+
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize parameters for the EclipseJDTLS server.
         """
         # Look into https://github.com/eclipse/eclipse.jdt.ls/blob/master/org.eclipse.jdt.ls.core/src/org/eclipse/jdt/ls/core/internal/preferences/Preferences.java to understand all the options available
 
-        if not os.path.isabs(repository_absolute_path):
-            repository_absolute_path = os.path.abspath(repository_absolute_path)
-        repo_uri = pathlib.Path(repository_absolute_path).as_uri()
+        repo_uri = pathlib.Path(self.repository_root_path).as_uri()
 
         # Load user's Maven and Gradle configuration paths from ls_specific_settings["java"]
 
@@ -953,25 +995,11 @@ class EclipseJDTLS(SolidLanguageServer):
             f"Gradle wrapper {'enabled' if gradle_wrapper_enabled else 'disabled'} (configurable via ls_specific_settings -> java -> gradle_wrapper_enabled)"
         )
 
-        # Gradle Java home: default to None, which means the bundled JRE is used
-        gradle_java_home = self._custom_settings.get("gradle_java_home")
-        if gradle_java_home is not None:
-            if not os.path.exists(gradle_java_home):
-                error_msg = (
-                    f"Gradle Java home not found: {gradle_java_home}. "
-                    f"Fix: update path in ~/.serena/serena_config.yml (ls_specific_settings -> java -> gradle_java_home), "
-                    f"or remove the setting to use the bundled JRE"
-                )
-                log.error(error_msg)
-                raise FileNotFoundError(error_msg)
-            log.info(f"Using Gradle Java home from custom location: {gradle_java_home}")
-        else:
-            log.info(f"Using bundled JRE for Gradle: {self.runtime_dependency_paths.jre_path}")
+        # Gradle Java home: explicit setting, system JAVA_HOME when requested, then bundled runtime.
+        gradle_java_home = self._resolve_gradle_java_home()
 
         initialize_params = {
             "locale": "en",
-            "rootPath": repository_absolute_path,
-            "rootUri": pathlib.Path(repository_absolute_path).as_uri(),
             "capabilities": {
                 "workspace": {
                     "applyEdit": True,
@@ -1264,41 +1292,34 @@ class EclipseJDTLS(SolidLanguageServer):
                 },
             },
             "trace": "verbose",
-            "processId": os.getpid(),
-            "workspaceFolders": [
-                {
-                    "uri": repo_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
         }
 
-        initialize_params["initializationOptions"]["workspaceFolders"] = [repo_uri]  # type: ignore
+        initialize_params["initializationOptions"]["workspaceFolders"] = [repo_uri]
 
         # IntelliCode bundle: only attached in default vscode-java VSIX mode.
         # In upstream-jdtls mode (jdtls_path set) we don't ship IntelliCode — agentic Serena workflows
         # don't use completion ranking, so the bundle would be inert dead weight.
         if self.runtime_dependency_paths.intellicode_jar_path is not None:
-            initialize_params["initializationOptions"]["bundles"] = [self.runtime_dependency_paths.intellicode_jar_path]  # type: ignore
+            initialize_params["initializationOptions"]["bundles"] = [self.runtime_dependency_paths.intellicode_jar_path]
         else:
-            initialize_params["initializationOptions"]["bundles"] = []  # type: ignore
+            initialize_params["initializationOptions"]["bundles"] = []
 
-        initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"] = [  # type: ignore
+        initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"] = [
             {"name": "JavaSE-21", "path": self.runtime_dependency_paths.jre_home_path, "default": True}
         ]
 
-        for runtime in initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"]:  # type: ignore
+        for runtime in initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"]:
             assert "name" in runtime
             assert "path" in runtime
             assert os.path.exists(runtime["path"]), f"Runtime required for eclipse_jdtls at path {runtime['path']} does not exist"
 
-        gradle_settings = initialize_params["initializationOptions"]["settings"]["java"]["import"]["gradle"]  # type: ignore
+        gradle_settings = initialize_params["initializationOptions"]["settings"]["java"]["import"]["gradle"]
         # In upstream-jdtls mode we don't ship a Gradle distribution — Buildship will use the project's
         # ./gradlew wrapper or a system-installed Gradle via its standard discovery rules.
         if self.runtime_dependency_paths.gradle_path is not None:
             gradle_settings["home"] = self.runtime_dependency_paths.gradle_path
-        gradle_settings["java"] = {"home": gradle_java_home if gradle_java_home is not None else self.runtime_dependency_paths.jre_path}
-        return cast(InitializeParams, initialize_params)
+        gradle_settings["java"] = {"home": gradle_java_home}
+        return initialize_params
 
     def _start_server(self) -> None:
         """
@@ -1351,7 +1372,7 @@ class EclipseJDTLS(SolidLanguageServer):
 
         log.info("Starting EclipseJDTLS server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
@@ -1457,7 +1478,7 @@ class EclipseJDTLS(SolidLanguageServer):
                 symbol["name"] = symbol["name"][: symbol["name"].index("(")]
             children = symbol.get("children")
             if children:
-                for child in children:  # type: ignore
+                for child in children:
                     fix_name(child)
 
         for root_symbol in result:

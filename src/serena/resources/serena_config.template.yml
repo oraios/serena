@@ -61,14 +61,31 @@ web_dashboard_open_on_launch: True
 #      opening the dashboard in browser tabs when selected from the tray menu.
 #      This is EXPERIMENTAL. It is tested on Windows only. We will establish macOS support, but it is yet untested.
 #      On Linux, this cannot be universally supported, but it may work in some desktop environments.
+#      On NixOS, when using the package from flake.nix, both modern AppIndicator trays as well as
+#      older Xorg-/XEmbed-based trays should be supported.
 # See https://oraios.github.io/serena/02-usage/060_dashboard.html
 web_dashboard_interface:
 
 # the address the web dashboard will listen on (bind address).
 web_dashboard_listen_address: 127.0.0.1
 
+# trusted hosts used to access the web dashboard.
+# By default, only allow access via local addresses for security reasons.
+# If you want to allow access from remote machines, add the hostname used to access the dashboard to this list.
+# If the list is empty/undefined, all hosts are trusted.
+web_dashboard_trusted_hosts:
+  - 127.0.0.1
+  - localhost
+
 # address where JetBrains plugin servers are running (only relevant when using the JetBrains language backend)
 jetbrains_plugin_server_address: 127.0.0.1
+
+# command used to launch a JetBrains IDE on demand (only relevant when using the JetBrains language backend)
+# If this is non-empty and, at project activation, the Serena JetBrains Plugin server instance corresponding
+# to the project is not found, use this command to spawn a new instance.
+# Specifically, if this is <cmd>, then `<cmd> <projectDir>` is launched.
+# Provide the full path to the executable/script (e.g., "/usr/bin/idea" or "C:/Users/bob/AppData/Local/JetBrains/Toolbox/scripts/idea.cmd").
+jetbrains_launch_command:
 
 # the minimum log level for the GUI log window and the dashboard (10 = debug, 20 = info, 30 = warning, 40 = error)
 log_level: 20
@@ -86,6 +103,7 @@ ls_specific_settings: {}
 # list of paths to ignore across all projects.
 # Same syntax as gitignore, so you can use * and **.
 # These patterns are merged additively with each project's own ignored_paths.
+# Quote patterns that start with `*`, e.g. `"**/bin/**"`.
 ignored_paths: []
 
 # list of regex patterns which, when matched, mark a memory entry as read‑only.
@@ -141,7 +159,7 @@ default_max_tool_answer_chars: 150000
 # See the `RegisteredTokenCountEstimator` enum for available options.
 #
 # By default, a very naive character count estimator is used, which simply counts the number of characters.
-# You can configure this to TIKTOKEN_GPT4 to use a local tiktoken-based estimator for GPT-4 (will download tiktoken
+# You can configure this to TIKTOKEN_GPT4O to use a local tiktoken-based estimator for GPT-4o (will download tiktoken
 # data files on first run), or ANTHROPIC_CLAUDE_SONNET_4 which will use the (free of cost) Anthropic API to
 # estimate the token count using the Claude Sonnet 4 tokenizer.
 token_count_estimator: CHAR_COUNT
@@ -165,6 +183,21 @@ symbol_info_budget: 10
 # Default: "$projectDir/.serena" (data stored inside the project directory)
 # Example for a central location: "/projects-metadata/$projectFolderName/.serena"
 project_serena_folder_location: "$projectDir/.serena"
+
+# list of glob patterns for project root directories that are considered trusted.
+# Some project settings will only be applied if the project is trusted.
+# A glob pattern can contain the following:
+#       *  matches any sequence of characters except path separators
+#      **  matches any sequence of characters including path separators
+#       ?  matches any single character except path separators
+#   [abc]  matches any single character in the set (here: a, b, or c)
+# Path separators are normalised internally, so on Windows, both / and \ can be used in the patterns.
+# Example:
+#   trusted_project_path_patterns:
+#     - /home/user/projects/**
+#     - C:\Users\Anna\Dev\work\**
+# The pattern "**" matches any project path, so it can be used to trust all projects.
+trusted_project_path_patterns: []
 
 # the list of registered project paths (updated automatically).
 projects: []

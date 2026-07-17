@@ -4,7 +4,7 @@ from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
 
-PYTHON_BACKEND_LANGUAGES = [Language.PYTHON, Language.PYTHON_TY]
+PYTHON_BACKEND_LANGUAGES = [Language.PYTHON, Language.PYTHON_TY, Language.PYTHON_PYREFLY]
 
 
 def read_repo_file(language_server: SolidLanguageServer, relative_path: str) -> str:
@@ -21,6 +21,40 @@ def is_diagnostics_test_file(relative_path: str) -> bool:
     normalized_path = relative_path.replace("\\", "/")
     filename = normalized_path.rsplit("/", 1)[-1].lower()
     return filename.startswith(("diagnosticssample.", "diagnostics_sample."))
+
+
+def document_symbol_names(language_server: SolidLanguageServer, relative_path: str) -> list[str]:
+    """All symbol names in a file's document-symbol tree, including children."""
+    symbols = language_server.request_document_symbols(relative_path).get_all_symbols_and_roots()
+    symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+    names: list[str] = []
+
+    def _collect(syms) -> None:
+        for sym in syms:
+            names.append(sym.get("name"))
+            _collect(sym.get("children", []) or [])
+
+    _collect(symbol_list)
+    return names
+
+
+def find_document_symbol(language_server: SolidLanguageServer, relative_path: str, name: str) -> UnifiedSymbolInformation:
+    """The first symbol called ``name`` in a file's document-symbol tree; fails the test if absent."""
+    symbols = language_server.request_document_symbols(relative_path).get_all_symbols_and_roots()
+    symbol_list = symbols[0] if symbols and isinstance(symbols[0], list) else symbols
+
+    def _search(syms):
+        for sym in syms:
+            if sym.get("name") == name:
+                return sym
+            found = _search(sym.get("children", []) or [])
+            if found is not None:
+                return found
+        return None
+
+    result = _search(symbol_list)
+    assert result is not None, f"Symbol '{name}' not found in {relative_path}"
+    return result
 
 
 def has_malformed_name(

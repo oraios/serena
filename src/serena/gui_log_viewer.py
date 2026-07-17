@@ -1,4 +1,3 @@
-# mypy: ignore-errors
 import logging
 import queue
 import sys
@@ -109,7 +108,7 @@ class GuiLogViewer:
 
         if self.menubar is not None:
             dashboard_menu = tk.Menu(self.menubar, tearoff=0)
-            dashboard_menu.add_command(label="Copy URL", command=copy_url)  # type: ignore
+            dashboard_menu.add_command(label="Copy URL", command=copy_url)
             self.menubar.add_cascade(label="Dashboard", menu=dashboard_menu)
 
     def add_log(self, message):
@@ -303,7 +302,7 @@ class GuiLogViewer:
             if self.mode == "dashboard":
                 self.menubar = tk.Menu(self.root)
                 server_menu = tk.Menu(self.menubar, tearoff=0)
-                server_menu.add_command(label="Shutdown", command=self._shutdown_server)  # type: ignore
+                server_menu.add_command(label="Shutdown", command=self._shutdown_server)
                 self.menubar.add_cascade(label="Server", menu=server_menu)
                 self.root.config(menu=self.menubar)
 

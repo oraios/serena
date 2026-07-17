@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from solidlsp.language_servers.common import RuntimeDependency
-from solidlsp.language_servers.csharp_language_server import CSharpLanguageServer
+from solidlsp.language_servers.csharp_language_server import ROSLYN_LONGEST_KNOWN_PACKAGE_MEMBER, CSharpLanguageServer
 from solidlsp.settings import SolidLSPSettings
 
 
@@ -128,3 +128,33 @@ class TestNuGetOrgDownload:
                 "solidlsp.language_servers.csharp_language_server.FileUtils.download_and_extract_archive_verified",
             ):
                 dependency_provider._download_nuget_package(test_dependency)
+
+    def test_download_nuget_package_uses_short_extraction_path_for_deep_windows_cache(self, tmp_path: Path):
+        provider = object.__new__(CSharpLanguageServer.DependencyProvider)
+        provider._ls_resources_dir = str(tmp_path.joinpath(*(["nested-cache-root"] * 8)))
+
+        test_dependency = RuntimeDependency(
+            id="TestPackage",
+            package_name="roslyn-language-server.win-x64",
+            package_version="5.5.0-2.26078.4",
+            url="https://www.nuget.org/api/v2/package/roslyn-language-server.win-x64/5.5.0-2.26078.4",
+            extract_path="tools/net10.0/win-x64",
+        )
+
+        def fake_download_and_extract(
+            _url: str,
+            target_path: str,
+            *_args: object,
+            **_kwargs: object,
+        ) -> None:
+            deepest_package_member = Path(target_path) / f"tools/net10.0/win-x64/{ROSLYN_LONGEST_KNOWN_PACKAGE_MEMBER}"
+            assert len(str(deepest_package_member)) < 260
+
+        with (
+            patch("solidlsp.language_servers.csharp_language_server.platform.system", return_value="Windows"),
+            patch(
+                "solidlsp.language_servers.csharp_language_server.FileUtils.download_and_extract_archive_verified",
+                side_effect=fake_download_and_extract,
+            ),
+        ):
+            provider._download_nuget_package(test_dependency)

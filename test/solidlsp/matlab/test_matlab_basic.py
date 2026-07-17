@@ -10,31 +10,19 @@ Requirements:
     - Node.js and npm must be installed
 """
 
-import os
-
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.conftest import language_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
 # Skip all tests if MATLAB is not available
 pytestmark = pytest.mark.matlab
 
-# Check if MATLAB is available
-MATLAB_AVAILABLE = os.environ.get("MATLAB_PATH") is not None or any(
-    os.path.exists(p)
-    for p in [
-        "/Applications/MATLAB_R2024b.app",
-        "/Applications/MATLAB_R2025b.app",
-        "/Volumes/S1/Applications/MATLAB_R2024b.app",
-        "/Volumes/S1/Applications/MATLAB_R2025b.app",
-    ]
-)
 
-
-@pytest.mark.skipif(not MATLAB_AVAILABLE, reason="MATLAB installation not found")
+@pytest.mark.skipif(not language_tests_enabled(Language.MATLAB), reason="MATLAB tests are disabled (MATLAB installation not found)")
 class TestMatlabLanguageServerBasics:
     """Test basic functionality of the MATLAB language server."""
 
@@ -95,7 +83,7 @@ class TestMatlabLanguageServerBasics:
         assert all_symbols is not None
 
 
-@pytest.mark.skipif(not MATLAB_AVAILABLE, reason="MATLAB installation not found")
+@pytest.mark.skipif(not language_tests_enabled(Language.MATLAB), reason="MATLAB tests are disabled (MATLAB installation not found)")
 class TestMatlabLanguageServerReferences:
     """Test find references functionality of the MATLAB language server."""
 

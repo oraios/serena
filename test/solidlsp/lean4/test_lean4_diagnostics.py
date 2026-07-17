@@ -2,7 +2,10 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.conftest import language_tests_enabled
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
+
+pytestmark = pytest.mark.skipif(not language_tests_enabled(Language.LEAN4), reason="Lean4 tests are disabled (lean not available)")
 
 
 @pytest.mark.lean4

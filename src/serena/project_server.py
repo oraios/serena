@@ -107,7 +107,9 @@ class ProjectServer:
         from flask import cli
 
         # suppress the default Flask startup banner
-        cli.show_server_banner = lambda *args, **kwargs: None
+        # ty cannot model reassigning a third-party module's function attribute (it rejects any
+        # replacement, even one with an identical signature), so the monkeypatch is suppressed here
+        cli.show_server_banner = lambda *args, **kwargs: None  # ty: ignore[invalid-assignment]
 
         self._app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
         return port

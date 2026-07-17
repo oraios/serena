@@ -197,17 +197,27 @@ class SerenaDashboardAPI:
         tool_names: list[str],
         agent: "SerenaAgent",
         tool_usage_stats: ToolUsageStats | None = None,
+        host: str = "127.0.0.1",
+        trusted_hosts: list[str] | None = None,
     ) -> None:
         self._memory_log_handler = memory_log_handler
         self._tool_names = tool_names
         self._agent = agent
+        self._host = host
         self._app = Flask(__name__)
+        if trusted_hosts:
+            self._app.config["TRUSTED_HOSTS"] = trusted_hosts
         self._tool_usage_stats = tool_usage_stats
         self._loaded_news: dict[str, str] = {}
         self._news_ready = threading.Event()
         self._setup_routes()
         self._read_news = ReadNews.load()
-        # Fetch remote news in background on startup (non-blocking)
+
+        # register callback for config changes
+        self._current_config_overview: dict[str, Any] | None = None
+        self._agent.register_config_changed_callback(self._on_agent_config_changed)
+
+        # fetch remote news in background on startup (non-blocking)
         threading.Thread(target=self._fetch_news, daemon=True).start()
 
     @property
@@ -272,8 +282,10 @@ class SerenaDashboardAPI:
 
         @self._app.route("/get_config_overview", methods=["GET"])
         def get_config_overview() -> dict[str, Any]:
-            result = self._agent.execute_task(self._get_config_overview, logged=False)
-            return result.model_dump()
+            result = self._current_config_overview
+            if result is None:
+                raise ValueError("Config overview not yet available")
+            return result
 
         @self._app.route("/shutdown", methods=["PUT"])
         def shutdown() -> dict[str, str]:
@@ -468,7 +480,7 @@ class SerenaDashboardAPI:
         if self._tool_usage_stats is not None:
             self._tool_usage_stats.clear()
 
-    def _get_config_overview(self) -> ResponseConfigOverview:
+    def _compute_config_overview(self) -> ResponseConfigOverview:
         from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
         from serena.tools.tools_base import Tool
 
@@ -490,7 +502,7 @@ class SerenaDashboardAPI:
         }
 
         # Get active modes
-        modes = self._agent.get_active_modes()
+        modes = self._agent.get_active_modes().get_modes(include_background_base_modes=False)
         modes_info = [
             {"name": mode.name, "description": mode.description, "path": SerenaAgentMode.get_path(mode.name, instance=mode)}
             for mode in modes
@@ -566,7 +578,7 @@ class SerenaDashboardAPI:
         # Get available memories if ReadMemoryTool is active
         available_memories = None
         if self._agent.tool_is_active("read_memory") and project is not None:
-            available_memories = project.memories_manager.list_memories().get_full_list()
+            available_memories = project.memory_manager.list_memories().get_full_list()
 
         # Get list of languages for the active project
         languages = []
@@ -596,6 +608,9 @@ class SerenaDashboardAPI:
             serena_version=self._agent.version,
         )
 
+    def _on_agent_config_changed(self) -> None:
+        self._current_config_overview = self._compute_config_overview().model_dump()
+
     def _get_available_languages(self) -> ResponseAvailableLanguages:
         from solidlsp.ls_config import Language
 
@@ -620,7 +635,7 @@ class SerenaDashboardAPI:
             if project is None:
                 raise ValueError("No active project")
 
-            content = project.memories_manager.load_memory(request_get_memory.memory_name)
+            content = project.memory_manager.load_memory(request_get_memory.memory_name)
             return ResponseGetMemory(content=content, memory_name=request_get_memory.memory_name)
 
         return self._agent.execute_task(run, logged=False)
@@ -630,7 +645,7 @@ class SerenaDashboardAPI:
             project = self._agent.get_active_project()
             if project is None:
                 raise ValueError("No active project")
-            project.memories_manager.save_memory(request_save_memory.memory_name, request_save_memory.content, is_tool_context=False)
+            project.memory_manager.save_memory(request_save_memory.memory_name, request_save_memory.content, is_tool_context=False)
 
         self._agent.execute_task(run, logged=True, name="SaveMemory")
 
@@ -639,7 +654,7 @@ class SerenaDashboardAPI:
             project = self._agent.get_active_project()
             if project is None:
                 raise ValueError("No active project")
-            project.memories_manager.delete_memory(request_delete_memory.memory_name, is_tool_context=False)
+            project.memory_manager.delete_memory(request_delete_memory.memory_name, is_tool_context=False)
 
         self._agent.execute_task(run, logged=True, name="DeleteMemory")
 
@@ -649,9 +664,7 @@ class SerenaDashboardAPI:
             if project is None:
                 raise ValueError("No active project")
 
-            return project.memories_manager.move_memory(
-                request_rename_memory.old_name, request_rename_memory.new_name, is_tool_context=False
-            )
+            return project.memory_manager.move_memory(request_rename_memory.old_name, request_rename_memory.new_name, is_tool_context=False)
 
         return self._agent.execute_task(run, logged=True, name="RenameMemory")
 
@@ -769,22 +782,23 @@ class SerenaDashboardAPI:
 
         raise RuntimeError(f"No free ports found starting from {start_port}")
 
-    def run(self, host: str, port: int) -> int:
+    def run(self, port: int) -> int:
         """
         Runs the dashboard on the given host and port and returns the port number.
         """
         # patch flask.cli.show_server to avoid printing the server info
         from flask import cli
 
-        cli.show_server_banner = lambda *args, **kwargs: None
-
-        self._app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
+        # ty cannot model reassigning a third-party module's function attribute (it rejects any
+        # replacement, even one with an identical signature), so the monkeypatch is suppressed here
+        cli.show_server_banner = lambda *args, **kwargs: None  # ty: ignore[invalid-assignment]
+        self._app.run(host=self._host, port=port, debug=False, use_reloader=False, threaded=True)
         return port
 
-    def run_in_thread(self, host: str) -> tuple[threading.Thread, int]:
-        port = self._find_first_free_port(self.BASE_PORT, host)
-        log.info("Starting dashboard (listen_address=%s, port=%d)", host, port)
-        thread = threading.Thread(target=lambda: self.run(host=host, port=port), daemon=True)
+    def run_in_thread(self) -> tuple[threading.Thread, int]:
+        port = self._find_first_free_port(self.BASE_PORT, self._host)
+        log.info("Starting dashboard (listen_address=%s, port=%d)", self._host, port)
+        thread = threading.Thread(target=lambda: self.run(port=port), daemon=True)
         thread.start()
         return thread, port
 
@@ -801,13 +815,14 @@ def open_url_in_browser(url: str, use_subprocess: bool = False) -> None:
     if use_subprocess:
         # Use a subprocess to avoid any output from webbrowser.open being written to stdout
         try:
-            subprocess.Popen(
+            p = subprocess.Popen(
                 [sys.executable, "-c", f"import webbrowser; webbrowser.open({url!r})"],
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 start_new_session=False,
             )
+            threading.Thread(target=p.wait, daemon=True).start()
         except Exception as e:
             # Subprocess creation can fail in rare cases (e.g. on some Linux systems; possibly subprocess/glibc bug)
             # See #1363

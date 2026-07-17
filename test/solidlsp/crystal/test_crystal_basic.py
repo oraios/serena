@@ -10,17 +10,17 @@ Known Crystalline limitations:
 """
 
 import os
-import shutil
 
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.conftest import language_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 pytestmark = [
     pytest.mark.crystal,
-    pytest.mark.skipif(shutil.which("crystalline") is None, reason="Crystalline is not installed"),
+    pytest.mark.skipif(not language_tests_enabled(Language.CRYSTAL), reason="Crystal tests are disabled (crystalline not available)"),
 ]
 
 

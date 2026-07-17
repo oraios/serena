@@ -1,0 +1,35 @@
+\documentclass{article}
+\usepackage{amsmath}
+
+\title{Serena Texlab Smoke Test}
+\author{Test Author}
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+\label{sec:intro}
+This is the introduction. It points forward to Section~\ref{sec:methods}.
+
+\section{Methods}
+\label{sec:methods}
+The methods build on Section~\ref{sec:intro}.
+
+\subsection{Implementation Details}
+\label{sec:details}
+Details that refer back to Section~\ref{sec:methods} once more.
+
+\section{Conclusion}
+\label{sec:conclusion}
+Wrapping up, see Section~\ref{sec:details}.
+
+\input{sections/background.tex}
+
+For the broader context behind these methods, see Section~\ref{sec:background}.
+The typesetting system itself is described by Lamport~\cite{lamport1994} and
+Knuth~\cite{knuth1984}.
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

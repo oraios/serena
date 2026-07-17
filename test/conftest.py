@@ -3,6 +3,7 @@ import os
 import platform
 import re
 import shutil as _sh
+import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -21,6 +22,8 @@ from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
 
 from .solidlsp.clojure import is_clojure_cli_available
+from .solidlsp.elixir import EXPERT_UNAVAILABLE
+from .solidlsp.erlang import ERLANG_LS_UNAVAILABLE
 
 configure(level=logging.INFO)
 
@@ -41,10 +44,12 @@ class LanguageParamRequest:
 _LANGUAGE_REPO_ALIASES: dict[Language, Language] = {
     Language.CPP_CCLS: Language.CPP,
     Language.PHP_PHPACTOR: Language.PHP,
+    Language.PHP_PHPANTOM: Language.PHP,
     Language.PYTHON_JEDI: Language.PYTHON,
     Language.PYTHON_TY: Language.PYTHON,
     Language.RUBY_SOLARGRAPH: Language.RUBY,
     Language.PYTHON_TY: Language.PYTHON,
+    Language.PYTHON_PYREFLY: Language.PYTHON,
 }
 
 PYTHON_LANGUAGE_BACKENDS = [Language.PYTHON, Language.PYTHON_TY]
@@ -61,6 +66,7 @@ def _create_ls(
     ignored_paths: list[str] | None = None,
     trace_lsp_communication: bool = False,
     ls_specific_settings: dict[Language, dict[str, Any]] | None = None,
+    workspace_folders: list[str] | None = None,
     additional_workspace_folders: list[str] | None = None,
     solidlsp_dir: Path | None = None,
 ) -> SolidLanguageServer:
@@ -74,6 +80,8 @@ def _create_ls(
         code_language=language,
         ignored_paths=ignored_paths,
         trace_lsp_communication=trace_lsp_communication,
+        workspace_folders=workspace_folders or ["."],
+        additional_workspace_folders=additional_workspace_folders or [],
     )
     effective_solidlsp_dir = solidlsp_dir if solidlsp_dir is not None else SerenaPaths().serena_user_home_dir
     project_data_path = os.path.join(repo_path, SERENA_MANAGED_DIR_NAME)
@@ -84,7 +92,6 @@ def _create_ls(
             solidlsp_dir=effective_solidlsp_dir,
             project_data_path=project_data_path,
             ls_specific_settings=ls_specific_settings or {},
-            additional_workspace_folders=additional_workspace_folders or [],
         ),
     )
 
@@ -96,29 +103,23 @@ def start_ls_context(
     ignored_paths: list[str] | None = None,
     trace_lsp_communication: bool = False,
     ls_specific_settings: dict[Language, dict[str, Any]] | None = None,
+    workspace_folders: list[str] | None = None,
     additional_workspace_folders: list[str] | None = None,
     solidlsp_dir: Path | None = None,
 ) -> Iterator[SolidLanguageServer]:
     ls = _create_ls(
-        language, repo_path, ignored_paths, trace_lsp_communication, ls_specific_settings, additional_workspace_folders, solidlsp_dir
+        language,
+        repo_path,
+        ignored_paths,
+        trace_lsp_communication,
+        ls_specific_settings,
+        workspace_folders,
+        additional_workspace_folders,
+        solidlsp_dir,
     )
     log.info(f"Starting language server for {language} {repo_path}")
-    ls.start()
-    try:
-        log.info(f"Language server started for {language} {repo_path}")
+    with ls.start_server_context():
         yield ls
-    finally:
-        log.info(f"Stopping language server for {language} {repo_path}")
-        try:
-            ls.stop(shutdown_timeout=5)
-        except Exception as e:
-            log.warning(f"Warning: Error stopping language server: {e}")
-            # try to force cleanup
-            if hasattr(ls, "server") and hasattr(ls.server, "process"):
-                try:
-                    ls.server.process.terminate()
-                except:
-                    pass
 
 
 @contextmanager
@@ -252,31 +253,37 @@ Flag indicating whether the tests are running in the GitHub CI environment.
 """
 
 is_windows = platform.system() == "Windows"
+is_macos = platform.system() == "Darwin"
+is_linux = platform.system() == "Linux"
 
 
 _LANGUAGE_PYTEST_MARKERS: dict[Language, list[MarkDecorator | Mark]] = {
-    Language.CLOJURE: [
-        pytest.mark.clojure,
-        pytest.mark.skipif(not is_clojure_cli_available(), reason="clojure CLI is not installed"),
-    ],
+    Language.ADA: [pytest.mark.ada],
+    Language.CLOJURE: [pytest.mark.clojure],
     Language.CPP: [pytest.mark.cpp],
     Language.CPP_CCLS: [pytest.mark.cpp],
+    Language.CUE: [pytest.mark.cue],
     Language.CSHARP: [pytest.mark.csharp],
     Language.FSHARP: [pytest.mark.fsharp],
     Language.GO: [pytest.mark.go],
     Language.HAXE: [pytest.mark.haxe],
     Language.JAVA: [pytest.mark.java],
-    Language.KOTLIN: [pytest.mark.kotlin, pytest.mark.skipif(is_ci, reason="Kotlin LSP JVM crashes on restart in CI")],
-    Language.LEAN4: [pytest.mark.lean4, pytest.mark.skipif(_sh.which("lean") is None, reason="Lean is not installed")],
+    Language.KOTLIN: [pytest.mark.kotlin],
+    Language.LEAN4: [pytest.mark.lean4],
+    Language.LATEX: [pytest.mark.latex],
     Language.MSL: [pytest.mark.msl],
     Language.PHP: [pytest.mark.php],
     Language.PHP_PHPACTOR: [pytest.mark.php],
+    Language.PHP_PHPANTOM: [pytest.mark.php],
     Language.POWERSHELL: [pytest.mark.powershell],
     Language.PYTHON: [pytest.mark.python],
     Language.PYTHON_JEDI: [pytest.mark.python],
     Language.PYTHON_TY: [pytest.mark.python],
+    Language.PYTHON_PYREFLY: [pytest.mark.python],
     Language.RUST: [pytest.mark.rust],
     Language.TYPESCRIPT: [pytest.mark.typescript],
+    Language.BSL: [pytest.mark.bsl],
+    Language.SVELTE: [pytest.mark.svelte],
     Language.ANGULAR: [pytest.mark.angular],
     Language.HTML: [pytest.mark.html],
     Language.SCSS: [pytest.mark.scss],
@@ -286,49 +293,173 @@ _LANGUAGE_PYTEST_MARKERS: dict[Language, list[MarkDecorator | Mark]] = {
 def get_pytest_markers(language: Language) -> list[MarkDecorator | Mark]:
     """Pytest markers for a language.
 
-    The returned list contains the primary language marker and any
-    environment-dependent skip markers shared across the test suite.
+    Returns the primary language marker plus the central enablement skip derived from
+    ``language_tests_enabled()`` -- so per-language availability/reliability lives in exactly one
+    place (``_determine_disabled_languages``) instead of being duplicated per marker or per test file.
     """
-    return _LANGUAGE_PYTEST_MARKERS[language]
+    return [
+        *_LANGUAGE_PYTEST_MARKERS[language],
+        pytest.mark.skipif(not language_tests_enabled(language), reason=f"{language.value} tests are disabled in this environment"),
+    ]
+
+
+def _is_perl_language_server_available() -> bool:
+    """
+    Whether Perl::LanguageServer is installed.
+
+    Perl itself ships with most base systems, so checking for the ``perl`` binary is not enough;
+    we verify that the ``Perl::LanguageServer`` module can be loaded -- which is exactly what the
+    Perl language server launcher requires to start.
+    """
+    if _sh.which("perl") is None:
+        return False
+    try:
+        return subprocess.run(["perl", "-MPerl::LanguageServer", "-e", "1"], capture_output=True, timeout=30, check=False).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _is_matlab_available() -> bool:
+    """Whether a MATLAB installation can be located (env var or a known install path)."""
+    if os.environ.get("MATLAB_PATH") is not None:
+        return True
+    return any(
+        os.path.exists(p)
+        for p in (
+            "/Applications/MATLAB_R2024b.app",
+            "/Applications/MATLAB_R2025b.app",
+            "/Volumes/S1/Applications/MATLAB_R2024b.app",
+            "/Volumes/S1/Applications/MATLAB_R2025b.app",
+        )
+    )
+
+
+def _is_r_language_server_available() -> bool:
+    """Whether R *and* its ``languageserver`` package are installed.
+
+    The R binary alone is not enough -- the language server runs as ``R -e "languageserver::run()"``,
+    which fails (RuntimeError) if the package is missing -- so check the package, not just ``which("R")``.
+    """
+    if _sh.which("R") is None:
+        return False
+    try:
+        return (
+            subprocess.run(
+                ["R", "--vanilla", "-e", 'quit(status = as.integer(!requireNamespace("languageserver", quietly = TRUE)))'],
+                capture_output=True,
+                timeout=60,
+                check=False,
+            ).returncode
+            == 0
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _is_ocaml_lsp_available() -> bool:
+    """Whether opam *and* the ``ocaml-lsp-server`` (``ocamllsp``) are installed.
+
+    opam alone is not enough -- the language server is launched via ``opam exec -- ocamllsp`` and
+    raises if the package is missing -- so verify ocamllsp resolves in the active switch.
+    """
+    if _sh.which("opam") is None:
+        return False
+    try:
+        return (
+            subprocess.run(
+                ["opam", "exec", "--", "ocamllsp", "--version"],
+                capture_output=True,
+                timeout=60,
+                check=False,
+            ).returncode
+            == 0
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 def _determine_disabled_languages() -> list[Language]:
     """
-    Determine which language tests should be disabled (based on the environment)
+    Determine which language tests are disabled in the current environment.
 
-    :return: the list of disabled languages
+    Every language falls into exactly ONE of the categories below; a language that is not appended
+    here is **category 4 (enabled everywhere)**, e.g. python, typescript, go, java, kotlin-locally.
+
+    1. ALWAYS DISABLED -- flaky/broken; not worth running anywhere.
+    2. DISABLED OFF-CI when a precondition (toolchain/LS) is missing, but EXPECTED ON CI -- guarded
+       with ``and not is_ci`` so a missing tool *on CI* fails loudly (catches a CI setup regression)
+       instead of silently skipping.
+    3. DISABLED WHEREVER the precondition is missing, INCLUDING on CI -- the precondition may or may
+       not be provided on CI (e.g. via the maximal container, see Dockerfile.maximal); if it isn't,
+       the tests just skip gracefully rather than fail.
+    4. ENABLED EVERYWHERE -- not listed in this function at all.
+    5. DISABLED ONLY ON CI (resource/stability reasons) even though the precondition holds locally.
     """
     result: list[Language] = []
 
-    java_tests_enabled = True
-    if not java_tests_enabled:
-        result.append(Language.JAVA)
+    # === 1. Always disabled (flaky / broken everywhere) ===
+    result.append(Language.BSL)  # 1C:Enterprise; niche and the tests are slow and flaky
+    result.append(Language.FSHARP)  # F# language server is currently unreliable
 
-    clojure_tests_enabled = is_clojure_cli_available()
-    if not clojure_tests_enabled:
-        result.append(Language.CLOJURE)
+    # === 2. Disabled off-CI if the precondition is missing; expected to be present on CI ===
+    if _sh.which("terraform") is None and not is_ci:
+        result.append(Language.TERRAFORM)
+    if _sh.which("regal") is None and not is_ci:
+        result.append(Language.REGO)
+    if _sh.which("elm") is None and not is_ci:
+        result.append(Language.ELM)
+    # qmlls is installed (standalone build; see pytest.yml) only on the Ubuntu other-langs CI batch. It is
+    # expected there, so a missing binary on Linux CI is NOT skipped here -- the test runs and fails loudly,
+    # catching a CI setup regression. On Windows/macOS CI (never installed) and off-CI without the binary it skips.
+    if (_sh.which("qmlls6") is None and _sh.which("qmlls") is None) and not (is_ci and is_linux):
+        result.append(Language.QML)
 
-    # Disable CPP_CCLS tests if ccls is not available
-    ccls_tests_enabled = _sh.which("ccls") is not None
-    # Skip ccls tests on Windows since no recent binary is available and version
-    # 0.20220729 from chocolatey crashes when parsing the test files.
-    ccls_tests_enabled = ccls_tests_enabled and not is_windows
-    if not ccls_tests_enabled:
-        result.append(Language.CPP_CCLS)
-
-    # Disable CPP (clangd) tests if clangd is not available
-    clangd_tests_enabled = _sh.which("clangd") is not None
-    if not clangd_tests_enabled:
+    # === 3. Disabled wherever the precondition is missing (including on CI) ===
+    # 3a. Platform precondition: these language servers have no native Windows support.
+    if is_windows:
+        result.append(Language.ANSIBLE)  # ansible-language-server has no native Windows support
+    if not is_macos:
+        result.append(Language.SWIFT)  # swiftly toolchain is only set up on the macOS native batch
+    # 3b. Toolchain / language-server availability (the LS/compiler must be on PATH or installed).
+    if _sh.which("clangd") is None:
         result.append(Language.CPP)
-
-    # Disable PHP_PHPACTOR tests if php is not available
-    php_tests_enabled = _sh.which("php") is not None
-    if not php_tests_enabled:
+    if _sh.which("ccls") is None or is_windows:  # no recent ccls binary is available for Windows
+        result.append(Language.CPP_CCLS)
+    if _sh.which("php") is None:
         result.append(Language.PHP_PHPACTOR)
+        result.append(Language.PHP_PHPANTOM)
+    if not is_clojure_cli_available():
+        result.append(Language.CLOJURE)
+    if _sh.which("verible-verilog-ls") is None:
+        result.append(Language.SYSTEMVERILOG)
+    if not _is_matlab_available():
+        result.append(Language.MATLAB)
+    if ERLANG_LS_UNAVAILABLE:  # no Erlang-OTP / no rebar3 / Windows -- see test/solidlsp/erlang
+        result.append(Language.ERLANG)
+    if EXPERT_UNAVAILABLE:  # Elixir not installed -- see test/solidlsp/elixir
+        result.append(Language.ELIXIR)
+    if _sh.which("lean") is None:
+        result.append(Language.LEAN4)
+    if _sh.which("crystalline") is None:
+        result.append(Language.CRYSTAL)
+    if _sh.which("julia") is None:  # LanguageServer.jl is auto-installed by the LS when julia is present
+        result.append(Language.JULIA)
+    if _sh.which("nixd") is None:
+        result.append(Language.NIX)
+    if _sh.which("haskell-language-server-wrapper") is None:
+        result.append(Language.HASKELL)
+    if not _is_r_language_server_available():  # `which("R")` isn't enough -- needs the languageserver package
+        result.append(Language.R)
+    if not _is_ocaml_lsp_available():  # opam alone isn't enough -- needs the ocaml-lsp-server package
+        result.append(Language.OCAML)
+    if not _is_perl_language_server_available():  # perl ships with the OS; the LS module is the real signal
+        result.append(Language.PERL)
 
-    al_tests_enabled = True
-    if not al_tests_enabled:
-        result.append(Language.AL)
+    # === 4. Enabled everywhere: every language NOT listed in this function (python, go, java, ...) ===
+
+    # === 5. Disabled only on CI (works locally; too unstable/costly on the CI runners) ===
+    if is_ci:
+        result.append(Language.KOTLIN)  # IntelliJ-based Kotlin LSP crashes on JVM restart under CI memory limits
 
     return result
 

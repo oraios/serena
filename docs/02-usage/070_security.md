@@ -150,6 +150,7 @@ Only the language servers listed below download or install additional dependenci
 - **PHP (`intelephense`)**: `intelephense`
 - **SCSS / Sass / CSS**: `some-sass-language-server`
 - **Solidity**: `@nomicfoundation/solidity-language-server`
+- **Svelte**: `svelte-language-server`
 - **TypeScript**: `typescript` and `typescript-language-server`
 - **Vue**: `@vue/language-server`, plus `typescript` and `typescript-language-server`
 - **VTSLS**: `@vtsls/language-server`

@@ -3,10 +3,242 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - Fix: `FileUtils.read_file`'s `charset_normalizer` fallback (used when a file cannot be decoded with
+    the project's configured `encoding`) decoded the raw bytes directly and therefore skipped the
+    universal-newline translation that the primary read path applies. CR characters from disk thus
+    reached Serena's in-memory file contents, where the rest of the code assumes LF-normalized text and
+    the `line_ending` setting is meant to be the single point of line-ending translation on write. The
+    fallback now normalizes line endings to LF, consistently with the primary path.
+  - Fix: a symbol whose LSP range ended exactly one line past EOF, at column 0 (the convention for
+    a range covering whole lines through the end of the file), raised `IndexError` in
+    `SymbolBody.get_text`. That one well-defined case is now corrected to end at the actual last
+    line; any other out-of-range end position now raises `InvalidTextLocationError` instead,
+    rather than guessing at a body that could be wrong #1498
+
+* Tools:
+  - Fix: `search_for_pattern` marked one line too many as matched whenever a match ended with a line
+    break, because the match's exclusive end index was mapped to a line number directly and therefore
+    resolved to the start of the following line. The line the match ends on is now determined correctly,
+    which also keeps `context_lines_after` aligned.
+  - `safe_delete`: Add heuristic to delete superfluous empty lines after a deletion
+
+* JetBrains:
+  - Allow external files from dependencies (specified via references like "<ext:FileUtil.class|472e0a13>") to be
+    - read via `ReadFileTool` 
+    - searched via `SearchForPatternTool`
+    - used in `JetBrainsFindDeclarationTool`
+    when using plugin version 2023.3.3+
+
+* Dependencies:
+  - Bump mcp from 1.27.0 to 1.28.1
+
+# v1.6.0 (2026-07-16)
+
+* General:
+  - Speed up MCP startup when auto-creating projects at startup (e.g. using `--project-from-cwd`) by
+    determining the project's languages in a background thread #1683
+  - Fix: in `glob_to_regex` / `search_text(is_glob=True)`, a `?` wildcard matched two characters instead
+    of one (it emitted `..` rather than `.`); it now matches a single character, consistent with the
+    `?` semantics documented for `glob_match` and the `test_??.py` example in `search_text`'s docstring.
+  - Add notion of trusted projects via new global configuration setting `trusted_project_path_patterns`.
+    Current effects:
+    - `ls_specific_settings` defined in project configurations will only be applied for trusted projects
+    - `activation_command` (and `activation_command_timeout`) defined in project configurations will only
+      be executed for trusted projects: an optional shell command run in the project root before the
+      language backend initialises (e.g. to generate source files a language server needs to index).
+      Exit code is the primary completion signal; `activation_command_timeout` (default 180s) is a safety
+      backstop — on expiry the process is killed and activation continues. Failures and timeouts are
+      logged but do not abort activation.
+  - Fix: context or mode argument referencing a known name (e.g. `--context anitgravity`) could result in   
+    incorrect file access if a corresponding local file existed (e.g. `./antigravity` binary);
+    file access is now guarded with path detection (file ending or path separator must be present)
+  - Adjust prompt generation mechanism to use newly introduced tool name mapping `tool_names`, allowing
+    prompts to directly use tool names that match the active language backend (and removing the need
+    for additional prompts that explain tool name differences)
+  - Improve quoting/escaping of arguments in shell executions on Windows (via `oslex` dependency)
+  - Fix: a registered project whose root directory was deleted while Serena was already running could break
+    `activate_project`/project lookup, raising `FileNotFoundError` in `RegisteredProject.matches_root_path`
+  - Update prompts/instructions: Serena instructions manual, modes (editing, interactive) 
+  - Allow structured tool output to be configured on a per-context basis, disabling it for Claude Code
+    (which does not correctly unpack structured output) #1042
+  - Fix: Project-specific filtering of files for source files ignored the language backend. 
+    The check is really only possible for LSP. 
+  - Fix: File system permission errors during gitignore scanning were not caught #1624
+  - During project creation, language composition percentages are now computed relative to the total number 
+    of recognised source files instead of all files, i.e. unrecognised files are ignored in the percentage 
+    computation.
+  - Consider all LSP-compliant line endings ("\n", "\r\n" and "\r") in `TextUtils`, noting that 
+    only "\n" appears in files read by `FileUtils.read_file` (Serena's default reading mechanism)
+  - Fix: Apply consistent line splitting across tools, uniformly applying the LSP splitting semantics; 
+    affects `search_text` used by `search_for_pattern` tool (reported in #1684)
+  - Fix in `TextUtils` (used by editors): Deleting up to the end of the file, referencing the line one past 
+    the end of the file (particularly for files with no newline at end of file) raised `InvalidTextLocationError`
+    instead of accepting the deletion (change in `TextUtils.delete_text_between_positions`,
+    which now accepts the end position similar to `insert_text_at_position`).
+  - Fix: glob pattern expansion in `expand_braces` did not terminate with empty or unbalanced braces #1690
+
+* CLI:
+  - Fix `--project-from-cwd` hijacking git worktrees nested under a Serena project. `find_project_root`
+    now walks up in a single pass so the nearest project boundary wins (either a `.serena/project.yml`
+    or a `.git`, including worktree/submodule pointer files), instead of preferring an ancestor's
+    `.serena/project.yml` over a closer `.git`. This previously bound CLI agents (Claude Code, Codex,
+    Gemini) launched from inside a worktree to the parent repo, causing stale reads and misdirected edits.
+  - Fix: CLI flags on `start-mcp-server` could incorrectly be saved to the global configuration file if the
+    list of projects was modified (triggering a save of the configuration with transient overrides applied)
+
+* Tools:
+  - New tool: `replace_in_files`
+  - `get_symbols_overview`, `jet_brains_get_symbols_overview`: Improved default for `depth` parameter
+  - Add tool parameter alias support, adding `name_path` as an alias for `name_path_pattern` in `find_symbol` tools
+  - Allow `query_project` tool to access read-only tools that are not enabled in the current configuration
+  - Make tool call errors surface explicitly as errors at the MCP protocol level
+
+* Language Servers:
+  - Fix: `SolidLanguageServer.is_ignored_path` raised `FileNotFoundError` for paths that are not present
+    on disk, crashing symbol tools when a language server reported locations of generated files
+    (e.g. JDTLS reporting Lombok-generated classes under `target/classes`). Missing paths are now
+    classified by the usual ignore rules, and symbol locations resolving to non-existent files are skipped.
+  - Solidity: fix diagnostics intermittently coming back empty on slow or cold environments (macOS/Windows CI).
+  - Perl: expose `file_filter` and `ignore_dirs` via `ls_specific_settings["perl"]`, so projects with
+    non-standard extensions (e.g. `.cgi`, `.psgi`) can make those files visible to Perl::LanguageServer.
+    Configured extensions are also synced into the Perl source-file matcher (now a cached singleton),
+    keeping `find_symbol` / symbol indexing consistent with the LS; the matcher is reset on every
+    language server activation so one project's reconfiguration does not leak into the next.
+    `FilenameMatcher` gains `add_extensions` / `reset` methods. Defaults are unchanged. #1449
+  - C/C++ (clangd): improve support and documentation for Unreal Engine 5 projects.
+  - HLSL (`shader-language-server`): pass `--locked` to `cargo install` when building from source
+    on macOS (and in the manual-install instructions), honoring the crate's packaged `Cargo.lock`.
+    Without it, fresh dependency resolution pulled in shader-sense 1.4.0, which no longer compiles
+    against the pinned shader_language_server 1.3.1, breaking the macOS CI job.
+  - `typescript_vts`: Add `initialization_options` setting in `ls_specific_settings.typescript_vts`. 
+    Enables Yarn PnP setups with `typescript.tsdk` pointing at the Yarn-generated SDK.
+  - TypeScript/VTS: disable automatic typing acquisition during initialization (no network
+    downloads at startup) and replace the fixed 2-second cross-file reference wait with
+    event-based `$/progress` indexing tracking (configurable `indexing_timeout`, default 30s)
+  - C#: minor fixes in Omnisharp and Roslyn that prevented startup on some systems #1617
+  - `SvelteLanguageServer`: Fix diagnostics requests for TypeScript/JavaScript files incorrectly being
+    processed by the Svelte LS instead of the TypeScript LS.
+  - `SvelteLanguageServer`: Fix document-symbol requests for TypeScript/JavaScript files returning empty
+    results in svelte-only mode (`languages: [svelte]`. #1552
+  - Svelte + TypeScript: make companion TypeScript server raise on readiness and indexing timeouts (instead
+    of silent "proceeding anyway"), so that partial indexing surfaces as a clear failure instead of flaky/wrong
+    cross-file results; add configurable timeouts (`server_ready_timeout`, `indexing_timeout`)
+    and overridable timeout hooks (base TS stays permissive). Svelte test fixture now uses `npm ci` +
+    committed `package-lock.json`.
+  - `JuliaLanguageServer`: Fix the stdio MCP server exiting right after `initialize` ("tools fetch failed")
+    when `julia` is enabled. #1577
+  - `Java`: invalidate JDTLS workspace cache when Java import settings change #1576
+  - `Java`: use `JAVA_HOME` for Gradle import when `use_system_java_home` is enabled and `gradle_java_home`
+    is unset. #1657
+  - `Java`: stop hard-ignoring directories named `target`/`build`/`bin`/`out`/`classes`/`dist`/`lib` in
+    `EclipseJDTLS`. These are all valid Java package identifiers, so ignoring them by name hid legitimate
+    source from the symbol tools even when they were not gitignored. Removed the hardcoded override; real
+    build output is already excluded via `.gitignore`. #1645
+  - Improve quoting of arguments in shell executions
+  - Add **LaTeX** support (experimental) via [texlab](https://github.com/latex-lsp/texlab).
+  - Add **QML** support via Qt's [`qmlls`](https://doc.qt.io/qt-6/qtqml-tool-qmlls.html) language
+    server (requires Qt 6 with `qmlls`/`qmlls6` on PATH). #1381
+  - PHP: add support for PHPantom as alternative to the already supported PHP LS #1554.
+  - Add new launch command customization options: `ls_args`, `ls_extra_args` and `ls_base_cmd`
+  - Add new configuration option `ls_workspace_folders` to allow indexed source folders to be specified
+    explicitly. In monorepos, this allows the set of indexed folders to be restricted to a subset of
+    the repository. #1627
+  - Rename configuration option `additional_workspace_folders` to `ls_additional_workspace_folders`
+    and support the option across all language servers (previously limited to TypeScript).
+  - `Pyright`: bump timeout for waiting for initial analysis from 5s to 60s.
+
+* JetBrains:
+  - Add configuration option `jetbrains_launch_command`, allowing Serena to spawn IDE instances automatically
+    upon project activation
+  - Fix: `jet_brains_list_inspections` failed when only default parameters were used #1615 
+  - Fix: `jet_brains_run_inspections` returned incorrectly transformed data (malforming snake-case conversion applied to all keys)
+
+* Dashboard:
+  - Make list of trusted hosts configurable, fixing host validation introduced in v1.5.2 allowing only
+    default local hostnames, effectively preventing remote connections
+  - Decouple configuration computation from the agent's task queue by introducing events for agent config/status updates.
+    This allows the dashboard to display the configuration while the project provided at startup is still initialising. #1064
+  - Fix empty executions queue displaying "Loading..."
+  - Tray manager: Add NixOS-support for AppIndicator-based trays (e.g., most Wayland-trays) to the package in flake.nix.
+  - Fix: Wait for the subprocess that opens the browser window, preventing zombie processes #1488 
+
+* Hooks:
+  - Handle tool_input passed as string gracefully instead of failing (Copilot CLI sends strings).
+
+* Memories:
+  - Make memory iteration follow symbolic links 
+  - Fix: a memory name that was absolute (e.g. `/etc/cron.d/backdoor`) or contained empty path
+    segments could write outside the `memories` folder.
+
+* Dependencies:
+  - Add dependency `oslex`
+
+# v1.5.3 (2026-05-26)
+
+Add meta-data for the GitHub MCP registry
+
+# v1.5.2 (2026-05-26)
+
+* General:
+  - Not existing paths return `False` on is ignored checks (instead of raising an error)
+  - Add `serena-agent` CLI command so that `uvx serena-agent` can be used as entrypoint.
+  - Fortls and pyright are now installed on the fly instead of being bundled in the serena-agent package.
+
+* Dashboard:
+  - Add host validation
+
+* Hooks:
+  - Extend list of extensions that are considered code files (affects the reminder hook counter).
+
+# v1.5.1 (2026-05-18)
+
+* General:
+  - Fix `onboarding_tool`: Used incorrect path to bootstrap memory (regression in v1.5.0)  
+ 
+* Language Servers:
+  - Add **CUE** support via the LSP mode of the official [`cue` CLI](https://github.com/cue-lang/cue) (`cue lsp`).
+
+# v1.5.0 (2026-05-18)
+
+* General:
+  - Make tool descriptions more amenable to tool search mechanisms as now used in several clients (e.g. avoid referencing other tools' names, etc.)
+  - Onboarding is now less invasive (LLM is instructed to ask the user whether to proceed)
+
+* Language Servers:
+  - No longer store temporary files (e.g. downloads) in `~/solidlsp_tmp`; instead, use OS-specific temporary directories
+  - Add **GDScript** (Godot Engine) support. Serena connects over TCP to the Godot editor's built-in LSP server (port 6008, same for Godot 3 and 4) — no separate language server process to install. Godot major version is auto-detected from `config_version` in `project.godot`. Note: Godot's LSP does not implement `workspace/symbol`; first workspace-wide scans fall back to per-file requests and can be slow for large projects (results are cached to disk). See the [GDScript Setup Guide](https://oraios.github.io/serena/03-special-guides/godot_gdscript_setup_guide_for_serena.html) for details. Closes #1446.
+
+* Dashboard:
+  - UI polish: switch UI font to Inter (with system fallbacks) and use JetBrains Mono only for code/logs/paths/identifiers; refine the light/dark palette with softer borders, clearer text hierarchy, and a more nuanced shadow/elevation system; introduce a consistent spacing scale; keep the orange accent.
+  - Modal markup cleanup: extract shared CSS classes (`.modal-info`, `.modal-hint`, `.modal-prompt`, `.modal-field`, `.modal-input`, `.modal-select`, `.modal-textarea`, `.modal-actions`, `.btn-secondary`) and remove duplicated inline styles from all seven modals. Inputs and textareas get an accent-colored focus ring; the modal backdrop has a subtle blur.
+  - Add Language: replace the native `<select>` with a filterable combobox — type to filter, keyboard navigation (Up/Down/Enter/Esc), substring highlight, click-outside to close. The typed value is validated against the available languages list before submission.
+
+* Memories:
+  - Memories can now reference each other using the `mem:<name>` convention. Renames
+    propagate to all references automatically. See the [reference convention](https://oraios.github.io/serena/02-usage/045_memories.html#referencing-memories-from-other-memories).
+  - Onboarding now seeds a `memory_maintenance` memory describing the memory-style and conventions, 
+    and the agent is instructed to read it before writing any other memories. 
+    A `global/memory_maintenance` memory takes precedence over the per-project seed. 
+    See the [memory maintenance section](https://oraios.github.io/serena/02-usage/045_memories.html#the-memory-maintenance-memory).
+   
+* CLI:
+  - Add `serena memories` CLI command group: `list`, `read`, `write`, `check` (referential
+    integrity report) and `auto-prefix-references` (heuristic rewrite of bare occurrences).
+    See the [CLI subcommands](https://oraios.github.io/serena/02-usage/045_memories.html#cli-subcommands).
+
+* Tools:
+  - `search_for_pattern`: Add parameter `multiline`
+  - Delete `check_onboarding_performed` tool (instead extend project activation message)
+
+# v1.3.0 (2026-05-11)
+
+* General:
   - Breaking change in mode definitions: Projects (project.yml) can no longer override `base_modes`.
     Instead, they can define `added_modes` to add modes on top of base and default modes.  
     See updated [documentation on modes](https://oraios.github.io/serena/02-usage/050_configuration.html#modes).
-  - Serena's default configuration now uses `interactive` and `editing` as `base_modes` instead of as `default_modes`. 
+  - Serena's default configuration now uses `interactive` and `editing` as `base_modes` instead of as `default_modes`.
+  - Fixed path validation in `search_for_pattern` tool (thanks to [@dodge1218](https://github.com/dodge1218) for the report)
+  - Fix: In HTTP/SSE mode, a client disconnection triggered a partial agent shutdown (project deactivation, dashboard manager & GUI viewer shutdown)
   
 * JetBrains:
   - Add new tools:
@@ -22,19 +254,24 @@ Status of the `main` branch. Changes prior to the next official version change w
     - `get_diagnostics_for_symbol`: Retrieves diagnostics pertaining to a specific symbol
 
 * Language Servers:
+  - Add **Svelte** support via `svelte-language-server@0.18.0`, installed with npm into Serena-managed language-server resources. The `svelte` language handles `.svelte` Single File Components plus TypeScript/JavaScript files for Svelte projects; use it instead of also enabling `typescript` unless intentionally running multiple language servers.
   - Elixir (`elixir-tools/next-ls`): Fix deadlock in monorepo projects where `mix.exs` lives in a subdirectory. The server now searches immediate subdirectories when no `mix.exs` is found at the repository root. #1444
   - Java (`eclipse.jdt.ls`): Add upstream JDTLS mode for offline / restricted-network use. Setting both `jdtls_path` and `lombok_path` in `ls_specific_settings.java` makes Serena use an existing upstream JDTLS installation (e.g. `brew install jdtls`) and the system JDK 21+, skipping the ~500 MB vscode-java VSIX, Gradle, and IntelliCode downloads. New related setting `java_home` lets the user override the JDK used to launch JDTLS. Default behavior unchanged — the JDTLS workspace hash is preserved bit-for-bit for users on the default route, so existing project caches are reused without a one-time reindex; the launcher path is mixed into the hash only when `jdtls_path` is set, isolating upstream installations from the default workspace. #1415
   - Java (eclipse.jdt.ls): Lombok-generated methods (getters/setters, builder(), equals/hashCode/toString, etc.) are now included in symbol-based tools (find_symbol, get_symbols_overview, edits). Added lombok_show_generated setting (default: on) to toggle this. Updated bundled vscode-java to 1.54.0-923. Issue #1432.
+  - Add **Ada / SPARK** support using AdaCore's [Ada Language Server](https://github.com/AdaCore/ada_language_server). Auto-downloads the official prebuilt ALS binary (linux-x64/arm64, darwin-x64/arm64, win32-x64). A single `ada` language covers both Ada and SPARK, since the server uses the same `.ads`/`.adb` files for both and distinguishes SPARK by source-level pragmas/aspects. Users can override the binary by setting `ls_specific_settings.ada.ls_path` to a pre-installed `ada_language_server` (e.g. from Alire, GNAT Studio, or the VS Code Ada extension).
   - Add **Angular** (experimental) via a dual-server architecture: `@angular/language-server` (ngserver) handles standalone `.html` template files, while a companion `typescript-language-server` with `@angular/language-service` loaded as a tsserver plugin handles all `.ts` operations including inline templates. Provides type-aware navigation between templates and component classes. Requires Node.js, npm, and `@angular/core` installed in the project (`npm install` in the project root). Subsumes `typescript`+`html` for `.ts`/`.html` files when active; SCSS is not subsumed.
   - Add **HTML** (experimental) using `vscode-html-language-server` from the `vscode-langservers-extracted` npm package. Provides in-file element/id symbols via documentSymbol; cross-file references are not meaningful for HTML. Also used as a companion server by the Angular LS for plain HTML documentSymbol support.
   - Add **SCSS / Sass / CSS** (experimental) using [some-sass-language-server](https://github.com/wkillerud/some-sass). Handles `.scss`, `.sass`, and `.css` through one server, with full `@use`/`@forward` workspace-wide go-to-definition and find-references for variables, mixins, and functions across Sass files. The `.css` path uses the same `vscode-css-languageservice` engine that powers the standalone CSS LS; CSS feature toggles default off upstream and are flipped on at startup so symbols, hover, completion, and syntax-level diagnostics work for plain CSS as well.
+  - Add **1C / OneScript** support using [BSL Language Server](https://github.com/1c-syntax/bsl-language-server/).
   - Add support for more filenames to be considered by ccls and clangd.
+  - Clojure (`clojure-lsp`): Fix incomplete `find_referencing_symbols` results in multi-module monorepos. clojure-lsp only discovers source paths from the descriptor at the workspace root and does not recurse for sub-module `deps.edn` / `project.clj` / `shadow-cljs.edn` / `bb.edn` files, so references in sibling modules were silently missed until those files happened to be opened by `find_symbol` / `get_symbols_overview`. Serena now scans the repo for project descriptors at startup and passes the union of their declared source paths to clojure-lsp via `initializationOptions`. Project-local `.lsp/config.edn` files are honoured as-is (no override). New `ls_specific_settings.clojure` keys: `source_paths` (explicit override) and `config_edn_path` (parse `:source-paths` from a user-supplied config file).
 
 * Hooks:
   - `serena-hooks auto-approve` now also emits an `allow` decision when Claude Code reports
     `permission_mode == "auto"`, in addition to the existing `acceptEdits` behavior. #1386
   - Extension: heuristics for parsing commands and firing a hook on too many greps or reads. Important for clients that, unlike claude code, don't have dedicated grep/read tools.
   - Read hook now only fires on reads of code files (using heuristics to parse the read command string)
+  - Reminder hook now also counts and fires on usages of serena's non-symbolic tools.
 
 # v1.2.0 (2026-04-27)
 

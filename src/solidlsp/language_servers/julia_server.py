@@ -1,6 +1,5 @@
 import logging
 import os
-import pathlib
 import platform
 import shutil
 import subprocess
@@ -10,7 +9,7 @@ from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.lsp_protocol_handler.lsp_types import DiagnosticTag, InitializeParams
+from solidlsp.lsp_protocol_handler.lsp_types import DiagnosticTag
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -78,10 +77,14 @@ class JuliaLanguageServer(SolidLanguageServer):
                 f"Checked locations: {common_locations}"
             )
 
-        # Check if LanguageServer.jl is installed
+        # Check if LanguageServer.jl is installed.
+        # stdin=DEVNULL: when Serena runs over the stdio MCP transport, the JSON-RPC
+        # channel *is* the process stdin/stdout. Without this, the Julia child inherits
+        # Serena's stdin (the MCP pipe) and clobbers it, killing the server right after
+        # initialize ("tools fetch failed"). See https://github.com/oraios/serena/issues/1577
         check_cmd = [julia_path, "-e", "using LanguageServer"]
         try:
-            result = subprocess.run(check_cmd, check=False, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(check_cmd, check=False, capture_output=True, text=True, timeout=10, stdin=subprocess.DEVNULL)
             if result.returncode != 0:
                 # LanguageServer.jl not found, install it
                 JuliaLanguageServer._install_language_server(julia_path)
@@ -99,7 +102,9 @@ class JuliaLanguageServer(SolidLanguageServer):
         install_cmd = [julia_path, "-e", 'using Pkg; Pkg.add("LanguageServer")']
 
         try:
-            result = subprocess.run(install_cmd, check=False, capture_output=True, text=True, timeout=300)  # 5 minutes for installation
+            result = subprocess.run(
+                install_cmd, check=False, capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL
+            )  # 5 minutes for installation
 
             if result.returncode == 0:
                 log.info("LanguageServer.jl installed successfully!")
@@ -130,15 +135,11 @@ class JuliaLanguageServer(SolidLanguageServer):
         # runs (standalone test invocations, CI cold start).
         return 30.0
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Julia Language Server.
         """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
-        initialize_params: InitializeParams = {  # type: ignore
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
+        initialize_params: dict = {
             "capabilities": {
                 # workspace.configuration MUST be true: LanguageServer.jl pulls all julia.lint.*
                 # settings via workspace/configuration after initialize. Without it, the server
@@ -158,14 +159,8 @@ class JuliaLanguageServer(SolidLanguageServer):
                     "documentSymbol": {"dynamicRegistration": True},
                 },
             },
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
         }
-        return initialize_params  # type: ignore
+        return initialize_params
 
     def _start_server(self) -> None:
         """Start the LanguageServer.jl server process."""
@@ -196,7 +191,7 @@ class JuliaLanguageServer(SolidLanguageServer):
         log.info("Starting LanguageServer.jl server process")
         self.server.start()
 
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
         log.info("Sending initialize request to Julia Language Server")
 
         init_response = self.server.send.initialize(initialize_params)

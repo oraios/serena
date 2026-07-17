@@ -1,18 +1,16 @@
 description: All tools, with detailed instructions for code editing
-prompt: |  
-  Use symbolic editing tools whenever possible for precise code modifications.
-  
-  {% if 'jet_brains_move' in available_tools -%}
+prompt: |
+  Use the symbolic editing tools for precise, structure-aware code modifications.
+
   **Refactoring tools**
-  You also have access to Serena's refactoring tools (move, inline, safe_delete) 
-  which should ALWAYS be preferred over naive and primitive approaches when applicable.
-  When you need to move, inline or delete a symbol, you should always try using the corresponding tool first.
-  {%- endif %}
-  
-  {% if 'jet_brains_move' in available_tools -%}
-  Apart from refactoring tools
-  {%- endif %}
-  you have two main approaches for editing code: (a) editing at the symbol level and (b) file-based editing.
+  For operations on existing symbols, prefer the dedicated refactoring tools over hand-edits:
+  `{{ tool_names['rename_symbol'] }}` and `{{ tool_names['safe_delete_symbol'] }}`{% if 'jet_brains_move' in available_tools %}, plus `jet_brains_move` and `jet_brains_inline_symbol`{% endif %} —
+  they are reference-aware and update or check all usages atomically. When such a tool returns success, the
+  refactoring is already complete and consistent across all declarations, references, overrides and imports —
+  trust it: do not re-read the changed files or re-run the build / test suite just to confirm the refactor
+  itself propagated, this would be wasted effort.
+    
+  Apart from those refactoring tools, you have two main approaches for editing code: (a) editing at the symbol level and (b) file-based editing.
   The symbol-based approach is appropriate if you need to adjust an entire symbol, e.g. a method, a class, a function, etc.
   It is not appropriate if you need to adjust just a few lines of code within a larger symbol.
 
@@ -21,18 +19,23 @@ prompt: |
   If you need to replace the definition of a symbol, use the `replace_symbol_body` tool.
   If you want to add some new code at the end of the file, use the `insert_after_symbol` tool with the last top-level symbol in the file. 
   Similarly, you can use `insert_before_symbol` with the first top-level symbol in the file to insert code at the beginning of a file.
-  You can understand relationships between symbols by using the `find_referencing_symbols` tool. If not explicitly requested otherwise by the user,
+  You can understand relationships between symbols by using the `{{ tool_names['find_referencing_symbols'] }}` tool. If not explicitly requested otherwise by the user,
   you make sure that when you edit a symbol, the change is either backward-compatible or you find and update all references as needed.
-  The `find_referencing_symbols` tool will give you code snippets around the references as well as symbolic information.
-  You can assume that all symbol editing tools are reliable, so you never need to verify the results if the tools return without error.
+  The `{{ tool_names['find_referencing_symbols'] }}` tool will give you code snippets around the references as well as symbolic information.
+  These edits are reliable: once a tool returns without error the change is applied, so you do not need to re-read the file just to confirm it.
 
   {% if 'replace_content' in available_tools %}
   **File-based editing**
   The `replace_content` tool allows you to perform regex-based replacements within files (as well as simple string replacements).
   This is your primary tool for editing code whenever replacing or deleting a whole symbol would be a more expensive operation,
   e.g. if you need to adjust just a few lines of code within a method.
-  You are extremely good at regex, so you never need to check whether the replacement produced the correct result.
-  In particular, you know how to use wildcards effectively in order to avoid specifying the full original text to be replaced!
+  In `regex` mode, wildcards like `start.*?end` let you match a span without quoting its full text; an ambiguous match
+  returns an error you can refine, so a tight wildcard pattern is both cheaper and safe.
+  For several small edits within one file, prefer a batch of targeted `replace_content` calls over rewriting the whole
+  file: rewriting has to re-emit the file's entire contents, whereas each targeted edit emits only the changed text.
+  {% if 'replace_in_files' in available_tools %}For the SAME edit across many files, use `replace_in_files`, which applies
+  it everywhere in one call — equally safe and transparent: its `dry_run` mode first previews every change as a diff with a
+  per-occurrence id, so you can then apply all of them or just a chosen subset.{% endif %}
   {% endif %}
 excluded_tools:
  - replace_lines

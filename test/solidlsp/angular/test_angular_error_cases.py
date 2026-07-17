@@ -265,7 +265,7 @@ class TestAngularCoreProbe:
         from solidlsp.language_servers.angular_language_server import AngularLanguageServer
 
         stub = type("Stub", (), {"repository_root_path": repo_path})()
-        return AngularLanguageServer._find_angular_core_install(stub)  # type: ignore[arg-type]
+        return AngularLanguageServer._find_angular_core_install(stub)
 
     def test_finds_core_at_project_root(self, tmp_path) -> None:
         core_pkg = tmp_path / "node_modules" / "@angular" / "core" / "package.json"
@@ -335,10 +335,10 @@ class TestAngularStartupCleanup:
         def boom(*_args: object, **_kwargs: object) -> dict:
             raise RuntimeError("simulated ngserver init failure")
 
-        # _get_initialize_params runs after both companions and ngserver have
-        # been spawned — exactly the failure window the cleanup wrapper
+        # _create_base_initialize_params runs after both companions and ngserver
+        # have been spawned — exactly the failure window the cleanup wrapper
         # protects against.
-        monkeypatch.setattr(ls, "_get_initialize_params", boom)
+        monkeypatch.setattr(ls, "_create_base_initialize_params", boom)
 
         try:
             with pytest.raises(RuntimeError, match="simulated ngserver init"):

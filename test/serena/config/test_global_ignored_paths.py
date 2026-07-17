@@ -20,7 +20,7 @@ def _create_test_project(
         ignored_paths=project_ignored_paths or [],
         ignore_all_files_in_gitignore=False,
     )
-    serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=global_ignored_paths)
+    serena_config = SerenaConfig(ignored_paths=global_ignored_paths).with_headless_mode_overrides()
     return Project(
         project_root=str(project_root),
         project_config=config,
@@ -102,6 +102,31 @@ class TestGlobalIgnoredPaths:
         assert project.is_ignored_path(str(self.project_path / "debug.log"))
         assert not project.is_ignored_path(str(self.project_path / "main.py"))
 
+    def test_nonexistent_path_not_ignored(self) -> None:
+        """Non-existent paths should return False (not ignored), not raise FileNotFoundError."""
+        project = _create_test_project(self.project_path)
+        nonexistent = str(self.project_path / "src" / "new_file.py")
+        assert not os.path.exists(nonexistent)
+        assert not project.is_ignored_path(nonexistent)
+
+    def test_nonexistent_path_with_ignore_patterns(self) -> None:
+        """Non-existent paths matching ignore patterns still return False (cannot check)."""
+        project = _create_test_project(
+            self.project_path,
+            global_ignored_paths=["*.log"],
+        )
+        nonexistent = str(self.project_path / "nonexistent.log")
+        assert not os.path.exists(nonexistent)
+        # Should not raise, should not match the *.log pattern
+        assert not project.is_ignored_path(nonexistent)
+
+    def test_validate_relative_path_allows_nonexistent(self) -> None:
+        """validate_relative_path with require_not_ignored should not raise for non-existent paths."""
+        project = _create_test_project(self.project_path)
+        nonexistent = "src/new_file.py"
+        # Should not raise
+        project.validate_relative_path(nonexistent, require_not_ignored=True)
+
 
 class TestRegisteredProjectGlobalIgnoredPaths:
     """RegisteredProject.get_project_instance() correctly passes global patterns to Project."""
@@ -124,7 +149,7 @@ class TestRegisteredProjectGlobalIgnoredPaths:
             ignored_paths=[],
             ignore_all_files_in_gitignore=False,
         )
-        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=["node_modules"])
+        serena_config = SerenaConfig(ignored_paths=["node_modules"]).with_headless_mode_overrides()
         registered = RegisteredProject(
             project_root=str(self.project_path),
             project_config=config,
@@ -144,7 +169,7 @@ class TestRegisteredProjectGlobalIgnoredPaths:
             project_root=str(self.project_path),
             project_config=config,
         )
-        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=[])
+        serena_config = SerenaConfig(ignored_paths=[]).with_headless_mode_overrides()
         project = registered.get_project_instance(serena_config=serena_config)
         assert not project.is_ignored_path(str(self.project_path / "node_modules" / "pkg.js"))
 
@@ -156,7 +181,7 @@ class TestRegisteredProjectGlobalIgnoredPaths:
         (serena_dir / "project.yml").write_text(
             'project_name: "test_project"\nlanguages: ["python"]\nignored_paths: []\nignore_all_files_in_gitignore: false\n'
         )
-        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=["node_modules"])
+        serena_config = SerenaConfig(ignored_paths=["node_modules"]).with_headless_mode_overrides()
         registered = RegisteredProject.from_project_root(
             str(self.project_path),
             serena_config=serena_config,
@@ -172,7 +197,7 @@ class TestRegisteredProjectGlobalIgnoredPaths:
             ignored_paths=[],
             ignore_all_files_in_gitignore=False,
         )
-        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=["node_modules"])
+        serena_config = SerenaConfig(ignored_paths=["node_modules"]).with_headless_mode_overrides()
         project = Project(
             project_root=str(self.project_path),
             project_config=config,
@@ -212,7 +237,7 @@ class TestGlobalIgnoredPathsWithGitignore:
             ignored_paths=["build"],
             ignore_all_files_in_gitignore=True,
         )
-        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=["node_modules"])
+        serena_config = SerenaConfig(ignored_paths=["node_modules"]).with_headless_mode_overrides()
         project = Project(
             project_root=str(self.project_path),
             project_config=config,
@@ -233,14 +258,12 @@ class TestSerenaConfigIgnoredPaths:
 
     def test_serena_config_default_ignored_paths(self) -> None:
         """SerenaConfig defaults to empty ignored_paths."""
-        config = SerenaConfig(gui_log_window=False, web_dashboard=False)
+        config = SerenaConfig().with_headless_mode_overrides()
         assert config.ignored_paths == []
 
     def test_serena_config_with_ignored_paths(self) -> None:
         """SerenaConfig can be created with explicit ignored_paths."""
         config = SerenaConfig(
-            gui_log_window=False,
-            web_dashboard=False,
             ignored_paths=["node_modules", "*.log", "build"],
-        )
+        ).with_headless_mode_overrides()
         assert config.ignored_paths == ["node_modules", "*.log", "build"]

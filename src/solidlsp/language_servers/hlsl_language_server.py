@@ -5,11 +5,9 @@ Supports HLSL, GLSL, and WGSL shader file formats.
 
 import logging
 import os
-import pathlib
 import shutil
-from typing import Any, cast
+from typing import Any
 
-import psutil
 from overrides import override
 
 from solidlsp.ls import (
@@ -18,7 +16,6 @@ from solidlsp.ls import (
     SolidLanguageServer,
 )
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
@@ -84,7 +81,7 @@ class HlslLanguageServer(SolidLanguageServer):
             base_url = f"{_GITHUB_RELEASE_BASE}/{tag}"
 
             # macOS has no pre-built binaries; build from source via cargo install
-            cargo_install_cmd = ["cargo", "install", "shader_language_server", "--version", version, "--root", "."]
+            cargo_install_cmd = ["cargo", "install", "shader_language_server", "--version", version, "--locked", "--root", "."]
 
             deps = RuntimeDependencyCollection(
                 [
@@ -144,7 +141,7 @@ class HlslLanguageServer(SolidLanguageServer):
                 raise FileNotFoundError(
                     "shader-language-server is not installed and no auto-install is available for your platform.\n"
                     "Please install it using one of the following methods:\n"
-                    "  cargo:   cargo install shader_language_server\n"
+                    "  cargo:   cargo install shader_language_server --locked\n"
                     "  GitHub:  Download from https://github.com/antaalt/shader-sense/releases\n"
                     "On macOS, install the Rust toolchain (https://rustup.rs) and Serena will build from source automatically.\n"
                     "See https://github.com/antaalt/shader-sense for more details."
@@ -168,13 +165,8 @@ class HlslLanguageServer(SolidLanguageServer):
         def _create_launch_command(self, core_path: str) -> list[str]:
             return [core_path, "--stdio"]
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+    def _create_base_initialize_params(self) -> dict:
         initialize_params = {
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
             "locale": "en",
             "capabilities": {
                 "textDocument": {
@@ -208,9 +200,8 @@ class HlslLanguageServer(SolidLanguageServer):
                     "configuration": True,
                 },
             },
-            "workspaceFolders": [{"uri": root_uri, "name": os.path.basename(repository_absolute_path)}],
         }
-        return cast(InitializeParams, initialize_params)
+        return initialize_params
 
     @override
     def _start_server(self) -> None:
@@ -238,7 +229,7 @@ class HlslLanguageServer(SolidLanguageServer):
 
         log.info("Starting shader-language-server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request")
         init_response = self.server.send.initialize(initialize_params)
@@ -252,38 +243,6 @@ class HlslLanguageServer(SolidLanguageServer):
             log.warning("shader-language-server does not advertise definitionProvider")
 
         self.server.notify.initialized({})
-
-    @override
-    def stop(self, shutdown_timeout: float = 2.0) -> None:
-        """Kill the shader-language-server process tree before the standard shutdown.
-
-        The base _shutdown() calls process.terminate() directly on the subprocess,
-        which on Windows with shell=True only kills the cmd.exe wrapper, leaving
-        the actual shader-language-server binary running as an orphan. We use psutil
-        to terminate the full process tree first.
-        """
-        process = self.server.process if self.server else None
-        if process and process.pid and process.returncode is None:
-            try:
-                parent = psutil.Process(process.pid)
-                children = parent.children(recursive=True)
-                for child in children:
-                    try:
-                        child.terminate()
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        pass
-                psutil.wait_procs(children, timeout=2)
-                for child in children:
-                    try:
-                        if child.is_running():
-                            child.kill()
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        pass
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                pass
-            except Exception as e:
-                log.debug(f"Error cleaning up shader-language-server process tree: {e}")
-        super().stop(shutdown_timeout)
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:

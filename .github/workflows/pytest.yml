@@ -1,3 +1,42 @@
+# =============================================================================
+# Test CI -- strategy & rationale (details inline at each step)
+# =============================================================================
+# BATCHING / PARALLELISM
+#   Tests run as parallel matrix jobs over (os x batch). They are split into 5
+#   marker-based batches (jvm, native, other-langs, niche, catch-all). We batch by
+#   pytest MARKER, not pytest-xdist (`-n`): tests share fixtures, language-server
+#   processes and on-disk resources, so in-process parallelism would race them.
+#   Each batch installs ONLY the toolchains its languages need (every install step
+#   is gated on matrix.batch), keeping jobs lean. catch-all is the negation of all
+#   named marker groups, so every test lands in exactly one batch and the partition
+#   cannot desync when a language is added.
+#
+# OS GATING
+#   Default is the full (os x batch) cross-product. `niche` (heavy/slow toolchains:
+#   lean, ocaml, nix, julia, R, perl) is ubuntu-only via matrix.exclude -- not worth
+#   the Windows/macOS cost. An OS-specific *language* inside an otherwise all-OS
+#   batch (swift -> macOS, haskell -> Linux only) is skipped one level down by the
+#   central conftest guard, NOT by the matrix.
+#
+# CONCURRENCY LIMITS (GitHub free tier)
+#   Hard caps: 20 concurrent jobs total and 5 concurrent macOS jobs. These bound the
+#   batch count -- the current matrix is 13 jobs (4 of them macOS), inside both
+#   limits; adding batches/OSes must keep respecting these ceilings or jobs queue.
+#   `concurrency: cancel-in-progress` also kills superseded runs on the same ref to
+#   free capacity quickly.
+#
+# CACHING
+#   Per-batch language-server cache keyed by os+batch (language-servers-<os>-<batch>),
+#   plus dedicated caches for the uv venv (keyed on uv.lock), swiftly, ZLS, FPC and
+#   the Go build/bin. Most niche toolchains restore from cache, so that batch is fast
+#   despite its size.
+#
+# TESTING / SKIPS
+#   All language skip logic is centralized in test/conftest.py
+#   (`language_tests_enabled()`): a test is skipped when its toolchain is not expected
+#   on the current OS/CI. Lint and type-check are batch-independent and run once per
+#   OS (catch-all only), not in every batch.
+# =============================================================================
 name: Tests
 
 on:
@@ -15,32 +54,55 @@ concurrency:
 
 jobs:
   cpu:
-    name: Tests on ${{ matrix.os }}
+    name: ${{ matrix.batch }} (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # Backstop against hung jobs: without this, GitHub's default limit is 6 hours (observed in
+    # run 29064865197, where a hung job burned the full 6h). Healthy runs peak at ~16 minutes
+    # warm-cache; 60 leaves ample headroom for cache-cold runs.
+    timeout-minutes: 60
+    # Marker groups are defined once here and combined in the "Compute marker expression" step.
+    # The catch-all batch is derived as the negation of all named groups, so adding a language to
+    # any group automatically removes it from catch-all -- the partition can never desync, and no
+    # test can fall through to "no batch". To add/rebalance: edit a MARKERS_* var, and (for a new
+    # group) add a case branch below + the batch name to the matrix list.
+    env:
+      MARKERS_JVM: "java or csharp or fsharp or kotlin or scala or groovy or clojure or bsl"
+      MARKERS_NATIVE: "cpp or rust or go or zig or pascal or swift"  # swift is macOS-only (skips elsewhere via the guard)
+      # other-langs: grab-bag + scripting languages + haskell + qml. Haskell (GHC/HLS) and qml (qmlls) are
+      # installed only on Linux -- too slow/expensive to build on the macOS runner (Haskell), or not worth
+      # the cost of a cross-OS Qt pull (qmlls) -- and skip on Windows+macOS via the central conftest guard.
+      MARKERS_OTHER_LANGS: "ruby or php or lua or luau or bash or powershell or elixir or erlang or dart or haxe or haskell or terraform or rego or ansible or yaml or toml or markdown or latex or crystal or cue or fortran or ada or matlab or systemverilog or hlsl or msl or al or qml"
+      # niche: slow, mostly-cached toolchains. ocaml + haskell are the two slowest -- kept in separate
+      # batches (ocaml here, haskell in other-langs). nix + perl skip on Windows via the guard.
+      MARKERS_NICHE: "julia or r or perl or lean4 or nix or ocaml"
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.11"]
+        # 5 batches, each installs ONLY the toolchains its languages need (steps gated by matrix.batch).
+        # Node/Python/uv stay in every batch (cheap, needed for the venv + auto-installed LSes).
+        # catch-all = web + python + the core framework.
+        batch: [jvm, native, other-langs, niche, catch-all]
+        # --- OS gating: which batch runs on which OS -----------------------------------------
+        # Default is the full cross-product (every batch on all three OSes); the `exclude` entries
+        # below carve out the exceptions. An OS-specific *language* inside an otherwise all-OS batch
+        # is handled one level down by the central conftest guard (swift -> macOS only; haskell ->
+        # not Windows), NOT here -- excludes drop a WHOLE batch from an OS.
+        #   jvm, native, other-langs, catch-all -> ubuntu, windows, macOS
+        #   niche                               -> ubuntu only (heavy/slow toolchains -- lean, ocaml,
+        #                                          nix, julia, R, perl -- not worth the Win/macOS cost)
+        exclude:
+          - { os: windows-latest, batch: niche }
+          - { os: macos-latest, batch: niche }
     steps:
       - uses: actions/checkout@v4
-      - name: Free disk space
-        if: runner.os == 'Linux'
-        run: |
-          df -h
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache
-          sudo apt-get clean
-          sudo apt-get autoremove -y
-          docker system prune -af || true
-          df -h
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
           python-version: "${{ matrix.python-version }}"
       - uses: actions/setup-go@v5
+        if: matrix.batch == 'native'
         with:
           go-version: ">=1.17.0"
       - name: Set up Node.js
@@ -54,8 +116,10 @@ jobs:
           mkdir -p $HOME/.cache/go-build
           mkdir -p $HOME/go/bin
       - name: Install uv
-        shell: bash
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+        # Use the official action (not `curl | sh`): it adds uv to GITHUB_PATH (the real OS PATH),
+        # so the Python language server's subprocess `shutil.which("uv"/"uvx")` finds it on Windows.
+        # The bash installer only puts uv on the Git-Bash MSYS PATH, invisible to Windows processes.
+        uses: astral-sh/setup-uv@v5
       - name: Cache uv virtualenv
         id: cache-uv
         uses: actions/cache@v3
@@ -75,12 +139,15 @@ jobs:
         shell: bash
         run: uv pip list
       - name: Check formatting
+        # Lint is batch-independent; run it only once per OS instead of in every batch.
+        if: matrix.batch == 'catch-all'
         shell: bash
         run: uv run poe lint
       # Add Go bin directory to PATH for this workflow
       # GITHUB_PATH is a special file that GitHub Actions uses to modify PATH
       # Writing to this file adds the directory to the PATH for subsequent steps
       - name: Cache Go binaries
+        if: matrix.batch == 'native'
         id: cache-go-binaries
         uses: actions/cache@v3
         with:
@@ -89,15 +156,9 @@ jobs:
             ~/.cache/go-build
           key: go-binaries-${{ runner.os }}-gopls-latest
       - name: Install gopls
-        if: steps.cache-go-binaries.outputs.cache-hit != 'true'
+        if: matrix.batch == 'native' && steps.cache-go-binaries.outputs.cache-hit != 'true'
         shell: bash
         run: go install golang.org/x/tools/gopls@latest
-      - name: Set up Elixir
-        if: runner.os != 'Windows'
-        uses: erlef/setup-beam@v1
-        with:
-          elixir-version: "1.19.3"
-          otp-version: "28"
 #      Erlang currently not tested in CI, random hangings on macos, always hangs on ubuntu
 #      In local tests, erlang seems to work though
 #      - name: Install Erlang Language Server
@@ -113,10 +174,12 @@ jobs:
 #          # Ensure erlang_ls is in PATH
 #          echo "$HOME/.local/bin" >> $GITHUB_PATH
       - name: Install clojure tools
+        if: matrix.batch == 'jvm'
         uses: DeLaGuardo/setup-clojure@13.4
         with:
           cli: latest
       - name: Install ccls (C/C++ Language Server)
+        if: matrix.batch == 'native'
         shell: bash
         run: |
           if [[ "${{ runner.os }}" == "Linux" ]]; then
@@ -135,18 +198,22 @@ jobs:
             exit 1
           fi
       - name: Setup Java (for JVM based languages)
+        if: matrix.batch == 'jvm'
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
       - name: Setup .NET SDK (for F# and C# languages)
+        if: matrix.batch == 'jvm'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
       - name: List .NET runtimes
+        if: matrix.batch == 'jvm'
         shell: bash
         run: dotnet --list-runtimes
       - name: Install Terraform
+        if: matrix.batch == 'other-langs'
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.5.0"
@@ -157,148 +224,87 @@ jobs:
       # Installation of swift with the action screws with installation of ruby on macOS for some reason
       # We can try again when version 3 of the action is released, where they will also use swiftly
       # Until then, we use custom code to install swift. Sourcekit-lsp is installed automatically with swift
+      - name: Cache Swift toolchain (swiftly)
+        if: runner.os == 'macOS' && matrix.batch == 'native'
+        id: cache-swiftly
+        uses: actions/cache@v3
+        with:
+          # macOS keeps the toolchain (incl. sourcekit-lsp) under ~/Library/Developer/Toolchains,
+          # NOT under ~/.swiftly -- both must be cached or the toolchain is lost on restore.
+          path: |
+            ~/.swiftly
+            ~/Library/Developer/Toolchains
+          key: swiftly-${{ runner.os }}-6.1.2-v2
       - name: Install Swift with swiftly (macOS)
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && matrix.batch == 'native'
         run: |
-          echo "=== Installing swiftly on macOS ==="
-          curl -O https://download.swift.org/swiftly/darwin/swiftly.pkg && \
-          installer -pkg swiftly.pkg -target CurrentUserHomeDirectory && \
-          ~/.swiftly/bin/swiftly init --quiet-shell-followup && \
-          . "${SWIFTLY_HOME_DIR:-$HOME/.swiftly}/env.sh" && \
+          set -e
+          # Install swiftly itself only if its binary isn't already present (e.g. restored from cache).
+          if [ ! -x "$HOME/.swiftly/bin/swiftly" ]; then
+            echo "=== Installing swiftly ==="
+            curl -O https://download.swift.org/swiftly/darwin/swiftly.pkg
+            installer -pkg swiftly.pkg -target CurrentUserHomeDirectory
+            "$HOME/.swiftly/bin/swiftly" init --quiet-shell-followup
+          fi
+          . "${SWIFTLY_HOME_DIR:-$HOME/.swiftly}/env.sh"
           hash -r
-          swiftly install --use 6.1.2
-          swiftly use 6.1.2
-          echo "~/.swiftly/bin" >> $GITHUB_PATH
-          echo "Swiftly installed successfully"
-          # Verify sourcekit-lsp is working before proceeding
-          echo "=== Verifying sourcekit-lsp installation ==="
-          which sourcekit-lsp || echo "Warning: sourcekit-lsp not found in PATH"
-          sourcekit-lsp --help || echo "Warning: sourcekit-lsp not responding"
-      - name: Install Swift with swiftly (Ubuntu)
-        if: runner.os == 'Linux'
-        run: |
-          echo "=== Installing swiftly on Ubuntu ==="
-          # Install dependencies BEFORE Swift to avoid exit code 1
-          sudo apt-get update
-          sudo apt-get -y install libcurl4-openssl-dev
-          curl -O https://download.swift.org/swiftly/linux/swiftly-$(uname -m).tar.gz && \
-          tar zxf swiftly-$(uname -m).tar.gz && \
-          ./swiftly init --quiet-shell-followup && \
-          . "${SWIFTLY_HOME_DIR:-$HOME/.local/share/swiftly}/env.sh" && \
-          hash -r
-          swiftly install --use 6.1.2
-          swiftly use 6.1.2
-          echo "=== Adding Swift toolchain to PATH ==="
-          echo "$HOME/.local/share/swiftly/bin" >> $GITHUB_PATH
-          echo "Swiftly installed successfully!"
-          # Verify sourcekit-lsp is working before proceeding
-          echo "=== Verifying sourcekit-lsp installation ==="
-          which sourcekit-lsp || echo "Warning: sourcekit-lsp not found in PATH"
-          sourcekit-lsp --help || echo "Warning: sourcekit-lsp not responding"
+          # Always run install: it downloads on a cache miss and is a fast no-op when the toolchain is
+          # genuinely present from cache. No `--use` -- that triggers the interactive .swift-version prompt.
+          swiftly install 6.1.2
+          # Locate sourcekit-lsp directly (macOS toolchains live under ~/Library/Developer/Toolchains)
+          # and put its directory on PATH -- avoids `swiftly use`, which prompts/hangs in CI.
+          SK="$(find "$HOME/Library/Developer/Toolchains" "$HOME/.swiftly" -name sourcekit-lsp 2>/dev/null | head -1)"
+          if [ -z "$SK" ]; then
+            echo "ERROR: sourcekit-lsp not found after Swift install. Searched:"
+            ls -la "$HOME/Library/Developer/Toolchains" 2>/dev/null || echo "  (no ~/Library/Developer/Toolchains)"
+            ls -la "$HOME/.swiftly" 2>/dev/null || echo "  (no ~/.swiftly)"
+            exit 1
+          fi
+          echo "sourcekit-lsp: $SK"
+          dirname "$SK" >> "$GITHUB_PATH"
       - name: Install Ruby
+        if: matrix.batch == 'other-langs'
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
       - name: Install Ruby language server
+        if: matrix.batch == 'other-langs'
         shell: bash
         run: gem install ruby-lsp
-      - name: Install OCaml and opam
-        uses: ocaml/setup-ocaml@v3
-        with:
-          ocaml-compiler: ${{ runner.os == 'Windows' && '4.14' || '5.3.x' }}
-          dune-cache: true
-          opam-repositories: |
-            ${{ runner.os == 'Windows' && 'opam-repository-mingw: https://github.com/ocaml-opam/opam-repository-mingw.git#sunset' || '' }}
-            default: https://github.com/ocaml/opam-repository.git
-      - name: Install OCaml packages
-        shell: bash
-        run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            opam install -y dune ocaml-lsp-server
-          else
-            # Require ocaml-lsp-server >= 1.23.0 for cross-file reference support
-            opam install -y dune 'ocaml-lsp-server>=1.23.0'
-          fi
-      - name: Install R
-        uses: r-lib/actions/setup-r@v2
-        with:
-          r-version: '4.4.2'
-          use-public-rspm: true
-      - name: Install R sysdeps (libuv for fs package)
-        if: runner.os == 'Linux'
-        shell: bash
-        run: sudo apt-get update && sudo apt-get install -y libuv1-dev
-      - name: Install R language server
-        shell: bash
-        run: |
-          Rscript -e "install.packages('languageserver', repos='https://cloud.r-project.org')"
-      - name: Set up Julia
-        uses: julia-actions/setup-julia@v2
-        with:
-          version: '1.12.6'
-      - name: Install Julia LanguageServer
-        shell: bash
-        run: julia -e 'using Pkg; Pkg.add(Pkg.PackageSpec(name="LanguageServer", version="5.0.0"))'
-      - name: Setup Haskell toolchain
-        if: runner.os != 'Windows'
-        uses: haskell/ghcup-setup@v1
-        with:
-          ghc: '9.12.2'
-          cabal: '3.10.3.0'
-          hls: '2.11.0.0'
-      - name: Verify Haskell tools
-        if: runner.os != 'Windows'
-        run: |
-          echo "Verifying installed Haskell tools:"
-          which ghc && ghc --version
-          which cabal && cabal --version
-          # HLS verification - non-blocking in case of version incompatibility
-          if command -v haskell-language-server-wrapper &>/dev/null; then
-            echo "Found haskell-language-server-wrapper"
-            haskell-language-server-wrapper --version || echo "WARNING: HLS wrapper found but version check failed"
-          elif command -v haskell-language-server &>/dev/null; then
-            echo "Found haskell-language-server"
-            haskell-language-server --version || echo "WARNING: HLS found but version check failed"
-          else
-            echo "WARNING: HLS not found (may be incompatible with GHC 9.12.2)"
-            echo "This is not a critical error - tests will use HLS if available at runtime"
-          fi
-        shell: bash
-      - name: Pre-build Haskell test project for HLS
-        if: runner.os != 'Windows'
-        run: |
-          cd test/resources/repos/haskell/test_repo
-          cabal update
-          cabal build --only-dependencies
-          cabal build
-          echo "Haskell test project built successfully"
-        shell: bash
       - name: Install Zig
+        if: matrix.batch == 'native'
         uses: mlugg/setup-zig@v2
         with:
           version: 0.14.1
+      - name: Cache ZLS (Zig Language Server)
+        if: matrix.batch == 'native'
+        id: cache-zls
+        uses: actions/cache@v3
+        with:
+          path: ~/.zls
+          key: zls-${{ runner.os }}-0.14.0
       - name: Install ZLS (Zig Language Server)
+        if: matrix.batch == 'native'
         shell: bash
         run: |
-          if [[ "${{ runner.os }}" == "Linux" ]]; then
-            wget https://github.com/zigtools/zls/releases/download/0.14.0/zls-x86_64-linux.tar.xz
-            tar -xf zls-x86_64-linux.tar.xz
-            sudo mv zls /usr/local/bin/
-            rm zls-x86_64-linux.tar.xz
-          elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            wget https://github.com/zigtools/zls/releases/download/0.14.0/zls-x86_64-macos.tar.xz
-            tar -xf zls-x86_64-macos.tar.xz
-            sudo mv zls /usr/local/bin/
-            rm zls-x86_64-macos.tar.xz
-          elif [[ "${{ runner.os }}" == "Windows" ]]; then
-            curl -L -o zls.zip https://github.com/zigtools/zls/releases/download/0.14.0/zls-x86_64-windows.zip
-            unzip -o zls.zip
-            mkdir -p "$HOME/bin"
-            mv zls.exe "$HOME/bin/"
-            echo "$HOME/bin" >> $GITHUB_PATH
-            rm zls.zip
+          ZLS_DIR="$HOME/.zls"
+          if [[ "${{ steps.cache-zls.outputs.cache-hit }}" != "true" ]]; then
+            mkdir -p "$ZLS_DIR"
+            if [[ "${{ runner.os }}" == "Linux" ]]; then
+              wget -O /tmp/zls.tar.xz https://github.com/zigtools/zls/releases/download/0.14.0/zls-x86_64-linux.tar.xz
+              tar -xf /tmp/zls.tar.xz -C "$ZLS_DIR" && rm /tmp/zls.tar.xz
+            elif [[ "${{ runner.os }}" == "macOS" ]]; then
+              wget -O /tmp/zls.tar.xz https://github.com/zigtools/zls/releases/download/0.14.0/zls-x86_64-macos.tar.xz
+              tar -xf /tmp/zls.tar.xz -C "$ZLS_DIR" && rm /tmp/zls.tar.xz
+            elif [[ "${{ runner.os }}" == "Windows" ]]; then
+              curl -L -o zls.zip https://github.com/zigtools/zls/releases/download/0.14.0/zls-x86_64-windows.zip
+              unzip -o zls.zip -d "$ZLS_DIR" && rm zls.zip
+            fi
+            chmod +x "$ZLS_DIR/zls" 2>/dev/null || true
           fi
+          echo "$ZLS_DIR" >> "$GITHUB_PATH"
       - name: Install verible-verilog-ls (SystemVerilog Language Server)
+        if: matrix.batch == 'other-langs'
         shell: bash
         run: |
           VERIBLE_VERSION="v0.0-4051-g9fdb4057"
@@ -329,6 +335,7 @@ jobs:
             echo "WARNING: verible-verilog-ls not found in PATH"
           fi
       - name: Install Lua Language Server
+        if: matrix.batch == 'other-langs'
         shell: bash
         run: |
           LUA_LS_VERSION="3.15.0"
@@ -373,61 +380,23 @@ jobs:
             echo "$LUA_LS_DIR/bin" >> $GITHUB_PATH
             rm lua-ls.zip
           fi
-      - name: Install Perl::LanguageServer
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          if [[ "${{ runner.os }}" == "Linux" ]]; then
-            sudo apt-get update
-            sudo apt-get install -y cpanminus build-essential libanyevent-perl libio-aio-perl
-          elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            brew install cpanminus
-          fi
-          PERL_MM_USE_DEFAULT=1 cpanm --notest --force Perl::LanguageServer
-          # Set up Perl local::lib environment for subsequent steps
-          echo "PERL5LIB=$HOME/perl5/lib/perl5${PERL5LIB:+:${PERL5LIB}}" >> $GITHUB_ENV
-          echo "PERL_LOCAL_LIB_ROOT=$HOME/perl5${PERL_LOCAL_LIB_ROOT:+:${PERL_LOCAL_LIB_ROOT}}" >> $GITHUB_ENV
-          echo "PERL_MB_OPT=--install_base \"$HOME/perl5\"" >> $GITHUB_ENV
-          echo "PERL_MM_OPT=INSTALL_BASE=$HOME/perl5" >> $GITHUB_ENV
-          echo "$HOME/perl5/bin" >> $GITHUB_PATH
       - name: Install ansible-core and ansible-lint (for Ansible language server tests)
+        if: matrix.batch == 'other-langs'
         shell: bash
         run: uv run pip install ansible-core ansible-lint
       - name: Install Haxe
+        if: matrix.batch == 'other-langs'
         # The Haxe LS binary (server.js) is auto-downloaded and runs on Node.js,
         # but it delegates to the Haxe compiler for code analysis at runtime.
         uses: krdlab/setup-haxe@v2
         with:
           haxe-version: 4.3.7
       - name: Install Elm
+        if: matrix.batch == 'catch-all'
         shell: bash
         run: npm install -g elm@0.19.1-6
-      - name: Install Nix
-        if: runner.os != 'Windows'  # Nix doesn't support Windows natively
-        uses: cachix/install-nix-action@v30
-        with:
-          nix_path: nixpkgs=channel:nixos-unstable
-      - name: Install nixd (Nix Language Server)
-        if: runner.os != 'Windows'  # Skip on Windows since Nix isn't available
-        shell: bash
-        run: |
-          # Install nixd using nix
-          nix profile install github:nix-community/nixd
-
-          # Verify nixd is installed and working
-          if ! command -v nixd &> /dev/null; then
-            echo "nixd installation failed or not in PATH"
-            exit 1
-          fi
-
-          echo "$HOME/.nix-profile/bin" >> $GITHUB_PATH
-      - name: Verify Nix package build
-        if: runner.os != 'Windows'  # Nix only supported on Linux/macOS
-        shell: bash
-        run: |
-          # Verify the flake builds successfully
-          nix build --no-link
       - name: Install Regal (Rego Language Server)
+        if: matrix.batch == 'other-langs'
         shell: bash
         run: |
           REGAL_VERSION="0.39.0"
@@ -454,35 +423,61 @@ jobs:
             mv regal.exe "$HOME/bin/"
             echo "$HOME/bin" >> $GITHUB_PATH
           fi
-      - name: Install Free Pascal Compiler
+      - name: Install qmlls (QML Language Server)
+        # qmlls needs Qt 6.6+ for textDocument/documentSymbol (the feature these tests assert); Ubuntu
+        # noble's apt only has Qt 6.4.2, whose qmlls returns -32601 "method not found" for it. So install
+        # the official standalone build (TheQtCompanyRnD/qmlls-workflow, linked from the Qt docs) -- an 8 MB
+        # single binary built from recent Qt dev. Restricted to Linux (a cross-OS Qt pull isn't worth it);
+        # QML skips on Windows/macOS via the conftest guard. libodbc2 is its only non-bundled runtime dep.
+        if: matrix.batch == 'other-langs' && runner.os == 'Linux'
         shell: bash
         run: |
+          QMLLS_VERSION="0.7"
+          QMLLS_DIR="$HOME/.qmlls"
+          mkdir -p "$QMLLS_DIR"
+          curl -fsSL -o /tmp/qmlls.zip "https://github.com/TheQtCompanyRnD/qmlls-workflow/releases/download/${QMLLS_VERSION}/qmllanguageserver-linux-x64-${QMLLS_VERSION}.zip"
+          unzip -o /tmp/qmlls.zip -d "$QMLLS_DIR" >/dev/null
+          rm /tmp/qmlls.zip
+          chmod +x "$QMLLS_DIR/qmlls"
+          # libodbc.so.2 is qmlls's only non-bundled runtime dep; install only if absent on the image.
+          ldconfig -p | grep -q 'libodbc.so.2' || { sudo apt-get update && sudo apt-get install -y libodbc2; }
+          # Fail loudly if any shared lib is still unresolved (e.g. a missing runtime dep).
+          missing="$(ldd "$QMLLS_DIR/qmlls" | grep 'not found' || true)"
+          [ -z "$missing" ] || { echo "ERROR: qmlls has unresolved runtime libs:"; echo "$missing"; exit 1; }
+          echo "$QMLLS_DIR" >> "$GITHUB_PATH"
+      - name: Cache Free Pascal Compiler
+        if: matrix.batch == 'native'
+        id: cache-fpc
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/fpc
+            ~/fpcsrc
+          key: fpc-${{ runner.os }}-3.2.2
+      - name: Install Free Pascal Compiler
+        if: matrix.batch == 'native'
+        shell: bash
+        run: |
+          # Only the downloads are gated on the cache; the PP/FPCDIR/PATH detection always runs
+          # (it works the same on freshly-downloaded or cache-restored ~/fpc + ~/fpcsrc).
+          FPC_CACHE_HIT="${{ steps.cache-fpc.outputs.cache-hit }}"
+          FPC_VERSION="3.2.2"
           if [[ "${{ runner.os }}" == "Linux" ]]; then
             sudo apt-get update
             sudo apt-get install -y fpc fpc-source
-            # Set environment variables for pasls
             echo "PP=/usr/bin/fpc" >> $GITHUB_ENV
-            # Find FPC source directory (version may vary) - remove trailing slash
             FPCDIR=$(ls -d /usr/share/fpcsrc/*/ 2>/dev/null | head -1 | sed 's:/$::')
-            if [[ -z "$FPCDIR" ]]; then
-              FPCDIR="/usr/share/fpcsrc"
-            fi
+            [[ -z "$FPCDIR" ]] && FPCDIR="/usr/share/fpcsrc"
             echo "FPCDIR=$FPCDIR" >> $GITHUB_ENV
-            echo "=== FPC source directory structure ==="
-            ls -la "$FPCDIR" || echo "FPCDIR not found"
-            ls -la "$FPCDIR/rtl" 2>/dev/null || echo "rtl subdirectory not found"
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            brew install fpc
-            # Download FPC source from SourceForge (fpc-src-laz cask is incompatible with ARM64)
-            FPC_VERSION="3.2.2"
-            curl -L -o fpc-source.tar.gz "https://sourceforge.net/projects/freepascal/files/Source/${FPC_VERSION}/fpc-${FPC_VERSION}.source.tar.gz/download"
-            mkdir -p "$HOME/fpcsrc"
-            tar -xzf fpc-source.tar.gz -C "$HOME/fpcsrc"
-            rm fpc-source.tar.gz
-            # Check extracted directory structure (might be nested)
-            echo "=== Extracted FPC source structure ==="
-            ls -la "$HOME/fpcsrc"
-            # Find the actual FPC source root (contains rtl, packages, etc.)
+            command -v fpc >/dev/null || brew install fpc
+            if [[ "$FPC_CACHE_HIT" != "true" ]]; then
+              # FPC source from SourceForge (fpc-src-laz cask is incompatible with ARM64)
+              curl -L -o fpc-source.tar.gz "https://sourceforge.net/projects/freepascal/files/Source/${FPC_VERSION}/fpc-${FPC_VERSION}.source.tar.gz/download"
+              mkdir -p "$HOME/fpcsrc"
+              tar -xzf fpc-source.tar.gz -C "$HOME/fpcsrc"
+              rm fpc-source.tar.gz
+            fi
             if [[ -d "$HOME/fpcsrc/fpc-${FPC_VERSION}/rtl" ]]; then
               FPCDIR="$HOME/fpcsrc/fpc-${FPC_VERSION}"
             elif [[ -d "$HOME/fpcsrc/fpc-${FPC_VERSION}/fpc-${FPC_VERSION}/rtl" ]]; then
@@ -492,34 +487,26 @@ jobs:
             fi
             echo "PP=$(which fpc)" >> $GITHUB_ENV
             echo "FPCDIR=$FPCDIR" >> $GITHUB_ENV
-            echo "=== FPC source directory ==="
-            ls -la "$FPCDIR" || echo "FPCDIR not found"
           elif [[ "${{ runner.os }}" == "Windows" ]]; then
-            FPC_VERSION="3.2.2"
-            # Download freepascal-ootb (includes FPC compiler)
-            curl -L -o fpc-ootb.zip https://github.com/fredvs/freepascal-ootb/releases/download/${FPC_VERSION}/fpc-ootb-322-x86_64-win64.zip
-            mkdir -p "$HOME/fpc"
-            unzip -q fpc-ootb.zip -d "$HOME/fpc"
-            rm fpc-ootb.zip
-            # Download FPC source from SourceForge (fpc-ootb only has compiled units, not source)
-            curl -L -o fpc-source.zip "https://sourceforge.net/projects/freepascal/files/Source/${FPC_VERSION}/fpc-${FPC_VERSION}.source.zip/download"
-            mkdir -p "$HOME/fpcsrc"
-            unzip -q fpc-source.zip -d "$HOME/fpcsrc"
-            rm fpc-source.zip
-            # Find fpc executable (fpc-ootb uses fpc-ootb.exe as the compiler)
-            echo "=== FPC directory structure ==="
-            find "$HOME/fpc" -name "*.exe" -type f 2>/dev/null | head -10
+            if [[ "$FPC_CACHE_HIT" != "true" ]]; then
+              # freepascal-ootb (compiler) + source (ootb ships compiled units only, not source)
+              curl -L -o fpc-ootb.zip https://github.com/fredvs/freepascal-ootb/releases/download/${FPC_VERSION}/fpc-ootb-322-x86_64-win64.zip
+              mkdir -p "$HOME/fpc"
+              unzip -q fpc-ootb.zip -d "$HOME/fpc"
+              rm fpc-ootb.zip
+              curl -L -o fpc-source.zip "https://sourceforge.net/projects/freepascal/files/Source/${FPC_VERSION}/fpc-${FPC_VERSION}.source.zip/download"
+              mkdir -p "$HOME/fpcsrc"
+              unzip -q fpc-source.zip -d "$HOME/fpcsrc"
+              rm fpc-source.zip
+            fi
             FPC_EXE=$(find "$HOME/fpc" -name "fpc-ootb-64.exe" -type f 2>/dev/null | head -1)
             echo "Found FPC executable: $FPC_EXE"
-            echo "Found FPC source dir: $HOME/fpcsrc/fpc-${FPC_VERSION}"
-            # Set environment variables for pasls
             echo "PP=$FPC_EXE" >> $GITHUB_ENV
             echo "FPCDIR=$HOME/fpcsrc/fpc-${FPC_VERSION}" >> $GITHUB_ENV
-            # Add FPC bin directory to PATH
-            FPC_BIN_DIR=$(dirname "$FPC_EXE")
-            echo "$FPC_BIN_DIR" >> $GITHUB_PATH
+            echo "$(dirname "$FPC_EXE")" >> $GITHUB_PATH
           fi
       - name: Verify FPC installation
+        if: matrix.batch == 'native'
         shell: bash
         run: |
           echo "=== Environment variables ==="
@@ -560,11 +547,154 @@ jobs:
             echo "ERROR: FPCDIR does not exist: $FPCDIR"
             exit 1
           fi
+      # --- Slow / heavy language toolchains, each isolated in its own batch (OS gating via matrix excludes) ---
+      - name: Setup Haskell toolchain
+        if: matrix.batch == 'other-langs' && runner.os == 'Linux'
+        uses: haskell/ghcup-setup@v1
+        with:
+          ghc: '9.12.2'
+          cabal: '3.10.3.0'
+          hls: '2.11.0.0'
+      - name: Verify Haskell tools
+        if: matrix.batch == 'other-langs' && runner.os == 'Linux'
+        shell: bash
+        run: |
+          which ghc && ghc --version
+          which cabal && cabal --version
+          if command -v haskell-language-server-wrapper &>/dev/null; then
+            haskell-language-server-wrapper --version || echo "WARNING: HLS wrapper version check failed"
+          else
+            echo "WARNING: haskell-language-server-wrapper not found (may be incompatible with GHC 9.12.2)"
+          fi
+      - name: Pre-build Haskell test project for HLS
+        if: matrix.batch == 'other-langs' && runner.os == 'Linux'
+        shell: bash
+        run: |
+          cd test/resources/repos/haskell/test_repo
+          cabal update
+          cabal build --only-dependencies
+          cabal build
+      - name: Install OCaml and opam
+        if: matrix.batch == 'niche'
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ runner.os == 'Windows' && '4.14' || '5.3.x' }}
+          dune-cache: true
+          opam-repositories: |
+            ${{ runner.os == 'Windows' && 'opam-repository-mingw: https://github.com/ocaml-opam/opam-repository-mingw.git#sunset' || '' }}
+            default: https://github.com/ocaml/opam-repository.git
+      - name: Install OCaml packages
+        if: matrix.batch == 'niche'
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            opam install -y dune ocaml-lsp-server
+          else
+            opam install -y dune 'ocaml-lsp-server>=1.23.0'
+          fi
+      - name: Install Nix
+        if: matrix.batch == 'niche' && runner.os != 'Windows'
+        uses: cachix/install-nix-action@v30
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          # Authenticate any GitHub fetch Nix makes during evaluation/tests with the runner's
+          # GITHUB_TOKEN (raises the unauthenticated 60 req/hr-per-IP API limit to ~1000/hr).
+          # nixd itself is installed from the channel below, so this is just insurance.
+          extra_nix_config: |
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+      - name: Install nixd (Nix Language Server)
+        if: matrix.batch == 'niche' && runner.os != 'Windows'
+        shell: bash
+        run: |
+          # Install nixd from the nixos-unstable channel (set as <nixpkgs> on NIX_PATH via nix_path
+          # above) using classic nix-env. `-f '<nixpkgs>'` resolves the channel tarball from
+          # nixos.org and selects the `nixd` attribute -- it never touches the GitHub API. (The flake
+          # form `nix profile install github:nix-community/nixd` resolves an unpinned HEAD through
+          # api.github.com/.../commits/HEAD, which GitHub 429-throttles on CI even with a token;
+          # and `nix-env -iA nixpkgs.nixd` fails here because no channel named `nixpkgs` is registered.)
+          nix-env -f '<nixpkgs>' -iA nixd
+          if ! command -v nixd &> /dev/null; then
+            echo "nixd installation failed or not in PATH"; exit 1
+          fi
+          echo "$HOME/.nix-profile/bin" >> $GITHUB_PATH
       - name: Build Lean 4 test project
+        if: matrix.batch == 'niche'
         uses: leanprover/lean-action@v1
         with:
           lake-package-directory: test/resources/repos/lean4/test_repo
+      # --- niche batch: R, Julia, Perl ---
+      - name: Install R
+        if: matrix.batch == 'niche'
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: '4.4.2'
+          use-public-rspm: true
+      - name: Cache R packages (languageserver + its deps)
+        if: matrix.batch == 'niche'
+        id: cache-r
+        uses: actions/cache@v3
+        with:
+          # setup-r exports R_LIBS_USER as $RUNNER_TEMP/Library (a stable path) and re-exports it on
+          # every run -- including cache hits -- so R finds the restored packages with no extra env.
+          # Bump the trailing -vN (or r-version) to invalidate after an R/OS-image upgrade.
+          path: ${{ env.R_LIBS_USER }}
+          key: r-pkgs-${{ runner.os }}-R4.4.2-languageserver-v1
+      - name: Install R sysdeps (libuv for fs package)
+        # Always run (NOT gated on the cache): the cached, compiled `fs` package links libuv at
+        # runtime, so the shared lib must be present even when the build below is skipped.
+        if: matrix.batch == 'niche' && runner.os == 'Linux'
+        shell: bash
+        run: sudo apt-get update && sudo apt-get install -y libuv1-dev
+      - name: Install R language server
+        if: matrix.batch == 'niche' && steps.cache-r.outputs.cache-hit != 'true'
+        shell: bash
+        run: Rscript -e "install.packages('languageserver', repos='https://cloud.r-project.org')"
+      - name: Set up Julia
+        if: matrix.batch == 'niche'
+        uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.12.6'
+      - name: Cache Julia depot (packages + precompiled)
+        # Caches the depot (~/.julia: packages, artifacts, compiled, ...) with an auto-managed key,
+        # so the LanguageServer Pkg.add below is a near-no-op (already installed + precompiled) on
+        # warm runs. The action handles save/restore itself -- no cache-hit gating needed.
+        if: matrix.batch == 'niche'
+        uses: julia-actions/cache@v2
+      - name: Install Julia LanguageServer
+        if: matrix.batch == 'niche'
+        shell: bash
+        run: julia -e 'using Pkg; Pkg.add(Pkg.PackageSpec(name="LanguageServer", version="5.0.0"))'
+      - name: Cache Perl::LanguageServer (~/perl5)
+        if: matrix.batch == 'niche' && runner.os != 'Windows'
+        id: cache-perl
+        uses: actions/cache@v3
+        with:
+          path: ~/perl5
+          key: perl-ls-${{ runner.os }}-v1
+      - name: Install Perl::LanguageServer
+        if: matrix.batch == 'niche' && runner.os != 'Windows'
+        shell: bash
+        run: |
+          # System deps are cheap and needed at runtime (the cached LS links libanyevent/libio-aio),
+          # so install them always; the slow cpanm build (XS compile of Coro etc.) runs only on a miss.
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y cpanminus build-essential libanyevent-perl libio-aio-perl
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            brew install cpanminus
+          fi
+          if [[ "${{ steps.cache-perl.outputs.cache-hit }}" != "true" ]]; then
+            # --local-lib pins the install to ~/perl5 (matching the PERL5LIB exports below), so the
+            # cached directory is exactly what `perl -MPerl::LanguageServer` loads on a restore.
+            PERL_MM_USE_DEFAULT=1 cpanm --notest --force --local-lib="$HOME/perl5" Perl::LanguageServer
+          fi
+          echo "PERL5LIB=$HOME/perl5/lib/perl5${PERL5LIB:+:${PERL5LIB}}" >> $GITHUB_ENV
+          echo "PERL_LOCAL_LIB_ROOT=$HOME/perl5${PERL_LOCAL_LIB_ROOT:+:${PERL_LOCAL_LIB_ROOT}}" >> $GITHUB_ENV
+          echo "PERL_MB_OPT=--install_base \"$HOME/perl5\"" >> $GITHUB_ENV
+          echo "PERL_MM_OPT=INSTALL_BASE=$HOME/perl5" >> $GITHUB_ENV
+          echo "$HOME/perl5/bin" >> $GITHUB_PATH
       - name: Install npm deps for Angular test repo
+        if: matrix.batch == 'catch-all'
         shell: bash
         run: |
           if [ -d test/resources/repos/angular/test_repo ]; then
@@ -576,17 +706,28 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ~/.serena/language_servers/static
-          key: language-servers-${{ runner.os }}-v1
+          key: language-servers-${{ runner.os }}-${{ matrix.batch }}-v1
           restore-keys: |
-            language-servers-${{ runner.os }}-
-      - name: Report free disk space
-        if: runner.os == 'Linux'
+            language-servers-${{ runner.os }}-${{ matrix.batch }}-
+      - name: Compute marker expression for this batch
+        id: markers
+        shell: bash
         run: |
-          echo "Free disk space before tests:"
-          df -h
+          case "${{ matrix.batch }}" in
+            jvm)         expr="$MARKERS_JVM" ;;
+            native)      expr="$MARKERS_NATIVE" ;;
+            other-langs) expr="$MARKERS_OTHER_LANGS" ;;
+            niche)       expr="$MARKERS_NICHE" ;;
+            catch-all)   expr="not ($MARKERS_JVM or $MARKERS_NATIVE or $MARKERS_OTHER_LANGS or $MARKERS_NICHE)" ;;
+            *)           echo "Unknown batch: ${{ matrix.batch }}" >&2; exit 1 ;;
+          esac
+          echo "Marker expression: $expr"
+          echo "expr=$expr" >> "$GITHUB_OUTPUT"
       - name: Test with pytest
         shell: bash
-        run: uv run poe test -q --tb=short
-      - name: Type-checking with mypy
+        run: uv run poe test -m "${{ steps.markers.outputs.expr }}" -q --tb=short
+      - name: Type-checking with ty
+        # Type-checking is batch-independent; run it only once per OS instead of in every batch.
+        if: matrix.batch == 'catch-all'
         shell: bash
         run: uv run poe type-check

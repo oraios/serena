@@ -24,6 +24,20 @@ if language_tests_enabled(Language.CPP_CCLS):
     _cpp_servers.append(Language.CPP_CCLS)
 
 
+@pytest.mark.parametrize("language", [Language.CPP, Language.CPP_CCLS])
+def test_source_fn_matcher_includes_ino(language: Language) -> None:
+    """Arduino .ino sketches are C++ and must route to the C++ language server.
+
+    This is a pure matcher check; it needs no running language server.
+    """
+    matcher = language.get_source_fn_matcher()
+    assert matcher.is_relevant_filename("sketch.ino")
+    assert matcher.is_relevant_filename("BLINK.INO")  # case-insensitive
+    assert matcher.is_relevant_filename("/path/to/s3_camera.ino")
+    assert matcher.is_relevant_filename("main.cpp")  # regression: ordinary C++ still matches
+    assert not matcher.is_relevant_filename("notes.md")
+
+
 @pytest.mark.cpp
 @pytest.mark.skipif(not _cpp_servers, reason="No C++ language server (clangd or ccls) available")
 class TestCppLanguageServer:

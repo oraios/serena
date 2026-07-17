@@ -22,6 +22,7 @@ class HookClient(Enum):
     """The client application that triggered the hook."""
 
     CLAUDE_CODE = "claude-code"
+    CODEBUDDY = "codebuddy"
     VSCODE = "vscode"
     CODEX = "codex"
 
@@ -47,6 +48,22 @@ class Hook(ABC):
 
 
 class PreToolUseHook(Hook, ABC):
+    _NON_SYMBOLIC_SERENA_TOOL_NAME_SUBSTRINGS = frozenset(
+        (
+            "pattern",
+            "read",
+            "diagnostics",
+            "memory",
+            "onboarding",
+            "config",
+            "list_file",
+            "find_file",
+            "shell",
+            "dashboard",
+            "restart_language_server",
+        )
+    )
+
     def __init__(self, client: HookClient):
         super().__init__(client)
         _tool_name = self._input_data.get("tool_name") or self._input_data.get("toolName", "") or ""
@@ -54,7 +71,11 @@ class PreToolUseHook(Hook, ABC):
         if not _tool_name:
             raise ValueError("Tool name is required in the hook input data")
         self._tool_name = _tool_name
-        self._tool_input: dict | None = self._input_data.get("tool_input") or self._input_data.get("toolInput")
+        raw_tool_input = self._input_data.get("tool_input") or self._input_data.get("toolInput")
+        # TODO: some agents, like copilot CLI, can send a string as value for raw_tool_input
+        #  Example: "tool_input":"*** Begin Patch\n*** Add File: /Users/acbdef/.copilot/session-state/08a961db-02f0-4c7c-b783-1e9818290292/files/hook-tool-test-3.txt\n+third edit tool test\n*** End Patch\n"
+        #  We currently don't parse such tool input and hence don't react to it in hooks
+        self._tool_input: dict | None = raw_tool_input if isinstance(raw_tool_input, dict) else None
 
         # only relevant in claude code at the moment, (not all events include this field; default to empty string)
         raw_permission_mode = self._input_data.get("permission_mode") or self._input_data.get("permissionMode") or ""
@@ -78,11 +99,13 @@ class PreToolUseHook(Hook, ABC):
                 hook_output["hookSpecificOutput"]["additionalContext"] = self.additional_context
             return json.dumps(hook_output)
 
-    def is_serena_tool(self) -> bool:
-        return "serena" in self._tool_name
+    def is_serena_symbolic_tool(self) -> bool:
+        return "serena" in self._tool_name and not any(
+            substring in self._tool_name for substring in self._NON_SYMBOLIC_SERENA_TOOL_NAME_SUBSTRINGS
+        )
 
 
-class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
+class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
     """Pre-tool-use hook that nudges the agent toward Serena's symbolic tools.
 
     Tracks consecutive uses of grep and read-file tools via a persisted
@@ -185,8 +208,8 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
             except Exception:
                 pass
 
-        def update(self, hook: "PreToolUseRemindAboutSerenaHook") -> None:
-            if hook.is_serena_tool():
+        def update(self, hook: "PreToolUseRemindAboutSymbolicToolsHook") -> None:
+            if hook.is_serena_symbolic_tool():
                 self.reset()
                 return
 
@@ -246,7 +269,7 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
 
     #: Shell commands that perform grep-like search; used to classify Codex
     #: shell-command tool calls whose ``cmd`` or ``command`` field starts with one of these.
-    _GREP_SHELL_COMMANDS: frozenset[str] = frozenset(("grep", "rg", "ag", "ack", "fgrep", "egrep"))
+    _GREP_SHELL_COMMANDS: frozenset[str] = frozenset(("grep", "rg", "ag", "ack", "fgrep", "egrep", "search_for_pattern"))
 
     #: Shell commands that perform file-read operations; used to classify Codex
     #: shell-command tool calls whose ``cmd`` or ``command`` field starts with one of these.
@@ -254,6 +277,8 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
 
     #: file suffixes for source-like files where symbolic tools are usually more
     #: appropriate than repeated raw reads. Lowercase and extension-only.
+    #: Note: ``search_for_pattern`` is always available regardless of extension and
+    #: is a better alternative to repeated raw reads for any structured file type.
     _CODE_FILE_EXTENSIONS: frozenset[str] = frozenset(
         (
             ".al",
@@ -271,14 +296,19 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
             ".fs",
             ".fsx",
             ".go",
+            ".graphql",
+            ".gql",
             ".groovy",
             ".h",
+            ".hcl",
             ".hpp",
             ".hs",
             ".html",
             ".java",
             ".jl",
             ".js",
+            ".json",
+            ".jsonc",
             ".jsx",
             ".kt",
             ".kts",
@@ -287,6 +317,7 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
             ".m",
             ".matlab",
             ".php",
+            ".proto",
             ".ps1",
             ".py",
             ".r",
@@ -295,11 +326,17 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
             ".scala",
             ".sh",
             ".sol",
+            ".sql",
             ".svelte",
             ".swift",
+            ".tf",
+            ".tfvars",
+            ".toml",
             ".ts",
             ".tsx",
             ".vue",
+            ".yaml",
+            ".yml",
             ".zig",
         )
     )
@@ -329,16 +366,16 @@ class PreToolUseRemindAboutSerenaHook(PreToolUseHook):
             self._file_path = str(file_path).strip() or None
 
     def is_grep_call(self) -> bool:
-        if self._client == HookClient.CLAUDE_CODE:
-            return self._tool_name == "grep"
+        if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
+            return self._tool_name == "grep" or "search_for_pattern" in self._tool_name
         if self._client == HookClient.CODEX and self._is_shell_command_call():
             return self._command_name in self._GREP_SHELL_COMMANDS
         # heuristic for other clients
         return "grep" in self._tool_name
 
     def is_read_call(self) -> bool:
-        if self._client == HookClient.CLAUDE_CODE:
-            return self._tool_name == "read"
+        if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
+            return self._tool_name == "read" or "read_file" in self._tool_name
         if self._client == HookClient.CODEX and self._is_shell_command_call():
             return self._command_name in self._READ_SHELL_COMMANDS
         # heuristic for other clients
@@ -516,7 +553,7 @@ class PreToolUseAutoApproveSerenaHook(PreToolUseHook):
 
     def execute(self) -> None:
         # only emit a decision when both the tool and the mode match; stay silent otherwise
-        if not self.is_serena_tool() or not self.is_auto_approve_mode():
+        if not self.is_serena_symbolic_tool() or not self.is_auto_approve_mode():
             return
 
         # name the actual mode in the reason so logs/debug output are unambiguous
@@ -563,7 +600,7 @@ class HookCommands(AutoRegisteringGroup):
     )
     @_client_option
     def remind(client: str) -> None:
-        PreToolUseRemindAboutSerenaHook(HookClient(client)).execute()
+        PreToolUseRemindAboutSymbolicToolsHook(HookClient(client)).execute()
 
     @staticmethod
     @click.command(

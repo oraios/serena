@@ -7,14 +7,23 @@ and tools for formatting and type checking.
 
 ## Release Process
 
-1. Ensure clean git status
-2. Set version for release, e.g.
+1. Ensure clean git status.
+2. Set the version for release, e.g.
    
        python scripts/bump_version.py --patch
        python scripts/bump_version.py --minor
 
    This also creates the git tag.
-3. Push to GitHub, triggering the release process.
+3. Push to GitHub:
 
        git push
        git push --tags
+
+   Important: This must push a single tag only!
+   Pushing the single tag triggers the `create-release` workflow for the tag, which creates a
+   **draft release** on GitHub.
+4. Review the draft release on the
+   [GitHub Releases page](https://github.com/oraios/serena/releases).
+   When ready, publish it (click *Publish release*).
+   This triggers the `publish` workflow, which builds and publishes the
+   package to PyPI.

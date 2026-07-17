@@ -6,7 +6,6 @@ Recreate the snapshots with `pytest --snapshot-update`.
 import logging
 import os
 import shutil
-import sys
 import tempfile
 import time
 from abc import ABC, abstractmethod
@@ -24,7 +23,7 @@ from syrupy import SnapshotAssertion
 from serena.code_editor import CodeEditor, LanguageServerCodeEditor
 from solidlsp.ls_config import Language
 from src.serena.symbol import LanguageServerSymbolRetriever
-from test.conftest import get_repo_path, project_with_ls_context
+from test.conftest import get_repo_path, language_tests_enabled, project_with_ls_context
 
 pytestmark = pytest.mark.snapshot
 
@@ -217,7 +216,7 @@ class EditingTest(ABC):
         with open(file_path, encoding="utf-8") as f:
             return f.read()
 
-    def run_test(self, content_after_ground_truth: SnapshotAssertion) -> None:
+    def run_test(self, content_after_ground_truth: SnapshotAssertion | None) -> None:
         with self._setup() as symbol_retriever:
             content_before = self._read_file(self.rel_path)
             code_editor = LanguageServerCodeEditor(symbol_retriever)
@@ -230,9 +229,10 @@ class EditingTest(ABC):
     def _apply_edit(self, code_editor: CodeEditor) -> None:
         pass
 
-    def _test_diff(self, code_diff: CodeDiff, snapshot: SnapshotAssertion) -> None:
+    def _test_diff(self, code_diff: CodeDiff, snapshot: SnapshotAssertion | None) -> None:
         assert code_diff.has_changes, f"Sanity check failed: No changes detected in {code_diff.relative_path}"
-        assert code_diff.modified_content == snapshot
+        if snapshot is not None:
+            assert code_diff.modified_content == snapshot
 
 
 # Python test file path
@@ -451,7 +451,7 @@ class NixAttrReplacementTest(EditingTest):
 
 
 @pytest.mark.nix
-@pytest.mark.skipif(sys.platform == "win32", reason="nixd language server doesn't run on Windows")
+@pytest.mark.skipif(not language_tests_enabled(Language.NIX), reason="Nix tests are disabled (nixd not available)")
 def test_nix_symbol_replacement_no_double_semicolon(snapshot: SnapshotAssertion):
     """
     Test that replacing a Nix attribute does not result in double semicolons.
@@ -484,7 +484,7 @@ class RenameSymbolTest(EditingTest):
         code_editor.rename_symbol(self.symbol_name, self.rel_path, self.new_name)
 
     @overrides
-    def _test_diff(self, code_diff: CodeDiff, snapshot: SnapshotAssertion) -> None:
+    def _test_diff(self, code_diff: CodeDiff, snapshot: SnapshotAssertion | None) -> None:
         # sanity check (e.g., for newly generated snapshots) that the new name is actually in the modified content
         assert self.new_name in code_diff.modified_content, f"New name '{self.new_name}' not found in modified content."
         return super()._test_diff(code_diff, snapshot)
@@ -499,6 +499,49 @@ def test_rename_symbol(snapshot: SnapshotAssertion):
         "renamed_typed_module_var",
     )
     test_case.run_test(content_after_ground_truth=snapshot)
+
+
+class InsertAndDeleteSymbolTest(EditingTest):
+    """
+    Inserts a symbol after another symbol and then deletes the inserted symbol, which should result
+    in no change to the file content.
+    """
+
+    def __init__(self, language: Language, rel_path: str, rel_symbol: str, deleted_symbol: str, insertion: str):
+        """
+        :param language: specifies the language server to use
+        :param rel_path: relative path of the file
+        :param rel_symbol: symbol after which the insertion is made
+        :param deleted_symbol: the symbol to be deleted after the insertion
+        :param insertion: text which inserts the symbol `deleted_symbol`
+        """
+        super().__init__(language, rel_path)
+        self.rel_symbol = rel_symbol
+        self.deleted_symbol = deleted_symbol
+        self.rel_path = rel_path
+        self.insertion = insertion
+
+    def _apply_edit(self, code_editor: CodeEditor) -> None:
+        code_editor.insert_after_symbol(self.rel_symbol, self.rel_path, self.insertion)
+        code_editor.delete_symbol(self.deleted_symbol, self.rel_path)
+
+    def _test_diff(self, code_diff: CodeDiff, snapshot: SnapshotAssertion | None) -> None:
+        assert not code_diff.has_changes
+
+
+def test_insert_and_delete_no_change():
+    """
+    Tests that inserting and immediately deleting a symbol results in no change to the file content.
+    """
+    insertion = "    def inserted_function():\n        pass"
+    test_case = InsertAndDeleteSymbolTest(
+        Language.PYTHON,
+        PYTHON_TEST_REL_FILE_PATH,
+        "VariableContainer/modify_instance_var",
+        "VariableContainer/inserted_function",
+        insertion,
+    )
+    test_case.run_test(None)
 
 
 # ===== VUE WRITE OPERATIONS TESTS =====

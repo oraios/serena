@@ -1,16 +1,15 @@
 import os
-import shutil
 
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
-from test.conftest import is_ci
+from test.conftest import language_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
-@pytest.mark.skipif(shutil.which("opam") is None and not is_ci, reason="OPAM is not available")
+@pytest.mark.skipif(not language_tests_enabled(Language.OCAML), reason="OCaml tests are disabled (opam not available)")
 @pytest.mark.ocaml
 class TestOCamlLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)

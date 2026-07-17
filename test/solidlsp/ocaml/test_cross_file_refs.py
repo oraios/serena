@@ -14,10 +14,12 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.language_servers.ocaml_lsp_server import OcamlLanguageServer
 from solidlsp.ls_config import Language
+from test.conftest import language_tests_enabled
 
 log = logging.getLogger(__name__)
 
 
+@pytest.mark.skipif(not language_tests_enabled(Language.OCAML), reason="OCaml tests are disabled (opam not available)")
 @pytest.mark.ocaml
 class TestCrossFileReferences:
     @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)

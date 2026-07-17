@@ -18,8 +18,7 @@ from overrides import override
 
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_utils import FileUtils, PathUtils
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.ls_utils import FileUtils
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -208,12 +207,10 @@ class TaploServer(SolidLanguageServer):
                     f"Failed to download Taplo from {download_url}. Try installing manually: cargo install taplo-cli --locked"
                 ) from e
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Taplo Language Server.
         """
-        root_uri = PathUtils.path_to_uri(repository_absolute_path)
         initialize_params = {
             "locale": "en",
             "capabilities": {
@@ -236,17 +233,8 @@ class TaploServer(SolidLanguageServer):
                     "symbol": {"dynamicRegistration": True},
                 },
             },
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
         }
-        return initialize_params  # type: ignore
+        return initialize_params
 
     def _start_server(self) -> None:
         """
@@ -269,7 +257,7 @@ class TaploServer(SolidLanguageServer):
 
         log.info("Starting Taplo server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request to Taplo server")
         init_response = self.server.send.initialize(initialize_params)

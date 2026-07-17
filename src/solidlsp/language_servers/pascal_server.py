@@ -49,10 +49,10 @@ import hashlib
 import json
 import logging
 import os
-import pathlib
 import platform
 import shutil
 import tarfile
+import tempfile
 import threading
 import time
 import urllib.error
@@ -63,7 +63,6 @@ import zipfile
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection, quote_windows_path
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -535,7 +534,7 @@ class PascalLanguageServer(SolidLanguageServer):
         """Atomic update: download -> verify checksum -> extract -> replace."""
         temp_dir = pasls_dir + ".tmp"
         backup_dir = pasls_dir + ".backup"
-        temp_archive_dir = os.path.join(os.path.expanduser("~"), "solidlsp_tmp")
+        temp_archive_dir = tempfile.mkdtemp(prefix="solidlsp_")
 
         try:
             dep = deps.get_single_dep_for_current_platform()
@@ -548,8 +547,6 @@ class PascalLanguageServer(SolidLanguageServer):
             # 1. Clean up any existing temp directory
             if os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir)
-            os.makedirs(temp_archive_dir, exist_ok=True)
-
             # 2. Download archive
             log.info(f"Downloading pasls archive: {archive_filename}")
             if not cls._download_archive(dep.url, archive_path):
@@ -605,11 +602,7 @@ class PascalLanguageServer(SolidLanguageServer):
                         shutil.copytree(backup_meta, target_meta)
 
             # 9. Clean up downloaded archive and temp directory
-            try:
-                os.remove(archive_path)
-                os.rmdir(temp_archive_dir)
-            except OSError:
-                pass
+            shutil.rmtree(temp_archive_dir, ignore_errors=True)
 
             log.info("pasls installation completed successfully")
             return True
@@ -625,12 +618,13 @@ class PascalLanguageServer(SolidLanguageServer):
                 except Exception as rollback_error:
                     log.error(f"Rollback failed: {rollback_error}")
 
-            # Clean up temp directory
+            # Clean up temp directories
             if os.path.exists(temp_dir):
                 try:
                     shutil.rmtree(temp_dir)
                 except Exception:
                     pass
+            shutil.rmtree(temp_archive_dir, ignore_errors=True)
 
             return False
 
@@ -781,8 +775,7 @@ class PascalLanguageServer(SolidLanguageServer):
         log.info(f"Using pasls at: {pasls_executable_path}")
         return quote_windows_path(pasls_executable_path)
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Pascal Language Server.
 
@@ -792,8 +785,6 @@ class PascalLanguageServer(SolidLanguageServer):
 
         We only pass target OS/CPU in initializationOptions if explicitly set.
         """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
-
         # Build initializationOptions from environment variables
         # pasls reads these to configure CodeTools:
         # - PP: Path to FPC compiler executable
@@ -885,18 +876,9 @@ class PascalLanguageServer(SolidLanguageServer):
                 },
             },
             "initializationOptions": initialization_options,
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
         }
 
-        return initialize_params  # type: ignore
+        return initialize_params
 
     def _start_server(self) -> None:
         """
@@ -930,7 +912,7 @@ class PascalLanguageServer(SolidLanguageServer):
 
         log.info("Starting Pascal server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)

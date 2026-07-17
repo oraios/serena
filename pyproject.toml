@@ -4,7 +4,7 @@ requires = ["hatchling"]
 
 [project]
 name = "serena-agent"
-version = "1.2.0"
+version = "1.6.1.dev0"
 description = "A powerful MCP toolkit for coding, providing semantic retrieval and editing capabilities - the IDE for your agent"
 authors = [{ name = "Oraios AI", email = "info@oraios-ai.de" }]
 readme = "README.md"
@@ -18,11 +18,9 @@ classifiers = [
 ]
 dependencies = [
   "requests==2.33.0",
-  "pyright==1.1.403",
-  "fortls==3.2.2",
   "overrides==7.7.0",
   "python-dotenv==1.2.2",
-  "mcp==1.27.0",
+  "mcp==1.28.1",
   "flask==3.1.3", # bumped from 3.1.1 for CVE fix (also fixes werkzeug alert)
   "sensai-utils==1.5.0",
   "pydantic==2.12.5",
@@ -45,14 +43,15 @@ dependencies = [
   "lsprotocol==2025.0.0",
   # Transitive deps pinned for security (dependabot alerts).
   # Exact pins because uvx installs from git, ignoring the lock file.
-  "urllib3==2.6.3",
+  "urllib3==2.7.0",
   "werkzeug==3.1.7",
-  "starlette==1.0.0",
-  "python-multipart==0.0.26",
+  "starlette==1.3.1",
+  "python-multipart==0.0.31",
   "filelock==3.25.2",
-  "cryptography==46.0.7",
+  "cryptography==48.0.1",
   "regex==2026.2.28",
-  "pythonnet==3.1.0-rc0 ; sys_platform == 'win32'",
+  "pythonnet==3.1.0 ; sys_platform == 'win32'",
+  "oslex==2.0.0",
 ]
 
 
@@ -64,6 +63,7 @@ explicit = true
 
 [project.scripts]
 serena = "serena.cli:top_level"
+serena-agent = "serena.cli:top_level"
 serena-hooks = "serena.hooks:hook_commands"
 
 [project.license]
@@ -73,7 +73,7 @@ text = "MIT"
 dev = [
   "jinja2==3.1.6",
   # In version 1.0.4 we get a NoneType error related to some config conversion (yml_analytics is None and should be a list)
-  "mypy==1.17.0",
+  "ty==0.0.24",
   "poethepoet==0.36.0",
   "pytest==8.4.1",
   "pytest-xdist==3.8.0",
@@ -92,12 +92,12 @@ dev = [
   "pytest-timeout==2.4.0",
   # Transitive dev deps pinned for security (dependabot alerts).
   # Exact pins because uvx installs from git, ignoring the lock file.
-  "tornado==6.5.5",
+  "tornado==6.5.7",
   "wheel==0.46.3",
   "pyasn1==0.6.3",
   "PyJWT==2.12.0",
 ]
-agno = ["agno==2.5.10", "sqlalchemy==2.0.41"]  # agno bumped for session state overwrite CVE
+agno = ["agno==2.6.6", "sqlalchemy==2.0.41"]  # agno bumped for session state overwrite CVE
 google = ["google-genai==1.27.0"]
 
 [project.urls]
@@ -109,29 +109,47 @@ packages = ["src/serena", "src/interprompt", "src/solidlsp"]
 [tool.doc8]
 max-line-length = 1000
 
-[tool.mypy]
-allow_redefinition = true
-check_untyped_defs = true
-disallow_incomplete_defs = true
-disallow_untyped_defs = true
-ignore_missing_imports = true
-no_implicit_optional = true
-pretty = true
-show_error_codes = true
-show_error_context = true
-show_traceback = true
-strict_equality = true
-strict_optional = true
-warn_no_return = true
-warn_redundant_casts = true
-warn_unreachable = true
-warn_unused_configs = true
-warn_unused_ignores = false
-exclude = "^build/|^docs/|^test/resources/"
+[tool.ty.environment]
+python-version = "3.11"
+# Analyze for all platforms rather than defaulting to the OS ty happens to run on. This keeps the
+# check deterministic across the CI matrix (Linux/Windows/macOS) and lets platform-conditional stdlib
+# members (e.g. subprocess.CREATE_NO_WINDOW, ctypes.windll, pwd) resolve without per-OS type-ignores.
+python-platform = "all"
 
-[[tool.mypy.overrides]]
-module = "test.*"
-disallow_untyped_defs = false  # untyped defs are OK in tests
+[tool.ty.rules]
+# Mirror mypy's ignore_missing_imports=true: optional extras (e.g. agno, google-genai) and
+# platform-specific modules (e.g. AppKit on macOS) are not installed in the default dev environment,
+# so we do not want unresolvable imports to fail the type check.
+unresolved-import = "ignore"
+possibly-missing-submodule = "ignore"
+
+[tool.ty.src]
+# NOTE: test/resources is intentionally NOT excluded here. This config is also discovered by the ty
+# language server (used by the PYTHON_TY diagnostics provider) when it analyzes the sample fixture
+# repos under test/resources; excluding them here would suppress the diagnostics those tests rely on.
+# test/resources is instead excluded from the `ty check test` CLI task via its --exclude flag.
+exclude = ["build/", "docs/"]
+
+[[tool.ty.overrides]]
+# Test code is heavily dynamic (pytest fixtures, MagicMock, intentionally loose Optionals). ty models
+# pytest's fail/skip helpers and MagicMock far more strictly than mypy did (mypy inferred `Any` for
+# these), which produces hundreds of diagnostics that are not real bugs. We therefore relax these
+# specific type rules for tests only, while still catching genuinely broken test code (undefined
+# names, syntax errors, unused type-ignore comments, etc.). The sample fixture repos under
+# test/resources are excluded so the ty language server still reports real diagnostics on them.
+include = ["test/**"]
+exclude = ["test/resources/"]
+
+[tool.ty.overrides.rules]
+invalid-argument-type = "ignore"
+invalid-key = "ignore"
+invalid-return-type = "ignore"
+no-matching-overload = "ignore"
+not-subscriptable = "ignore"
+parameter-already-assigned = "ignore"
+too-many-positional-arguments = "ignore"
+unresolved-attribute = "ignore"
+unsupported-operator = "ignore"
 
 [tool.poe.env]
 PYDEVD_DISABLE_FILE_VALIDATION = "1"
@@ -144,9 +162,7 @@ PYDEVD_DISABLE_FILE_VALIDATION = "1"
 type = "simple"
 
 [tool.poe.tasks]
-# Uses PYTEST_MARKERS env var for default markers
-# For custom markers, one can either adjust the env var or just use -m option in the command line,
-# as the second -m option will override the first one.
+# For custom markers, use poe test -m ...
 test = "pytest test -vv"
 _ruff_check = "ruff check src scripts test"
 _ruff_format_check = "ruff format --check src scripts test"
@@ -154,9 +170,10 @@ _ruff_fix = "ruff check --fix src scripts test"
 _ruff_format = "ruff format src scripts test"
 lint = ["_ruff_format_check", "_ruff_check"]
 format = ["_ruff_fix", "_ruff_format"]
-_mypy_core = "mypy src/serena src/solidlsp"
-_mypy_test = "mypy --disable-error-code no-untyped-def test"
-type-check = ["_mypy_core", "_mypy_test"]
+_ty_core = "ty check src/serena src/solidlsp"
+_ty_test = "ty check test --exclude test/resources"
+type-check = ["_ty_core", "_ty_test"]
+ty = ["type-check"]
 # docs
 _autogen_docs = "python docs/autogen_docs.py"
 _sphinx_build = "sphinx-build -b html docs docs/_build -W --keep-going"
@@ -284,6 +301,7 @@ ignore = [
   "UP042",    # wants str,Enum -> StrEnum (breaking change)
   "PLW0108",  # unnecessary lambda (style preference)
   "PLC0207",  # split vs rsplit optimization (style preference)
+  "RSE102",   # wants to force use of raise with class instead of instance (style preference)
 ]
 unfixable = ["F841", "F601", "F602", "B018"]
 extend-fixable = ["F401", "B905", "W291"]
@@ -294,12 +312,16 @@ max-complexity = 20
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D103"]
 "scripts/**" = ["D103"]
+# BSL integration tests deliberately contain Cyrillic identifiers (1C:Enterprise metadata
+# object names and procedure names). ruff's ambiguous-unicode rules flag every such char.
+"test/solidlsp/bsl/**" = ["RUF001", "RUF002", "RUF003"]
 
 [tool.pytest.ini_options]
 addopts = "--snapshot-patch-pycharm-diff"
 markers = [
   "clojure: language server running for Clojure",
   "crystal: language server running for Crystal",
+  "cue: language server running for CUE",
   "python: language server running for Python",
   "go: language server running for Go",
   "java: language server running for Java",
@@ -307,6 +329,7 @@ markers = [
   "groovy: language server running for Groovy",
   "rust: language server running for Rust",
   "typescript: language server running for TypeScript",
+  "svelte: language server running for Svelte (uses svelte-language-server)",
   "vue: language server running for Vue (uses TypeScript LSP)",
   "php: language server running for PHP",
   "perl: language server running for Perl",
@@ -331,6 +354,7 @@ markers = [
   "fsharp: language server running for F#",
   "rego: language server running for Rego",
   "markdown: language server running for Markdown",
+  "latex: language server running for LaTeX",
   "julia: Julia language server tests",
   "fortran: language server running for Fortran",
   "haskell: Haskell language server tests",
@@ -349,14 +373,19 @@ markers = [
   "solidity: language server running for Solidity (uses @nomicfoundation/solidity-language-server)",
   "ansible: language server running for Ansible (uses @ansible/ansible-language-server)",
   "msl: language server running for mSL (mIRC Scripting Language)",
+  "bsl: language server running for BSL (1C:Enterprise / OneScript)",
   "html: language server running for HTML (vscode-html-language-server, used as companion by Angular)",
   "scss: language server running for SCSS / Sass / CSS (some-sass-language-server)",
   "angular: language server running for Angular (uses @angular/language-server + @angular/language-service tsserver plugin)",
+  "ada: language server running for Ada / SPARK (uses AdaCore Ada Language Server)",
+  "qml: language server running for QML (uses Qt's qmlls)",
 ]
 
 [tool.codespell]
 # Ref: https://github.com/codespell-project/codespell#using-a-config-file
-skip = '.git*,*.svg,*.lock,*.min.*'
+# We skip third-party test fixture repositories entirely (they contain
+# external package lockfiles, minified code, and arbitrary dependency strings).
+skip = '.git*,*.svg,*.lock,*.min.*,*test_memories_manager.py,./test/resources/repos'
 check-hidden = true
 ignore-regex = '\.\w+'
-ignore-words-list = 'paket'
+ignore-words-list = 'paket,EDN,als,ue'

@@ -27,7 +27,7 @@ from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_types import Location
 from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler import lsp_types
-from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, ExecuteCommandParams, InitializeParams, SymbolInformation
+from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, ExecuteCommandParams, SymbolInformation
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -121,8 +121,8 @@ class VueTypeScriptServer(TypeScriptLanguageServer):
         )
 
     @override
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
-        params = super()._get_initialize_params(repository_absolute_path)
+    def _create_base_initialize_params(self) -> dict:
+        params = super()._create_base_initialize_params()
 
         params["initializationOptions"] = {
             "plugins": [
@@ -344,7 +344,7 @@ class VueLanguageServer(SolidLanguageServer):
                     continue
 
                 new_item: dict = {}
-                new_item.update(item)  # type: ignore[arg-type]
+                new_item.update(item)
                 new_item["absolutePath"] = str(abs_path)
                 new_item["relativePath"] = str(rel_path)
                 result.append(ls_types.Location(**new_item))  # type: ignore
@@ -390,7 +390,7 @@ class VueLanguageServer(SolidLanguageServer):
                     log.debug(f"Skipping invalid location item: {item}")
                     continue
 
-                abs_path = PathUtils.uri_to_path(item["uri"])  # type: ignore[arg-type]
+                abs_path = PathUtils.uri_to_path(item["uri"])
                 if not Path(abs_path).is_relative_to(self.repository_root_path):
                     log.warning(f"Found file reference outside repository: {abs_path}, skipping")
                     continue
@@ -401,7 +401,7 @@ class VueLanguageServer(SolidLanguageServer):
                     continue
 
                 new_item: dict = {}
-                new_item.update(item)  # type: ignore[arg-type]
+                new_item.update(item)
                 new_item["absolutePath"] = str(abs_path)
                 new_item["relativePath"] = str(rel_path)
                 ret.append(Location(**new_item))  # type: ignore
@@ -617,8 +617,7 @@ class VueLanguageServer(SolidLanguageServer):
 
         return [vue_executable_path, "--stdio"], tsdk_path, ts_ls_executable_path
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+    def _create_base_initialize_params(self) -> dict:
         initialize_params = {
             "locale": "en",
             "capabilities": {
@@ -644,15 +643,6 @@ class VueLanguageServer(SolidLanguageServer):
                     "symbol": {"dynamicRegistration": True},
                 },
             },
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
             "initializationOptions": {
                 "vue": {
                     "hybridMode": True,
@@ -662,7 +652,7 @@ class VueLanguageServer(SolidLanguageServer):
                 },
             },
         }
-        return initialize_params  # type: ignore
+        return initialize_params
 
     def _start_typescript_server(self) -> None:
         try:
@@ -811,7 +801,7 @@ class VueLanguageServer(SolidLanguageServer):
 
         log.info("Starting Vue server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)

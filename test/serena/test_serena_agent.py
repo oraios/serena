@@ -26,6 +26,7 @@ from serena.tools import (
     GetDiagnosticsForFileTool,
     InitialInstructionsTool,
     ReplaceContentTool,
+    ReplaceInFilesTool,
     ReplaceSymbolBodyTool,
     SafeDeleteSymbol,
     Tool,
@@ -36,7 +37,6 @@ from test.conftest import (
     find_identifier_pos,
     get_pytest_markers,
     get_repo_path,
-    is_ci,
     language_tests_enabled,
 )
 
@@ -47,7 +47,7 @@ class BaseCase:
     id: str
 
     def to_pytest_param(self, *marks: MarkDecorator | Mark) -> ParameterSet:
-        return pytest.param(self.language, self, marks=[*get_pytest_markers(self.language), *marks], id=self.id)  # type: ignore
+        return pytest.param(self.language, self, marks=[*get_pytest_markers(self.language), *marks], id=self.id)
 
 
 @dataclass
@@ -517,6 +517,9 @@ FIND_SYMBOL_REFERENCES_CASES = [
     FindSymbolCase(
         language=Language.RUST, id="rust_add_function", symbol_name="add", expected_kind="Function", expected_file="lib.rs"
     ).to_pytest_param(),
+    FindSymbolCase(
+        language=Language.LATEX, id="latex_methods_section", symbol_name="Methods", expected_kind="Module", expected_file="main.tex"
+    ).to_pytest_param(),
 ]
 
 FIND_REFERENCE_CASES = [
@@ -597,6 +600,13 @@ FIND_REFERENCE_CASES = [
     ).to_pytest_param(
         pytest.mark.xfail(reason="F# language server is unreliable"),  # See issue #1040
     ),
+    FindReferenceCase(
+        language=Language.LATEX,
+        id="latex_background_refs",
+        symbol_name="Background",
+        definition_file="sections/background.tex",
+        reference_file="main.tex",
+    ).to_pytest_param(),
 ]
 
 FIND_DEFINING_SYMBOL_REGEX_ERROR_CASES = [
@@ -715,9 +725,7 @@ SAFE_DELETE_BLOCKED_CASES = [
         id="kotlin_model",
         name_path="Model",
         relative_path=os.path.join("src", "main", "kotlin", "test_repo", "Model.kt"),
-    ).to_pytest_param(
-        *([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
-    ),
+    ).to_pytest_param(),
     SafeDeleteCase(
         language=Language.TYPESCRIPT,
         id="typescript_helper_function",
@@ -744,9 +752,7 @@ SAFE_DELETE_SUCCEEDS_CASES = [
         id="kotlin_model_user",
         name_path="ModelUser",
         relative_path=os.path.join("src", "main", "kotlin", "test_repo", "ModelUser.kt"),
-    ).to_pytest_param(
-        *([pytest.mark.skip(reason="Kotlin LSP JVM crashes on restart in CI")] if is_ci else []),
-    ),
+    ).to_pytest_param(),
     SafeDeleteCase(
         language=Language.TYPESCRIPT,
         id="typescript_unused_standalone_function",
@@ -758,7 +764,7 @@ SAFE_DELETE_SUCCEEDS_CASES = [
 
 @pytest.fixture
 def serena_config():
-    config = SerenaConfig(gui_log_window=False, web_dashboard=False, log_level=logging.ERROR)
+    config = SerenaConfig(log_level=logging.ERROR).with_headless_mode_overrides()
 
     # Create test projects for all supported languages
     test_projects = []
@@ -779,6 +785,7 @@ def serena_config():
         Language.HAXE,
         Language.LEAN4,
         Language.MSL,
+        Language.LATEX,
     ]:
         repo_path = get_repo_path(language)
         if repo_path.exists():
@@ -867,7 +874,7 @@ class TestSerenaAgent:
           * an invalid project path is specified at startup
         All cases must not raise an exception.
         """
-        serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False)
+        serena_config = SerenaConfig().with_headless_mode_overrides()
         SerenaAgent(project=project, serena_config=serena_config)
 
     def _symbol_matches_expected_name(self, symbol: dict, expected_name: str) -> bool:
@@ -1163,6 +1170,57 @@ class TestSerenaAgent:
     @pytest.mark.parametrize(
         "serena_agent",
         [
+            pytest.param(Language.PYTHON, marks=get_pytest_markers(Language.PYTHON), id="python_replace_in_files"),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_replace_in_files_dry_run_then_selective_apply(self, serena_agent: SerenaAgent):
+        """A dry run lists every occurrence as a diff with an id and modifies nothing; a follow-up call
+        restricted to one of the ids replaces exactly that occurrence.
+        """
+        relative_path = os.path.join("test_repo", "models.py")
+        needle = "name: str | None = None"
+        repl = "name: str | None = MARKER_DEFAULT"
+        tool = serena_agent.get_tool(ReplaceInFilesTool)
+        with project_file_modification_context(serena_agent, relative_path):
+            original_content = read_project_file(serena_agent.get_active_project(), relative_path)
+            assert original_content.count(needle) >= 2
+
+            listing = tool.apply(needle=needle, repl=repl, mode="literal", relative_path=relative_path, dry_run=True)
+            assert "DRY RUN" in listing
+            occurrence_ids = re.findall(r"\[([^\[\]]+:\d+@[0-9a-f]{6})\]", listing)
+            assert len(occurrence_ids) == original_content.count(needle)
+            assert read_project_file(serena_agent.get_active_project(), relative_path) == original_content
+
+            result = tool.apply(needle=needle, repl=repl, mode="literal", relative_path=relative_path, occurrence_ids=[occurrence_ids[0]])
+            assert "Replaced 1 occurrence(s) in 1 file(s)" in result
+            new_content = read_project_file(serena_agent.get_active_project(), relative_path)
+            assert new_content.count("MARKER_DEFAULT") == 1
+
+    @pytest.mark.parametrize(
+        "serena_agent",
+        [
+            pytest.param(Language.PYTHON, marks=get_pytest_markers(Language.PYTHON), id="python_replace_in_files_guard"),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_replace_in_files_expected_count_guard_returns_listing(self, serena_agent: SerenaAgent):
+        """A blind call with a wrong expected_count must change nothing and return the prospective
+        changes (the failed guard doubles as a dry run).
+        """
+        relative_path = os.path.join("test_repo", "models.py")
+        needle = "name: str | None = None"
+        tool = serena_agent.get_tool(ReplaceInFilesTool)
+        with project_file_modification_context(serena_agent, relative_path):
+            original_content = read_project_file(serena_agent.get_active_project(), relative_path)
+            with pytest.raises(ValueError, match="NO changes were applied") as exc_info:
+                tool.apply(needle=needle, repl="X", mode="literal", relative_path=relative_path, expected_count=1)
+            assert re.search(r"\[[^\[\]]+:\d+@[0-9a-f]{6}\]", str(exc_info.value))  # the listing with ids is included
+            assert read_project_file(serena_agent.get_active_project(), relative_path) == original_content
+
+    @pytest.mark.parametrize(
+        "serena_agent",
+        [
             pytest.param(Language.PYTHON, marks=get_pytest_markers(Language.PYTHON), id="python_services"),
             pytest.param(Language.PYTHON_TY, marks=get_pytest_markers(Language.PYTHON_TY), id="python_ty_services"),
         ],
@@ -1284,7 +1342,7 @@ class TestPromptProvision:
 
     @classmethod
     def _call_tool(cls, agent: SerenaAgent, tool_class: type[Tool], session_id: str = "global", **kwargs) -> str:
-        result = agent.get_tool(tool_class).apply_ex(mcp_ctx=cls.MockContext(session_id), **kwargs)  # type: ignore
+        result = agent.get_tool(tool_class).apply_ex(mcp_ctx=cls.MockContext(session_id), **kwargs)
         return result
 
     @staticmethod

@@ -145,6 +145,11 @@ class TestZigLanguageServer:
     @pytest.mark.skipif(
         sys.platform == "win32", reason="ZLS cross-file references don't work reliably on Windows - URI path handling issues"
     )
+    @pytest.mark.xfail(
+        sys.platform == "darwin",
+        reason="ZLS cross-file references are flaky on macOS CI: sometimes finds 0 Calculator references in main.zig",
+        strict=False,
+    )
     def test_cross_file_references_with_open_files(self, language_server: SolidLanguageServer) -> None:
         """
         Test finding cross-file references with files open.

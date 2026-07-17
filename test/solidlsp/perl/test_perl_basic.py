@@ -1,16 +1,19 @@
-import platform
 from pathlib import Path
 
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.conftest import language_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
+pytestmark = pytest.mark.skipif(
+    not language_tests_enabled(Language.PERL), reason="Perl tests are disabled (Perl::LanguageServer not available)"
+)
+
 
 @pytest.mark.perl
-@pytest.mark.skipif(platform.system() == "Windows", reason="Perl::LanguageServer does not support native Windows operation")
 class TestPerlLanguageServer:
     """
     Tests for Perl::LanguageServer integration.
@@ -76,6 +79,14 @@ class TestPerlLanguageServer:
         main_pl_lines = sorted([ref["range"]["start"]["line"] for ref in main_pl_refs])
         assert 17 in main_pl_lines, f"Expected reference at line 18 (0-indexed 17), found: {main_pl_lines}"
         assert 20 in main_pl_lines, f"Expected reference at line 21 (0-indexed 20), found: {main_pl_lines}"
+
+    @pytest.mark.parametrize("language_server", [Language.PERL], indirect=True)
+    def test_find_references_includes_t_files(self, language_server: SolidLanguageServer) -> None:
+        """References to a .pm/.pl sub must surface callers in .t test files (fileFilter includes .t)."""
+        reference_locations = language_server.request_references("helper.pl", 4, 5)
+
+        t_refs = [ref for ref in reference_locations if ref["uri"].endswith(".t")]
+        assert t_refs, f"Expected at least one reference in a .t file, got: {[r['uri'] for r in reference_locations]}"
 
     @pytest.mark.parametrize("language_server", [Language.PERL], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:

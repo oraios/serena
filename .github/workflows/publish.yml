@@ -1,10 +1,9 @@
 name: Publish Python Package
 
 on:
-  push:
-    # Sequence of patterns matched against refs/tags
-    tags:
-      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+  release:
+    types:
+      - published
 
 jobs:
   publish:
@@ -12,11 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write  # Required for trusted publishing
-      contents: write  # Required for the GH release
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.release.tag_name }}
           persist-credentials: false
 
       - name: Install the latest version of uv
@@ -27,11 +26,5 @@ jobs:
       - name: Build package
         run: uv build
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          files: |
-            dist/*.tar.gz
-            dist/*.whl
-      - name: Publish to PyPI (conditional)
+      - name: Publish to PyPI
         run: uv publish

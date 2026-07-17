@@ -20,7 +20,7 @@ to be provided manually, this is mentioned in the notes below the respective lan
 
 With `uv` installed and on your PATH, install Serena with this command:
 
-    uv tool install -p 3.13 serena-agent@latest --prerelease=allow
+    uv tool install -p 3.13 serena-agent
 
 Upon completion, the command `serena` should be available in your terminal.
 
@@ -37,7 +37,7 @@ Note that you can switch backends at any time via Serena's [configuration](050_c
 
 To update Serena to the latest version, run:
 
-    uv tool upgrade serena-agent --prerelease=allow
+    uv tool upgrade serena-agent
 
 :::{tip}
 To keep informed about updates, make sure you regularly open [Serena's Dashboard](060_dashboard),

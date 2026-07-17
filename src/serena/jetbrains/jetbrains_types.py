@@ -6,6 +6,14 @@ Prefix used for in relative paths of symbols that are from external libraries (i
 """
 
 
+def is_external_path(relative_path: str):
+    """
+    :param relative_path: a relative path (e.g., from a symbol's `relative_path` field)
+    :return: whether the path is an external path (i.e., from a library, not the user's codebase)
+    """
+    return relative_path.startswith(JB_EXTERNAL_FILE_PREFIX)
+
+
 class PluginStatusDTO(TypedDict):
     project_root: str
     plugin_version: str
@@ -89,22 +97,6 @@ class TypeHierarchyNodeDTO(TypedDict):
 class TypeHierarchyResponse(TypedDict):
     hierarchy: NotRequired[list[TypeHierarchyNodeDTO]]
     num_levels_not_included: NotRequired[int]
-
-
-class InspectionResultDTO(TypedDict):
-    inspection_name: str
-    severity: str
-    message: str
-    relative_path: str
-    start_line: int
-    end_line: int
-    start_col: NotRequired[int]
-    end_col: NotRequired[int]
-    quick_fix_available: NotRequired[bool]
-
-
-class RunInspectionsResponse(TypedDict):
-    inspections: list[InspectionResultDTO]
 
 
 class InspectionInfoDTO(TypedDict):

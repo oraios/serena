@@ -15,10 +15,10 @@ from serena.util.git import get_git_status
 log = logging.getLogger(__name__)
 
 VersionPart = Literal["major", "minor", "patch"]
-_VERSION_PATTERN = re.compile(r"^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)$")
-_INIT_VERSION_PATTERN = re.compile(r'^(?P<before>__version__\s*=\s*")(?P<version>\d+\.\d+\.\d+)(?P<after>"\s*)$', re.MULTILINE)
+_VERSION_PATTERN = re.compile(r"^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(\.\w+)?$")
+_INIT_VERSION_PATTERN = re.compile(r'^(?P<before>__version__\s*=\s*")(?P<version>\d+\.\d+\.\d+(?:\.\w+)?)(?P<after>"\s*)$', re.MULTILINE)
 _PYPROJECT_VERSION_PATTERN = re.compile(
-    r'(?m)^(?P<before>\[project\]\n(?:.*\n)*?^version\s*=\s*")(?P<version>\d+\.\d+\.\d+)(?P<after>"\s*)$'
+    r'(?m)^(?P<before>\[project\]\n(?:.*\n)*?^version\s*=\s*")(?P<version>\d+\.\d+\.\d+(?:\.\w+)?)(?P<after>"\s*)$'
 )
 _UNRELEASED_HEADER = "# Unreleased (main)\n"
 
@@ -35,21 +35,46 @@ def bump_version(major: bool, minor: bool, patch: bool, target_version: str | No
         raise click.ClickException("Working directory is not clean. Please commit or stash your changes first.")
 
     log.info("bump_version called: major=%s, minor=%s, patch=%s, target_version=%s", major, minor, patch, target_version)
+
+    # determine part to bump
     version_part = resolve_version_selection(major=major, minor=minor, patch=patch, target_version=target_version)
     log.info("Resolved version_part=%s", version_part)
 
+    # bump it (never incrementing patch because it was already updated with the last .dev version)
     repo_root = find_repo_root()
     log.info("Repo root: %s", repo_root)
-    new_version = bump_repo_version(repo_root, version_part=version_part, target_version=target_version, dry_run=dry_run)
+    new_version = bump_repo_version(
+        repo_root, version_part=version_part, target_version=target_version, dry_run=dry_run, increment_patch=False
+    )
     log.info("New version: %s", new_version)
+
+    # commit and tag for new version
     if dry_run:
         click.echo(f"Dry run complete. Version would be bumped to {new_version}")
+        return
     else:
         os.system("uv lock")
         click.echo(f"Bumped version to {new_version}")
         os.system("git add -u")
         os.system(f'git commit -m "Release v{new_version}"')
         os.system(f"git tag v{new_version}")
+
+    # bump patch and add suffix for next dev iteration
+    new_snapshot_version = bump_repo_version(
+        repo_root,
+        version_part="patch",
+        target_version=None,
+        dry_run=dry_run,
+        target_version_suffix=".dev0",
+        increment_patch=True,
+    )
+    log.info("New snapshot version: %s", new_snapshot_version)
+
+    # commit the new snapshot version
+    os.system("uv lock")
+    click.echo(f"Bumped version to {new_snapshot_version}")
+    os.system("git add -u")
+    os.system(f'git commit -m "Set version to v{new_snapshot_version}"')
 
 
 def find_repo_root() -> Path:
@@ -74,7 +99,15 @@ def resolve_version_selection(*, major: bool, minor: bool, patch: bool, target_v
     raise click.ClickException("No version bump selected. Use --major, --minor, --patch or --version.")
 
 
-def bump_repo_version(repo_root: Path, *, version_part: VersionPart | None, target_version: str | None, dry_run: bool = False) -> str:
+def bump_repo_version(
+    repo_root: Path,
+    *,
+    version_part: VersionPart | None,
+    target_version: str | None,
+    dry_run: bool = False,
+    target_version_suffix: str | None = None,
+    increment_patch: bool = True,
+) -> str:
     pyproject_path = repo_root / "pyproject.toml"
     init_path = repo_root / "src" / "serena" / "__init__.py"
     changelog_path = repo_root / "CHANGELOG.md"
@@ -100,18 +133,23 @@ def bump_repo_version(repo_root: Path, *, version_part: VersionPart | None, targ
     else:
         if version_part is None:
             raise click.ClickException("No version target specified.")
-        new_version = increment_version(current_version, version_part)
+        new_version = increment_version(current_version, version_part, increment_patch=increment_patch)
+    if target_version_suffix is not None:
+        new_version += target_version_suffix
     log.info("New version will be: %s", new_version)
 
     new_pyproject_text = replace_version(pyproject_text, _PYPROJECT_VERSION_PATTERN, new_version, "pyproject.toml")
     new_init_text = replace_version(init_text, _INIT_VERSION_PATTERN, new_version, "src/serena/__init__.py")
-    new_changelog_text = update_changelog(changelog_text, new_version)
 
     file_changes: list[tuple[Path, str, str]] = [
         (pyproject_path, pyproject_text, new_pyproject_text),
         (init_path, init_text, new_init_text),
-        (changelog_path, changelog_text, new_changelog_text),
     ]
+
+    # update changelog only for actual releases (not -dev versions with suffixes)
+    if target_version_suffix is None:
+        new_changelog_text = update_changelog(changelog_text, new_version)
+        file_changes.append((changelog_path, changelog_text, new_changelog_text))
 
     if dry_run:
         for path, old, new in file_changes:
@@ -139,6 +177,13 @@ def _print_diff(old: str, new: str) -> None:
 
 
 def extract_version(text: str, pattern: re.Pattern[str], file_label: str) -> str:
+    """
+    Extracts the core version Major.Minor.Patch in the given text
+    :param text:
+    :param pattern: the pattern to search for
+    :param file_label: file reference for error messages
+    :return: the core version
+    """
     match = pattern.search(text)
     if match is None:
         raise click.ClickException(f"Could not find version in {file_label}.")
@@ -152,7 +197,7 @@ def replace_version(text: str, pattern: re.Pattern[str], new_version: str, file_
     return f"{text[: match.start('version')]}{new_version}{text[match.end('version') :]}"
 
 
-def increment_version(version: str, version_part: VersionPart) -> str:
+def increment_version(version: str, version_part: VersionPart, increment_patch: bool) -> str:
     match = _VERSION_PATTERN.fullmatch(version)
     if match is None:
         raise click.ClickException(f"Unsupported version format: {version}")
@@ -165,7 +210,12 @@ def increment_version(version: str, version_part: VersionPart) -> str:
         return f"{major + 1}.0.0"
     if version_part == "minor":
         return f"{major}.{minor + 1}.0"
-    return f"{major}.{minor}.{patch + 1}"
+    elif version_part == "patch":
+        if increment_patch:
+            patch += 1
+        return f"{major}.{minor}.{patch}"
+    else:
+        raise ValueError(version_part)
 
 
 def validate_version_string(version: str) -> str:

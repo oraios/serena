@@ -28,6 +28,13 @@ or at least freely available for use.
 We currently provide direct, out-of-the-box support for the programming languages listed below.
 Some languages require additional installations or setup steps, as noted.
 
+* **Ada / SPARK**  
+  (uses AdaCore's [Ada Language Server (ALS)](https://github.com/AdaCore/ada_language_server),
+  automatically downloaded; supports `.ads`, `.adb`, and `.ada` files;
+  works best with a `.gpr` GNAT project file at the repository root;
+  SPARK is handled by the same server transparently — set language `ada` for both.
+  To use a pre-installed ALS (e.g. from Alire, GNAT Studio, or the VS Code Ada extension),
+  set `ls_specific_settings.ada.ls_path`.)
 * **AL**
 * **Angular**  
   (experimental; requires Node.js + npm, plus `npm install` having been run in the project root so that `@angular/core`
@@ -40,17 +47,21 @@ Some languages require additional installations or setup steps, as noted.
   semantic tokens, and validation; document symbols, workspace symbols, references, and rename
   are not supported by this version)
 * **Bash**
+* **BSL** (1C:Enterprise / OneScript)  
+  (requires Java 21+ on PATH; uses [bsl-language-server](https://github.com/1c-syntax/bsl-language-server) by 1c-syntax; the JAR is auto-downloaded and SHA-256-verified for the bundled default version; supports `.bsl` and `.os` files; configure optional `ls_path` or `bsl_ls_version` under `ls_specific_settings.bsl`)
 * **C#**  
   (by default, uses the Roslyn language server (language `csharp`), requiring [.NET v10+](https://dotnet.microsoft.com/en-us/download/dotnet) and, on Windows, `pwsh` ([PowerShell 7+](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows?view=powershell-7.5));
   set language to `csharp_omnisharp` to use OmiSharp instead)
 * **C/C++**  
   (by default, uses the clangd language server (language `cpp`) but we also support ccls (language `cpp_ccls`);
   for best results, provide a `compile_commands.json` at the repository root;
-  see the [C/C++ Setup Guide](../03-special-guides/cpp_setup) for details.)
+  see the [C/C++ Setup Guide](../03-special-guides/cpp_setup) for details;
+  for Unreal Engine 5 projects, see the [Unreal Engine Setup Guide](../03-special-guides/unreal_engine_setup_guide_for_serena).)
 * **Clojure**
 * **Crystal**  
   (requires [Crystalline](https://github.com/elbywan/crystalline) language server to be installed and available on PATH;
   note: Crystalline has limited go-to-definition support and does not support find-references)
+* **CUE**
 * **Dart**
 * **Elixir**  
   (requires Elixir installation; Expert language server is downloaded automatically)
@@ -62,6 +73,10 @@ Some languages require additional installations or setup steps, as noted.
   (requires [.NET v8.0+](https://dotnet.microsoft.com/en-us/download/dotnet); uses FsAutoComplete/Ionide, which is auto-installed; for Homebrew .NET on macOS, set DOTNET_ROOT in your environment)
 * **Fortran**   
   (requires installation of fortls: `pip install fortls`)
+* **GDScript** (Godot Engine)  
+  (requires the Godot editor to be running with its built-in LSP enabled — default on port 6008;
+  Serena connects over TCP and does not launch Godot itself;
+  see the [GDScript Setup Guide](../03-special-guides/godot_gdscript_setup_guide_for_serena) for details)
 * **Go**  
   (requires installation of `gopls`)
 * **Groovy**  
@@ -83,6 +98,10 @@ Some languages require additional installations or setup steps, as noted.
 * **Julia**
 * **Kotlin**  
   (uses the pre-alpha [official kotlin LS](https://github.com/Kotlin/kotlin-lsp), some issues may appear)
+* **LaTeX**  
+  (experimental; must be explicitly enabled via language `latex`; uses [texlab](https://github.com/latex-lsp/texlab),
+  auto-downloaded as a SHA-256-verified prebuilt binary; supports `.tex`, `.bib`, `.sty`, and `.cls` files; texlab is
+  GPL-3.0 and runs as a separate downloaded process)
 * **Lean 4**  
   (requires `lean` and `lake` installed via [elan](https://github.com/leanprover/elan); uses the built-in Lean 4 LSP;
   the project must be a Lake project with `lake build` run before use)
@@ -103,8 +122,16 @@ Some languages require additional installations or setup steps, as noted.
   (requires installation of Perl::LanguageServer)
 * **PHP**  
   (by default, uses the Intelephense language server (language `php`), set `INTELEPHENSE_LICENSE_KEY` environment variable for premium features;
-  we also support [Phpactor](https://github.com/phpactor/phpactor) (language `php_phpactor`), which requires PHP 8.1+)
+  we also support [Phpactor](https://github.com/phpactor/phpactor) (language `php_phpactor`), which requires PHP 8.1+;
+  and the experimental [PHPantom](https://github.com/PHPantom-dev/phpantom_lsp) backend (language `php_phpantom`)
 * **Python**
+  (by default, uses [Pyright](https://github.com/microsoft/pyright) (language `python`);
+  alternatives: [ty](https://github.com/astral-sh/ty) (language `python_ty`),
+  [pyrefly](https://github.com/facebook/pyrefly) (language `python_pyrefly`),
+  [Jedi](https://github.com/palotas/jedi-language-server) (language `python_jedi`);
+  ty and pyrefly require `uv`/`uvx` in PATH)
+* **QML**
+  (requires Qt 6, provides `qmlls` or `qmlls6` on PATH; see the [Qt qmlls documentation](https://doc.qt.io/qt-6/qtqml-tool-qmlls.html))
 * **R**  
   (requires installation of the `languageserver` R package)
 * **Ruby**  
@@ -119,6 +146,8 @@ Some languages require additional installations or setup steps, as noted.
 * **Solidity**  
   (experimental; requires Node.js and npm; automatically installs `@nomicfoundation/solidity-language-server`;
   works best with a `foundry.toml` or `hardhat.config.js` in the project root)
+* **Svelte**
+  (requires Node.js v18+ and npm; supports `.svelte` Single File Components plus TypeScript/JavaScript files via `svelte-language-server`; a companion `typescript-language-server` + `typescript-svelte-plugin` is spawned automatically for cross-file rename, go-to-definition, and references across `.ts`/`.js` and `.svelte` files; use language `svelte` for Svelte projects instead of also enabling `typescript`)
 * **Swift**
 * **TypeScript**
 * **Vue**    

@@ -1,14 +1,12 @@
 import logging
 import os
 import shutil
-from typing import cast
 
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
-from solidlsp.ls_utils import PathUtils, PlatformUtils
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
+from solidlsp.ls_utils import PlatformUtils
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -219,17 +217,12 @@ class TerraformLS(SolidLanguageServer):
         )
         self.request_id = 0
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Terraform Language Server.
         """
-        root_uri = PathUtils.path_to_uri(repository_absolute_path)
         result = {
-            "processId": os.getpid(),
             "locale": "en",
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
             "capabilities": {
                 "textDocument": {
                     "synchronization": {"didSave": True, "dynamicRegistration": True},
@@ -243,14 +236,8 @@ class TerraformLS(SolidLanguageServer):
                 },
                 "workspace": {"workspaceFolders": True, "didChangeConfiguration": {"dynamicRegistration": True}},
             },
-            "workspaceFolders": [
-                {
-                    "name": os.path.basename(repository_absolute_path),
-                    "uri": root_uri,
-                }
-            ],
         }
-        return cast(InitializeParams, result)
+        return result
 
     def _start_server(self) -> None:
         """Start terraform-ls server process"""
@@ -271,7 +258,7 @@ class TerraformLS(SolidLanguageServer):
 
         log.info("Starting terraform-ls server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
