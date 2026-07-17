@@ -97,6 +97,13 @@ ls_additional_workspace_folders: []
 
 # list of additional paths to ignore in this project.
 # Same syntax as gitignore, so you can use * and **.
+# Important: quote patterns that start with `*`, otherwise YAML treats them as aliases.
+# Example:
+#   ignored_paths:
+#     - "examples/**"
+#     - ".worktrees/**"
+#     - "**/bin/**"
+#     - "**/obj/**"
 # Note: global ignored_paths from serena_config.yml are also applied additively.
 ignored_paths: []
 

@@ -103,6 +103,7 @@ ls_specific_settings: {}
 # list of paths to ignore across all projects.
 # Same syntax as gitignore, so you can use * and **.
 # These patterns are merged additively with each project's own ignored_paths.
+# Quote patterns that start with `*`, e.g. `"**/bin/**"`.
 ignored_paths: []
 
 # list of regex patterns which, when matched, mark a memory entry as read‑only.

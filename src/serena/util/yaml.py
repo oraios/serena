@@ -70,7 +70,17 @@ def load_yaml(path: str, comment_normalisation: YamlCommentNormalisation = YamlC
     """
     with open(path, encoding=SERENA_FILE_ENCODING) as f:
         yaml = _create_yaml(preserve_comments=True)
-        commented_map: CommentedMap | None = yaml.load(f)
+        try:
+            commented_map: CommentedMap | None = yaml.load(f)
+        except Exception as e:
+            msg = str(e)
+            if "undefined alias" in msg:
+                raise ValueError(
+                    f"Invalid YAML in {path}: values that start with `*` must be quoted. "
+                    "This often happens in `ignored_paths` when using gitignore-style globs like "
+                    '`"**/bin/**"` or `"**/obj/**"`.'
+                ) from e
+            raise
     if commented_map is None:  # ruamel returns None for empty documents, but we want an empty CommentedMap
         commented_map = CommentedMap()
     normalise_yaml_comments(commented_map, comment_normalisation)
