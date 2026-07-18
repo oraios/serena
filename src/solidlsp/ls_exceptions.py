@@ -52,6 +52,15 @@ class SolidLSPException(Exception):
         return s
 
 
+class InvalidTextLocationError(SolidLSPException):
+    """
+    Raised when a symbol's LSP range refers to a text location that does not exist
+    in the file's current line buffer, other than the well-defined whole-line-through-EOF
+    convention (end line exactly one past EOF at column 0), which is corrected rather
+    than rejected.
+    """
+
+
 class MetalsStaleLockError(SolidLSPException):
     """
     Raised when a stale Metals H2 database lock is detected and the user

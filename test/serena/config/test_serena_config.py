@@ -467,6 +467,25 @@ class TestProjectSerenaDataFolder:
         assert project.path_to_serena_data_folder() == str(custom_serena)
 
 
+class TestProjectConfigYamlValidation:
+    def test_ignored_paths_globs_starting_with_star_require_quotes(self):
+        project_dir = Path(tempfile.mkdtemp())
+        try:
+            serena_dir = project_dir / SERENA_MANAGED_DIR_NAME
+            serena_dir.mkdir(parents=True)
+            (serena_dir / "project.yml").write_text('project_name: "demo"\nlanguages: ["csharp"]\nignored_paths:\n- **/bin/**\n')
+
+            with pytest.raises(ValueError) as exc_info:
+                ProjectConfig.load(project_dir, create_default_serena_config())
+
+            msg = str(exc_info.value)
+            assert "values that start with `*` must be quoted" in msg
+            assert "ignored_paths" in msg
+            assert '"**/bin/**"' in msg
+        finally:
+            shutil.rmtree(project_dir)
+
+
 class TestSerenaConfigFromConfigFileRobustness:
     """Tests that ``SerenaConfig.from_config_file`` does not abort the whole
     loader when a single registered project has a broken ``project.yml``.
@@ -535,6 +554,30 @@ class TestSerenaConfigFromConfigFileRobustness:
         assert any("Failed to load project configuration" in msg and str(bad_project.resolve()) in msg for msg in caplog.messages), (
             f"Expected a warning naming {bad_project.resolve()}, got: {caplog.messages}"
         )
+
+    def test_alias_like_ignored_path_error_is_logged_with_hint(self, caplog, monkeypatch):
+        good_project = self._make_project_dir(
+            "good_project",
+            'project_name: "good_project"\nlanguages: ["python"]\n',
+        )
+        bad_project = self._make_project_dir(
+            "bad_project",
+            'project_name: "bad_project"\nlanguages: ["csharp"]\nignored_paths:\n- **/bin/**\n',
+        )
+        self._write_master_config([good_project, bad_project])
+
+        monkeypatch.setattr(
+            SerenaConfig,
+            "_determine_config_file_path",
+            classmethod(lambda cls: str(self.master_config_path)),
+        )
+
+        with caplog.at_level(logging.ERROR):
+            config = SerenaConfig.from_config_file(generate_if_missing=False)
+
+        registered_roots = {Path(p.project_root).resolve() for p in config.projects}
+        assert registered_roots == {good_project.resolve()}
+        assert any("must be quoted" in msg and str(bad_project.resolve()) in msg for msg in caplog.messages), caplog.messages
 
 
 class TestGetRegisteredProjectWithDanglingProject:

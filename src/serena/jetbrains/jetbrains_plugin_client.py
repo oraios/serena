@@ -734,6 +734,16 @@ class JetBrainsPluginClient(ToStringMixin):
             request_data["groupPathContains"] = group_path_contains
         return cast(jb.ListInspectionsResponse, self._make_request("POST", "/listInspections", request_data))
 
+    def read_file(self, relative_path: str) -> str:
+        self._require_version_at_least(2023, 3, 3)
+        request_data = {
+            "relativePath": relative_path,
+        }
+        response = self._make_request("POST", "/readFile", request_data)
+        if "content" not in response:
+            raise PluginServerError(f"Unexpected response from readFile: {response}")
+        return response["content"]
+
     def close(self) -> None:
         self._session.close()
 

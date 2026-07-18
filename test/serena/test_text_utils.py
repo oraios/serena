@@ -103,6 +103,55 @@ class TestSearchText:
         assert "return a * c" in first_match.lines[1].line_content
         assert "elif b > a:" in first_match.lines[2].line_content
 
+    @pytest.mark.parametrize(
+        ("pattern", "expected_matched_lines"),
+        [
+            # matches ending with a newline: the trailing newline terminates the last matched line
+            # and must not pull in the line that follows
+            (r"alpha\n", [0]),
+            (r"alpha\nbeta\n", [0, 1]),
+            (r"gamma\n", [2]),
+            # controls: matches ending mid-line were always correct
+            (r"alpha", [0]),
+            (r"beta", [1]),
+            (r"alpha\nbeta", [0, 1]),
+        ],
+    )
+    def test_search_text_match_ending_at_line_break(self, pattern: str, expected_matched_lines: list[int]):
+        """The lines marked as matched are exactly the lines the matched text occupies."""
+        content = "alpha\nbeta\ngamma\n"
+
+        matches = search_text(pattern, content=content)
+
+        assert len(matches) == 1
+        matched_lines = [line.line_number for line in matches[0].lines if line.match_type == LineType.MATCH]
+        assert matched_lines == expected_matched_lines
+        assert matches[0].num_matched_lines == len(expected_matched_lines)
+
+    @pytest.mark.parametrize(
+        ("pattern", "expected_matched_lines"),
+        [
+            (r"alpha\r\n", [0]),
+            (r"alpha\r", [0]),
+            (r"alpha\r\nbeta\r\n", [0, 1]),
+            (r"alpha", [0]),
+        ],
+    )
+    def test_search_text_match_ending_at_line_break_crlf(self, pattern: str, expected_matched_lines: list[int]):
+        """As above for CRLF content, where the end index can fall inside the two-character line break.
+
+        The content is passed directly rather than read from a file, since the file read paths translate
+        line endings and CR would not reach this function.
+        """
+        content = "alpha\r\nbeta\r\ngamma\r\n"
+
+        matches = search_text(pattern, content=content)
+
+        assert len(matches) == 1
+        matched_lines = [line.line_number for line in matches[0].lines if line.match_type == LineType.MATCH]
+        assert matched_lines == expected_matched_lines
+        assert matches[0].num_matched_lines == len(expected_matched_lines)
+
     def test_search_text_with_multiline_match(self):
         """Test searching with multiline pattern matching."""
         content = """

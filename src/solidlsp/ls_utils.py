@@ -21,17 +21,20 @@ from urllib.parse import urlparse
 import charset_normalizer
 import requests
 
-from solidlsp.ls_exceptions import SolidLSPException
+from solidlsp.ls_exceptions import InvalidTextLocationError, SolidLSPException
 from solidlsp.ls_types import UnifiedSymbolInformation
 
 log = logging.getLogger(__name__)
 
 
-class InvalidTextLocationError(Exception):
-    pass
-
-
 class TextStepper:
+    r"""
+    A utility class for stepping through a text string line by line, keeping track of the current line and column numbers.
+
+    It handles the newline sequences "\n", "\r\n", and "\r" as defined by the Language Server Protocol (LSP).
+    However, note that files read through `FileUtils.read_file` will contain only "\n" (LF).
+    """
+
     def __init__(self, chars: str):
         self._chars = chars
         self._len = len(chars)
@@ -115,6 +118,21 @@ class TextStepper:
             self.is_newline = False
         return True
 
+    def step_to(self, line: int, col: int):
+        """
+        Steps through the text until the given line and column are reached, or until the end of the text is reached.
+
+        :param line: the 0-based line number to step to
+        :param col: the 0-based column number to step to
+        """
+        while self.line < line:
+            if not self.step_line():
+                break
+        if self.line != line:
+            raise InvalidTextLocationError
+        self.idx += col
+        self.col = col
+
     def process_all(self):
         """
         Processes all characters in the text, updating the line and column numbers accordingly.
@@ -122,7 +140,7 @@ class TextStepper:
         while self.step_line():
             pass
 
-    def _get_last_line(self, with_end: bool) -> str:
+    def get_last_line(self, with_end: bool) -> str:
         """
         Returns the last line processed, optionally including the newline character(s) at the end
         """
@@ -140,7 +158,7 @@ class TextStepper:
         lines = []
         while self.step_line():
             if self.is_newline:
-                lines.append(self._get_last_line(with_end=with_ends))
+                lines.append(self.get_last_line(with_end=with_ends))
 
         # add the last line (which was not followed by a newline), even if empty
         last_line = self._chars[self.line_start_idx :]
@@ -203,7 +221,7 @@ class TextUtils:
         text_stepper = TextStepper(text)
         while text_stepper.line < line:
             if not text_stepper.step_line():
-                raise InvalidTextLocationError("{line=}, {col=}")
+                raise InvalidTextLocationError(f"{line=}, {col=}")
 
         return text_stepper.line_start_idx + col
 
@@ -327,19 +345,9 @@ class PathUtils:
 
         This method was obtained from https://stackoverflow.com/a/61922504
         """
-        try:
-            from urllib.parse import unquote, urlparse
-            from urllib.request import url2pathname
-        except ImportError:
-            # backwards compatibility (Python 2)
-            from urllib.parse import unquote as unquote_py2
-            from urllib.request import url2pathname as url2pathname_py2
+        from urllib.parse import unquote, urlparse
+        from urllib.request import url2pathname
 
-            from urlparse import urlparse as urlparse_py2
-
-            unquote = unquote_py2
-            url2pathname = url2pathname_py2
-            urlparse = urlparse_py2
         parsed = urlparse(uri)
         host = f"{os.path.sep}{os.path.sep}{parsed.netloc}{os.path.sep}"
         path = os.path.abspath(os.path.join(host, url2pathname(unquote(parsed.path))))
@@ -380,6 +388,9 @@ class FileUtils:
         Reads the file at the given path using the given encoding and returns the contents as a string.
         If decoding fails, tries to detect the encoding using charset_normalizer.
 
+        Line endings are normalized to LF (universal newlines), irrespective of the encoding
+        used to decode the file.
+
         Raises FileNotFoundError if the file does not exist.
         """
         if not os.path.exists(file_path):
@@ -396,7 +407,10 @@ class FileUtils:
                     log.warning(
                         f"Could not decode {file_path} with encoding='{encoding}'; using best match '{match.encoding}' instead",
                     )
-                    return match.raw.decode(match.encoding)
+                    # Decoding the raw bytes bypasses the universal-newline translation that the
+                    # open() call above applies, so normalize explicitly to keep both paths equivalent.
+                    decoded = match.raw.decode(match.encoding)
+                    return decoded.replace("\r\n", "\n").replace("\r", "\n")
                 raise ude
         except Exception as exc:
             log.error(f"Failed to read '{file_path}' with encoding '{encoding}': {exc}")
