@@ -521,8 +521,22 @@ class SessionStartActivateProjectHook(Hook):
 
 
 class SessionEndCleanupHook(Hook):
+    def __init__(self, client: HookClient):
+        raw = sys.stdin.read()
+        input_data = json.loads(raw) if raw else {}
+        self._input_data = input_data
+        self._client = client
+
+        session_id = input_data.get("session_id") or input_data.get("sessionId")
+        self._session_id = str(session_id) if session_id else None
+        self.session_persistence_dir = os.path.join(serena_home_dir, "hook_data", self._session_id) if self._session_id is not None else ""
+        self.triggered_at_timestamp = datetime.now()
+
     def execute(self) -> None:
-        shutil.rmtree(self.session_persistence_dir, ignore_errors=True)
+        if self._session_id is not None:
+            shutil.rmtree(self.session_persistence_dir, ignore_errors=True)
+        if self._client == HookClient.CODEX:
+            click.echo(json.dumps({"continue": True}))
 
 
 class PreToolUseAutoApproveSerenaHook(PreToolUseHook):
