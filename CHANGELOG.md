@@ -3,8 +3,8 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * Language Servers:
-  - Python: allow selecting BasedPyright for the existing `python` language through
-    `ls_specific_settings.python.language_server`; Pyright remains the default.
+  - Python: add BasedPyright as the separate experimental language `python_basedpyright`;
+    Pyright remains the default `python` language server.
 
 # v1.6.0 (2026-07-16)
 

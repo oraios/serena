@@ -938,14 +938,28 @@ Supported settings:
 
 #### Python
 
-Serena uses Pyright by default for the `python` language key. You can instead select
-[BasedPyright](https://github.com/DetachHead/basedpyright) without changing the language key:
+Serena supports several Python language servers through separate language keys.
+
+##### Pyright (`python`)
+
+Pyright is the default Python language server.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `pyright_version` | `1.1.403` | Override the exact Pyright package version Serena launches through `uvx` / `uv x`. |
+| `ls_path` | managed executable | Override `pyright-langserver` and bypass the managed `uvx` / `uv x` invocation. The default `--stdio` argument is still applied. |
+
+##### BasedPyright (`python_basedpyright`)
+
+To use [BasedPyright](https://github.com/DetachHead/basedpyright), select its separate experimental
+language key:
 
 ```yaml
-languages: [python]
+languages: [python_basedpyright]
 ls_specific_settings:
-  python:
-    language_server: basedpyright
+  python_basedpyright:
     basedpyright_version: "1.39.9"
 ```
 
@@ -953,17 +967,14 @@ Supported settings:
 
 | Setting | Default | Description |
 |---|---|---|
-| `language_server` | `pyright` | Select `pyright` or `basedpyright`. |
-| `pyright_version` | `1.1.403` | Override the exact Pyright package version Serena launches through `uvx` / `uv x`. |
 | `basedpyright_version` | `1.39.9` | Override the exact BasedPyright package version Serena launches through `uvx` / `uv x`. |
-| `ls_path` | managed executable | Override the selected server executable (`pyright-langserver` or `basedpyright-langserver`) and bypass the managed `uvx` / `uv x` invocation. The default `--stdio` argument is still applied. |
+| `ls_path` | managed executable | Override `basedpyright-langserver` and bypass the managed `uvx` / `uv x` invocation. The default `--stdio` argument is still applied. |
 
 The generic [language-server launch settings](override-ls-path), including `ls_base_cmd`, `ls_args`,
-and `ls_extra_args`, also apply. `ls_args` replaces the default arguments, while `ls_extra_args`
-appends to them.
+and `ls_extra_args`, apply to both servers. `ls_args` replaces the default arguments, while
+`ls_extra_args` appends to them.
 
-The alternative Python backends remain separate language keys: `python_ty`, `python_pyrefly`, and
-`python_jedi`.
+Other alternative Python language keys are `python_ty`, `python_pyrefly`, and `python_jedi`.
 
 #### Ruby
 

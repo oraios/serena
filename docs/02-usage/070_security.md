@@ -111,8 +111,8 @@ One important detail is that `uvx` ignores the lockfile when installing directly
 
 For the Pyright, BasedPyright, and `ty` Python language servers, Serena uses exact pinned versions when
 invoking them through `uvx` / `uv x`. Pyright and BasedPyright default to `1.1.403` and `1.39.9`,
-respectively; the corresponding `pyright_version` and `basedpyright_version` settings can override
-those pins.
+respectively; `ls_specific_settings.python.pyright_version` and
+`ls_specific_settings.python_basedpyright.basedpyright_version` can override those pins.
 
 ```{dropdown} What Serena Downloads by Default for Language Servers
 :open:
@@ -165,8 +165,10 @@ All of the above are installed with exact pinned package versions by default, in
 
 - **F#**: installs pinned `fsautocomplete` via `dotnet tool install`.
 - **Ruby (`ruby-lsp`)**: if not already available through Bundler or as a global executable, Serena installs a pinned `ruby-lsp` gem.
-- **Python (`python`)**: the selected Pyright package (`pyright` by default or `basedpyright`) is launched
-  through `uvx` / `uv x` using an exact pinned version. Supplying `ls_path` bypasses this managed invocation.
+- **Python (`python`)**: Pyright is launched through `uvx` / `uv x` using an exact pinned version.
+  Supplying `ls_path` bypasses this managed invocation.
+- **Python (`python_basedpyright`)**: BasedPyright is launched through `uvx` / `uv x` using an exact
+  pinned version. Supplying `ls_path` bypasses this managed invocation.
 - **Python (`python_ty`)**: launched through `uvx` / `uv x` using an exact pinned `ty` version.
 - **HLSL on macOS**: if no prebuilt binary is used, Serena builds `shader_language_server` from a pinned version using Cargo.
 

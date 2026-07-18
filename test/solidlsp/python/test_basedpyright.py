@@ -56,9 +56,8 @@ def basedpyright_project(tmp_path_factory: pytest.TempPathFactory) -> Path:
 @pytest.fixture(scope="module")
 def basedpyright_language_server(basedpyright_project: Path) -> Iterator[SolidLanguageServer]:
     with start_ls_context(
-        language=Language.PYTHON,
+        language=Language.PYTHON_BASEDPYRIGHT,
         repo_path=str(basedpyright_project),
-        ls_specific_settings={Language.PYTHON: {"language_server": "basedpyright"}},
     ) as language_server:
         yield language_server
 
@@ -67,7 +66,7 @@ def test_basedpyright_starts(
     basedpyright_language_server: SolidLanguageServer,
     basedpyright_project: Path,
 ) -> None:
-    assert basedpyright_language_server.language == Language.PYTHON
+    assert basedpyright_language_server.language == Language.PYTHON_BASEDPYRIGHT
     assert basedpyright_language_server.is_running()
     assert Path(basedpyright_language_server.language_server.repository_root_path).resolve() == basedpyright_project.resolve()
 
