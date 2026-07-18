@@ -1,0 +1,29 @@
+<?php
+
+/**
+ * @file
+ * Drupal-style module file: ordinary PHP kept in a non-.php extension.
+ *
+ * Only visible to the symbol tools when ls_specific_settings["php"]["file_filter"] includes
+ * ".module" (see #1710); inert for all tests running with default settings.
+ */
+
+/**
+ * Implements hook_help().
+ */
+function drupal_module_help($route_name) {
+    return 'Help for ' . $route_name;
+}
+
+/**
+ * Implements hook_cron().
+ */
+function drupal_module_cron() {
+    helperFunction();
+}
+
+class DrupalModuleController {
+    public function build(): string {
+        return drupal_module_help('help.page.drupal_module');
+    }
+}

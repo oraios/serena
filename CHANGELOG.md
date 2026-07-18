@@ -25,6 +25,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     it fits, otherwise truncated with a trailing '...' and a note) before falling back to bare line
     numbers, so agents can pick the right match without re-reading files. #1640
 
+* Language Servers:
+  - PHP/Intelephense: expose `file_filter` via `ls_specific_settings["php"]`, so that additional
+    extensions containing PHP sources (e.g. Drupal's `.module` / `.install` / `.inc` / `.theme`)
+    become visible to the symbol tools and are indexed by the language server #1710
+
 * JetBrains:
   - Allow external files from dependencies (specified via references like "<ext:FileUtil.class|472e0a13>") to be
     - read via `ReadFileTool` 

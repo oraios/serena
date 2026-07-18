@@ -10,9 +10,9 @@ from time import sleep
 from overrides import override
 
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_utils import PlatformId, PlatformUtils
-from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink
+from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, DidChangeConfigurationParams, LocationLink
 from solidlsp.settings import SolidLSPSettings
 
 from ..lsp_protocol_handler import lsp_types
@@ -26,6 +26,13 @@ log = logging.getLogger(__name__)
 INITIAL_INTELEPHENSE_VERSION = "1.14.4"
 DEFAULT_INTELEPHENSE_VERSION = "1.14.4"
 
+# Default file extensions treated as PHP sources. Exposed for override via
+# `ls_specific_settings["php"]` (key `file_filter`). Extensions added via `file_filter` are also
+# synced into Language.PHP.get_source_fn_matcher() (a cached singleton) and, when customized,
+# pushed to Intelephense as `intelephense.files.associations` globs, so Serena's symbol index and
+# the language server agree on which files are PHP sources (#1710).
+_DEFAULT_FILE_FILTER: list[str] = [".php"]
+
 
 class Intelephense(SolidLanguageServer):
     """
@@ -35,6 +42,11 @@ class Intelephense(SolidLanguageServer):
         - maxMemory: sets intelephense.maxMemory
         - maxFileSize: sets intelephense.files.maxSize
         - ignore_vendor: whether or ignore directories named "vendor" (default: true)
+        - file_filter: list of file extensions (with leading dot) to treat as PHP sources,
+          e.g. [".php", ".phtml", ".module"]. Defaults to [".php"]. The extensions are added to
+          Serena's PHP source-file matcher and a custom list is pushed to Intelephense as
+          intelephense.files.associations globs, so find_symbol and the language server treat
+          the same files as PHP sources (see #1710).
     """
 
     @override
@@ -93,6 +105,28 @@ class Intelephense(SolidLanguageServer):
         def _create_launch_command(self, core_path: str) -> list[str]:
             return [core_path, "--stdio"]
 
+    @staticmethod
+    def _resolve_file_filter(solidlsp_settings: SolidLSPSettings) -> list[str]:
+        """Resolve the file extensions to treat as PHP sources.
+
+        Reads an optional override from ``ls_specific_settings["php"]`` (key ``file_filter``);
+        falls back to the default otherwise. Extracted as a pure function so the configuration
+        plumbing can be unit-tested without starting the language server.
+        """
+        php_settings = solidlsp_settings.get_ls_specific_settings(Language.PHP)
+        return php_settings.get("file_filter", list(_DEFAULT_FILE_FILTER))
+
+    @staticmethod
+    def _sync_source_fn_matcher(file_filter: list[str]) -> None:
+        """Keep Serena's PHP source-file matcher in sync with the configured ``file_filter``.
+
+        ``Language.PHP.get_source_fn_matcher()`` is a ``@cache``d per-language singleton, so adding
+        the configured extensions here propagates to every consumer of the matcher - symbol index
+        traversal, ignore checks, and language composition detection. Without this, ``find_symbol``
+        would not surface symbols in files whose extensions were added to ``file_filter`` (#1710).
+        """
+        Language.PHP.get_source_fn_matcher().add_extensions(*file_filter)
+
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         super().__init__(config, repository_root_path, None, "php", solidlsp_settings)
         self.request_id = 0
@@ -105,6 +139,11 @@ class Intelephense(SolidLanguageServer):
         if self._custom_settings.get("ignore_vendor", True):
             self._ignored_dirnames.add("vendor")
         log.info(f"Ignoring the following directories for PHP projects: {', '.join(sorted(self._ignored_dirnames))}")
+
+        self._file_filter = self._resolve_file_filter(solidlsp_settings)
+        # Sync Serena's source-file matcher with the configured extensions so find_symbol and the
+        # language server agree on which files are PHP sources (see #1710).
+        self._sync_source_fn_matcher(self._file_filter)
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
@@ -183,6 +222,16 @@ class Intelephense(SolidLanguageServer):
         assert "documentSymbolProvider" in capabilities, "Server must support document symbols"
 
         self.server.notify.initialized({})
+
+        if self._file_filter != _DEFAULT_FILE_FILTER:
+            # Intelephense only indexes files matching its `files.associations` globs (default:
+            # ["*.php", "*.phtml"]), so a custom file_filter must also be pushed to the server;
+            # otherwise cross-file features (references, definitions) would skip the extra files
+            # even though Serena's matcher accepts them (#1710).
+            associations = [f"*{ext}" for ext in self._file_filter]
+            intelephense_config: DidChangeConfigurationParams = {"settings": {"intelephense": {"files": {"associations": associations}}}}
+            log.info(f"Sending workspace/didChangeConfiguration with file associations: {associations}")
+            self.server.notify.workspace_did_change_configuration(intelephense_config)
 
         # Intelephense server is typically ready immediately after initialization
         # TODO: This is probably incorrect; the server does send an initialized notification, which we could wait for!
