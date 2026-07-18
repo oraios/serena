@@ -58,6 +58,24 @@ class TestResolveFileFilter:
         assert ".module" not in _DEFAULT_FILE_FILTER
 
 
+class TestResolveFilesAssociations:
+    def test_default_filter_is_not_pushed(self) -> None:
+        # Pushing globs derived from the default filter would replace Intelephense's built-in
+        # associations ["*.php", "*.phtml"] and silently drop .phtml indexing, changing default
+        # behavior; the push must stay gated off for default-configured sessions.
+        assert Intelephense._resolve_files_associations(list(_DEFAULT_FILE_FILTER)) is None
+
+    def test_explicitly_configured_default_is_not_pushed(self) -> None:
+        assert Intelephense._resolve_files_associations([".php"]) is None
+
+    def test_custom_filter_yields_globs(self) -> None:
+        assert Intelephense._resolve_files_associations([".php", ".phtml", ".module"]) == [
+            "*.php",
+            "*.phtml",
+            "*.module",
+        ]
+
+
 class TestSourceFnMatcherSync:
     def test_custom_file_filter_extends_php_matcher(self, tmp_path: Path) -> None:
         # #1710: find_symbol relies on Language.PHP.get_source_fn_matcher(); unless the configured
@@ -144,6 +162,16 @@ class TestFileFilterIntegration:
             Language.PHP,
             ls_specific_settings={Language.PHP: {"file_filter": [".php", ".module"]}},
         ) as ls:
+            # Layer 2 (files.associations push) must be asserted FIRST: the reference in the
+            # never-opened drupal_module.module can only come from the server's association-driven
+            # background index. request_full_symbol_tree below didOpens every matched file in the
+            # LS, after which this assertion could pass even without the push.
+            helper_php_path = str(get_repo_path(Language.PHP) / "helper.php")
+            references = ls.request_references(helper_php_path, 2, len("function "))
+            assert any(ref["uri"].endswith("drupal_module.module") for ref in references), (
+                f"helperFunction call in drupal_module.module not found in references: {references}"
+            )
+
             # Layer 1 (Serena's source matcher): the .module file takes part in symbol traversal.
             symbols = ls.request_full_symbol_tree()
             assert SymbolUtils.symbol_tree_contains_name(symbols, "drupal_module_help"), (
@@ -151,11 +179,4 @@ class TestFileFilterIntegration:
             )
             assert SymbolUtils.symbol_tree_contains_name(symbols, "DrupalModuleController"), (
                 "DrupalModuleController from drupal_module.module not found in the symbol tree"
-            )
-
-            # Layer 2 (files.associations push): cross-file features cover the .module file.
-            helper_php_path = str(get_repo_path(Language.PHP) / "helper.php")
-            references = ls.request_references(helper_php_path, 2, len("function "))
-            assert any(ref["uri"].endswith("drupal_module.module") for ref in references), (
-                f"helperFunction call in drupal_module.module not found in references: {references}"
             )

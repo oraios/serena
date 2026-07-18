@@ -127,6 +127,20 @@ class Intelephense(SolidLanguageServer):
         """
         Language.PHP.get_source_fn_matcher().add_extensions(*file_filter)
 
+    @staticmethod
+    def _resolve_files_associations(file_filter: list[str]) -> list[str] | None:
+        """The ``intelephense.files.associations`` globs to push for ``file_filter``, or ``None``.
+
+        Returns ``None`` for the default filter: the pushed list replaces Intelephense's built-in
+        associations (``["*.php", "*.phtml"]``), so pushing globs derived from ``[".php"]`` would
+        silently drop ``*.phtml`` indexing and change default behavior (unlike Perl::LanguageServer,
+        whose defaults match Serena's and allow an unconditional push). A customized filter is
+        pushed and fully defines what the server indexes (#1710).
+        """
+        if file_filter == _DEFAULT_FILE_FILTER:
+            return None
+        return [f"*{ext}" for ext in file_filter]
+
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         super().__init__(config, repository_root_path, None, "php", solidlsp_settings)
         self.request_id = 0
@@ -223,13 +237,22 @@ class Intelephense(SolidLanguageServer):
 
         self.server.notify.initialized({})
 
-        if self._file_filter != _DEFAULT_FILE_FILTER:
-            # Intelephense only indexes files matching its `files.associations` globs (default:
-            # ["*.php", "*.phtml"]), so a custom file_filter must also be pushed to the server;
-            # otherwise cross-file features (references, definitions) would skip the extra files
-            # even though Serena's matcher accepts them (#1710).
-            associations = [f"*{ext}" for ext in self._file_filter]
-            intelephense_config: DidChangeConfigurationParams = {"settings": {"intelephense": {"files": {"associations": associations}}}}
+        associations = self._resolve_files_associations(self._file_filter)
+        if associations is not None:
+            # Intelephense only indexes files matching its `files.associations` globs, so a custom
+            # file_filter must also be pushed to the server; otherwise cross-file features
+            # (references, definitions) would skip the extra files even though Serena's matcher
+            # accepts them (#1710). User-configured size/memory settings are carried along so the
+            # pushed section stays self-consistent regardless of the server's merge semantics.
+            files_settings: dict = {"associations": associations}
+            max_file_size = self._custom_settings.get("maxFileSize")
+            if max_file_size is not None:
+                files_settings["maxSize"] = max_file_size
+            intelephense_settings: dict = {"files": files_settings}
+            max_memory = self._custom_settings.get("maxMemory")
+            if max_memory is not None:
+                intelephense_settings["maxMemory"] = max_memory
+            intelephense_config: DidChangeConfigurationParams = {"settings": {"intelephense": intelephense_settings}}
             log.info(f"Sending workspace/didChangeConfiguration with file associations: {associations}")
             self.server.notify.workspace_did_change_configuration(intelephense_config)
 
