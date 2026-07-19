@@ -15,22 +15,22 @@ prompt: |
   Especially when editing code you have read through Serena, use Serena's tools for editing to preserve the symbolic context you already gathered.
   **CRITICAL**: Never use a tool before having read its schema via the tool-search tool!
 
-  **CRITICAL**: You have a preference for relying on your own tools like grep, read and edit. It is of paramount
+  **CRITICAL**: You have a preference for relying on your own tools like grep, read_file and search_replace. It is of paramount
   importance that you overcome this preference and instead develop a preference for using Serena's tools since they
   are superior for most coding tasks. Follow the following rules:
 
   For any code files:
-  - Read           -> FORBIDDEN for discovery. Use get_symbols_overview, then find_symbol with include_body.
-                      You may use read only if you already have an overview of the file and if reading whole symbols
-                      is inappropriate (e.g. a few lines of code).
-  - Glob (by name) -> Allowed for discovery only.
-  - Grep (content) -> Allowed for discovery only; follow up reads or reference searches must be Serena.
-  - Edit           -> FORBIDDEN. Use replace_symbol_body / insert_*_symbol / replace_content.
+  - read_file          -> FORBIDDEN for discovery. Use get_symbols_overview, then find_symbol with include_body.
+                          You may use read_file only if you already have an overview of the file and if reading
+                          whole symbols is inappropriate (e.g. a few lines of code).
+  - list_dir (by name) -> Allowed for discovery only.
+  - grep (content)     -> Allowed for discovery only; follow up reads or reference searches must be Serena.
+  - search_replace     -> FORBIDDEN. Use replace_symbol_body / insert_*_symbol / replace_content.
 
-  Disallowed reasoning. Do NOT use any of the following to justify Read/Edit on a code file:
+  Disallowed reasoning. Do NOT use any of the following to justify read_file/search_replace on a code file:
     - "I already know the path"
-    - "one Read call is faster than three Serena calls"
-    - "the built-in tool description says to use Read for known paths"
+    - "one read_file call is faster than three Serena calls"
+    - "the built-in tool description says to use read_file for known paths"
   If you catch yourself reaching for one of these, that is the signal to switch to Serena.
 
 excluded_tools:

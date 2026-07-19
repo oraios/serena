@@ -22,7 +22,8 @@ The test is designed to be safe and free:
   confirmed intact. ``--hooks-only`` never mutates the config and therefore never backs it up.
 
 Per-check evidence files and a Markdown report are written to the work directory (printed at
-startup, default: ``<system tmp>/serena-grok-live``). The exit code is 0 iff no check FAILed.
+startup; default: a fresh private 0700 directory created via ``mkdtemp`` under the system tmp,
+prefix ``serena-grok-live-``). The exit code is 0 iff no check FAILed.
 
 Usage::
 
@@ -137,8 +138,6 @@ def run_command(
     :param stdin_text: text to pass on standard input
     :return: the captured result; on timeout, ``timed_out`` is set and ``return_code`` is None
     """
-    import os
-
     env = None
     if env_overlay is not None:
         env = {**os.environ, **env_overlay}
@@ -656,21 +655,23 @@ class GrokLiveTest:
 
         self._section("H6 — neutral tools (edit/list) never trigger")
         neutral_calls = [
-            ("edit_file", {"target_file": "src/a.py", "instructions": "x"}),
+            ("search_replace", {"target_file": "src/a.py", "instructions": "x"}),
             ("list_dir", {"target_directory": "."}),
-            ("edit_file", {"target_file": "src/b.py"}),
+            ("search_replace", {"target_file": "src/b.py"}),
         ]
         neutral_outputs = [
             self._run_hook("remind", self._pre_tool_use_payload("live-H6", name, tool_input)) for name, tool_input in neutral_calls
         ]
         self._write_evidence("H6.txt", "\n".join(f"rc={r.return_code} out={r.stdout!r}" for r in neutral_outputs))
         if all(r.return_code == 0 and not r.stdout.strip() for r in neutral_outputs):
-            self._record("H6", Status.PASS, "edit_file/list_dir stay silent")
+            self._record("H6", Status.PASS, "search_replace/list_dir stay silent")
         else:
             self._record("H6", Status.FAIL, "a neutral tool produced output or an error (see evidence/H6.txt)")
 
         self._section("H7 — auto-approve emits native allow")
-        result = self._run_hook("auto-approve", self._pre_tool_use_payload("live-H7", "serena__find_symbol", {}, permission_mode="auto"))
+        result = self._run_hook(
+            "auto-approve", self._pre_tool_use_payload("live-H7", "serena__find_symbol", {}, permission_mode="acceptEdits")
+        )
         self._write_evidence("H7.txt", f"rc={result.return_code}\n{result.stdout}")
         if result.return_code == 0 and result.stdout.strip() == '{"decision": "allow"}':
             self._record("H7", Status.PASS, 'exact native allow: {"decision": "allow"}')
@@ -877,15 +878,15 @@ class GrokLiveTest:
             doctor = self._grok("mcp", "doctor", LIVE_MCP_SERVER_NAME, "--json", timeout=180)
             evidence.append("--- retry ---\n" + doctor.output)
 
-        # if the spawn seems to time out, retry with the docs-recommended startup timeout;
+        # if the spawn seems to time out, retry with a raised startup timeout (above grok's 30s default);
         # 'grok mcp add' has no flag for it, so it must be inserted into the config directly
-        if not self._doctor_looks_healthy(doctor) and self._insert_startup_timeout_sec(15):
+        if not self._doctor_looks_healthy(doctor) and self._insert_startup_timeout_sec(60):
             doctor = self._grok("mcp", "doctor", LIVE_MCP_SERVER_NAME, "--json", timeout=180)
-            evidence.append("--- with startup_timeout_sec=15 ---\n" + doctor.output)
+            evidence.append("--- with startup_timeout_sec=60 ---\n" + doctor.output)
             if self._doctor_looks_healthy(doctor):
                 self._finding(
-                    "grok's default MCP startup timeout is too low for Serena; the docs recommend startup_timeout_sec=15 "
-                    "for manual TOML configuration, and the setup handler may want to write it as well"
+                    "grok's default MCP startup timeout (30s) was too low for Serena's cold start in this environment; "
+                    "raising startup_timeout_sec (e.g. 60) in the TOML fixed it — worth noting for slow environments"
                 )
 
         self._write_evidence("M3-doctor.txt", "\n".join(evidence))
@@ -1032,7 +1033,7 @@ class GrokLiveTest:
             )
             self._finding(
                 "the docs' project-scoped hooks JSON was not surfaced by 'grok inspect --json' in an untrusted project; "
-                "Grok requires /hooks-trust before project hooks load — the docs may want to mention this"
+                "Grok requires /hooks-trust before project hooks load (expected; documented in the Grok hooks docs section)"
             )
 
         self._section("D2 — global hooks directory next to the Grok config (informational)")
@@ -1117,7 +1118,7 @@ class GrokLiveTest:
             self.check_p4_context_loads()
             self.check_h_hook_protocol()
             if self.config.hooks_only:
-                for check_id in ("S1", "S2", "S3", "S4", "S5", "M1", "M2", "M3", "M4", "D1", "D2"):
+                for check_id in ("S1", "S2", "S3", "S4", "S5", "M1", "M2", "M3", "M4", "M5", "D1", "D2"):
                     self._record(check_id, Status.SKIP, "--hooks-only")
             else:
                 self.check_s_client_setup()
@@ -1167,7 +1168,7 @@ def main() -> int:
     )
     parser.add_argument("--hooks-only", action="store_true", help="run only the pure-local checks; never touches the Grok configuration")
     parser.add_argument("--skip-unit", action="store_true", help="skip the pytest smoke run (phase P2)")
-    parser.add_argument("--work-dir", help="directory for evidence and reports (default: <system tmp>/serena-grok-live)")
+    parser.add_argument("--work-dir", help="directory for evidence and reports (default: a fresh private mkdtemp under the system tmp)")
     parser.add_argument("--repo-root", help="Serena repository root (default: derived from this script's location)")
     parser.add_argument("--serena-bin", help="serena executable under test (default: <repo>/.venv)")
     parser.add_argument("--serena-hooks-bin", help="serena-hooks executable under test (default: <repo>/.venv)")

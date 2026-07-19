@@ -399,7 +399,6 @@ Alternatively, add the following to `~/.grok/config.toml`:
 
 ```toml
 [mcp_servers.serena]
-startup_timeout_sec = 15
 command = "serena"
 args = ["start-mcp-server", "--project-from-cwd", "--context=grok"]
 ```

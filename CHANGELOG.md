@@ -54,6 +54,8 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Hooks:
   - Add `serena-hooks --client=grok`, including Grok-native PreToolUse allow/deny output.
+  - PreToolUse remind hook: coerce non-string shell command values instead of failing, and recognize
+    `target_file`/`targetFile` file-path keys (shared payload parsing, applies to all hook clients).
 
 * Dependencies:
   - Bump mcp from 1.27.0 to 1.28.1
@@ -189,8 +191,6 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Wait for the subprocess that opens the browser window, preventing zombie processes #1488 
 
 * Hooks:
-  - PreToolUse remind hook: coerce non-string shell command values instead of failing, and recognize
-    `target_file`/`targetFile` file-path keys (shared payload parsing, applies to all hook clients).
   - Handle tool_input passed as string gracefully instead of failing (Copilot CLI sends strings).
 
 * Memories:

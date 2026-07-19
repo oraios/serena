@@ -274,11 +274,11 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
     #: are caught alongside ``read_file``, while ``write_file``/``edit_file`` are not.
     _READ_FILE_VERB_SUBSTRINGS: frozenset[str] = frozenset(("read", "view", "open", "show"))
 
-    #: Shell commands that perform grep-like search; used to classify Codex
+    #: Shell commands that perform grep-like search; used to classify Codex/Grok
     #: shell-command tool calls whose ``cmd`` or ``command`` field starts with one of these.
     _GREP_SHELL_COMMANDS: frozenset[str] = frozenset(("grep", "rg", "ag", "ack", "fgrep", "egrep", "search_for_pattern"))
 
-    #: Shell commands that perform file-read operations; used to classify Codex
+    #: Shell commands that perform file-read operations; used to classify Codex/Grok
     #: shell-command tool calls whose ``cmd`` or ``command`` field starts with one of these.
     _READ_SHELL_COMMANDS: frozenset[str] = frozenset(("cat", "head", "tail", "sed", "less", "more", "bat", "get-content", "gc"))
 
@@ -352,7 +352,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         super().__init__(client)
         self._tool_call_counter = self.ToolUseCounter.load(self)
 
-        # extract a shell ``cmd``/``command`` field (Codex shell-command-style payloads):
+        # extract a shell ``cmd``/``command`` field (Codex/Grok shell-command-style payloads):
         # split into command name (basename, lowercased) and the remaining argument string
         # so both bare names (``rg``) and path-prefixed invocations (``/usr/bin/grep``) are
         # normalised the same way. Stays ``None`` when no shell command is present.
