@@ -236,6 +236,8 @@ class LiveTestConfig:
     work_dir: Path
     hooks_only: bool = False
     skip_unit: bool = False
+    grok_config_explicit: bool = False
+    """whether --grok-config was supplied on the command line (enables the config-path/CLI consistency check)"""
 
     @property
     def evidence_dir(self) -> Path:
@@ -293,6 +295,7 @@ class LiveTestConfig:
             work_dir=work_dir,
             hooks_only=args.hooks_only,
             skip_unit=args.skip_unit,
+            grok_config_explicit=bool(args.grok_config),
         )
 
 
@@ -364,6 +367,44 @@ class GrokLiveTest:
             return config.get("mcp_servers", {}).get(server_name, {})
         except (OSError, tomllib.TOMLDecodeError):
             return {}
+
+    def _verify_config_path_matches_cli(self, mcp_list_output: str) -> None:
+        """Abort if ``--grok-config`` points at a file the grok CLI is not actually using.
+
+        The grok CLI offers no alternate-config option (``grok mcp`` knows only the user/project
+        scopes), so ``--grok-config`` exists solely for nonstandard Grok homes. If it named a file
+        the CLI does not use, every file-level safety measure in this script (backup, restore,
+        baseline byte-comparison) would silently protect the wrong file while ``grok mcp
+        add/remove`` mutates the real configuration. Cross-check: the ``[mcp_servers.*]`` table
+        names in the file must equal the server names reported by ``grok mcp list``.
+
+        :param mcp_list_output: the raw output of ``grok mcp list`` captured for the baseline
+        :raises AbortError: on any mismatch, before any mutation has occurred
+        """
+        if not self.config.grok_config_explicit:
+            return
+        import tomllib
+
+        try:
+            with open(self.config.grok_config_path, "rb") as f:
+                file_servers = set(tomllib.load(f).get("mcp_servers", {}).keys())
+        except (OSError, tomllib.TOMLDecodeError):
+            file_servers = set()
+        import re
+
+        cli_servers = set()
+        for line in mcp_list_output.splitlines():
+            m = re.match(r"^\s*([\w-]+):\s", line)
+            if m:
+                cli_servers.add(m.group(1))
+        if file_servers != cli_servers:
+            self._record("P3", Status.FAIL, "--grok-config does not match the configuration the grok CLI actually uses")
+            raise AbortError(
+                f"--grok-config {self.config.grok_config_path} is not the config the grok CLI uses "
+                f"(file declares mcp_servers {sorted(file_servers)}, 'grok mcp list' reports {sorted(cli_servers)}). "
+                "This flag is for nonstandard Grok homes only — it cannot isolate the test from the real "
+                "configuration, because 'grok mcp' has no alternate-config option. Aborting before any mutation."
+            )
 
     def _insert_startup_timeout_sec(self, seconds: int) -> bool:
         """Add ``startup_timeout_sec`` to the live server's ``[mcp_servers.<name>]`` table, located structurally.
@@ -485,6 +526,7 @@ class GrokLiveTest:
         self._baseline_mcp_list = baseline.output
         self._write_evidence("P3-baseline-mcp-list.txt", self._baseline_mcp_list)
         print(self._baseline_mcp_list.strip())
+        self._verify_config_path_matches_cli(self._baseline_mcp_list)
         if "serena" in self._baseline_mcp_list:
             self._record("P3", Status.FAIL, "a serena MCP entry is already registered in Grok — refusing to touch it")
             raise AbortError(
@@ -1130,7 +1172,12 @@ def main() -> int:
     parser.add_argument("--serena-bin", help="serena executable under test (default: <repo>/.venv)")
     parser.add_argument("--serena-hooks-bin", help="serena-hooks executable under test (default: <repo>/.venv)")
     parser.add_argument("--grok-bin", help="grok executable (default: resolved from PATH)")
-    parser.add_argument("--grok-config", help="Grok user config file (default: ~/.grok/config.toml)")
+    parser.add_argument(
+        "--grok-config",
+        help="Grok user config file, for nonstandard Grok homes (default: ~/.grok/config.toml). NOT an isolation "
+        "mechanism: 'grok mcp' has no alternate-config option, so this must be the config the CLI actually uses — "
+        "verified against 'grok mcp list' at startup, mismatch aborts before any mutation",
+    )
     args = parser.parse_args()
 
     try:
