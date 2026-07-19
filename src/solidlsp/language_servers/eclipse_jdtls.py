@@ -15,7 +15,7 @@ import subprocess
 import threading
 from pathlib import Path, PurePath
 from time import sleep
-from typing import cast
+from typing import Any, cast
 
 from overrides import override
 
@@ -199,6 +199,17 @@ class EclipseJDTLS(SolidLanguageServer):
               are not supported in default VSIX mode (the resource paths inside the archive change between
               releases); use upstream-jdtls mode for arbitrary versions.
         - intellicode_version: Override the pinned IntelliCode VSIX version downloaded by Serena
+        - runtimes: Additional JRE/JDK entries to register with JDT-LS's ``java.configuration.runtimes``,
+              for projects whose source/target level exceeds the JDK JDT-LS itself runs on (currently
+              JDK 21 in default vscode-java VSIX mode). Each entry is a mapping with:
+                - name (required): the JRE container name JDT-LS should register the entry under,
+                  e.g. "JavaSE-25" (must match the ``JavaSE-NN`` the build tool requests).
+                - path (required): filesystem path to the JDK/JRE home directory; must exist.
+                - default (optional): whether this runtime is JDT-LS's default when no container name matches.
+                - sources / javadoc (optional): passed through unchanged to JDT-LS.
+              These entries extend rather than replace the bundled JRE, which is still registered as
+              "JavaSE-21" unless a configured entry reuses that same name (in which case it is overridden).
+              See serena #1478.
 
     Example configuration for upstream JDTLS mode (no downloads, suitable for offline/corporate):
     ```yaml
@@ -228,6 +239,10 @@ class EclipseJDTLS(SolidLanguageServer):
         gradle_version: "8.14.2"
         vscode_java_version: "1.54.0-923"  # also accepts pinned legacy "1.42.0-561"
         intellicode_version: "1.2.30"
+        runtimes:  # register additional JDKs for projects targeting a newer Java version
+          - name: "JavaSE-25"
+            path: "/home/user/Java/jdk25"
+            default: true
     ```
     """
 
@@ -779,6 +794,7 @@ class EclipseJDTLS(SolidLanguageServer):
                 "java_home",
                 "use_system_java_home",
                 "maven_offline",
+                "runtimes",
             )
             workspace_settings = {key: custom_settings.settings[key] for key in workspace_setting_keys if key in custom_settings.settings}
             workspace_settings_json = json.dumps(workspace_settings, sort_keys=True, separators=(",", ":"))
@@ -921,6 +937,52 @@ class EclipseJDTLS(SolidLanguageServer):
         # bundled runtime fallback...
         log.info(f"Using bundled JRE for Gradle: {self.runtime_dependency_paths.jre_path}")
         return self.runtime_dependency_paths.jre_path
+
+    def _resolve_configured_runtimes(self) -> list[dict[str, Any]]:
+        """
+        Validate and normalize the optional extra JRE/JDK runtimes to register with JDT-LS, as configured
+        via ``ls_specific_settings.java.runtimes``. Each entry mirrors the shape VS Code's Java extension
+        sends via ``java.configuration.runtimes`` (``name``, ``path``, optional ``default``/``sources``/
+        ``javadoc``); see serena #1478.
+
+        :return: the validated list of runtime dicts (empty if the setting is unset)
+        :raises ValueError: if the setting or one of its entries is malformed
+        :raises FileNotFoundError: if an entry's ``path`` does not exist
+        """
+        configured_runtimes = self._custom_settings.get("runtimes", [])
+        if not isinstance(configured_runtimes, list):
+            raise ValueError(
+                f"ls_specific_settings.java.runtimes must be a list of {{name, path}} entries, "
+                f"got {type(configured_runtimes).__name__}: {configured_runtimes!r}"
+            )
+
+        # validate each entry and normalize it to the shape JDT-LS expects...
+        validated_runtimes: list[dict[str, Any]] = []
+        for entry in configured_runtimes:
+            if not isinstance(entry, dict) or "name" not in entry or "path" not in entry:
+                raise ValueError(
+                    f"Invalid ls_specific_settings.java.runtimes entry {entry!r}: each entry requires at least a 'name' and a 'path' key."
+                )
+            path = entry["path"]
+            if not os.path.exists(path):
+                error_msg = (
+                    f"ls_specific_settings.java.runtimes entry '{entry['name']}' points to a path that "
+                    f"does not exist: {path}. Fix: update the path in ~/.serena/serena_config.yml "
+                    f"(ls_specific_settings -> java -> runtimes), or remove the entry."
+                )
+                log.error(error_msg)
+                raise FileNotFoundError(error_msg)
+
+            runtime: dict[str, Any] = {"name": entry["name"], "path": path}
+            if "default" in entry:
+                runtime["default"] = bool(entry["default"])
+            for optional_key in ("sources", "javadoc"):
+                if optional_key in entry:
+                    runtime[optional_key] = entry[optional_key]
+            validated_runtimes.append(runtime)
+            log.info(f"Registering additional JDT-LS runtime '{runtime['name']}' from custom settings: {path}")
+
+        return validated_runtimes
 
     def _create_base_initialize_params(self) -> dict:
         """
@@ -1304,9 +1366,19 @@ class EclipseJDTLS(SolidLanguageServer):
         else:
             initialize_params["initializationOptions"]["bundles"] = []
 
-        initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"] = [
-            {"name": "JavaSE-21", "path": self.runtime_dependency_paths.jre_home_path, "default": True}
-        ]
+        # merge the bundled JRE with any additional runtimes configured via ls_specific_settings.java.runtimes
+        # (e.g. so projects targeting a newer Java version than the bundled JRE resolve their JRE container)...
+        default_runtime = {"name": "JavaSE-21", "path": self.runtime_dependency_paths.jre_home_path, "default": True}
+        configured_runtimes = self._resolve_configured_runtimes()
+        runtimes_by_name = {default_runtime["name"]: default_runtime}
+        for runtime in configured_runtimes:
+            runtimes_by_name[runtime["name"]] = runtime
+        if runtimes_by_name["JavaSE-21"] is default_runtime and any(runtime.get("default") for runtime in configured_runtimes):
+            # a configured runtime claims the JDT-LS default; the bundled runtime must not also claim it,
+            # since JDT-LS expects at most one default runtime
+            default_runtime["default"] = False
+
+        initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"] = list(runtimes_by_name.values())
 
         for runtime in initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"]:
             assert "name" in runtime

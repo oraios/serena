@@ -15,6 +15,14 @@ Status of the `main` branch. Changes prior to the next official version change w
     line; any other out-of-range end position now raises `InvalidTextLocationError` instead,
     rather than guessing at a body that could be wrong #1498
 
+* Language Servers:
+  - Java (JDT-LS): add `runtimes` to `ls_specific_settings.java`, a list of extra JRE/JDK entries
+    (`name`, `path`, optional `default`/`sources`/`javadoc`) passed through to JDT-LS's
+    `java.configuration.runtimes`. Fixes silently broken JDK type resolution (`java.lang.Object`
+    and other JDK types reported as "cannot be resolved") for projects whose source/target level
+    exceeds the bundled JDK 21 JRE JDT-LS registers by default; configured runtimes extend rather
+    than replace that bundled default. #1478
+
 * Tools:
   - Fix: `search_for_pattern` marked one line too many as matched whenever a match ended with a line
     break, because the match's exclusive end index was mapped to a line number directly and therefore
