@@ -6,6 +6,7 @@ Recreate the snapshots with `pytest --snapshot-update`.
 import logging
 import os
 import shutil
+import sys
 import tempfile
 import time
 from abc import ABC, abstractmethod
@@ -470,6 +471,62 @@ def test_nix_symbol_replacement_no_double_semicolon(snapshot: SnapshotAssertion)
         "default.nix",
         "testUser",  # Simple attrset with multiple key-value pairs
         NIX_ATTR_REPLACEMENT,
+    )
+    test_case.run_test(content_after_ground_truth=snapshot)
+
+
+# A single `type` declaration body that re-supplies the leading `type` keyword, as a user would
+# after copying the body returned by find_symbol. Replacing the body with this must not duplicate
+# the keyword.
+GO_DECL_REPLACEMENT = """type NamedInt int64"""
+
+
+class GoDeclReplacementTest(EditingTest):
+    """Test for replacing a single Go ``type``/``var``/``const`` declaration that should NOT result
+    in a duplicated leading keyword (e.g. ``type type NamedInt``).
+    """
+
+    def __init__(self, language: Language, rel_path: str, symbol_name: str, new_body: str):
+        super().__init__(language, rel_path)
+        self.symbol_name = symbol_name
+        self.new_body = new_body
+
+    def _apply_edit(self, code_editor: CodeEditor) -> None:
+        code_editor.replace_body(self.symbol_name, self.rel_path, self.new_body)
+
+    @overrides
+    def _test_diff(self, code_diff: CodeDiff, snapshot: SnapshotAssertion | None) -> None:
+        # the leading declaration keyword must appear exactly once (no `type type` corruption)
+        for keyword in ("type", "var", "const"):
+            assert f"{keyword} {keyword} " not in code_diff.modified_content, (
+                f"Replacement duplicated the '{keyword}' keyword: {code_diff.modified_content!r}"
+            )
+        return super()._test_diff(code_diff, snapshot)
+
+
+@pytest.mark.go
+@pytest.mark.skipif(sys.platform == "win32", reason="gopls is not provisioned on the Windows CI runner")
+def test_go_symbol_replacement_no_double_keyword(snapshot: SnapshotAssertion):
+    """
+    Test that replacing a Go ``type``/``var``/``const`` declaration does not duplicate the leading
+    keyword.
+
+    This exercises the bug where:
+    - Original: type NamedInt int
+    - Replacement body (as displayed by find_symbol): type NamedInt int64
+    - Bug result would be: type type NamedInt int64 (the original `type ` prefix is kept because the
+      gopls symbol range starts at the identifier, and the supplied body adds another `type`)
+    - Correct result should be: type NamedInt int64
+
+    gopls reports the symbol range of such declarations starting at the identifier (after the
+    keyword), unlike ``func`` declarations whose range includes the ``func`` keyword. The gopls
+    range extension prevents the duplicated keyword.
+    """
+    test_case = GoDeclReplacementTest(
+        Language.GO,
+        "symbol_body.go",
+        "NamedInt",
+        GO_DECL_REPLACEMENT,
     )
     test_case.run_test(content_after_ground_truth=snapshot)
 

@@ -2,13 +2,15 @@ import hashlib
 import json
 import logging
 import os
+import re
 import subprocess
 from collections.abc import Hashable
 from typing import Any
 
 from overrides import override
 
-from solidlsp.ls import RawDocumentSymbol, SolidLanguageServer
+from solidlsp import ls_types
+from solidlsp.ls import DocumentSymbols, LSPFileBuffer, RawDocumentSymbol, SolidLanguageServer, SymbolBodyFactory
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -20,6 +22,12 @@ class Gopls(SolidLanguageServer):
     """
     Provides Go specific instantiation of the LanguageServer class using gopls.
     """
+
+    # matches a line prefix that consists solely of a leading `type`/`var`/`const` declaration
+    # keyword (with optional indentation and the whitespace before the declared identifier).
+    # gopls reports the symbol range of such single declarations starting at the identifier,
+    # i.e. after the keyword, whereas `func` declarations include the `func` keyword.
+    _LEADING_DECL_KEYWORD_RE = re.compile(r"(?P<indent>\s*)(?:type|var|const)\s+")
 
     @classmethod
     def supports_implementation_request(cls) -> bool:
@@ -162,11 +170,11 @@ class Gopls(SolidLanguageServer):
     @override
     def _document_symbols_cache_fingerprint(self) -> Hashable:
         """
-        Compute a deterministic fingerprint of the Go build context.
-
-        The fingerprint includes gopls_settings and selected env vars that affect symbol discovery.
+        Compute a deterministic fingerprint of method/implementation versions and Gopls settings/the Go build context.
         """
         normalize_symbol_name_version = 1
+        request_document_symbols_impl_version = 2
+
         gopls_settings_raw = self._custom_settings.settings.get("gopls_settings")
 
         gopls_settings: dict | None
@@ -185,22 +193,107 @@ class Gopls(SolidLanguageServer):
 
         # Version processed symbols even when the build context itself is empty.
         if gopls_settings is None and not env_subset:
-            return normalize_symbol_name_version
+            additional_settings_fingerprint = ""
+        else:
+            fingerprint_data: dict[str, object] = {
+                "env": env_subset,
+            }
+            if gopls_settings is not None:
+                fingerprint_data["gopls_settings"] = gopls_settings
+            canonical_json = self._canonical_json_or_raise(json, fingerprint_data)
+            additional_settings_fingerprint = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()[:16]
 
-        fingerprint_data: dict[str, object] = {
-            "env": env_subset,
-            "normalize_symbol_name_version": normalize_symbol_name_version,
-        }
-        if gopls_settings is not None:
-            fingerprint_data["gopls_settings"] = gopls_settings
-
-        canonical_json = self._canonical_json_or_raise(json, fingerprint_data)
-
-        return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()[:16]
+        return normalize_symbol_name_version, request_document_symbols_impl_version, additional_settings_fingerprint
 
     @override
     def _normalize_symbol_name(self, symbol: RawDocumentSymbol, relative_file_path: str) -> str:
         return symbol["name"].rsplit(".", 1)[-1]
+
+    @override
+    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
+        # Override to extend single `type`/`var`/`const` declaration ranges to include the leading
+        # keyword. gopls excludes the keyword from such ranges (unlike `func` declarations), which
+        # causes replace_symbol_body to drop the keyword from the symbol body and replacement range;
+        # a natural keyword-inclusive round-trip edit would then corrupt the file (e.g. `type Foo`
+        # becomes `type type Foo`). See _extend_go_symbol_range_to_include_leading_keyword.
+        document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
+        if not document_symbols.root_symbols:
+            return document_symbols
+
+        # obtain the file lines and a body factory to recompute the bodies of extended symbols
+        with self._open_file_context(relative_file_path, file_buffer, open_in_ls=False) as file_data:
+            file_lines = file_data.split_lines()
+            body_factory = SymbolBodyFactory(file_data)
+
+            # extend ranges recursively, operating on copies so the cached symbols are not mutated.
+            # Children keep their `parent` back-pointer aimed at the original (un-extended) node;
+            # this is intentional and safe, because ancestor traversal only reads name/kind/overload
+            # index (see Symbol.iter_ancestors), none of which the extension changes. Rebinding the
+            # back-pointers would force a deep copy of every extended subtree for no observable gain.
+            def extend_symbol_and_children(symbol: ls_types.UnifiedSymbolInformation) -> ls_types.UnifiedSymbolInformation:
+                extended = self._extend_go_symbol_range_to_include_leading_keyword(symbol, file_lines, body_factory)
+                children = symbol.get("children")
+                if children:
+                    if extended is symbol:
+                        extended = symbol.copy()
+                    extended["children"] = [extend_symbol_and_children(child) for child in children]
+                return extended
+
+            extended_root_symbols = [extend_symbol_and_children(sym) for sym in document_symbols.root_symbols]
+
+        return DocumentSymbols(extended_root_symbols)
+
+    def _extend_go_symbol_range_to_include_leading_keyword(
+        self,
+        symbol: ls_types.UnifiedSymbolInformation,
+        file_lines: list[str],
+        body_factory: SymbolBodyFactory,
+    ) -> ls_types.UnifiedSymbolInformation:
+        """
+        Extend a Go symbol's body range to include a leading `type`/`var`/`const` keyword.
+
+        gopls reports the range of a single `type`/`var`/`const` declaration starting at the
+        declared identifier (after the keyword), whereas the range of a `func` declaration includes
+        the `func` keyword. This asymmetry makes :meth:`replace_symbol_body` omit the keyword from
+        both the displayed body and the replacement range, so re-supplying the keyword in an edit
+        corrupts the file (e.g. ``type Foo`` becomes ``type type Foo``).
+
+        :param symbol: the symbol whose range may be extended.
+        :param file_lines: the lines of the file in which the symbol is defined.
+        :param body_factory: the factory used to recompute the symbol body from the extended range.
+        :return: a copy of the symbol with an extended range, or the original symbol if no leading
+            keyword precedes the identifier on the start line (e.g. for funcs or for grouped
+            declarations such as ``var ( ... )`` whose keyword sits on a separate line).
+        """
+        # determine whether only a declaration keyword precedes the identifier on the start line
+        range_info = symbol["range"]
+        start_line = range_info["start"]["line"]
+        start_char = range_info["start"]["character"]
+        if start_line >= len(file_lines):
+            return symbol
+        prefix = file_lines[start_line][:start_char]
+        match = self._LEADING_DECL_KEYWORD_RE.fullmatch(prefix)
+        if match is None:
+            return symbol
+
+        # extend the range start back to the keyword (excluding indentation), updating both the
+        # symbol range and its location range so the replacement range covers the keyword
+        new_start = ls_types.Position(line=start_line, character=len(match.group("indent")))
+        extended = symbol.copy()
+        extended["range"] = ls_types.Range(start=new_start, end=range_info["end"])
+        location = extended.get("location")
+        if location:
+            location = location.copy()
+            if "range" in location:
+                location["range"] = ls_types.Range(start=new_start, end=location["range"]["end"])
+            extended["location"] = location
+
+        # recompute the body from the now-extended location range so the displayed body stays
+        # consistent with the replacement range; the stale body must be removed first, since the
+        # factory returns an existing SymbolBody as-is and otherwise reads the updated location range
+        extended.pop("body", None)
+        extended["body"] = body_factory.create_symbol_body(extended)
+        return extended
 
     def _start_server(self) -> None:
         """Start gopls server process"""
