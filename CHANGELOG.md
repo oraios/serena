@@ -32,6 +32,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     - used in `JetBrainsFindDeclarationTool`
     when using plugin version 2023.3.3+
 
+* Dashboard:
+  - Fix: the "Last Execution" panel stayed on "Loading..." forever when there was no logged execution
+    (e.g. a fresh server / no tool run yet), because `loadLastExecution()` only rendered the panel when
+    the backend returned a non-null execution; the empty state is now rendered via the existing
+    `displayLastExecution(null)` path, mirroring the other panels #1713
+
 * Dependencies:
   - Bump mcp from 1.27.0 to 1.28.1
 
