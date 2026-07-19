@@ -170,11 +170,11 @@ class Gopls(SolidLanguageServer):
     @override
     def _document_symbols_cache_fingerprint(self) -> Hashable:
         """
-        Compute a deterministic fingerprint of the Go build context.
-
-        The fingerprint includes gopls_settings and selected env vars that affect symbol discovery.
+        Compute a deterministic fingerprint of method/implementation versions and Gopls settings/the Go build context.
         """
         normalize_symbol_name_version = 1
+        request_document_symbols_impl_version = 2
+
         gopls_settings_raw = self._custom_settings.settings.get("gopls_settings")
 
         gopls_settings: dict | None
@@ -193,18 +193,17 @@ class Gopls(SolidLanguageServer):
 
         # Version processed symbols even when the build context itself is empty.
         if gopls_settings is None and not env_subset:
-            return normalize_symbol_name_version
+            additional_settings_fingerprint = ""
+        else:
+            fingerprint_data: dict[str, object] = {
+                "env": env_subset,
+            }
+            if gopls_settings is not None:
+                fingerprint_data["gopls_settings"] = gopls_settings
+            canonical_json = self._canonical_json_or_raise(json, fingerprint_data)
+            additional_settings_fingerprint = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()[:16]
 
-        fingerprint_data: dict[str, object] = {
-            "env": env_subset,
-            "normalize_symbol_name_version": normalize_symbol_name_version,
-        }
-        if gopls_settings is not None:
-            fingerprint_data["gopls_settings"] = gopls_settings
-
-        canonical_json = self._canonical_json_or_raise(json, fingerprint_data)
-
-        return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()[:16]
+        return normalize_symbol_name_version, request_document_symbols_impl_version, additional_settings_fingerprint
 
     @override
     def _normalize_symbol_name(self, symbol: RawDocumentSymbol, relative_file_path: str) -> str:
