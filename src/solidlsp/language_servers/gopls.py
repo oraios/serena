@@ -169,12 +169,12 @@ class Gopls(SolidLanguageServer):
 
     @override
     def _document_symbols_cache_fingerprint(self) -> Hashable:
-        """
-        Compute a deterministic fingerprint of method/implementation versions and Gopls settings/the Go build context.
-        """
         normalize_symbol_name_version = 1
         request_document_symbols_impl_version = 2
+        return normalize_symbol_name_version, request_document_symbols_impl_version
 
+    @override
+    def _raw_document_symbols_cache_fingerprint(self) -> Hashable:
         gopls_settings_raw = self._custom_settings.settings.get("gopls_settings")
 
         gopls_settings: dict | None
@@ -193,7 +193,7 @@ class Gopls(SolidLanguageServer):
 
         # Version processed symbols even when the build context itself is empty.
         if gopls_settings is None and not env_subset:
-            additional_settings_fingerprint = ""
+            return None
         else:
             fingerprint_data: dict[str, object] = {
                 "env": env_subset,
@@ -201,9 +201,7 @@ class Gopls(SolidLanguageServer):
             if gopls_settings is not None:
                 fingerprint_data["gopls_settings"] = gopls_settings
             canonical_json = self._canonical_json_or_raise(json, fingerprint_data)
-            additional_settings_fingerprint = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()[:16]
-
-        return normalize_symbol_name_version, request_document_symbols_impl_version, additional_settings_fingerprint
+            return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()[:16]
 
     @override
     def _normalize_symbol_name(self, symbol: RawDocumentSymbol, relative_file_path: str) -> str:
