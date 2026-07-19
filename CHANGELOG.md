@@ -16,6 +16,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     rather than guessing at a body that could be wrong #1498
 
 * Language Servers:
+  - Fix: Properly differentiate between raw and high-level symbol cache fingerprints, avoiding unnecessary
+    invalidations of the raw cache when only the derived high-level representation changes
   - Java (JDT-LS): add `runtimes` to `ls_specific_settings.java`, a list of extra JRE/JDK entries
     (`name`, `path`, optional `default`/`sources`/`javadoc`) passed through to JDT-LS's
     `java.configuration.runtimes`. Fixes silently broken JDK type resolution (`java.lang.Object`
