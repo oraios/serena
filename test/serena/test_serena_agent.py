@@ -764,7 +764,7 @@ SAFE_DELETE_SUCCEEDS_CASES = [
 
 @pytest.fixture
 def serena_config():
-    config = SerenaConfig(log_level=logging.ERROR).with_headless_mode_overrides()
+    config = SerenaConfig(log_level=logging.ERROR, tool_timeout=600).with_headless_mode_overrides()
 
     # Create test projects for all supported languages
     test_projects = []
@@ -1047,7 +1047,7 @@ class TestSerenaAgent:
         agent = serena_agent
 
         find_symbol_tool = agent.get_tool(FindSymbolTool)
-        result = find_symbol_tool.apply_ex(
+        result = find_symbol_tool.apply(
             name_path_pattern=case.name_path,
             depth=0,
             relative_path=None,
@@ -1070,7 +1070,7 @@ class TestSerenaAgent:
         agent = serena_agent
 
         find_symbol_tool = agent.get_tool(FindSymbolTool)
-        result = find_symbol_tool.apply_ex(
+        result = find_symbol_tool.apply(
             name_path_pattern=case.name_path,
             depth=0,
             substring_matching=True,
@@ -1088,7 +1088,7 @@ class TestSerenaAgent:
         agent = serena_agent
 
         find_symbol_tool = agent.get_tool(FindSymbolTool)
-        result = find_symbol_tool.apply_ex(
+        result = find_symbol_tool.apply(
             name_path_pattern=case.name_path,
             depth=0,
             substring_matching=False,
@@ -1342,7 +1342,7 @@ class TestPromptProvision:
 
     @classmethod
     def _call_tool(cls, agent: SerenaAgent, tool_class: type[Tool], session_id: str = "global", **kwargs) -> str:
-        result = agent.get_tool(tool_class).apply_ex(mcp_ctx=cls.MockContext(session_id), **kwargs)
+        result = agent.get_tool(tool_class).apply_ex(mcp_ctx=cls.MockContext(session_id), catch_exceptions=False, **kwargs)
         return result
 
     @staticmethod
