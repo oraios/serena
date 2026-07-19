@@ -873,6 +873,9 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
     JetBrains IDE launch command, which can be used to auto-start an IDE instance on demand.
     """
     tool_timeout: float = DEFAULT_TOOL_TIMEOUT
+    """
+    timeout for tool calls in seconds; if a tool takes longer than this, it is aborted and an error is returned.
+    """
 
     token_count_estimator: str = RegisteredTokenCountEstimator.CHAR_COUNT.name
     """Only relevant if `record_tool_usage` is True; the name of the token count estimator to use for tool usage statistics.
