@@ -874,6 +874,15 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
     """
     tool_timeout: float = DEFAULT_TOOL_TIMEOUT
 
+    detect_external_file_changes: bool = True
+    """Whether, before each symbolic tool call, Serena should check the project's source files for
+    changes made outside of its own tools (another editor, a second agent, a git checkout, a build
+    step) and notify the language server so symbolic queries reflect the current files on disk.
+    Enabled by default because a warm language server otherwise silently serves stale symbol data
+    for such edits. The check performs one directory walk plus an ``os.stat`` per tracked source
+    file per symbolic call; set this to False on very large repositories where that cost outweighs
+    the staleness risk (e.g. when all edits go through Serena anyway)."""
+
     token_count_estimator: str = RegisteredTokenCountEstimator.CHAR_COUNT.name
     """Only relevant if `record_tool_usage` is True; the name of the token count estimator to use for tool usage statistics.
     See the `RegisteredTokenCountEstimator` enum for available options.

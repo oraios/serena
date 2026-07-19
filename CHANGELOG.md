@@ -3,6 +3,14 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - Fix: a warm language server served stale symbol results for files edited outside of Serena's own
+    tools (another editor, a second agent, a `git` checkout, a build step). The
+    `workspace/didChangeWatchedFiles` notification was defined but never sent, so such edits were
+    invisible to symbolic queries (`find_referencing_symbols`, `find_symbol`, etc.) until a restart.
+    Before each symbolic tool call, Serena now checks its tracked source files for external changes and
+    notifies the language server (new `Project.poll_and_notify_file_changes`). Controlled by the new
+    `detect_external_file_changes` config option (enabled by default; disable on very large repositories
+    where the per-query filesystem walk is not worth it).
   - Fix: `FileUtils.read_file`'s `charset_normalizer` fallback (used when a file cannot be decoded with
     the project's configured `encoding`) decoded the raw bytes directly and therefore skipped the
     universal-newline translation that the primary read path applies. CR characters from disk thus

@@ -21,6 +21,11 @@ from serena.util.file_system import GitignoreParser, match_path, scan_directory
 from serena.util.text_utils import MatchedConsecutiveLines, search_files
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from solidlsp.lsp_protocol_handler.lsp_types import (
+    DidChangeWatchedFilesParams,
+    FileChangeType,
+    FileEvent,
+)
 
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
@@ -59,6 +64,13 @@ class Project(ToStringMixin):
         self._language_server_manager_init_error: Exception | None = None
         self.is_newly_created = is_newly_created
         self._agent: Optional["SerenaAgent"] = None
+
+        # State for detecting externally-made file changes (see poll_and_notify_file_changes).
+        # Maps relative source-file path -> mtime last observed by the poll. None until the first
+        # poll, which only establishes the baseline (it must not report the project's entire
+        # pre-existing file set as newly created).
+        self._freshness_last_seen_mtimes: dict[str, float] | None = None
+        self._freshness_lock = threading.Lock()
 
         # create .gitignore file in the project's Serena data folder if not yet present
         serena_data_gitignore_path = os.path.join(self._serena_data_folder, ".gitignore")
@@ -361,6 +373,74 @@ class Project(ToStringMixin):
                             f"File {abs_file_path} not found (possibly due it being a symlink), skipping it in request_parsed_files",
                         )
             return rel_file_paths
+
+    def poll_and_notify_file_changes(self) -> int:
+        """Detects source files that were changed, created or deleted on disk since the last call
+        and notifies every language server managed for this project via the LSP
+        ``workspace/didChangeWatchedFiles`` notification.
+
+        This exists because Serena's own file and symbol tools notify the language server inline
+        (via didOpen/didChange/didClose) when they edit a file, but edits made through any other
+        channel (another editor, a second agent, a git checkout, a build step) are otherwise
+        invisible to a warm language server, causing symbolic queries to answer from a stale index.
+
+        The set of files considered is exactly the set Serena itself tracks (see
+        :meth:`gather_source_files`), so no separate file-discovery logic has to be kept in sync.
+        The dominant cost is the directory walk plus one ``os.stat`` per tracked file; this is
+        intended to be called before symbolic tool invocations rather than on a timer.
+
+        :return: the number of change events sent (0 if nothing changed, if no language server is
+            running yet, or on the first call, which only establishes the baseline).
+        """
+        current: dict[str, float] = {}
+        for rel_path in self.gather_source_files():
+            try:
+                current[rel_path] = os.stat(os.path.join(self.project_root, rel_path)).st_mtime
+            except OSError:
+                continue
+
+        # Read-diff-swap under the lock only; the filesystem walk above and the LSP notifications
+        # below stay outside it so concurrent callers do not serialize on I/O.
+        with self._freshness_lock:
+            previous = self._freshness_last_seen_mtimes
+            self._freshness_last_seen_mtimes = current
+            if previous is None:
+                return 0
+            events: list[tuple[str, FileChangeType]] = []
+            for rel_path, mtime in current.items():
+                prev_mtime = previous.get(rel_path)
+                if prev_mtime is None:
+                    events.append((rel_path, FileChangeType.Created))
+                elif mtime > prev_mtime:
+                    events.append((rel_path, FileChangeType.Changed))
+            events.extend((rel_path, FileChangeType.Deleted) for rel_path in previous if rel_path not in current)
+
+        if not events or self.language_server_manager is None:
+            return 0
+
+        changes: list[FileEvent] = [
+            {"uri": Path(self.project_root, rel_path).resolve().as_uri(), "type": change_type} for rel_path, change_type in events
+        ]
+        params: DidChangeWatchedFilesParams = {"changes": changes}
+        created_paths = [rel_path for rel_path, change_type in events if change_type == FileChangeType.Created]
+
+        for ls in self.language_server_manager.iter_language_servers():
+            try:
+                ls.server.notify.did_change_watched_files(params)
+            except Exception:
+                log.warning("Failed to notify language server of watched file changes", exc_info=True)
+            # A didChangeWatchedFiles(Created) notification alone is not enough for every backend
+            # (observed with pyright) to fold a brand-new file into its cross-file reference graph;
+            # an open/close cycle forces the parse+bind that Serena's own file tools trigger via
+            # SolidLanguageServer.open_file().
+            for rel_path in created_paths:
+                try:
+                    with ls.open_file(rel_path):
+                        pass
+                except Exception:
+                    log.warning(f"Failed to refresh newly created file {rel_path!r} in language server", exc_info=True)
+
+        return len(events)
 
     def _create_file_collection(self, relative_path: str, code_files_only: bool) -> FileCollection:
         if FileProxy.is_external_path(relative_path):

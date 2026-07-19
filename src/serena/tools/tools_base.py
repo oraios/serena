@@ -319,6 +319,26 @@ class Tool(Component):
     def is_symbolic(self) -> bool:
         return issubclass(self.__class__, ToolMarkerSymbolicRead) or issubclass(self.__class__, ToolMarkerSymbolicEdit)
 
+    def _maybe_refresh_project_freshness(self) -> None:
+        """Before a symbolic tool call, give the active project's language server(s) a chance to
+        learn about files that changed on disk outside of Serena's own tools
+        (see :meth:`serena.project.Project.poll_and_notify_file_changes`).
+
+        No-op for non-symbolic tools: file tools read the filesystem directly (always current), and
+        editing tools notify the language server inline. Controlled by the
+        ``detect_external_file_changes`` configuration option. Best-effort: a failure here must
+        never prevent the tool from running.
+        """
+        if not self.is_symbolic() or not self.agent.serena_config.detect_external_file_changes:
+            return
+        project = self.agent.get_active_project()
+        if project is None:
+            return
+        try:
+            project.poll_and_notify_file_changes()
+        except Exception:
+            log.warning("Failed to poll for external file changes before symbolic tool call", exc_info=True)
+
     @classmethod
     def get_param_aliases(cls) -> dict[str, str]:
         """
@@ -370,6 +390,10 @@ class Tool(Component):
                             "No active project. Ask the user to provide the project path or to select a project from this list of known projects: "
                             + f"{self.agent.serena_config.project_names}"
                         )
+
+                # reflect any externally-made file changes in the language server index before a
+                # symbolic query (no-op for non-symbolic tools and when disabled via config)
+                self._maybe_refresh_project_freshness()
 
                 # construct apply kwargs, adding session_id if the tool is session-aware
                 apply_kwargs = dict(kwargs)
