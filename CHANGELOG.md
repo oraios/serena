@@ -56,7 +56,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     `displayLastExecution(null)` path, mirroring the other panels #1713
 
 * Dependencies:
-  - Bump mcp from 1.27.0 to 1.28.1
+  - Bump `mcp` from 1.27.0 to 1.28.1
+  - Bump `anthropic` from 0.59.0 to 0.117.0
 
 # v1.6.0 (2026-07-16)
 
