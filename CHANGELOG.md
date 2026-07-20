@@ -18,6 +18,10 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Language Servers:
   - Fix: Properly differentiate between raw and high-level symbol cache fingerprints, avoiding unnecessary
     invalidations of the raw cache when only the derived high-level representation changes
+  - Fix: Language servers were not notified of external file system changes, causing some
+    symbolic operations (such as `find_referencing_symbols`) to report stale information.
+    An explicit file system polling mechanism is now used to detect changes prior to the affected
+    tool executions.
   - Improve uv-based language server launch command compatibility: Use the more widely supported 
     `uv tool run` instead of `uv x` #1721
   - Java (JDT-LS): add `runtimes` to `ls_specific_settings.java`, a list of extra JRE/JDK entries
@@ -41,6 +45,12 @@ Status of the `main` branch. Changes prior to the next official version change w
   - `search_for_pattern`: on overflow, the shortening chain now emits each match's first line (full when
     it fits, otherwise truncated with a trailing '...' and a note) before falling back to bare line
     numbers, so agents can pick the right match without re-reading files. #1640
+
+* Language Servers:
+  - PHP: treat `.phtml` files as PHP sources by default (all PHP language servers) #1710
+  - PHP/Intelephense: expose `file_filter` via `ls_specific_settings["php"]`, so that additional
+    extensions containing PHP sources (e.g. Drupal's `.module` / `.install` / `.inc` / `.theme`)
+    become visible to the symbol tools and are indexed by the language server #1710
 
 * JetBrains:
   - Allow external files from dependencies (specified via references like "<ext:FileUtil.class|472e0a13>") to be
