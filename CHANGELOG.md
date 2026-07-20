@@ -26,6 +26,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     numbers, so agents can pick the right match without re-reading files. #1640
 
 * Language Servers:
+  - PHP: treat `.phtml` files as PHP sources by default (all PHP language servers) #1710
   - PHP/Intelephense: expose `file_filter` via `ls_specific_settings["php"]`, so that additional
     extensions containing PHP sources (e.g. Drupal's `.module` / `.install` / `.inc` / `.theme`)
     become visible to the symbol tools and are indexed by the language server #1710

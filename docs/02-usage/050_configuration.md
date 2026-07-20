@@ -913,18 +913,18 @@ Supported settings:
 | `ignore_vendor` | `true` | Ignore directories named `vendor` while indexing the project. |
 | `maxFileSize` | unset | Forwarded as `intelephense.files.maxSize` in `initializationOptions`. |
 | `maxMemory` | unset | Forwarded as `intelephense.maxMemory` in `initializationOptions`. |
-| `file_filter` | `[".php"]` | File extensions (with leading dot) to treat as PHP sources, e.g. `[".php", ".phtml", ".module"]` (#1710). |
+| `file_filter` | unset | Additional file extensions (with leading dot) to treat as PHP sources, e.g. `[".module", ".install"]`; added to the defaults `.php` / `.phtml` (#1710). |
 
 Example configuration making Drupal source files visible to the symbol tools:
 
 ```yaml
 ls_specific_settings:
   php:
-    file_filter: [".php", ".phtml", ".module", ".install", ".inc", ".theme", ".profile", ".engine"]
+    file_filter: [".module", ".install", ".inc", ".theme", ".profile", ".engine"]
 ```
 
 Notes:
-- Extensions added via `file_filter` are also synced into Serena's PHP source-file matcher, so `find_symbol` and symbol indexing treat the same files as the language server. A custom list is additionally pushed to Intelephense as `intelephense.files.associations` globs and fully defines what the server indexes, so keep `.php` (and `.phtml` if you use it) in the list. Defaults are unchanged when the key is omitted.
+- Extensions added via `file_filter` are synced into Serena's PHP source-file matcher and pushed to Intelephense as `intelephense.files.associations` globs at startup, so `find_symbol` and the language server treat the same files as PHP sources.
 - The matcher is reset on every language server activation, so one project's `file_filter` does not leak into another.
 
 #### PHP (`Phpactor`)
