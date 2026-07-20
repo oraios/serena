@@ -591,7 +591,15 @@ class HookCommands(AutoRegisteringGroup):
     @click.command("cleanup", help="Set this as hook at session end all hook data for the current session")
     @_client_option
     def cleanup(client: str) -> None:
-        SessionEndCleanupHook(HookClient(client)).execute()
+        hook_client = HookClient(client)
+        try:
+            SessionEndCleanupHook(hook_client).execute()
+        except Exception as exc:
+            if hook_client != HookClient.CODEX:
+                raise
+            click.echo(f"Serena cleanup failed: {exc}", err=True)
+        if hook_client == HookClient.CODEX:
+            click.echo(json.dumps({"continue": True}))
 
     @staticmethod
     @click.command(

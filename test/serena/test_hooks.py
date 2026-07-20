@@ -693,6 +693,27 @@ class TestHookCli:
         assert result.exit_code == 0
         assert not session_dir.exists()
 
+    def test_codex_cleanup_emits_valid_stop_hook_json(self, tmp_path: Path):
+        runner = CliRunner()
+        stdin_json = json.dumps({"session_id": "codex-cleanup"})
+        with patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            result = runner.invoke(hook_commands, ["cleanup", "--client", "codex"], input=stdin_json)
+
+        assert result.exit_code == 0
+        assert json.loads(result.stdout) == {"continue": True}
+
+    def test_codex_cleanup_without_session_id_still_emits_valid_json(self):
+        runner = CliRunner()
+        result = runner.invoke(
+            hook_commands,
+            ["cleanup", "--client", "codex"],
+            input=json.dumps({"stop_hook_active": False}),
+        )
+
+        assert result.exit_code == 0
+        assert json.loads(result.stdout) == {"continue": True}
+        assert "Session ID is required" in result.stderr
+
     def test_remind_command(self, tmp_path: Path):
         """Invoke the remind command enough times to trigger a deny."""
         runner = CliRunner()
