@@ -274,11 +274,13 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
         :param max_answer_chars: max result length; -1 for default
         :return: a list of JSON objects with the symbols referencing the requested symbol
         """
+        self.project.ls_sync_file_system_changes()
+
         include_body = False  # It is probably never a good idea to include the body of the referencing symbols
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
-        symbol_retriever = self.create_language_server_symbol_retriever()
 
+        symbol_retriever = self.create_language_server_symbol_retriever()
         references_in_symbols = symbol_retriever.find_referencing_symbols(
             name_path,
             relative_file_path=relative_path,
@@ -361,6 +363,8 @@ class FindImplementationsTool(Tool, ToolMarkerSymbolicRead):
         :param max_answer_chars: max result length; -1 for default
         :return: a list of JSON objects with the symbols implementing the requested symbol
         """
+        self.project.ls_sync_file_system_changes()
+
         include_body = False
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
@@ -414,6 +418,8 @@ class FindDeclarationTool(Tool, ToolMarkerSymbolicRead):
         :param include_body: whether to include the symbol's body in the result. Default False.
         :param include_info: whether to include additional info (hover-like). Default False.
         """
+        self.project.ls_sync_file_system_changes()
+
         symbol_retriever = self.create_language_server_symbol_retriever()
         relative_path = self._sanitize_input_param(relative_path)
         regex = self._sanitize_input_param(regex)
@@ -496,6 +502,8 @@ class GetDiagnosticsForFileTool(Tool, ToolMarkerSymbolicRead):
         :param max_answer_chars: max result length; -1 for default
         :return: grouped diagnostics for the requested file.
         """
+        self.project.ls_sync_file_system_changes()
+
         symbol_retriever = self.create_language_server_symbol_retriever()
         diagnostics = symbol_retriever.get_file_diagnostics(
             relative_file_path=relative_path,
@@ -547,6 +555,8 @@ class GetDiagnosticsForSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOption
         :param max_answer_chars: max result length; -1 for default
         :return: grouped diagnostics for the requested symbol and, optionally, its referencing symbols.
         """
+        self.project.ls_sync_file_system_changes()
+
         symbol_retriever = self.create_language_server_symbol_retriever()
         diagnostics_by_symbol = symbol_retriever.get_symbol_diagnostics(
             name_path=name_path,
@@ -693,6 +703,8 @@ class SafeDeleteSymbol(Tool, ToolMarkerSymbolicEdit):
         :param name_path_pattern: name path of the symbol to delete
         :param relative_path: the relative path to the file containing the symbol to delete
         """
+        self.project.ls_sync_file_system_changes()
+
         ls_symbol_retriever = self.create_language_server_symbol_retriever()
         symbol = ls_symbol_retriever.find_unique(name_path_pattern, substring_matching=False, within_relative_path=relative_path)
         symbol_rel_path = symbol.relative_path
