@@ -3194,4 +3194,17 @@ class SolidLanguageServer(ABC):
         """
         Create the InitializeParams object to send to the language server during initialization.
         """
-        return self._create_initialize_params_builder().with_base_options(self._create_base_initialize_params()).build()
+        params = self._create_initialize_params_builder().with_base_options(self._create_base_initialize_params()).build()
+        self._register_content_modified_retry_methods(params)
+        return params
+
+    def _register_content_modified_retry_methods(self, params: InitializeParams) -> None:
+        """
+        Reads back `general.staleRequestSupport.retryOnContentModified` from the InitializeParams
+        we are about to send and registers it with the underlying `LanguageServerInterface`, so
+        that `send_request` only retries `ContentModified` (-32801) responses for methods we have
+        actually told the server we will retry (see `LanguageServerInterface.send_request`).
+        """
+        general_capabilities = cast(dict, params.get("capabilities", {})).get("general", {})
+        retry_methods = general_capabilities.get("staleRequestSupport", {}).get("retryOnContentModified", [])
+        self.server.set_content_modified_retry_methods(retry_methods)

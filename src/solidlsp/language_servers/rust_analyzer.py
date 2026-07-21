@@ -413,6 +413,10 @@ class RustAnalyzer(SolidLanguageServer):
                             "textDocument/semanticTokens/full",
                             "textDocument/semanticTokens/range",
                             "textDocument/semanticTokens/full/delta",
+                            # rust-analyzer's internal cancellation tracking does not cover hover,
+                            # so hover requests it cancels while indexing come back ContentModified;
+                            # we retry them ourselves (see LanguageServerInterface.send_request). #1724
+                            "textDocument/hover",
                         ],
                     },
                     "regularExpressions": {"engine": "ECMAScript", "version": "ES2020"},

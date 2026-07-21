@@ -52,6 +52,11 @@ Status of the `main` branch. Changes prior to the next official version change w
   - PHP/Intelephense: expose `file_filter` via `ls_specific_settings["php"]`, so that additional
     extensions containing PHP sources (e.g. Drupal's `.module` / `.install` / `.inc` / `.theme`)
     become visible to the symbol tools and are indexed by the language server #1710
+  - Fix: an LSP `ContentModified` (-32801) response was surfaced as a hard `SolidLSPException`
+    instead of being retried, as the spec expects for requests a client declared it will reissue.
+    `send_request` now retries such responses for methods declared via a server's
+    `retryOnContentModified` capability; rust-analyzer declares `textDocument/hover`, fixing the
+    flaky `test_find_symbol[rust_add_function]` on windows-latest. #1724
 
 * JetBrains:
   - Allow external files from dependencies (specified via references like "<ext:FileUtil.class|472e0a13>") to be
