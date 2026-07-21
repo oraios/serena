@@ -910,7 +910,10 @@ class LanguageServerConfig:
     trace_lsp_communication: bool = False
     start_independent_lsp_process: bool = True
     ignored_paths: list[str] = field(default_factory=list)
-    """Paths, dirs or glob-like patterns. The matching will follow the same logic as for .gitignore entries"""
+    """
+    list of ordered ignore patterns (same syntax as .gitignore; only forward slashes) to be used by the language server
+    for filtering out files and folders from indexing and analysis.
+    """
     encoding: str = "utf-8"
     """File encoding to use when reading source files"""
 

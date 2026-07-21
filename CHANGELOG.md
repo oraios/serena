@@ -22,6 +22,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     symbolic operations (such as `find_referencing_symbols`) to report stale information.
     An explicit file system polling mechanism is now used to detect changes prior to the affected
     tool executions.
+  - Fix: Order of ignore patterns passed to language servers was not respected #1729 
   - Improve uv-based language server launch command compatibility: Use the more widely supported 
     `uv tool run` instead of `uv x` #1721
   - Java (JDT-LS): add `runtimes` to `ls_specific_settings.java`, a list of extra JRE/JDK entries
