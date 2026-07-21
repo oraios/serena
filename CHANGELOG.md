@@ -2,8 +2,17 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Add Grok Build support (context `grok`, setup CLI, hooks)
+
 * Language Servers:
     - Add `python_basedpyright` as an alternative Python language server
+
+* Hooks:
+  - Add `serena-hooks --client=grok`, including Grok-native PreToolUse allow/deny output.
+  - PreToolUse remind hook: coerce non-string shell command values instead of failing, and recognize
+    `target_file`/`targetFile` file-path keys (shared payload parsing, applies to all hook clients).
+
 
 # v1.6.1 (2026-07-21)
 

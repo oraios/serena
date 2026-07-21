@@ -13,6 +13,7 @@ import pytest
 from _pytest.mark import Mark, MarkDecorator, ParameterSet
 
 from serena.agent import SerenaAgent
+from serena.config.context_mode import SerenaAgentContext
 from serena.config.serena_config import ProjectConfig, RegisteredProject, SerenaConfig
 from serena.project import Project
 from serena.tools import (
@@ -39,6 +40,7 @@ from test.conftest import (
     get_repo_path,
     language_tests_enabled,
 )
+from test.serena.config.test_context_mode import GROK_EXCLUDED_TOOLS
 
 
 @dataclass
@@ -876,6 +878,25 @@ class TestSerenaAgent:
         """
         serena_config = SerenaConfig().with_headless_mode_overrides()
         SerenaAgent(project=project, serena_config=serena_config)
+
+    @pytest.mark.python
+    @pytest.mark.skipif(not language_tests_enabled(Language.PYTHON), reason="python tests are disabled in this environment")
+    def test_grok_context_restricts_toolset_and_prompt(self, serena_config):
+        agent = SerenaAgent(
+            project="test_repo_python",
+            serena_config=serena_config,
+            context=SerenaAgentContext.from_name("grok"),
+        )
+        agent.execute_task(lambda: None)
+
+        try:
+            exposed = {tool.get_name() for tool in agent.get_exposed_tool_instances()}
+            assert exposed.isdisjoint(GROK_EXCLUDED_TOOLS)
+            assert "activate_project" not in exposed
+            assert {"find_symbol", "get_symbols_overview", "replace_symbol_body"} <= exposed
+            assert "Serena's code intelligence tools" in agent.create_system_prompt()
+        finally:
+            agent.on_shutdown(timeout=5)
 
     def _symbol_matches_expected_name(self, symbol: dict, expected_name: str) -> bool:
         return (

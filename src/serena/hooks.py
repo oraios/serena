@@ -25,6 +25,7 @@ class HookClient(Enum):
     CODEBUDDY = "codebuddy"
     VSCODE = "vscode"
     CODEX = "codex"
+    GROK = "grok"
 
 
 class Hook(ABC):
@@ -88,6 +89,12 @@ class PreToolUseHook(Hook, ABC):
         additional_context: str = ""
 
         def to_json_string(self, client: HookClient) -> str:
+            if client == HookClient.GROK:
+                grok_output: dict[str, str] = {"decision": self.permission_decision}
+                if self.permission_decision == "deny":
+                    grok_output["reason"] = self.permission_decision_reason
+                return json.dumps(grok_output)
+
             hook_output = {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
@@ -267,11 +274,11 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
     #: are caught alongside ``read_file``, while ``write_file``/``edit_file`` are not.
     _READ_FILE_VERB_SUBSTRINGS: frozenset[str] = frozenset(("read", "view", "open", "show"))
 
-    #: Shell commands that perform grep-like search; used to classify Codex
+    #: Shell commands that perform grep-like search; used to classify Codex/Grok
     #: shell-command tool calls whose ``cmd`` or ``command`` field starts with one of these.
     _GREP_SHELL_COMMANDS: frozenset[str] = frozenset(("grep", "rg", "ag", "ack", "fgrep", "egrep", "search_for_pattern"))
 
-    #: Shell commands that perform file-read operations; used to classify Codex
+    #: Shell commands that perform file-read operations; used to classify Codex/Grok
     #: shell-command tool calls whose ``cmd`` or ``command`` field starts with one of these.
     _READ_SHELL_COMMANDS: frozenset[str] = frozenset(("cat", "head", "tail", "sed", "less", "more", "bat", "get-content", "gc"))
 
@@ -345,7 +352,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         super().__init__(client)
         self._tool_call_counter = self.ToolUseCounter.load(self)
 
-        # extract a shell ``cmd``/``command`` field (Codex shell-command-style payloads):
+        # extract a shell ``cmd``/``command`` field (Codex/Grok shell-command-style payloads):
         # split into command name (basename, lowercased) and the remaining argument string
         # so both bare names (``rg``) and path-prefixed invocations (``/usr/bin/grep``) are
         # normalised the same way. Stays ``None`` when no shell command is present.
@@ -356,18 +363,26 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         # payloads pass the target as ``file_path`` rather than via a shell command).
         self._file_path: str | None = None
         if self._tool_input is not None:
-            self._command = self._tool_input.get("cmd", self._tool_input.get("command", "")).strip()
+            self._command = str(self._tool_input.get("cmd", self._tool_input.get("command", ""))).strip()
             if self._command:
                 cmd_split = self._command.split(maxsplit=1)
                 if len(cmd_split) > 1:
                     self._command_args_str = cmd_split[1]
                 self._command_name = os.path.basename(cmd_split[0]).lower()
-            file_path = self._tool_input.get("file_path") or self._tool_input.get("filePath") or ""
+            file_path = (
+                self._tool_input.get("file_path")
+                or self._tool_input.get("filePath")
+                or self._tool_input.get("target_file")
+                or self._tool_input.get("targetFile")
+                or ""
+            )
             self._file_path = str(file_path).strip() or None
 
     def is_grep_call(self) -> bool:
         if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
             return self._tool_name == "grep" or "search_for_pattern" in self._tool_name
+        if self._client == HookClient.GROK:
+            return self._tool_name == "grep" or (self._is_shell_command_call() and self._command_name in self._GREP_SHELL_COMMANDS)
         if self._client == HookClient.CODEX and self._is_shell_command_call():
             return self._command_name in self._GREP_SHELL_COMMANDS
         # heuristic for other clients
@@ -376,6 +391,8 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
     def is_read_call(self) -> bool:
         if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
             return self._tool_name == "read" or "read_file" in self._tool_name
+        if self._client == HookClient.GROK:
+            return self._tool_name == "read_file" or (self._is_shell_command_call() and self._command_name in self._READ_SHELL_COMMANDS)
         if self._client == HookClient.CODEX and self._is_shell_command_call():
             return self._command_name in self._READ_SHELL_COMMANDS
         # heuristic for other clients
@@ -400,7 +417,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         if self._file_path is not None:
             return self._is_code_file_path(self._file_path)
 
-        if self._client == HookClient.CODEX and self._command_args_str is not None:
+        if self._client in (HookClient.CODEX, HookClient.GROK) and self._command_args_str is not None:
             return any(self._is_code_file_path(argument) for argument in self._iter_shell_path_arguments())
 
         return True
