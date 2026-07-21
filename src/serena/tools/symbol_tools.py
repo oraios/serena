@@ -272,7 +272,9 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
         :param max_answer_chars: max result length; -1 for default
         :return: a list of JSON objects with the symbols referencing the requested symbol
         """
-        self.project.ls_sync_file_system_changes()
+        # file system sync needed for case where symbol finder does not perform a global search, updating everything
+        if relative_path:
+            self.project.ls_sync_file_system_changes()
 
         include_body = False  # It is probably never a good idea to include the body of the referencing symbols
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None

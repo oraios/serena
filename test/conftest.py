@@ -13,6 +13,7 @@ import pytest
 from _pytest.mark import Mark, MarkDecorator
 from sensai.util.logging import configure
 
+from serena.agent import SerenaAgent
 from serena.config.serena_config import SerenaConfig, SerenaPaths
 from serena.constants import SERENA_MANAGED_DIR_NAME
 from serena.project import Project
@@ -129,7 +130,7 @@ def start_default_ls_context(language: Language) -> Iterator[SolidLanguageServer
 
 
 def create_default_serena_config():
-    return SerenaConfig(gui_log_window=False, web_dashboard=False)
+    return SerenaConfig().with_headless_mode_overrides()
 
 
 def _create_default_project(language: Language, repo_root_override: str | None = None) -> Project:
@@ -236,6 +237,20 @@ def project_with_ls_context(language: Language, repo_root_override: str | None =
     with project_context(language, repo_root_override) as project:
         project.create_language_server_manager()
         yield project
+
+
+@contextmanager
+def agent_for_project_context(language: Language, repo_root_override: str | None = None) -> Iterator[SerenaAgent]:
+    project_root = str(get_repo_path(language)) if repo_root_override is None else repo_root_override
+    agent = SerenaAgent(project=project_root, serena_config=create_default_serena_config())
+
+    # wait for agent to be ready
+    agent.execute_task(lambda: None)
+
+    try:
+        yield agent
+    finally:
+        agent.on_shutdown()
 
 
 @pytest.fixture(scope="module")
