@@ -2,6 +2,9 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Language Servers:
+    - Add `python_basedpyright` as an alternative Python language server
+
 # v1.6.1 (2026-07-21)
 
 * General:

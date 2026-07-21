@@ -47,13 +47,14 @@ _LANGUAGE_REPO_ALIASES: dict[Language, Language] = {
     Language.PHP_PHPACTOR: Language.PHP,
     Language.PHP_PHPANTOM: Language.PHP,
     Language.PYTHON_JEDI: Language.PYTHON,
+    Language.PYTHON_BASEDPYRIGHT: Language.PYTHON,
     Language.PYTHON_TY: Language.PYTHON,
     Language.RUBY_SOLARGRAPH: Language.RUBY,
     Language.PYTHON_TY: Language.PYTHON,
     Language.PYTHON_PYREFLY: Language.PYTHON,
 }
 
-PYTHON_LANGUAGE_BACKENDS = [Language.PYTHON, Language.PYTHON_TY]
+PYTHON_LANGUAGE_BACKENDS = [Language.PYTHON, Language.PYTHON_TY, Language.PYTHON_BASEDPYRIGHT]
 
 
 def get_repo_path(language: Language) -> Path:
@@ -295,6 +296,7 @@ _LANGUAGE_PYTEST_MARKERS: dict[Language, list[MarkDecorator | Mark]] = {
     Language.PYTHON_JEDI: [pytest.mark.python],
     Language.PYTHON_TY: [pytest.mark.python],
     Language.PYTHON_PYREFLY: [pytest.mark.python],
+    Language.PYTHON_BASEDPYRIGHT: [pytest.mark.python],
     Language.RUST: [pytest.mark.rust],
     Language.TYPESCRIPT: [pytest.mark.typescript],
     Language.BSL: [pytest.mark.bsl],
