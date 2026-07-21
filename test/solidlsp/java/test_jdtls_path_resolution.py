@@ -21,6 +21,7 @@ from solidlsp.language_servers.eclipse_jdtls import (
     JDTLS_CONFIG_DIR_BY_PLATFORM,
     JDTLS_MIN_JDK_VERSION,
     EclipseJDTLS,
+    RuntimeDependencyPaths,
 )
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.settings import SolidLSPSettings
@@ -52,6 +53,144 @@ def _make_fake_jdtls_install(
         for config_name in set(JDTLS_CONFIG_DIR_BY_PLATFORM.values()):
             (root / config_name).mkdir(exist_ok=True)
     return root
+
+
+def _make_runtime_dependency_paths(root: Path) -> RuntimeDependencyPaths:
+    """
+    Build minimal runtime dependency paths for initialize-parameter tests.
+
+    :param root: Root directory under which fake runtime files are created.
+    :return: Runtime paths sufficient for ``EclipseJDTLS._create_base_initialize_params``.
+    """
+    jre_home = root / "jre-home"
+    jre_home.mkdir(parents=True)
+    jre_bin = jre_home / "bin"
+    jre_bin.mkdir()
+    jre_path = jre_bin / _JAVA_EXE_NAME
+    jre_path.touch()
+
+    gradle_path = root / "gradle"
+    gradle_path.mkdir()
+
+    launcher = root / "jdtls-launcher.jar"
+    launcher.touch()
+    config = root / "config"
+    config.mkdir()
+    lombok = root / "lombok.jar"
+    lombok.touch()
+
+    return RuntimeDependencyPaths(
+        jre_path=str(jre_path),
+        jre_home_path=str(jre_home),
+        jdtls_launcher_jar_path=str(launcher),
+        jdtls_readonly_config_path=str(config),
+        lombok_jar_path=str(lombok),
+        gradle_path=str(gradle_path),
+    )
+
+
+def _make_uninitialized_jdtls(
+    repository_root: Path, custom_settings: dict[str, object], runtime_dependency_paths: RuntimeDependencyPaths
+) -> EclipseJDTLS:
+    """
+    Build an EclipseJDTLS instance without starting dependency setup or JDTLS.
+
+    :param repository_root: Repository root reported to initialization-parameter generation.
+    :param custom_settings: Java language-server settings to attach to the instance.
+    :param runtime_dependency_paths: Runtime paths to attach to the instance.
+    :return: Partially initialized server suitable for pure parameter-generation tests.
+    """
+    server = object.__new__(EclipseJDTLS)
+    server.repository_root_path = str(repository_root)
+    server._custom_settings = SolidLSPSettings.CustomLSSettings(custom_settings)
+    server.runtime_dependency_paths = runtime_dependency_paths
+    return server
+
+
+def _gradle_java_home(initialize_params: dict) -> str:
+    """
+    Return the Gradle Java home from initialize parameters.
+
+    :param initialize_params: JDTLS initialize-parameter payload.
+    :return: Configured Gradle Java home.
+    """
+    return initialize_params["initializationOptions"]["settings"]["java"]["import"]["gradle"]["java"]["home"]
+
+
+# ----------------------------------------------------------------------------
+# Gradle Java-home initialize settings
+# ----------------------------------------------------------------------------
+
+
+class TestGradleJavaHomeInitializeSettings:
+    def test_explicit_gradle_java_home_takes_precedence_over_java_home(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Verify explicit Gradle Java home wins over system ``JAVA_HOME``."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+        explicit_gradle_jdk = tmp_path / "explicit-gradle-jdk"
+        explicit_gradle_jdk.mkdir()
+        env_jdk = tmp_path / "env-jdk"
+        env_jdk.mkdir()
+        monkeypatch.setenv("JAVA_HOME", str(env_jdk))
+
+        server = _make_uninitialized_jdtls(
+            repo,
+            {"gradle_java_home": str(explicit_gradle_jdk), "use_system_java_home": True},
+            runtime_paths,
+        )
+
+        assert _gradle_java_home(server._create_base_initialize_params()) == str(explicit_gradle_jdk)
+
+    def test_uses_java_home_for_gradle_when_system_java_home_enabled(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Verify Gradle import uses system ``JAVA_HOME`` when the system setting is enabled."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+        env_jdk = tmp_path / "env-jdk"
+        env_jdk.mkdir()
+        monkeypatch.setenv("JAVA_HOME", str(env_jdk))
+
+        server = _make_uninitialized_jdtls(repo, {"use_system_java_home": True}, runtime_paths)
+
+        assert _gradle_java_home(server._create_base_initialize_params()) == str(env_jdk)
+
+    def test_uses_bundled_runtime_for_gradle_when_system_java_home_disabled(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Verify Gradle import uses the bundled runtime when system Java home is disabled."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+        env_jdk = tmp_path / "env-jdk"
+        env_jdk.mkdir()
+        monkeypatch.setenv("JAVA_HOME", str(env_jdk))
+
+        server = _make_uninitialized_jdtls(repo, {"use_system_java_home": False}, runtime_paths)
+
+        assert _gradle_java_home(server._create_base_initialize_params()) == runtime_paths.jre_path
+
+    def test_uses_bundled_runtime_for_gradle_when_requested_java_home_is_unset(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Verify Gradle import falls back to the bundled runtime when ``JAVA_HOME`` is unset."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+        monkeypatch.delenv("JAVA_HOME", raising=False)
+
+        server = _make_uninitialized_jdtls(repo, {"use_system_java_home": True}, runtime_paths)
+
+        assert _gradle_java_home(server._create_base_initialize_params()) == runtime_paths.jre_path
+
+    def test_missing_explicit_gradle_java_home_raises(self, tmp_path: Path) -> None:
+        """Verify missing explicit Gradle Java home remains a configuration error."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+
+        server = _make_uninitialized_jdtls(repo, {"gradle_java_home": str(tmp_path / "missing-jdk")}, runtime_paths)
+
+        with pytest.raises(FileNotFoundError, match="Gradle Java home not found"):
+            server._create_base_initialize_params()
 
 
 # ----------------------------------------------------------------------------
@@ -393,9 +532,12 @@ class TestComputeWorkspaceHash:
     (default vscode-java VSIX bump or upstream install change) lands in a separate
     ws_dir and avoids stale OSGi configs from the previous version blocking startup.
 
+    Workspace-affecting Java settings are also mixed into the hash so stale Maven /
+    Gradle import caches are not silently reused after config changes.
+
     Backwards-compatibility carve-out: legacy default-mode users on
     INITIAL_VSCODE_JAVA_VERSION keep the original ``md5(repository_root_path)`` format,
-    so existing JDTLS workspaces and project caches are reused without a one-time reindex.
+    as long as they have not opted into tracked workspace-affecting settings.
     """
 
     REPO = "/home/me/projects/widgets"
@@ -451,3 +593,183 @@ class TestComputeWorkspaceHash:
         h1 = EclipseJDTLS.DependencyProvider._compute_workspace_hash("/a/repo", self.DEFAULT_LAUNCHER, empty_settings)
         h2 = EclipseJDTLS.DependencyProvider._compute_workspace_hash("/b/repo", self.DEFAULT_LAUNCHER, empty_settings)
         assert h1 != h2
+
+    def test_workspace_affecting_settings_change_hash(self) -> None:
+        base_settings = SolidLSPSettings.CustomLSSettings({"maven_user_settings": "/tmp/maven-a.xml"})
+        changed_settings = SolidLSPSettings.CustomLSSettings({"maven_user_settings": "/tmp/maven-b.xml"})
+
+        h1 = EclipseJDTLS.DependencyProvider._compute_workspace_hash(self.REPO, self.DEFAULT_LAUNCHER, base_settings)
+        h2 = EclipseJDTLS.DependencyProvider._compute_workspace_hash(self.REPO, self.DEFAULT_LAUNCHER, changed_settings)
+
+        assert h1 != h2
+
+    def test_legacy_initial_mode_still_invalidates_when_workspace_settings_change(self) -> None:
+        settings = SolidLSPSettings.CustomLSSettings(
+            {
+                "vscode_java_version": self._initial_settings().get("vscode_java_version"),
+                "gradle_user_home": "/tmp/gradle-home",
+            }
+        )
+
+        legacy_hash = EclipseJDTLS.DependencyProvider._compute_workspace_hash(self.REPO, self.DEFAULT_LAUNCHER, self._initial_settings())
+        configured_hash = EclipseJDTLS.DependencyProvider._compute_workspace_hash(self.REPO, self.DEFAULT_LAUNCHER, settings)
+
+        assert configured_hash != legacy_hash
+
+
+# ----------------------------------------------------------------------------
+# is_ignored_dirname (directory-traversal filter)
+# ----------------------------------------------------------------------------
+
+
+class TestIsIgnoredDirname:
+    """Regression for #1645: the Java language server must not hard-ignore directories whose names
+    collide with build-tool output (``lib``, ``dist``, ``classes``, ``out``, ...). Those are all
+    valid Java package identifiers, so ignoring them by name hid legitimate source from the symbol
+    tools even when ``git check-ignore`` reported nothing. Real build output is already filtered via
+    ``.gitignore``, so directory traversal should only skip the language-agnostic
+    ``_ALWAYS_IGNORED_DIRS`` (VCS/venv/cache/IDE internals) inherited from the base language server.
+    """
+
+    @pytest.fixture
+    def jdtls(self) -> EclipseJDTLS:
+        # is_ignored_dirname only reads the class-level _ALWAYS_IGNORED_DIRS, so an uninitialized
+        # instance is sufficient here (no Java or JDTLS process required).
+        return object.__new__(EclipseJDTLS)
+
+    @pytest.mark.parametrize("dirname", ["lib", "dist", "classes", "out", "target", "build", "bin"])
+    def test_valid_package_dirnames_are_not_ignored(self, jdtls: EclipseJDTLS, dirname: str) -> None:
+        assert jdtls.is_ignored_dirname(dirname) is False
+
+    @pytest.mark.parametrize("dirname", [".git", ".venv", ".idea", ".serena", ".mypy_cache"])
+    def test_always_ignored_dirs_are_still_ignored(self, jdtls: EclipseJDTLS, dirname: str) -> None:
+        assert jdtls.is_ignored_dirname(dirname) is True
+
+
+# ----------------------------------------------------------------------------
+# _resolve_configured_runtimes / configured `runtimes` initialize settings (#1478)
+# ----------------------------------------------------------------------------
+
+
+def _runtimes(initialize_params: dict) -> list[dict]:
+    """
+    Return the JDT-LS ``java.configuration.runtimes`` list from initialize parameters.
+
+    :param initialize_params: JDTLS initialize-parameter payload.
+    :return: The configured runtimes list.
+    """
+    return initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"]
+
+
+class TestResolveConfiguredRuntimes:
+    def test_empty_when_unset(self, custom_settings: SolidLSPSettings.CustomLSSettings) -> None:
+        server = object.__new__(EclipseJDTLS)
+        server._custom_settings = custom_settings
+        assert server._resolve_configured_runtimes() == []
+
+    def test_valid_entry_is_normalized(self, tmp_path: Path) -> None:
+        jdk = tmp_path / "jdk-25"
+        jdk.mkdir()
+        server = object.__new__(EclipseJDTLS)
+        server._custom_settings = SolidLSPSettings.CustomLSSettings(
+            {"runtimes": [{"name": "JavaSE-25", "path": str(jdk), "default": True}]}
+        )
+        assert server._resolve_configured_runtimes() == [{"name": "JavaSE-25", "path": str(jdk), "default": True}]
+
+    def test_optional_sources_and_javadoc_pass_through(self, tmp_path: Path) -> None:
+        jdk = tmp_path / "jdk-25"
+        jdk.mkdir()
+        server = object.__new__(EclipseJDTLS)
+        server._custom_settings = SolidLSPSettings.CustomLSSettings(
+            {"runtimes": [{"name": "JavaSE-25", "path": str(jdk), "sources": "/src", "javadoc": "/doc"}]}
+        )
+        assert server._resolve_configured_runtimes() == [{"name": "JavaSE-25", "path": str(jdk), "sources": "/src", "javadoc": "/doc"}]
+
+    def test_raises_when_runtimes_is_not_a_list(self) -> None:
+        server = object.__new__(EclipseJDTLS)
+        server._custom_settings = SolidLSPSettings.CustomLSSettings({"runtimes": {"name": "JavaSE-25", "path": "/x"}})
+        with pytest.raises(ValueError, match="must be a list"):
+            server._resolve_configured_runtimes()
+
+    @pytest.mark.parametrize(
+        "entry", [{"path": "/x"}, {"name": "JavaSE-25"}, "not-a-dict", 42], ids=["missing-name", "missing-path", "string", "int"]
+    )
+    def test_raises_for_malformed_entry(self, entry: object) -> None:
+        server = object.__new__(EclipseJDTLS)
+        server._custom_settings = SolidLSPSettings.CustomLSSettings({"runtimes": [entry]})
+        with pytest.raises(ValueError, match="requires at least a 'name' and a 'path' key"):
+            server._resolve_configured_runtimes()
+
+    def test_raises_for_nonexistent_path(self, tmp_path: Path) -> None:
+        server = object.__new__(EclipseJDTLS)
+        server._custom_settings = SolidLSPSettings.CustomLSSettings(
+            {"runtimes": [{"name": "JavaSE-25", "path": str(tmp_path / "missing-jdk")}]}
+        )
+        with pytest.raises(FileNotFoundError, match="does not exist"):
+            server._resolve_configured_runtimes()
+
+
+class TestConfiguredRuntimesInitializeSettings:
+    def test_bundled_runtime_is_sole_default_when_unconfigured(
+        self, tmp_path: Path, custom_settings: SolidLSPSettings.CustomLSSettings
+    ) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+
+        server = _make_uninitialized_jdtls(repo, {}, runtime_paths)
+
+        assert _runtimes(server._create_base_initialize_params()) == [
+            {"name": "JavaSE-21", "path": runtime_paths.jre_home_path, "default": True}
+        ]
+
+    def test_configured_runtime_extends_bundled_runtime(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+        jdk25 = tmp_path / "jdk-25"
+        jdk25.mkdir()
+
+        server = _make_uninitialized_jdtls(repo, {"runtimes": [{"name": "JavaSE-25", "path": str(jdk25)}]}, runtime_paths)
+
+        runtimes = _runtimes(server._create_base_initialize_params())
+        assert {"name": "JavaSE-21", "path": runtime_paths.jre_home_path, "default": True} in runtimes
+        assert {"name": "JavaSE-25", "path": str(jdk25)} in runtimes
+        assert len(runtimes) == 2
+
+    def test_configured_runtime_with_same_name_overrides_bundled_runtime(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+        override_jdk = tmp_path / "override-jdk-21"
+        override_jdk.mkdir()
+
+        server = _make_uninitialized_jdtls(repo, {"runtimes": [{"name": "JavaSE-21", "path": str(override_jdk)}]}, runtime_paths)
+
+        runtimes = _runtimes(server._create_base_initialize_params())
+        assert runtimes == [{"name": "JavaSE-21", "path": str(override_jdk)}]
+
+    def test_configured_default_unsets_bundled_default(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+        jdk25 = tmp_path / "jdk-25"
+        jdk25.mkdir()
+
+        server = _make_uninitialized_jdtls(repo, {"runtimes": [{"name": "JavaSE-25", "path": str(jdk25), "default": True}]}, runtime_paths)
+
+        runtimes = _runtimes(server._create_base_initialize_params())
+        bundled = next(r for r in runtimes if r["name"] == "JavaSE-21")
+        configured = next(r for r in runtimes if r["name"] == "JavaSE-25")
+        assert bundled["default"] is False
+        assert configured["default"] is True
+
+    def test_invalid_configured_runtime_raises_during_initialize_params(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+
+        server = _make_uninitialized_jdtls(repo, {"runtimes": [{"name": "JavaSE-25"}]}, runtime_paths)
+
+        with pytest.raises(ValueError, match="requires at least a 'name' and a 'path' key"):
+            server._create_base_initialize_params()

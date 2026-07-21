@@ -92,7 +92,9 @@ Some useful options include:
 
   * `--project <path|name>`: specify the project to work on by name or path.
   * `--project-from-cwd`: auto-detect the project from current working directory     
-    (looking for a directory containing `.serena/project.yml` or `.git` in parent directories and activating the containing directory as the project root, if any).
+    (walking up the parent directories and activating the nearest one that contains either `.serena/project.yml`
+    or `.git`, if any). The nearest boundary wins, so a git worktree nested under another Serena project resolves
+    to the worktree itself rather than the ancestor project.
     This option is intended for CLI-based agents like Claude Code, Gemini and Codex, which are typically started from within the project directory
     and which do not change directories during their operation.
   * `--language-backend JetBrains`: use the Serena JetBrains Plugin as the language backend (overriding the default backend configured in the central configuration)
@@ -239,7 +241,7 @@ docker run --rm -i --network host -v /path/to/your/projects:/workspaces/projects
 This command mounts your projects into the container under `/workspaces/projects`, so when working with projects,
 you need to refer to them using the respective path (e.g. `/workspaces/projects/my-project`).
 
-Alternatively, you may use Docker compose with the `compose.yml` file provided in the repository.
+Alternatively, you may use Docker compose. Adjust the file `compose.yml`, which is provided in the repository, according to your needs.
 See our [advanced Docker usage](https://github.com/oraios/serena/blob/main/DOCKER.md) documentation for more detailed instructions, configuration options, and limitations.
 
 :::{note}

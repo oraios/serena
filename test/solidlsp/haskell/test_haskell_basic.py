@@ -13,19 +13,19 @@ Test Repository Structure:
 - app/Main.hs: Main entry point using Calculator and Helper modules
 """
 
-import sys
-
 import pytest
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
+from test.conftest import language_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
+pytestmark = pytest.mark.skipif(not language_tests_enabled(Language.HASKELL), reason="Haskell tests are disabled (HLS not available)")
+
 
 @pytest.mark.haskell
-@pytest.mark.skipif(sys.platform == "win32", reason="HLS not installed on Windows CI")
 class TestHaskellLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
     def test_calculator_module_symbols(self, language_server: SolidLanguageServer):

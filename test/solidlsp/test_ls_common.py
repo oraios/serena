@@ -1,9 +1,12 @@
 import os
+from collections.abc import Sequence
 
 import pytest
 
 from solidlsp import SolidLanguageServer
-from test.conftest import PYTHON_LANGUAGE_BACKENDS
+from solidlsp.ls_config import Language
+from solidlsp.ls_utils import SymbolUtils
+from test.conftest import PYTHON_LANGUAGE_BACKENDS, start_ls_context
 
 
 class TestLanguageServerCommonFunctionality:
@@ -41,3 +44,35 @@ class TestLanguageServerCommonFunctionality:
 
         finally:
             os.remove(file_path)
+
+    def test_workspace_folders_affect_full_symbol_tree(self):
+        """
+        Tests that workspace folder configurations are respected when requesting the full symbol tree.
+        """
+
+        def check(langsrv: SolidLanguageServer, present: Sequence[str] = (), absent: Sequence[str] = ()) -> None:
+            symbols = langsrv.request_full_symbol_tree()
+            for name in present:
+                assert SymbolUtils.symbol_tree_contains_name(symbols, name)
+            for name in absent:
+                assert not SymbolUtils.symbol_tree_contains_name(symbols, name)
+
+        symbols_in_subfolder_test_repo = ["OuterClass", "UserService"]
+        symbols_in_subfolder_scripts = ["parse_args", "create_sample_users"]
+        all_symbols = symbols_in_subfolder_test_repo + symbols_in_subfolder_scripts
+
+        with start_ls_context(language=Language.PYTHON, workspace_folders=["."]) as ls:
+            ls.request_full_symbol_tree()
+            check(ls, present=all_symbols)
+
+        with start_ls_context(language=Language.PYTHON, workspace_folders=["./test_repo"]) as ls:
+            ls.request_full_symbol_tree()
+            check(ls, present=symbols_in_subfolder_test_repo, absent=symbols_in_subfolder_scripts)
+
+        with start_ls_context(language=Language.PYTHON, workspace_folders=["./scripts"]) as ls:
+            ls.request_full_symbol_tree()
+            check(ls, present=symbols_in_subfolder_scripts, absent=symbols_in_subfolder_test_repo)
+
+            # test that explicit requests for symbols in other workspace folders are rejected
+            with pytest.raises(ValueError, match="outside"):
+                ls.request_full_symbol_tree(within_relative_path="./test_repo")

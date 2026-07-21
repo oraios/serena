@@ -4,7 +4,6 @@ Provides F# specific instantiation of the LanguageServer class.
 
 import logging
 import os
-import pathlib
 import shutil
 import threading
 from pathlib import Path
@@ -16,7 +15,6 @@ from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependenc
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import Language, LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -129,17 +127,11 @@ class FSharpLanguageServer(SolidLanguageServer):
         # FsAutoComplete uses --lsp flag for LSP mode
         return f"{fsautocomplete_path} --adaptive-lsp-server-enabled --project-graph-enabled --use-fcs-transparent-compiler"
 
-    def _get_initialize_params(self) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the F# Language Server.
         """
-        root_uri = pathlib.Path(self.repository_root_path).as_uri()
-
         initialize_params = {
-            "processId": os.getpid(),
-            "rootPath": self.repository_root_path,
-            "rootUri": root_uri,
-            "workspaceFolders": [{"name": "workspace", "uri": root_uri}],
             "capabilities": {
                 "workspace": {
                     "applyEdit": True,
@@ -269,7 +261,7 @@ class FSharpLanguageServer(SolidLanguageServer):
             "trace": "off",
         }
 
-        return initialize_params  # type: ignore
+        return initialize_params
 
     def _get_dotnet_root(self) -> str:
         """
@@ -362,7 +354,7 @@ class FSharpLanguageServer(SolidLanguageServer):
             raise SolidLSPException(f"Failed to start F# language server: {e}")
 
         # Send initialization
-        initialize_params = self._get_initialize_params()
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request to F# language server")
         try:

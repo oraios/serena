@@ -8,14 +8,12 @@ The editor must be open with its built-in language server enabled (default).
 
 import logging
 import os
-import pathlib
 from collections.abc import Callable
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_process import LanguageServerInterface, TCPConnectionInfo, TCPLanguageServer
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo, StringDict
+from solidlsp.lsp_protocol_handler.server import StringDict
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -49,7 +47,7 @@ class GodotLanguageServer(SolidLanguageServer):
         self._configured_request_timeout: float | None = None
 
         # Dummy ProcessLaunchInfo — _create_language_server_interface() ignores it
-        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=""), "gdscript", solidlsp_settings)
+        super().__init__(config, repository_root_path, None, "gdscript", solidlsp_settings)
 
     def set_request_timeout(self, timeout: float | None) -> None:
         """Cap the timeout at the value configured in ls_specific_settings, if set."""
@@ -75,12 +73,8 @@ class GodotLanguageServer(SolidLanguageServer):
             pass
         return None
 
-    def _create_language_server_interface(
-        self,
-        process_launch_info: ProcessLaunchInfo,
-        logging_fn: Callable[[str, str, StringDict | str], None] | None,
-    ) -> LanguageServerInterface:
-        settings: dict = self._custom_settings or {}
+    def _create_language_server_interface(self, logging_fn: Callable[[str, str, StringDict | str], None] | None) -> LanguageServerInterface:
+        settings = self._custom_settings or {}
         port = settings.get("port", DEFAULT_GODOT_LS_PORT)
         request_timeout = settings.get("request_timeout", DEFAULT_GODOT_REQUEST_TIMEOUT)
         self._configured_request_timeout = settings.get("request_timeout")
@@ -93,14 +87,8 @@ class GodotLanguageServer(SolidLanguageServer):
             request_timeout=request_timeout,
         )
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
+    def _create_base_initialize_params(self) -> dict:
         params = {
-            "processId": os.getpid(),
-            "rootUri": root_uri,
-            "rootPath": repository_absolute_path,
-            "workspaceFolders": [{"uri": root_uri, "name": os.path.basename(repository_absolute_path)}],
             "capabilities": {
                 "textDocument": {
                     "synchronization": {"didSave": True, "dynamicRegistration": True},
@@ -125,7 +113,7 @@ class GodotLanguageServer(SolidLanguageServer):
                 },
             },
         }
-        return params  # type: ignore
+        return params
 
     def _start_server(self) -> None:
         def do_nothing(params: dict) -> None:
@@ -143,7 +131,7 @@ class GodotLanguageServer(SolidLanguageServer):
         log.info("Connecting to Godot LSP at %s:%d", self._conn_info.host, self._conn_info.port)
         self.server.start()
 
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
         log.info("Sending LSP initialize request to Godot")
         self.server.send.initialize(initialize_params)
         self.server.notify.initialized({})

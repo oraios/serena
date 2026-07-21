@@ -19,7 +19,7 @@ def is_headless_environment() -> bool:
         return False
 
     # Check for DISPLAY variable (required for X11)
-    if not os.environ.get("DISPLAY"):  # type: ignore
+    if not os.environ.get("DISPLAY"):
         return True
 
     # Check for SSH session

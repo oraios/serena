@@ -21,18 +21,25 @@ from solidlsp.language_servers.common import (
 )
 from solidlsp.language_servers.typescript_language_server import TypeScriptLanguageServer
 from solidlsp.ls import (
+    DocumentSymbols,
     LanguageServerDependencyProvider,
     LanguageServerDependencyProviderSinglePath,
+    LSPFileBuffer,
     SolidLanguageServer,
 )
 from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 TS_EXT = frozenset({".ts", ".tsx", ".mts", ".cts"})
 JS_EXT = frozenset({".js", ".jsx", ".mjs", ".cjs"})
 SVELTE_EXT = frozenset({".svelte"})
+# cap the file listing in SvelteCompanionPreparationError so a large repo cannot bloat the message
+_MAX_FAILED_FILES_IN_ERROR = 10
+
+
+class SvelteCompanionPreparationError(RuntimeError):
+    """Raised when the companion TypeScript server cannot be prepared deterministically."""
 
 
 def _is_ts_file(uri: str) -> bool:
@@ -52,6 +59,9 @@ class SvelteTypeScriptServer(TypeScriptLanguageServer):
 
     Spawned and owned by :class:`SvelteLanguageServer`; not instantiated directly.
     """
+
+    INDEXING_PROGRESS_TIMEOUT = 120.0
+    SERVER_READY_TIMEOUT = 30.0
 
     class DependencyProvider(TypeScriptLanguageServer.DependencyProvider):
         """Returns the pre-installed typescript-language-server binary.
@@ -118,8 +128,8 @@ class SvelteTypeScriptServer(TypeScriptLanguageServer):
         return "typescript"
 
     @override
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
-        params = super()._get_initialize_params(repository_absolute_path)
+    def _create_base_initialize_params(self) -> dict:
+        params = super()._create_base_initialize_params()
         params["initializationOptions"] = {
             "plugins": [
                 {
@@ -141,6 +151,16 @@ class SvelteTypeScriptServer(TypeScriptLanguageServer):
         self.server.on_request("workspace/configuration", workspace_configuration_handler)
         super()._start_server()
 
+    @override
+    def _handle_server_ready_timeout(self, timeout: float) -> None:
+        raise TimeoutError(f"Svelte companion TypeScript server did not become ready within {timeout:.0f}s")
+
+    @override
+    def _handle_project_indexing_timeout(self, timeout: float) -> None:
+        raise TimeoutError(
+            f"Svelte companion TypeScript server project indexing did not complete within {timeout:.0f}s ({self.describe_indexing_state()})"
+        )
+
 
 class SvelteLanguageServer(SolidLanguageServer):
     """
@@ -150,6 +170,9 @@ class SvelteLanguageServer(SolidLanguageServer):
         * ``svelte_language_server_version``: version of ``svelte-language-server``
           to install (default: ``0.18.0``).
         * ``npm_registry``: optional alternative npm-compatible registry URL.
+        * ``indexing_timeout``: optional timeout in seconds for companion TS indexing of
+          Svelte files. Falls back to ``ls_specific_settings["typescript"].indexing_timeout``
+          or the Svelte companion default.
         * ``initialization_options_configuration``: optional dict merged into
           ``initializeParams.initializationOptions.configuration`` (same top-level keys as in
           Svelte Language Tools: ``svelte``, ``prettier``, ``typescript``, …).
@@ -312,6 +335,15 @@ class SvelteLanguageServer(SolidLanguageServer):
                 log.debug("Error processing svelte file %s: %s", svelte_file, exc)
         return svelte_files
 
+    def _get_companion_indexing_timeout(self) -> float:
+        """:return: maximum seconds to wait for companion TS indexing after opening Svelte files."""
+        ts_settings = self._solidlsp_settings.get_ls_specific_settings(Language.TYPESCRIPT)
+        timeout = self._custom_settings.get(
+            "indexing_timeout",
+            ts_settings.get("indexing_timeout", SvelteTypeScriptServer.INDEXING_PROGRESS_TIMEOUT),
+        )
+        return float(timeout)
+
     def _ensure_svelte_files_indexed_on_ts_server(self) -> None:
         """Open all .svelte files on the companion TS server so the plugin includes them in the TS program.
 
@@ -331,6 +363,8 @@ class SvelteLanguageServer(SolidLanguageServer):
         # prepare progress tracking BEFORE opening files to avoid a race
         self._ts_server.expect_indexing()
 
+        failed_svelte_files = []
+        first_open_error: Exception | None = None
         for svelte_file in svelte_files:
             try:
                 with self._ts_server.open_file(svelte_file) as file_buffer:
@@ -338,15 +372,29 @@ class SvelteLanguageServer(SolidLanguageServer):
                     self._indexed_svelte_file_uris.append(file_buffer.uri)
             except Exception as exc:
                 log.debug("Failed to open %s on companion TS server: %s", svelte_file, exc)
+                if first_open_error is None:
+                    first_open_error = exc
+                failed_svelte_files.append(svelte_file)
+
+        if failed_svelte_files:
+            shown_files = sorted(failed_svelte_files)[:_MAX_FAILED_FILES_IN_ERROR]
+            remainder = len(failed_svelte_files) - len(shown_files)
+            listing = ", ".join(shown_files) + (f" and {remainder} more" if remainder else "")
+            raise SvelteCompanionPreparationError(
+                f"Failed to open {len(failed_svelte_files)} Svelte file(s) on companion TypeScript server: {listing}"
+            ) from first_open_error
 
         self._svelte_files_indexed = True
         log.info("Svelte file indexing complete; waiting for companion TS server to finish processing")
 
-        timeout = TypeScriptLanguageServer.INDEXING_PROGRESS_TIMEOUT
-        if self._ts_server.wait_for_indexing(timeout=timeout):
+        timeout = self._get_companion_indexing_timeout()
+        if self._ts_server._wait_for_indexing_start_or_completion(timeout=timeout):
             log.info("Companion TypeScript server finished indexing .svelte files")
         else:
-            log.warning("Timeout (%ss) waiting for companion TS server to index .svelte files; proceeding anyway", timeout)
+            raise TimeoutError(
+                f"Companion TypeScript server did not finish indexing {len(svelte_files)} .svelte files within {timeout:.0f}s "
+                f"({self._ts_server.describe_indexing_state()})"
+            )
 
     def _cleanup_indexed_svelte_files(self) -> None:
         """Decrement ref-counts for all .svelte files opened during indexing."""
@@ -383,13 +431,13 @@ class SvelteLanguageServer(SolidLanguageServer):
             )
             log.info("Starting companion SvelteTypeScriptServer")
             self._ts_server.start()
-            log.info("Waiting for companion SvelteTypeScriptServer to be ready ...")
-            if not self._ts_server.server_ready.wait(timeout=30.0):
-                log.warning("Timeout waiting for companion SvelteTypeScriptServer; proceeding anyway")
-                self._ts_server.server_ready.set()
             self._ts_server_started = True
             log.info("Companion SvelteTypeScriptServer ready")
             self._ensure_svelte_files_indexed_on_ts_server()
+        except (TimeoutError, SvelteCompanionPreparationError):
+            log.exception("Failed to prepare companion SvelteTypeScriptServer; aborting Svelte server startup")
+            self._stop_typescript_server()
+            raise
         except Exception:
             log.exception("Error starting companion SvelteTypeScriptServer; TS-side operations degrade to svelte LS")
             self._ts_server = None
@@ -436,9 +484,9 @@ class SvelteLanguageServer(SolidLanguageServer):
                 return
             _orig_notify_send("$/onDidChangeTsOrJsFile", {"uri": uri, "changes": changes})
 
-        self.server.notify.send_notification = send_notification_wrapped  # type: ignore[method-assign]  # type: ignore[method-assign]  # type: ignore[method-assign]
+        self.server.notify.send_notification = send_notification_wrapped
 
-    def _get_initialize_params(self) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Svelte Language Server.
 
@@ -449,8 +497,6 @@ class SvelteLanguageServer(SolidLanguageServer):
         The resulting dict is also stored as :attr:`_lsp_configuration` so
         ``workspace/configuration`` requests can be answered with real values.
         """
-        root_uri = pathlib.Path(self.repo_path).as_uri()
-
         # base configuration mirroring all plugin-sections from svelte-vscode initializationOptions
         lsp_config: dict[str, Any] = {
             "svelte": {},
@@ -512,17 +558,8 @@ class SvelteLanguageServer(SolidLanguageServer):
                 "dontFilterIncompleteCompletions": True,
                 "configuration": lsp_config,
             },
-            "processId": os.getpid(),
-            "rootPath": self.repo_path,
-            "rootUri": root_uri,
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(self.repo_path),
-                }
-            ],
         }
-        return cast(InitializeParams, initialize_params)
+        return initialize_params
 
     def _start_server(self) -> None:
         def window_log_message(msg: dict) -> None:
@@ -560,7 +597,7 @@ class SvelteLanguageServer(SolidLanguageServer):
         self._wrap_notify_send_for_ts_js_mirror()
         self.server.start()
 
-        init_params = self._get_initialize_params()
+        init_params = self._create_initialize_params()
         init_response = self.server.send.initialize(init_params)
 
         assert "documentSymbolProvider" in init_response["capabilities"], "Svelte LSP did not advertise documentSymbolProvider"
@@ -646,6 +683,25 @@ class SvelteLanguageServer(SolidLanguageServer):
             with self._ts_server.open_file(relative_file_path):
                 return self._ts_server.request_definition(relative_file_path, line, column)
         return super().request_definition(relative_file_path, line, column)
+
+    @override
+    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
+        """Delegate document-symbol requests for .ts/.js files to the companion TS server.
+
+        The base svelte LS only provides ``documentSymbol`` for .svelte files and returns nothing for
+        .ts/.js files. Without this override, symbols defined in plain .ts/.js modules would be
+        undiscoverable via ``find_symbol``/``get_symbols_overview`` and ``find_referencing_symbols``
+        would fail outright, since it must first locate the target symbol via ``documentSymbol``.
+        Routing .ts/.js files to the companion (svelte-plugin-aware) typescript LS mirrors the
+        existing references/definition/rename delegations.
+
+        The companion's own ``file_buffer`` is not reused here: the provided buffer (if any) is bound
+        to this svelte LS, so the companion opens and reads the file itself.
+        Falls back to the svelte LS when the companion is unavailable or when the file is .svelte.
+        """
+        if _is_ts_file(relative_file_path) and self._ts_server is not None:
+            return self._ts_server.request_document_symbols(relative_file_path)
+        return super().request_document_symbols(relative_file_path, file_buffer)
 
     @override
     def request_text_document_diagnostics(

@@ -65,7 +65,16 @@ For details on mode configuration, see
 def find_project_root(root: str | Path | None = None) -> str | None:
     """Find project root by walking up from CWD.
 
-    Checks for .serena/project.yml first (explicit Serena project), then .git (git root).
+    Returns the nearest ancestor that is either an explicit Serena project
+    (contains .serena/project.yml) or a git root (contains .git, which may be a
+    directory or, for git worktrees and submodules, a pointer file). The nearest
+    such directory wins; a .serena/project.yml at the same level takes priority
+    over .git only because they resolve to the same directory.
+
+    Walking up with a single pass (rather than searching all levels for
+    .serena/project.yml first and only then for .git) ensures a git worktree
+    nested under another Serena project resolves to the worktree itself, instead
+    of being hijacked by the ancestor project's .serena/project.yml.
 
     :param root: If provided, constrains the search to this directory and below
                  (acts as a virtual filesystem root). Search stops at this boundary.
@@ -82,14 +91,12 @@ def find_project_root(root: str | Path | None = None) -> str | None:
             if boundary is not None and parent == boundary:
                 return
 
-    # First pass: look for .serena
+    # Single pass: the nearest project boundary wins, whether it is an explicit
+    # Serena project (.serena/project.yml) or a git root (.git, a dir or a worktree
+    # pointer file). This keeps a nested git worktree from being hijacked by an
+    # ancestor's .serena/project.yml.
     for directory in ancestors():
-        if (directory / ".serena" / "project.yml").is_file():
-            return str(directory)
-
-    # Second pass: look for .git
-    for directory in ancestors():
-        if (directory / ".git").exists():  # .git can be file (worktree) or dir
+        if (directory / ".serena" / "project.yml").is_file() or (directory / ".git").exists():
             return str(directory)
 
     return None
@@ -177,9 +184,7 @@ class TopLevelCommands(AutoRegisteringGroup):
     )
     def init(language_backend: Literal["LSP", "JetBrains"] = "LSP") -> None:
         click.echo(f"\nSerena version: {serena_version()}\n")
-        serena_config = SerenaConfig.from_config_file()
-        serena_config.language_backend = LanguageBackend(language_backend)
-        serena_config.save()
+        serena_config = SerenaConfig.init(language_backend=LanguageBackend(language_backend))
         click.echo(f"Configuration file: {serena_config.config_file_path}")
         click.echo(f"Language backend: {language_backend}")
 
@@ -390,13 +395,7 @@ class TopLevelCommands(AutoRegisteringGroup):
     @click.command(
         "print-system-prompt", help="Print the system prompt for a project.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH}
     )
-    @click.argument("project", type=click.Path(exists=True), default=os.getcwd(), required=False)
-    @click.option(
-        "--log-level",
-        type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
-        default="WARNING",
-        help="Log level for prompt generation.",
-    )
+    @click.argument("project", type=click.Path(exists=True), default=None, required=False)
     @click.option("--only-instructions", is_flag=True, help="Print only the initial instructions, without prefix/postfix.")
     @click.option(
         "--context", type=str, default=DEFAULT_CONTEXT, show_default=True, help="Built-in context name or path to custom context YAML."
@@ -410,27 +409,19 @@ class TopLevelCommands(AutoRegisteringGroup):
         show_default=False,
         help=_MODES_EXPLANATION,
     )
-    def print_system_prompt(
-        project: str, log_level: str, only_instructions: bool, context: str, modes: Sequence[str] | None = None
-    ) -> None:
+    def print_system_prompt(project: str | None, only_instructions: bool, context: str, modes: Sequence[str] | None = None) -> None:
         from serena.agent import SerenaAgent
 
         prefix = "You will receive access to Serena's symbolic tools. Below are instructions for using them, take them into account."
         postfix = "You begin by acknowledging that you understood the above instructions and are ready to receive tasks."
 
-        lvl = logging.getLevelNamesMapping()[log_level.upper()]
-        logging.configure(level=lvl)
         context_instance = SerenaAgentContext.load(context)
         modes_selection_def: ModeSelectionDefinition | None = None
         if modes:
             modes_selection_def = ModeSelectionDefinition(default_modes=modes)
-        serena_config = SerenaConfig.from_config_file()
-        serena_config.web_dashboard = False
-        print(serena_config.default_modes)
-        print(serena_config.base_modes)
-
+        serena_config = SerenaConfig.from_config_file().with_headless_mode_overrides()
         agent = SerenaAgent(
-            project=os.path.abspath(project),
+            project=os.path.abspath(project) if project is not None else None,
             serena_config=serena_config,
             context=context_instance,
             modes=modes_selection_def,
@@ -923,10 +914,8 @@ class ProjectCommands(AutoRegisteringGroup):
 
         logging.configure(level=logging.INFO)
         project_path = os.path.abspath(project)
-        serena_config = SerenaConfig.from_config_file()
+        serena_config = SerenaConfig.from_config_file().with_headless_mode_overrides()
         serena_config.language_backend = LanguageBackend.LSP
-        serena_config.gui_log_window = False
-        serena_config.web_dashboard = False
         proj = Project.load(project_path, serena_config=serena_config)
 
         # Create log file with timestamp
@@ -1108,7 +1097,7 @@ class ToolCommands(AutoRegisteringGroup):
 
         agent = SerenaAgent(
             project=None,
-            serena_config=SerenaConfig(web_dashboard=False, log_level=logging.INFO),
+            serena_config=SerenaConfig(log_level=logging.INFO).with_headless_mode_overrides(),
             context=serena_context,
         )
         tool = agent.get_tool_by_name(tool_name)
@@ -1135,17 +1124,11 @@ class MemoryCommands(AutoRegisteringGroup):
         exist at the configured location). Never auto-creates the ``.serena`` directory —
         if no project configuration is found, the user is directed at ``serena project create``.
         """
-        from serena.project import Project
-
         serena_config = SerenaConfig.from_config_file()
-        project_path = os.path.abspath(project)
-        try:
-            proj = Project.load(project_path, serena_config=serena_config, autogenerate=False)
-        except FileNotFoundError as e:
-            raise click.UsageError(
-                f"{e}\nNo Serena project found at {project_path}. Create one first with:\n  serena project create {project_path}"
-            ) from e
-        return proj.memory_manager
+        registered_project = serena_config.get_registered_project(project)
+        if registered_project is None:
+            raise click.UsageError(f"No Serena project found for '{project}'. Create one first.")
+        return registered_project.get_project_instance(serena_config).memory_manager
 
     @staticmethod
     @click.command(

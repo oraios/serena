@@ -9,16 +9,18 @@ from sensai.util.logging import LogTime
 from sensai.util.string import TextBuilder, ToStringMixin
 
 from serena.config.serena_config import (
+    LanguageBackend,
     ProjectConfig,
+    ProjectConfigAutoGenerationMode,
     SerenaConfig,
 )
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from serena.memories.memory_manager import MemoryManager
-from serena.util.file_system import GitignoreParser, match_path
+from serena.util.file_proxy import FileCollection, FileProxy
+from serena.util.file_system import GitignoreParser, match_path, scan_directory
 from serena.util.text_utils import MatchedConsecutiveLines, search_files
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from solidlsp.ls_utils import FileUtils
 
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
@@ -120,18 +122,28 @@ class Project(ToStringMixin):
     def project_name(self) -> str:
         return self.project_config.project_name
 
+    @property
+    def language_backend(self) -> LanguageBackend:
+        # The backend configuration is fundamentally owned by the agent, so it takes
+        # precedence. (Note: The agent does not necessary honour the project's choice,
+        # as it may be invalid.)
+        if self._agent is not None:
+            return self._agent.get_language_backend()
+        else:
+            return self.serena_config.determine_language_backend(self.project_config)
+
     @classmethod
     def load(
         cls,
         project_root: str | Path,
         serena_config: "SerenaConfig",
-        autogenerate: bool = True,
+        autogen: ProjectConfigAutoGenerationMode = ProjectConfigAutoGenerationMode.SYNCHRONOUS,
     ) -> "Project":
         assert serena_config is not None
         project_root = Path(project_root).resolve()
         if not project_root.exists():
             raise FileNotFoundError(f"Project root not found: {project_root}")
-        project_config = ProjectConfig.load(project_root, serena_config=serena_config, autogenerate=autogenerate)
+        project_config = ProjectConfig.load(project_root, serena_config=serena_config, autogen=autogen)
         return Project(project_root=str(project_root), project_config=project_config, serena_config=serena_config)
 
     def save_config(self) -> None:
@@ -146,15 +158,23 @@ class Project(ToStringMixin):
     def path_to_project_yml(self) -> str:
         return self.serena_config.get_project_yml_location(self.project_root)
 
+    def is_trusted(self) -> bool:
+        """
+        Checks whether the project is trusted, based on the global configuration.
+
+        :return: True if the project is trusted, False otherwise
+        """
+        return self.serena_config.is_trusted_project_path(self.project_root)
+
     def read_file(self, relative_path: str) -> str:
         """
-        Reads a file relative to the project root.
+        Reads a project file.
 
-        :param relative_path: the path to the file relative to the project root
+        :param relative_path: the path to the file relative to the project root or an external
+            path token like "<ext:FileUtil.class|472e0a13>"
         :return: the content of the file
         """
-        abs_path = Path(self.project_root) / relative_path
-        return FileUtils.read_file(str(abs_path), self.project_config.encoding)
+        return FileProxy.from_project_relative_path(self, relative_path).get_contents()
 
     @property
     def _ignore_spec(self) -> pathspec.PathSpec:
@@ -211,17 +231,20 @@ class Project(ToStringMixin):
             log.debug(f"Path {abs_path} does not exist, skipping ignore check")
             return False
 
-        # Check file extension if it's a file
-        is_file = os.path.isfile(abs_path)
-        if is_file and ignore_non_source_files:
-            is_file_in_supported_language = False
-            for language in self.project_config.languages:
-                fn_matcher = language.get_source_fn_matcher()
-                if fn_matcher.is_relevant_filename(abs_path):
-                    is_file_in_supported_language = True
-                    break
-            if not is_file_in_supported_language:
-                return True
+        # check code file restriction (depending on backend)
+        if ignore_non_source_files:
+            # apply restriction only for LSP backend, which enumerates known languages
+            # and therefore can determine whether a file is a source file or not
+            if self.language_backend.is_lsp():
+                if os.path.isfile(abs_path):
+                    is_file_in_supported_language = False
+                    for language in self.project_config.languages:
+                        fn_matcher = language.get_source_fn_matcher()
+                        if fn_matcher.is_relevant_filename(abs_path):
+                            is_file_in_supported_language = True
+                            break
+                    if not is_file_in_supported_language:
+                        return True
 
         # Create normalized path for consistent handling
         rel_path = Path(relative_path)
@@ -285,17 +308,18 @@ class Project(ToStringMixin):
 
     def validate_relative_path(self, relative_path: str, require_not_ignored: bool = False) -> None:
         """
-        Validates that the given relative path is safe to read or edit,
-        meaning it's inside the project directory and not ignored.
-
-        Non-existent paths are allowed (not considered ignored) to support
-        editing tools that create new files.
+        Validates that the given relative path is within the project directory
+        (and, optionally, not ignored according to the project's ignore settings),
+        raising a ValueError if the validation fails.
 
         :param relative_path: the path to validate, relative to the project root
         :param require_not_ignored: if True, the path must not be ignored according to the project's ignore settings
         """
+        if FileProxy.is_external_path(relative_path):
+            return
+
         if not self.is_path_in_project(relative_path):
-            raise ValueError(f"{relative_path=} points to path outside of the repository root; cannot access for safety reasons")
+            raise ValueError(f"{relative_path=} points outside the project root ({self.project_root})")
 
         if require_not_ignored:
             if self.is_ignored_path(relative_path):
@@ -338,7 +362,35 @@ class Project(ToStringMixin):
                         )
             return rel_file_paths
 
-    def search_source_files_for_pattern(
+    def _create_file_collection(self, relative_path: str, code_files_only: bool) -> FileCollection:
+        if FileProxy.is_external_path(relative_path):
+            # single external path: create appropriate proxy
+            file_collection = FileCollection([FileProxy.from_project_relative_path(self, relative_path)])
+        else:
+            # path is a local project path
+            abs_path = os.path.join(self.project_root, relative_path)
+            if not os.path.exists(abs_path):
+                raise FileNotFoundError(f"Relative path {relative_path} does not exist.")
+
+            if code_files_only:
+                relative_file_paths = self.gather_source_files(relative_path=relative_path)
+                file_collection = FileCollection.from_local_project_paths(relative_file_paths, self)
+            else:
+                abs_path = os.path.join(self.project_root, relative_path)
+                if os.path.isfile(abs_path):
+                    rel_paths_to_search = [relative_path]
+                else:
+                    _dirs, rel_paths_to_search = scan_directory(
+                        path=abs_path,
+                        recursive=True,
+                        is_ignored_dir=self.is_ignored_path,
+                        is_ignored_file=self.is_ignored_path,
+                        relative_to=self.project_root,
+                    )
+                file_collection = FileCollection.from_local_project_paths(rel_paths_to_search, self)
+        return file_collection
+
+    def search_project_files_for_pattern(
         self,
         pattern: str,
         relative_path: str = "",
@@ -347,6 +399,7 @@ class Project(ToStringMixin):
         paths_include_glob: str | None = None,
         paths_exclude_glob: str | None = None,
         multiline: bool = True,
+        code_files_only: bool = True,
     ) -> list[MatchedConsecutiveLines]:
         """
         Search for a pattern across all (non-ignored) source files
@@ -360,12 +413,10 @@ class Project(ToStringMixin):
         :param multiline: Whether to compile the regex with the DOTALL flag (``.`` matches newlines).
         :return: List of matched consecutive lines with context
         """
-        relative_file_paths = self.gather_source_files(relative_path=relative_path)
+        file_collection = self._create_file_collection(relative_path, code_files_only)
         return search_files(
-            relative_file_paths,
+            file_collection,
             pattern,
-            root_path=self.project_root,
-            file_reader=self.read_file,
             context_lines_before=context_lines_before,
             context_lines_after=context_lines_after,
             paths_include_glob=paths_include_glob,
@@ -402,6 +453,10 @@ class Project(ToStringMixin):
         :return: the language server manager, which is also stored in the project instance
         """
         try:
+            # ensure that the project configuration, particularly the list of languages is complete,
+            # despite asynchronous first-time project configuration generation (which may not have completed yet)
+            self.project_config.await_asynchronous_completion()
+
             # determine timeout to use for LS calls
             tool_timeout = self.serena_config.tool_timeout
             if tool_timeout is None or tool_timeout < 0:
@@ -419,18 +474,26 @@ class Project(ToStringMixin):
 
             log.info(f"Creating language server manager for {self.project_root}")
             self._language_server_manager_init_error = None
-            ls_specific_settings = {**self.serena_config.ls_specific_settings, **self.project_config.ls_specific_settings}
+            ls_specific_settings = dict(self.serena_config.ls_specific_settings)
+            if self.project_config.ls_specific_settings:
+                if self.is_trusted():
+                    ls_specific_settings.update(self.project_config.ls_specific_settings)
+                else:
+                    log.warning(
+                        f"Project path {self.project_root} is not trusted, ignoring LS-specific settings from project configuration. "
+                        "To trust the project, modify the trusted path patterns in the global configuration."
+                    )
             factory = LanguageServerFactory(
                 project_root=self.project_root,
+                project_config=self.project_config,
                 project_data_path=self._serena_data_folder,
                 encoding=self.project_config.encoding,
                 ignored_patterns=self._ignored_patterns,
                 ls_timeout=ls_timeout,
                 ls_specific_settings=ls_specific_settings,
-                additional_workspace_folders=self.project_config.additional_workspace_folders,
                 trace_lsp_communication=self.serena_config.trace_lsp_communication,
             )
-            self.language_server_manager = LanguageServerManager.from_languages(self.project_config.languages, factory)
+            self.language_server_manager = LanguageServerManager.from_languages(self.project_config.languages, factory, self)
             return self.language_server_manager
         except Exception as e:
             self._language_server_manager_init_error = e
@@ -493,6 +556,14 @@ class Project(ToStringMixin):
         else:
             log.info("Removing and stopping the language server for language %s ...", language.value)
             self.language_server_manager.remove_language_server(language)
+
+    def ls_sync_file_system_changes(self) -> int:
+        """
+        Synchronizes file system changes with the project's associated language server(s), if applicable
+        """
+        if self.language_server_manager:
+            return self.language_server_manager.sync_file_system_changes()
+        return 0
 
     def shutdown(self, timeout: float = 2.0) -> None:
         if self.language_server_manager is not None:

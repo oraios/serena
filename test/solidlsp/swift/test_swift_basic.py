@@ -6,7 +6,6 @@ like request_references using the Swift test repository.
 """
 
 import os
-import platform
 
 import pytest
 
@@ -14,15 +13,11 @@ from serena.project import Project
 from serena.util.text_utils import LineType
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from test.conftest import is_ci
+from test.conftest import is_ci, language_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
-# Skip Swift tests on Windows due to complex GitHub Actions configuration
-WINDOWS_SKIP = platform.system() == "Windows"
-WINDOWS_SKIP_REASON = "GitHub Actions configuration for Swift on Windows is complex, skipping for now."
-
-pytestmark = [pytest.mark.swift, pytest.mark.skipif(WINDOWS_SKIP, reason=WINDOWS_SKIP_REASON)]
+pytestmark = [pytest.mark.swift, pytest.mark.skipif(not language_tests_enabled(Language.SWIFT), reason="Swift tests are disabled")]
 
 
 class TestSwiftLanguageServerBasics:
@@ -203,7 +198,7 @@ class TestSwiftProjectBasics:
 
         # Scenario 3: Search for struct definitions
         struct_pattern = r"struct\s+\w+"
-        matches = project.search_source_files_for_pattern(struct_pattern)
+        matches = project.search_project_files_for_pattern(struct_pattern)
         assert len(matches) > 0, "Should find struct definitions"
         # Should find User struct
         user_matches = [m for m in matches if "User" in str(m)]
@@ -211,7 +206,7 @@ class TestSwiftProjectBasics:
 
         # Scenario 4: Search for class definitions
         class_pattern = r"class\s+\w+"
-        matches = project.search_source_files_for_pattern(class_pattern)
+        matches = project.search_project_files_for_pattern(class_pattern)
         assert len(matches) > 0, "Should find class definitions"
         # Should find Calculator and Circle classes
         calculator_matches = [m for m in matches if "Calculator" in str(m)]
@@ -221,7 +216,7 @@ class TestSwiftProjectBasics:
 
         # Scenario 5: Search for enum definitions
         enum_pattern = r"enum\s+\w+"
-        matches = project.search_source_files_for_pattern(enum_pattern)
+        matches = project.search_project_files_for_pattern(enum_pattern)
         assert len(matches) > 0, "Should find enum definitions"
         # Should find Status enum
         status_matches = [m for m in matches if "Status" in str(m)]

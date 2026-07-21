@@ -2,7 +2,7 @@ import logging
 import os
 import re
 import shutil
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Literal
 
@@ -147,11 +147,41 @@ class MemoryManager:
         # use a callable replacement to avoid backreference interpretation of characters in ref_new
         return re.subn(pattern, lambda _m: ref_new, content)
 
+    def _resolve_memory_path(self, base_dir: Path, parts: Sequence[str]) -> Path:
+        """
+        Builds the ``*.md`` path for ``parts`` under ``base_dir``, creating any parent
+        subdirectories, and guarantees the result stays inside ``base_dir``.
+
+        The containment check is a defense-in-depth backstop for :meth:`get_memory_file_path`'s
+        up-front segment validation: even if a crafted name slipped through, the built path must
+        never escape the memories sandbox (which would let an agent read/write/delete arbitrary
+        files). The check runs *before* any directory is created, so a rejected name cannot leave
+        stray directories behind either. It is deliberately *lexical* (``normpath``, no symlink
+        resolution): directory symlinks placed inside the memories folder are a supported way to
+        share memories (e.g. a monorepo symlinking each submodule's memory dir), and those must
+        keep resolving to their targets at I/O time.
+        """
+        filename = f"{parts[-1]}.md"
+        subdir = base_dir if len(parts) == 1 else base_dir.joinpath(*parts[:-1])
+        candidate = subdir / filename
+        base_norm = Path(os.path.normpath(base_dir))
+        if not Path(os.path.normpath(candidate)).is_relative_to(base_norm):
+            raise ValueError(f"Memory name resolves outside the memories directory. Got: {'/'.join(parts)}")
+        subdir.mkdir(parents=True, exist_ok=True)
+        return candidate
+
     def get_memory_file_path(self, name: str) -> Path:
         name = self._sanitize_name(name)
         parts = name.split("/")
+
         if ".." in parts:
-            raise ValueError(f"Memory name cannot contain '..' segments for security reasons. Got: {name}")
+            raise ValueError(f"Memory name cannot contain '..' segments. Got: {name}")
+
+        # Reject absolute names and empty path segments: pathlib discards the base directory when
+        # joined with an absolute path (e.g. "/etc/cron.d/backdoor" would reset to "/etc/cron.d"),
+        # letting a memory name escape the sandbox. A leading "/" produces an empty first segment.
+        if os.path.isabs(name) or "" in parts:
+            raise ValueError(f"Memory name cannot be absolute or contain empty path segments. Got: {name}")
 
         if self._is_global(name):
             if name == self.GLOBAL_TOPIC:
@@ -160,26 +190,11 @@ class MemoryManager:
                 )
             # Strip "global/" prefix and resolve against global dir
             sub_name = name[len(self.GLOBAL_TOPIC) + 1 :]
-            parts = sub_name.split("/")
-            filename = f"{parts[-1]}.md"
-            if len(parts) > 1:
-                subdir = self._global_memory_dir / "/".join(parts[:-1])
-                subdir.mkdir(parents=True, exist_ok=True)
-                return subdir / filename
-            return self._global_memory_dir / filename
+            return self._resolve_memory_path(self._global_memory_dir, sub_name.split("/"))
 
         # Project-local memory
         assert self._project_memory_dir is not None, "Project dir was not passed at initialization"
-
-        filename = f"{parts[-1]}.md"
-
-        if len(parts) > 1:
-            # Create subdirectory path
-            subdir = self._project_memory_dir / "/".join(parts[:-1])
-            subdir.mkdir(parents=True, exist_ok=True)
-            return subdir / filename
-
-        return self._project_memory_dir / filename
+        return self._resolve_memory_path(self._project_memory_dir, parts)
 
     def _check_write_access(self, name: str, is_tool_context: bool) -> None:
         # in tool context, memories can be read-only
@@ -191,7 +206,7 @@ class MemoryManager:
         self._check_not_ignored(name)
         memory_file_path = self.get_memory_file_path(name)
         if not memory_file_path.exists():
-            return f"Memory file {name} not found, consider creating it with the `write_memory` tool if you need it."
+            raise FileNotFoundError(f"Memory named '{name}' not found")
         with open(memory_file_path, encoding=self._encoding) as f:
             return f.read()
 
@@ -233,11 +248,27 @@ class MemoryManager:
         def get_full_list(self) -> list[str]:
             return sorted(self.memories + self.read_only_memories)
 
+    @staticmethod
+    def _iter_memory_files(search_dir: Path) -> Iterator[Path]:
+        """Yields every ``*.md`` file under ``search_dir``, descending into symlinked directories.
+
+        Directory symlinks must be followed so that memories shared via symlink are discovered
+        (e.g. a monorepo whose ``.serena/memories`` folder symlinks each submodule's memory
+        directory, making them addressable as ``<submodule>/<name>``). ``Path.rglob`` only
+        follows symlinked directories from Python 3.13 onwards, via ``recurse_symlinks``; on
+        3.11/3.12 it silently skips them, so we fall back to ``os.walk(followlinks=True)`` there.
+        ``rglob`` is preferred when available as it is faster than ``os.walk``.
+        """
+        for root, _dirs, files in os.walk(search_dir, followlinks=True):
+            for filename in files:
+                if filename.endswith(".md"):
+                    yield Path(root) / filename
+
     def _list_memories(self, search_dir: Path, base_dir: Path, prefix: str = "") -> MemoriesList:
         result = self.MemoriesList()
         if not search_dir.exists():
             return result
-        for md_file in search_dir.rglob("*.md"):
+        for md_file in self._iter_memory_files(search_dir):
             rel = str(md_file.relative_to(base_dir).with_suffix("")).replace(os.sep, "/")
             memory_name = prefix + rel
             if self._is_ignored_memory(memory_name):

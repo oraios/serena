@@ -164,7 +164,12 @@ class GitignoreParser:
         queue: list[str] = [self.repo_root]
 
         def scan(abs_path: str | None) -> Iterator[str]:
-            for entry in os.scandir(abs_path):
+            try:
+                entries = os.scandir(abs_path)
+            except PermissionError as ex:
+                log.debug(f"Skipping unreadable directory {abs_path}: {ex}")
+                return
+            for entry in entries:
                 try:
                     if entry.is_dir(follow_symlinks=follow_symlinks):
                         queue.append(entry.path)

@@ -18,6 +18,12 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class SolidLSPSettings:
+    """
+    Configures SolidLSP-specific data storage as well as global settings.
+
+    Note: Server instance-specific settings belong in LanguageServerConfig, not here.
+    """
+
     solidlsp_dir: str = str(pathlib.Path.home() / ".solidlsp")
     """
     Path to the directory in which to store global Solid-LSP data (which is not project-specific)
@@ -33,13 +39,6 @@ class SolidLSPSettings:
     Advanced configuration option allowing to configure language server implementation specific options.
     Have a look at the docstring of the constructors of the corresponding LS implementations within solidlsp to see which options are available.
     No documentation on options means no options are available.
-    """
-    additional_workspace_folders: list[str] = field(default_factory=list)
-    """
-    Additional workspace folder paths for cross-package reference support.
-    Paths can be absolute or relative to the project root. Each folder is added as a workspace
-    folder in the LSP initialization, enabling language servers to discover symbols and references
-    across package boundaries (e.g. in monorepos).
     """
 
     def __post_init__(self) -> None:

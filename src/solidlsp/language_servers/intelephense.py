@@ -4,7 +4,6 @@ Provides PHP specific instantiation of the LanguageServer class using Intelephen
 
 import logging
 import os
-import pathlib
 import shutil
 from time import sleep
 
@@ -13,7 +12,7 @@ from overrides import override
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_utils import PlatformId, PlatformUtils
-from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, InitializeParams, LocationLink
+from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, DidChangeConfigurationParams, LocationLink
 from solidlsp.settings import SolidLSPSettings
 
 from ..lsp_protocol_handler import lsp_types
@@ -36,6 +35,11 @@ class Intelephense(SolidLanguageServer):
         - maxMemory: sets intelephense.maxMemory
         - maxFileSize: sets intelephense.files.maxSize
         - ignore_vendor: whether or ignore directories named "vendor" (default: true)
+        - file_filter: list of additional file extensions (with leading dot) to treat as PHP
+          sources, e.g. [".module", ".inc"]. The extensions are added to the defaults (".php",
+          ".phtml") of Serena's PHP source-file matcher and are pushed to Intelephense via
+          files.associations, such that the symbol tools and the language server treat the
+          same files as PHP sources (see #1710).
     """
 
     @override
@@ -107,14 +111,19 @@ class Intelephense(SolidLanguageServer):
             self._ignored_dirnames.add("vendor")
         log.info(f"Ignoring the following directories for PHP projects: {', '.join(sorted(self._ignored_dirnames))}")
 
+        # extend the source-file matcher with any additional extensions configured via `file_filter`,
+        # such that Serena's symbol tools treat the added extensions as PHP sources as well (#1710)
+        file_filter = self._custom_settings.get("file_filter")
+        if file_filter:
+            self.language.get_source_fn_matcher().add_extensions(*file_filter)
+
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
-    def _get_initialize_params(self, repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialization params for the Intelephense Language Server.
         """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
         initialize_params = {
             "locale": "en",
             "capabilities": {
@@ -135,15 +144,6 @@ class Intelephense(SolidLanguageServer):
                     "symbol": {"dynamicRegistration": True},
                 },
             },
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
         }
         initialization_options = {}
         # Add license key if provided via environment variable
@@ -159,7 +159,7 @@ class Intelephense(SolidLanguageServer):
             initialization_options["intelephense.files.maxSize"] = max_file_size
 
         initialize_params["initializationOptions"] = initialization_options
-        return initialize_params  # type: ignore
+        return initialize_params
 
     def _start_server(self) -> None:
         """Start Intelephense server process"""
@@ -180,7 +180,7 @@ class Intelephense(SolidLanguageServer):
 
         log.info("Starting Intelephense server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
@@ -194,6 +194,17 @@ class Intelephense(SolidLanguageServer):
         assert "documentSymbolProvider" in capabilities, "Server must support document symbols"
 
         self.server.notify.initialized({})
+
+        # push the file associations derived from the source-file matcher (the default extensions
+        # plus any configured via `file_filter`), such that Intelephense indexes the same set of
+        # files that Serena's symbol tools treat as PHP sources (#1710). This cannot be passed in
+        # the initialize request: Intelephense reads configuration exclusively from
+        # workspace/didChangeConfiguration (its initializationOptions only cover storagePath,
+        # globalStoragePath, clearCache and licenceKey).
+        associations = [f"*{ext}" for ext in self.language.get_source_fn_matcher().file_extensions]
+        intelephense_config: DidChangeConfigurationParams = {"settings": {"intelephense": {"files": {"associations": associations}}}}
+        log.info(f"Sending workspace/didChangeConfiguration with file associations: {associations}")
+        self.server.notify.workspace_did_change_configuration(intelephense_config)
 
         # Intelephense server is typically ready immediately after initialization
         # TODO: This is probably incorrect; the server does send an initialized notification, which we could wait for!

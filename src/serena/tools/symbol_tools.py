@@ -40,20 +40,28 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
 
     symbol_dict_grouper = LanguageServerSymbolDictGrouper(["kind"], ["kind"], collapse_singleton=True)
 
-    def apply(self, relative_path: str, depth: int = 0, max_answer_chars: int = -1) -> str:
+    def apply(self, relative_path: str, depth: int = -1, max_answer_chars: int = -1) -> str:
         """
         Use this tool to get a high-level understanding of the code symbols in a file.
         This should be the first tool to call when you want to understand a new file, unless you already know
         what you are looking for.
 
         :param relative_path: the relative path to the file to get the overview of
-        :param depth: depth up to which descendants of top-level symbols shall be retrieved
-            (e.g. 1 retrieves immediate children). Default 0.
+        :param depth: depth up to which descendants shall be retrieved.
+            Default (-1) results in a language specific choice: 1 for java and kotlin and 0 for other languages
         :param max_answer_chars: if the overview is longer than this number of characters,
             no content will be returned. -1 means the default value from the config will be used.
             Don't adjust unless there is really no other way to get the content required for the task.
         :return: a JSON object containing symbols grouped by kind in a compact format.
         """
+        # Note: file system sync not required (relevant file is opened in the language server explicitly)
+
+        if depth == -1:
+            if relative_path.endswith((".java", ".kt")):
+                depth = 1
+            else:
+                depth = 0
+
         result = self.get_symbol_overview(relative_path, depth=depth)
 
         # capture kind names and depth-0 snapshots before grouping, which mutates the dicts
@@ -183,6 +191,8 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         :param max_answer_chars: max result length; -1 for default
         :return: symbols (with locations) matching the name.
         """
+        # Note: file system sync not required; the symbol finder opens all relevant source files explicitly in the case of changes
+
         if include_body:
             depth = 0  # ignore user-specified depth if include_body is True
         assert max_matches != 0, "max_matches must be > 0 or equal to -1."
@@ -228,11 +238,15 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
                     # In python 3.15 we could specify extra_items=True in the TypedDict definition,
                     # https://peps.python.org/pep-0728/
                     # If we ever upgrade to 3.15, we can remove the type: ignore[typeddict-unknown-key]
-                    s_dict["info"] = symbol_info  # type: ignore[typeddict-unknown-key]
+                    s_dict["info"] = symbol_info
 
         grouped_symbol_dicts = self.symbol_dict_grouper.group(symbol_dicts)
         result = self._to_json(grouped_symbol_dicts)
         return self._limit_length(result, max_answer_chars, shortened_result_factories=[create_short_result_relative_path_to_name_paths])
+
+    @classmethod
+    def get_param_aliases(cls) -> dict[str, str]:
+        return {"name_path": "name_path_pattern"}
 
 
 class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
@@ -257,18 +271,20 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
 
         :param name_path: name path of the symbol
         :param relative_path: the relative path to the file containing the symbol for which to find references.
-            Note: for external dependencies, this must be an identifier starting with `<ext` that you have received
-            earlier (don't try to guess!).
         :param include_kinds: (optional) limits results to the given LSP symbol kinds (integers)
         :param exclude_kinds: optional list of LSP symbol kinds (integers) to exclude.
         :param max_answer_chars: max result length; -1 for default
         :return: a list of JSON objects with the symbols referencing the requested symbol
         """
+        # file system sync needed for case where symbol finder does not perform a global search, updating everything
+        if relative_path:
+            self.project.ls_sync_file_system_changes()
+
         include_body = False  # It is probably never a good idea to include the body of the referencing symbols
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
-        symbol_retriever = self.create_language_server_symbol_retriever()
 
+        symbol_retriever = self.create_language_server_symbol_retriever()
         references_in_symbols = symbol_retriever.find_referencing_symbols(
             name_path,
             relative_file_path=relative_path,
@@ -302,12 +318,12 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
                 }
             )
 
-        result = self.symbol_dict_grouper.group(reference_dicts)  # type: ignore
+        result = self.symbol_dict_grouper.group(reference_dicts)
 
         # shortened result closures, from least to most aggressive shortening
         def make_refs_without_context() -> str:
             """References with name_path and reference line, without surrounding code lines"""
-            grouped = self.symbol_dict_grouper.group(copy.deepcopy(ref_summaries))  # type: ignore
+            grouped = self.symbol_dict_grouper.group(copy.deepcopy(ref_summaries))
             return f"References without surrounding lines:\n{self._to_json(grouped)}"
 
         def make_per_file_counts() -> str:
@@ -351,6 +367,8 @@ class FindImplementationsTool(Tool, ToolMarkerSymbolicRead):
         :param max_answer_chars: max result length; -1 for default
         :return: a list of JSON objects with the symbols implementing the requested symbol
         """
+        self.project.ls_sync_file_system_changes()
+
         include_body = False
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
         parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
@@ -404,6 +422,8 @@ class FindDeclarationTool(Tool, ToolMarkerSymbolicRead):
         :param include_body: whether to include the symbol's body in the result. Default False.
         :param include_info: whether to include additional info (hover-like). Default False.
         """
+        self.project.ls_sync_file_system_changes()
+
         symbol_retriever = self.create_language_server_symbol_retriever()
         relative_path = self._sanitize_input_param(relative_path)
         regex = self._sanitize_input_param(regex)
@@ -486,6 +506,8 @@ class GetDiagnosticsForFileTool(Tool, ToolMarkerSymbolicRead):
         :param max_answer_chars: max result length; -1 for default
         :return: grouped diagnostics for the requested file.
         """
+        self.project.ls_sync_file_system_changes()
+
         symbol_retriever = self.create_language_server_symbol_retriever()
         diagnostics = symbol_retriever.get_file_diagnostics(
             relative_file_path=relative_path,
@@ -537,6 +559,8 @@ class GetDiagnosticsForSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOption
         :param max_answer_chars: max result length; -1 for default
         :return: grouped diagnostics for the requested symbol and, optionally, its referencing symbols.
         """
+        self.project.ls_sync_file_system_changes()
+
         symbol_retriever = self.create_language_server_symbol_retriever()
         diagnostics_by_symbol = symbol_retriever.get_symbol_diagnostics(
             name_path=name_path,
@@ -665,6 +689,7 @@ class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
         :param new_name: the new name for the symbol
         :return: result summary indicating success or failure
         """
+        self.project.ls_sync_file_system_changes()
         code_editor = self.create_ls_code_editor()
         status_message = code_editor.rename_symbol(name_path, relative_path=relative_path, new_name=new_name)
         return status_message
@@ -683,6 +708,8 @@ class SafeDeleteSymbol(Tool, ToolMarkerSymbolicEdit):
         :param name_path_pattern: name path of the symbol to delete
         :param relative_path: the relative path to the file containing the symbol to delete
         """
+        self.project.ls_sync_file_system_changes()
+
         ls_symbol_retriever = self.create_language_server_symbol_retriever()
         symbol = ls_symbol_retriever.find_unique(name_path_pattern, substring_matching=False, within_relative_path=relative_path)
         symbol_rel_path = symbol.relative_path

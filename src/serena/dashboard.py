@@ -502,7 +502,7 @@ class SerenaDashboardAPI:
         }
 
         # Get active modes
-        modes = self._agent.get_active_modes()
+        modes = self._agent.get_active_modes().get_modes(include_background_base_modes=False)
         modes_info = [
             {"name": mode.name, "description": mode.description, "path": SerenaAgentMode.get_path(mode.name, instance=mode)}
             for mode in modes
@@ -789,7 +789,9 @@ class SerenaDashboardAPI:
         # patch flask.cli.show_server to avoid printing the server info
         from flask import cli
 
-        cli.show_server_banner = lambda *args, **kwargs: None
+        # ty cannot model reassigning a third-party module's function attribute (it rejects any
+        # replacement, even one with an identical signature), so the monkeypatch is suppressed here
+        cli.show_server_banner = lambda *args, **kwargs: None  # ty: ignore[invalid-assignment]
         self._app.run(host=self._host, port=port, debug=False, use_reloader=False, threaded=True)
         return port
 

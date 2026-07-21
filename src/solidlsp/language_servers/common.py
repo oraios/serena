@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 import os
+import pathlib
 import platform
-import shutil
 import subprocess
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -105,7 +105,7 @@ class RuntimeDependencyCollection:
         if not PlatformUtils.get_platform_id().is_windows():
             import pwd
 
-            kwargs["user"] = pwd.getpwuid(os.getuid()).pw_name  # type: ignore
+            kwargs["user"] = pwd.getpwuid(os.getuid()).pw_name
 
         command = subprocess_util.convert_shell_cmd(command)
         log.info("Running command %s in '%s'", f"'{command}'" if isinstance(command, str) else command, cwd)
@@ -119,7 +119,7 @@ class RuntimeDependencyCollection:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             **kwargs,
-        )  # type: ignore
+        )
         if completed_process.returncode != 0:
             log.warning("Command '%s' failed with return code %d", command, completed_process.returncode)
             log.warning("Command output:\n%s", completed_process.stdout)
@@ -148,42 +148,6 @@ class RuntimeDependencyCollection:
                 expected_sha256=dep.sha256,
                 allowed_hosts=dep.allowed_hosts,
             )
-
-
-DEFAULT_UVX_PYTHON_VERSION = "3.13"
-
-
-def build_uvx_launch_command(
-    package: str,
-    version: str,
-    entrypoint: str,
-    extra_args: Sequence[str] = (),
-    python_version: str = DEFAULT_UVX_PYTHON_VERSION,
-) -> list[str]:
-    """Build a command that runs a pinned PyPI package's console script on demand via ``uvx`` / ``uv x``.
-
-    Resolution order:
-      1. Prefer ``uvx`` (env var ``UVX`` or PATH lookup).
-      2. Fall back to ``uv x`` if only ``uv`` is on PATH.
-      3. Raise ``RuntimeError`` if neither is available.
-
-    :param package: PyPI package name (e.g. ``"pyright"``).
-    :param version: Pinned package version.
-    :param entrypoint: Console script provided by the package (e.g. ``"pyright-langserver"``).
-    :param extra_args: Arguments appended after the entrypoint (e.g. ``("--stdio",)``).
-    :param python_version: Python interpreter version passed via ``-p`` (uv will fetch it if missing).
-    """
-    base_args = ["-p", python_version, "--from", f"{package}=={version}", entrypoint, *extra_args]
-
-    uvx_path = os.environ.get("UVX") or shutil.which("uvx")
-    if uvx_path is not None:
-        return [uvx_path, *base_args]
-
-    uv_path = shutil.which("uv")
-    if uv_path is not None:
-        return [uv_path, "x", *base_args]
-
-    raise RuntimeError("Could not find 'uvx' or 'uv' in PATH. Install uv (https://docs.astral.sh/uv/).")
 
 
 def build_npm_install_command(package_name: str, version: str, registry: str | None = None) -> list[str]:
@@ -216,3 +180,13 @@ def quote_windows_path(path: str) -> str:
             return path
         return f'"{path}"'
     return path
+
+
+UE_IGNORED_DIRNAMES = frozenset({"Binaries", "DerivedDataCache", "Intermediate", "Saved"})
+"""Unreal Engine build and cache directories. Matched per directory name, so per-plugin and
+per-module copies (e.g. ``Plugins/Foo/Intermediate``) are covered too."""
+
+
+def is_unreal_engine_project(repository_root_path: str) -> bool:
+    """:return: whether the repository root contains an Unreal Engine ``.uproject`` file."""
+    return any(pathlib.Path(repository_root_path).glob("*.uproject"))

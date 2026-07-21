@@ -13,7 +13,7 @@ setting up a project with Serena typically involves the following steps:
 4. **Working on coding tasks**: Using Serena to help you with actual coding tasks in the project
 
 (project-creation-indexing)=
-## Project Creation & Indexing
+## Project Creation
 
 Project creation is the process of defining fundamental project settings that are relevant to Serena's operation.
 
@@ -38,7 +38,7 @@ To explicitly create a project, use the following command while in the project d
  * You can immediately index the project after creation with `--index`.
 
 (project-config)=
-#### Project Configuration
+## Project Configuration
 
 After creation, you can adjust the project settings in the generated `.serena/project.yml` file
 within the project directory.
@@ -51,8 +51,9 @@ The file allows you to configure ...
   * the encoding used in source files
   * ignore rules
   * write access
-  * [additional workspace folders](additional-workspace-folders) for cross-package reference support in monorepos
+  * the list of workspace folders to be processed by language servers (when using the LSP backend)
   * an initial prompt that shall be passed to the LLM whenever the project is activated
+  * a shell command to run upon project activation (prior to language backend initialisation)
   * the set of tools and modes to use for the project
   * and some other settings.
 
@@ -60,44 +61,17 @@ For detailed information on the parameters and possible settings, see the
 [template file](https://github.com/oraios/serena/blob/main/src/serena/resources/project.template.yml).
 
 :::{note}
-Many settings in project.yml *extend* or *override* settings in the global configuration file `serena_config.yml`.
+Many settings in project.yml *extend* or *override* settings in [Serena's global configuration](global-config).
 So use the project configuration specifically for aspects that apply only to the particular project.
 :::
 
-**Local Overrides**. The project.yml file is intended to be versioned together with the project.
+**Local Overrides**. The `project.yml` file is intended to be versioned together with the project.
 You can specify local overrides for the settings in a `project.local.yml` file in the same directory
 (which, by default, is ignored by git). 
 Any keys defined therein will override the respective key in `project.yml`.
 
-(additional-workspace-folders)=
-#### Additional Workspace Folders (Cross-Package References)
-
-In monorepos or multi-package setups, Serena's language server normally only sees symbols within the
-project root. To enable cross-package references (e.g. `find_referencing_symbols` discovering usages
-in sibling packages), configure `additional_workspace_folders` in your `project.yml`:
-
-```yaml
-additional_workspace_folders:
-  - ../shared-lib
-  - ../api-client
-  - /absolute/path/to/another-package
-```
-
-Paths can be absolute or relative to the project root. Each folder is registered as an LSP workspace
-folder, and the language server will discover symbols and references across all listed packages.
-
-**Currently supported for:** TypeScript. Other language servers will raise an error if this setting
-is used with them. Support for additional languages can be added by implementing the
-`_find_representative_source_file()` method in the respective language server class.
-
-:::{note}
-Each additional workspace folder adds startup time, as the language server needs to index the
-additional projects. For large monorepos, consider listing only the packages you actively need
-cross-references for.
-:::
-
 (indexing)=
-### Indexing
+## Indexing
 
 :::{note}
 Indexing is not a relevant operation when using the JetBrains plugin, as indexing is handled by the IDE.
@@ -109,7 +83,7 @@ that requires symbol information.
 
 While in the project directory, run this command:
    
-    <serena> project index
+    serena project index
 
 Indexing has to be called only once. During regular usage, Serena will automatically update the index whenever files change.
 

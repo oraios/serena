@@ -1,16 +1,15 @@
 import os
-import shutil
 
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
-from test.conftest import is_ci
+from test.conftest import language_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
-@pytest.mark.skipif(shutil.which("elm") is None and not is_ci, reason="Elm compiler is not available")
+@pytest.mark.skipif(not language_tests_enabled(Language.ELM), reason="Elm tests are disabled (elm compiler not available)")
 @pytest.mark.elm
 class TestElmLanguageServer:
     @pytest.mark.parametrize("language_server", [Language.ELM], indirect=True)

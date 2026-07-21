@@ -8,7 +8,10 @@ from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_utils import SymbolUtils
 from solidlsp.settings import SolidLSPSettings
+from test.conftest import language_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
+
+pytestmark = pytest.mark.skipif(not language_tests_enabled(Language.BSL), reason="BSL tests are disabled (niche, slow and flaky)")
 
 
 @pytest.mark.bsl

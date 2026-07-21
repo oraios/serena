@@ -1,6 +1,5 @@
 import logging
 import os
-import pathlib
 import subprocess
 import time
 from collections.abc import Hashable
@@ -11,7 +10,6 @@ from solidlsp import ls_types
 from solidlsp.ls import RawDocumentSymbol, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_types import SymbolKind
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -75,13 +73,10 @@ class SourceKitLSP(SolidLanguageServer):
 
         return original_name.split("(", 1)[0].strip()
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Swift Language Server.
         """
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
-
         initialize_params = {
             "capabilities": {
                 "general": {
@@ -295,7 +290,6 @@ class SourceKitLSP(SolidLanguageServer):
                     "workspaceFolders": True,
                 },
             },
-            "clientInfo": {"name": "Visual Studio Code", "version": "1.102.2"},
             "initializationOptions": {
                 "backgroundIndexing": True,
                 "backgroundPreparationMode": "enabled",
@@ -305,18 +299,9 @@ class SourceKitLSP(SolidLanguageServer):
                 "workspace/peekDocuments": True,
             },
             "locale": "en",
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
         }
 
-        return initialize_params  # type: ignore[return-value]
+        return initialize_params
 
     def _start_server(self) -> None:
         """Start sourcekit-lsp server process"""
@@ -337,7 +322,7 @@ class SourceKitLSP(SolidLanguageServer):
 
         log.info("Starting sourcekit-lsp server process")
         self.server.start()
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)

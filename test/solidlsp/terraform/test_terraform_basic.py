@@ -5,18 +5,16 @@ These tests validate the functionality of the language server APIs
 like request_references using the test repository.
 """
 
-import shutil
-
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
 from solidlsp.ls_types import SymbolKind
-from test.conftest import is_ci
+from test.conftest import language_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
-@pytest.mark.skipif(shutil.which("terraform") is None and not is_ci, reason="Terraform CLI is not available")
+@pytest.mark.skipif(not language_tests_enabled(Language.TERRAFORM), reason="Terraform tests are disabled (terraform CLI not available)")
 @pytest.mark.terraform
 class TestLanguageServerBasics:
     """Test basic functionality of the Terraform language server."""

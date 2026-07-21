@@ -1,14 +1,13 @@
-import shutil
-
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
+from test.conftest import language_tests_enabled
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
 pytestmark = [
     pytest.mark.crystal,
-    pytest.mark.skipif(shutil.which("crystalline") is None, reason="Crystalline is not installed"),
+    pytest.mark.skipif(not language_tests_enabled(Language.CRYSTAL), reason="Crystal tests are disabled (crystalline not available)"),
 ]
 
 

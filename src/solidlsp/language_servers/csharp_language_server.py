@@ -6,6 +6,7 @@ import logging
 import os
 import platform
 import shutil
+import tempfile
 import threading
 from collections.abc import Hashable, Iterable
 from dataclasses import replace
@@ -25,7 +26,7 @@ from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_types import Hover
 from solidlsp.ls_utils import FileUtils, PathUtils
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams, InitializeResult
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeResult
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
@@ -34,6 +35,8 @@ log = logging.getLogger(__name__)
 
 NUGET_ALLOWED_HOSTS = ("www.nuget.org", "nuget.org", "globalcdn.nuget.org")
 DEFAULT_CSHARP_LANGUAGE_SERVER_VERSION = "5.5.0-2.26078.4"
+WINDOWS_MAX_PATH = 260
+ROSLYN_LONGEST_KNOWN_PACKAGE_MEMBER = "Microsoft.CodeAnalysis.ExternalAccess.CompilerDeveloperSDK.dll"
 
 _RUNTIME_DEPENDENCIES = [
     RuntimeDependency(
@@ -274,7 +277,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         if original_name != normalized_name:
             sel_range = symbol.get("selectionRange")
             if sel_range:
-                start = sel_range.get("start")  # type: ignore
+                start = sel_range.get("start")
                 if start and "line" in start and "character" in start:
                     line = start["line"]
                     char = start["character"]
@@ -460,12 +463,15 @@ class CSharpLanguageServer(SolidLanguageServer):
             if url is None:
                 raise SolidLSPException(f"No URL specified for package {package_name} version {package_version}")
 
-            temp_dir = Path(self._ls_resources_dir) / "temp_downloads"
-            temp_dir.mkdir(parents=True, exist_ok=True)
+            package_extract_dir = Path(self._ls_resources_dir) / "temp_downloads" / f"{package_name}.{package_version}"
+            projected_path = package_extract_dir / (dependency.extract_path or "") / ROSLYN_LONGEST_KNOWN_PACKAGE_MEMBER
+            if platform.system() == "Windows" and len(str(projected_path)) >= WINDOWS_MAX_PATH:
+                log.warning("Using a short temporary directory for Roslyn package extraction because the configured cache path is too deep")
+                package_extract_dir = Path(tempfile.mkdtemp(prefix="serena-roslyn-")) / package_extract_dir.name
+            package_extract_dir.parent.mkdir(parents=True, exist_ok=True)
 
             try:
                 log.debug(f"Downloading package from: {url}")
-                package_extract_dir = temp_dir / f"{package_name}.{package_version}"
                 FileUtils.download_and_extract_archive_verified(
                     url,
                     str(package_extract_dir),
@@ -480,60 +486,51 @@ class CSharpLanguageServer(SolidLanguageServer):
             except Exception as e:
                 raise SolidLSPException(f"Failed to download package {package_name} version {package_version} from NuGet.org: {e}") from e
 
-    def _get_initialize_params(self) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Microsoft.CodeAnalysis.LanguageServer.
         """
-        root_uri = PathUtils.path_to_uri(self.repository_root_path)
-        root_name = os.path.basename(self.repository_root_path)
-        return cast(
-            InitializeParams,
-            {
-                "workspaceFolders": [{"uri": root_uri, "name": root_name}],
-                "processId": os.getpid(),
-                "rootPath": self.repository_root_path,
-                "rootUri": root_uri,
-                "capabilities": {
-                    "window": {
-                        "workDoneProgress": True,
-                        "showMessage": {"messageActionItem": {"additionalPropertiesSupport": True}},
-                        "showDocument": {"support": True},
+        return {
+            "capabilities": {
+                "window": {
+                    "workDoneProgress": True,
+                    "showMessage": {"messageActionItem": {"additionalPropertiesSupport": True}},
+                    "showDocument": {"support": True},
+                },
+                "workspace": {
+                    "applyEdit": True,
+                    "workspaceEdit": {"documentChanges": True},
+                    "didChangeConfiguration": {"dynamicRegistration": True},
+                    "didChangeWatchedFiles": {"dynamicRegistration": True},
+                    "symbol": {
+                        "dynamicRegistration": True,
+                        "symbolKind": {"valueSet": list(range(1, 27))},
                     },
-                    "workspace": {
-                        "applyEdit": True,
-                        "workspaceEdit": {"documentChanges": True},
-                        "didChangeConfiguration": {"dynamicRegistration": True},
-                        "didChangeWatchedFiles": {"dynamicRegistration": True},
-                        "symbol": {
-                            "dynamicRegistration": True,
-                            "symbolKind": {"valueSet": list(range(1, 27))},
+                    "executeCommand": {"dynamicRegistration": True},
+                    "configuration": True,
+                    "workspaceFolders": True,
+                    "workDoneProgress": True,
+                },
+                "textDocument": {
+                    "synchronization": {"dynamicRegistration": True, "willSave": True, "willSaveWaitUntil": True, "didSave": True},
+                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                    "signatureHelp": {
+                        "dynamicRegistration": True,
+                        "signatureInformation": {
+                            "documentationFormat": ["markdown", "plaintext"],
+                            "parameterInformation": {"labelOffsetSupport": True},
                         },
-                        "executeCommand": {"dynamicRegistration": True},
-                        "configuration": True,
-                        "workspaceFolders": True,
-                        "workDoneProgress": True,
                     },
-                    "textDocument": {
-                        "synchronization": {"dynamicRegistration": True, "willSave": True, "willSaveWaitUntil": True, "didSave": True},
-                        "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
-                        "signatureHelp": {
-                            "dynamicRegistration": True,
-                            "signatureInformation": {
-                                "documentationFormat": ["markdown", "plaintext"],
-                                "parameterInformation": {"labelOffsetSupport": True},
-                            },
-                        },
-                        "definition": {"dynamicRegistration": True},
-                        "references": {"dynamicRegistration": True},
-                        "documentSymbol": {
-                            "dynamicRegistration": True,
-                            "symbolKind": {"valueSet": list(range(1, 27))},
-                            "hierarchicalDocumentSymbolSupport": True,
-                        },
+                    "definition": {"dynamicRegistration": True},
+                    "references": {"dynamicRegistration": True},
+                    "documentSymbol": {
+                        "dynamicRegistration": True,
+                        "symbolKind": {"valueSet": list(range(1, 27))},
+                        "hierarchicalDocumentSymbolSupport": True,
                     },
                 },
             },
-        )
+        }
 
     def _start_server(self) -> None:
         indexing_complete = threading.Event()
@@ -666,7 +663,7 @@ class CSharpLanguageServer(SolidLanguageServer):
             raise SolidLSPException(f"Failed to start C# language server: {e}")
 
         # Send initialization
-        initialize_params = self._get_initialize_params()
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request to language server")
         try:

@@ -48,6 +48,46 @@ class TestGoLanguageServer:
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         assert any("main.go" in ref.get("uri", "") for ref in refs), "Expected at least one reference result to point at main.go"
 
+    @pytest.mark.parametrize("language_server", [Language.GO], indirect=True)
+    def test_type_var_const_body_includes_leading_keyword(self, language_server: SolidLanguageServer) -> None:
+        """
+        Single ``type``/``var``/``const`` declarations must expose a body and replacement range that
+        include the leading keyword, just like ``func`` declarations do.
+
+        Regression test for gopls reporting the symbol range of such declarations starting at the
+        declared identifier (after the keyword) rather than at the keyword. That asymmetry made
+        replace_symbol_body drop the keyword from the body and replacement range, so a natural
+        keyword-inclusive round-trip edit corrupted the file (e.g. ``type Foo`` -> ``type type Foo``).
+        """
+        all_symbols, _ = language_server.request_document_symbols("symbol_body.go").get_all_symbols_and_roots()
+        symbols_by_name = {sym.get("name"): sym for sym in all_symbols}
+
+        # single declarations: body starts with the keyword, the range start moves to the keyword
+        # (column 0 here), and the selection range still points at the identifier after the keyword
+        expected_keyword_by_name = {
+            "BodyStruct": "type ",
+            "NamedInt": "type ",
+            "AliasInt": "type ",
+            "GlobalCounter": "var ",
+            "MaxItems": "const ",
+        }
+        for name, keyword in expected_keyword_by_name.items():
+            sym = symbols_by_name.get(name)
+            assert sym is not None, f"{name} not found in symbol_body.go"
+            body = sym["body"].get_text()
+            assert body.startswith(keyword), f"Expected body of {name} to start with {keyword!r}, got {body[:24]!r}"
+            assert sym["location"]["range"]["start"]["character"] == 0, f"Expected {name} body range to start at the keyword (col 0)"
+            assert sym["selectionRange"]["start"]["character"] > 0, f"Expected {name} selectionRange to point at the identifier"
+
+        # grouped declarations keep the keyword on a separate line (e.g. ``var ( ... )``), so their
+        # bodies must NOT include it and their ranges must be left untouched
+        for name in ("GroupedA", "GroupedB"):
+            sym = symbols_by_name.get(name)
+            assert sym is not None, f"{name} not found in symbol_body.go"
+            body = sym["body"].get_text()
+            assert body.startswith(name), f"Expected grouped var {name} body to start with the identifier, got {body[:24]!r}"
+            assert not body.startswith("var"), f"Grouped var {name} body must not include the 'var' keyword"
+
     if language_has_verified_implementation_support(Language.GO):
 
         @pytest.mark.parametrize("language_server", [Language.GO], indirect=True)

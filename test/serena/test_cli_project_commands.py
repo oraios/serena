@@ -328,6 +328,33 @@ class TestFindProjectRoot:
         finally:
             os.chdir(original_cwd)
 
+    def test_git_worktree_not_hijacked_by_ancestor_serena(self, temp_project_dir):
+        """A git worktree nested under a Serena project must resolve to the worktree.
+
+        Regression test: when a git worktree (whose .git is a pointer *file*) lives
+        below a directory that is an explicit Serena project (.serena/project.yml),
+        the worktree's own .git boundary must win over the ancestor's project marker.
+        The old two-pass search returned the ancestor Serena project, causing reads
+        and edits to land in the wrong working tree.
+        """
+        # Ancestor directory is an explicit Serena project.
+        serena_dir = os.path.join(temp_project_dir, ".serena")
+        os.makedirs(serena_dir)
+        Path(os.path.join(serena_dir, "project.yml")).touch()
+        # Nested git worktree: .git is a gitdir pointer file, as created by `git worktree add`.
+        worktree = os.path.join(temp_project_dir, "nested", "worktree")
+        os.makedirs(worktree)
+        Path(os.path.join(worktree, ".git")).write_text("gitdir: /repo/.git/worktrees/wt\n")
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(worktree)
+            result = find_project_root(root=temp_project_dir)
+            assert result is not None
+            assert os.path.samefile(result, worktree)
+        finally:
+            os.chdir(original_cwd)
+
 
 class TestProjectFromCwdMutualExclusivity:
     """Tests for --project-from-cwd mutual exclusivity."""

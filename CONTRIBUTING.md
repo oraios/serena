@@ -18,6 +18,12 @@ Every PR should cover a single logical change or a set of closely related change
 
 See the corresponding [memory](.serena/memories/adding_new_language_support_guide.md).
 
+## Submitting Pull Requests
+
+Before submitting a PR, be sure to document your relevant changes (i.e. new features, fixes) in `CHANGELOG.md`.
+Use a concise style and add your change to the appropriate section
+("Language Servers", "Tools", "JetBrains", "CLI", "Memories", "Dashboard", "Hooks", "General").
+
 ## Python Environment Setup
 
 You can install a virtual environment with the required as follows

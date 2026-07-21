@@ -33,50 +33,77 @@ To implement a new language server using the DependencyProvider pattern:
     ```
     The resource dir that is passed is the directory in which installed dependencies should be stored!
 
-**Base Classes:**
+**Base Classes** (choose the most specific one that fits):
 
-- **`LanguageServerDependencyProviderSinglePath`** - For language servers with a single core dependency (e.g., an executable or JAR file)
-  - Provides automatic support for the `ls_path` custom setting, allowing users to override the core dependency path (if they have it installed it themselves)
+- **`LanguageServerDependencyProviderUvx`** - For language servers distributed as a PyPI package, run on demand
+  via `uvx` / `uv x` (no installation step to implement)
+  - Simply instantiate it with the package name, pinned default version, entrypoint (console script) and optional `extra_args`;
+    the version can be overridden by the user via the configured `version_setting_key` custom setting
+  - Reference implementation: `PyrightServer`
+
+- **`LanguageServerDependencyProviderBaseCommand`** - For the common case where the
+  launch command is constructed from a *base command* (which the user can override via custom settings; handled generically)
+  - Implement `_create_default_base_command()` to return the default base command (executable + args), downloading/installing
+    dependencies beforehand if necessary
+  - Implement `_create_launch_command_from_base_command(base_command)` to add any further arguments, producing the
+    final launch command
+
+- **`LanguageServerDependencyProviderSinglePath`** - Alternative to inheriting from `...BaseCommand` directly for the case
+  of a single core dependency (e.g., an executable or JAR file); use when the single path is not used directly as a base command
+  otherwise inherit from `...BaseCommand` directly
   - Implement `_get_or_install_core_dependency()` to return the path to the core dependency, downloading/installing it automatically if necessary
   - Implement `_create_launch_command(core_path)` to build the full command from the core path
-  - Reference implementations: `TypeScriptLanguageServer`, `Intelephense`, `ClojureLSP`, `ClangdLanguageServer`, `PyrightServer`
+  - Reference implementations: `TypeScriptLanguageServer`, `Intelephense`, `ClojureLSP`, `ClangdLanguageServer`
 
-- **`LanguageServerDependencyProvider`** - The base class, which can be directly inherited from for complex cases with multiple dependencies or custom setup
-  - Implement `create_launch_command()` directly
+- **`LanguageServerDependencyProvider`** - The root base class, for complex cases with multiple dependencies or custom setup
+  - Implement `create_launch_command()` directly (note: no automatic support for user-level launch command overrides in this case)
   - Reference implementations: `EclipseJDTLS`, `CSharpLanguageServer`, `MatlabLanguageServer`
 
 **Implementation Pointers::**
-  - When returning the command, prefer the list-based representation for robustness
   - Override `create_launch_command_env` if the launch command needs environment variables to be set (defaults to `{}` in the base implementation)
 
 You should look at at least one existing implementation of each base class to understand how they work.
 
 ### 1.2 LSP Initialization
 
-Override initialization methods if needed:
+Override `_create_base_initialize_params` to provide server-specific initialization
+parameters. The common keys — `processId`, `rootPath`, `rootUri`, `clientInfo` and
+`workspaceFolders` — are set centrally by the `InitializeParamsBuilder` (see
+`src/solidlsp/initialize_params.py`), so your override MUST NOT set them. Just return
+the server-specific settings (typically `capabilities` and `initializationOptions`):
 
 ```python
-def _get_initialize_params(self) -> InitializeParams:
-    """Return language-specific initialization parameters."""
+def _create_base_initialize_params(self) -> dict:
+    """Return language-specific initialization parameters (server-specific keys only)."""
     return {
-        "processId": os.getpid(),
-        "rootUri": PathUtils.path_to_uri(self.repository_root_path),
         "capabilities": {
             # Language-specific capabilities
-        }
+        },
+        # "initializationOptions": {...},  # if the server needs them
     }
 
 def _start_server(self):
     """Start the language server with custom handlers."""
     # Set up notification handlers
     self.server.on_notification("window/logMessage", self._handle_log_message)
-    
-    # Start server and initialize
+
+    # Start server and initialize. Do NOT call _create_base_initialize_params directly;
+    # _create_initialize_params() wraps it with the builder to add the common keys.
     self.server.start()
-    init_response = self.server.send.initialize(self._get_initialize_params())
-    
+    init_response = self.server.send.initialize(self._create_initialize_params())
+
     self.server.notify.initialized({})
 ```
+
+Notes:
+- The builder resolves `workspaceFolders` from the language server config (indexed
+  folders + `ls_additional_workspace_folders`); don't build the folder list yourself.
+- To send a folder list nested inside `initializationOptions` (some servers, e.g.
+  `EclipseJDTLS`/`KotlinLanguageServer`, need this), set it explicitly there — only the
+  *top-level* `workspaceFolders` is builder-managed.
+- To suppress the top-level `workspaceFolders` entirely, override
+  `_create_initialize_params_builder` and construct `DefaultInitializeParamsBuilder`
+  with `set_workspace_folders=False`.
 
 After `_start_server` returns, the language server should be fully operational.
 If the server requires that one waits for certain notifications or responses before being ready, implement that logic here.

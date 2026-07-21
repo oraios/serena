@@ -11,8 +11,11 @@ from typing import Any, Literal, cast
 
 import docstring_parser
 from mcp.server.fastmcp import server
-from mcp.server.fastmcp.server import FastMCP, Settings
-from mcp.server.fastmcp.tools.base import Tool as MCPTool
+from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.fastmcp.server import Context, FastMCP, Settings
+from mcp.server.fastmcp.tools.base import Tool as FastMCPTool
+from mcp.server.session import ServerSessionT
+from mcp.shared.context import LifespanContextT, RequestT
 from mcp.types import ToolAnnotations
 from pydantic_settings import SettingsConfigDict
 from sensai.util import logging
@@ -24,14 +27,14 @@ from serena.agent import (
 from serena.config.context_mode import SerenaAgentContext
 from serena.config.serena_config import LanguageBackend, ModeSelectionDefinition
 from serena.constants import DEFAULT_CONTEXT, SERENA_LOG_FORMAT
-from serena.tools import Tool
+from serena.tools import Tool, ToolCallError
 from serena.util.exception import show_fatal_exception_safe
 from serena.util.logging import MemoryLogHandler
 
 log = logging.getLogger(__name__)
 
 
-def configure_logging(*args, **kwargs) -> None:  # type: ignore
+def configure_logging(*args, **kwargs) -> None:
     # We only do something here if logging has not yet been configured.
     # Normally, logging is configured in the MCP server startup script.
     if not logging.is_enabled():
@@ -45,6 +48,98 @@ server.configure_logging = configure_logging  # type: ignore
 @dataclass
 class SerenaMCPRequestContext:
     agent: SerenaAgent
+
+
+class SerenaFastMCPTool(FastMCPTool):
+    def __init__(self, tool: Tool, openai_tool_compatible: bool, structured_output: bool | None):
+        """
+        :param tool: the Serena tool
+        :param openai_tool_compatible: whether to process the tool schema to be compatible with OpenAI tools
+            (doesn't accept integer, needs number instead, etc.). This allows using Serena MCP within Codex.
+        :param structured_output: whether to use structured output for the tool (None = auto)
+        """
+        func_name = tool.get_name()
+        func_doc = tool.get_apply_docstring() or ""
+        func_arg_metadata = tool.get_apply_fn_metadata(structured_output=structured_output)
+        is_async = False
+        parameters = func_arg_metadata.arg_model.model_json_schema()
+        if openai_tool_compatible:
+            parameters = SerenaMCPFactory._sanitize_for_openai_tools(parameters)
+
+        docstring = docstring_parser.parse(func_doc)
+
+        # Mount the tool description as a combination of the docstring description and
+        # the return value description, if it exists.
+        overridden_description = tool.agent.get_context().tool_description_overrides.get(func_name, None)
+
+        if overridden_description is not None:
+            func_doc = overridden_description
+        elif docstring.description:
+            func_doc = docstring.description
+        else:
+            func_doc = ""
+        func_doc = func_doc.strip().strip(".")
+        if func_doc:
+            func_doc += "."
+        if docstring.returns and (docstring_returns_descr := docstring.returns.description):
+            # Only add a space before "Returns" if func_doc is not empty
+            prefix = " " if func_doc else ""
+            func_doc = f"{func_doc}{prefix}Returns {docstring_returns_descr.strip().strip('.')}."
+
+        # Parse the parameter descriptions from the docstring and add pass its description
+        # to the parameter schema.
+        docstring_params = {param.arg_name: param for param in docstring.params}
+        parameters_properties: dict[str, dict[str, Any]] = parameters["properties"]
+        for parameter, properties in parameters_properties.items():
+            if (param_doc := docstring_params.get(parameter)) and param_doc.description:
+                param_desc = f"{param_doc.description.strip().strip('.') + '.'}"
+                properties["description"] = param_desc[0].upper() + param_desc[1:]
+
+        def execute_fn(**kwargs) -> str:
+            try:
+                return tool.apply_ex(log_call=True, catch_exceptions=False, **kwargs)
+            except ToolCallError as e:
+                raise ToolError(e.get_error_message()) from e
+
+        # Generate human-readable title from snake_case tool name
+        tool_title = " ".join(word.capitalize() for word in func_name.split("_"))
+
+        # Create annotations with appropriate hints based on tool capabilities
+        can_edit = tool.can_edit()
+        annotations = ToolAnnotations(
+            title=tool_title,
+            readOnlyHint=not can_edit,
+            destructiveHint=can_edit,
+        )
+
+        super().__init__(
+            fn=execute_fn,
+            name=func_name,
+            description=func_doc,
+            parameters=parameters,
+            fn_metadata=func_arg_metadata,
+            is_async=is_async,
+            # keep the value in sync with the kwarg name in Tool.apply_ex. The mcp sdk uses reflection to infer this
+            # when the tool is constructed via from_function (which is a bit crazy IMO, but well...)
+            context_kwarg="mcp_ctx",
+            annotations=annotations,
+            title=tool_title,
+        )
+
+        self._param_aliases = tool.get_param_aliases()
+
+    async def run(
+        self,
+        arguments: dict[str, Any],
+        context: Context[ServerSessionT, LifespanContextT, RequestT] | None = None,
+        convert_result: bool = False,
+    ) -> Any:
+        # apply parameter aliases
+        for param_alias, param_name in self._param_aliases.items():
+            if param_alias in arguments and param_name not in arguments:
+                arguments[param_name] = arguments.pop(param_alias)
+
+        return await super().run(arguments, context, convert_result)
 
 
 class SerenaMCPFactory:
@@ -87,7 +182,7 @@ class SerenaMCPFactory:
         """
         s = deepcopy(schema)
 
-        def walk(node):  # type: ignore
+        def walk(node):
             if not isinstance(node, dict):
                 # lists get handled by parent calls
                 return node
@@ -181,90 +276,34 @@ class SerenaMCPFactory:
         return walk(s)
 
     @staticmethod
-    def make_mcp_tool(tool: Tool, openai_tool_compatible: bool = True) -> MCPTool:
+    def make_mcp_tool(tool: Tool, openai_tool_compatible: bool = True, structured_output: bool | None = None) -> SerenaFastMCPTool:
         """
-        Create an MCP tool from a Serena Tool instance.
+        Creates an MCP tool from a Serena Tool instance.
 
-        :param tool: The Serena Tool instance to convert.
+        :param tool: the Serena Tool instance to convert.
         :param openai_tool_compatible: whether to process the tool schema to be compatible with OpenAI tools
             (doesn't accept integer, needs number instead, etc.). This allows using Serena MCP within codex.
+        :param structured_output: whether to use structured output for the tool (None = auto)
         """
-        func_name = tool.get_name()
-        func_doc = tool.get_apply_docstring() or ""
-        func_arg_metadata = tool.get_apply_fn_metadata()
-        is_async = False
-        parameters = func_arg_metadata.arg_model.model_json_schema()
-        if openai_tool_compatible:
-            parameters = SerenaMCPFactory._sanitize_for_openai_tools(parameters)
-
-        docstring = docstring_parser.parse(func_doc)
-
-        # Mount the tool description as a combination of the docstring description and
-        # the return value description, if it exists.
-        overridden_description = tool.agent.get_context().tool_description_overrides.get(func_name, None)
-
-        if overridden_description is not None:
-            func_doc = overridden_description
-        elif docstring.description:
-            func_doc = docstring.description
-        else:
-            func_doc = ""
-        func_doc = func_doc.strip().strip(".")
-        if func_doc:
-            func_doc += "."
-        if docstring.returns and (docstring_returns_descr := docstring.returns.description):
-            # Only add a space before "Returns" if func_doc is not empty
-            prefix = " " if func_doc else ""
-            func_doc = f"{func_doc}{prefix}Returns {docstring_returns_descr.strip().strip('.')}."
-
-        # Parse the parameter descriptions from the docstring and add pass its description
-        # to the parameter schema.
-        docstring_params = {param.arg_name: param for param in docstring.params}
-        parameters_properties: dict[str, dict[str, Any]] = parameters["properties"]
-        for parameter, properties in parameters_properties.items():
-            if (param_doc := docstring_params.get(parameter)) and param_doc.description:
-                param_desc = f"{param_doc.description.strip().strip('.') + '.'}"
-                properties["description"] = param_desc[0].upper() + param_desc[1:]
-
-        def execute_fn(**kwargs) -> str:  # type: ignore
-            return tool.apply_ex(log_call=True, catch_exceptions=True, **kwargs)
-
-        # Generate human-readable title from snake_case tool name
-        tool_title = " ".join(word.capitalize() for word in func_name.split("_"))
-
-        # Create annotations with appropriate hints based on tool capabilities
-        can_edit = tool.can_edit()
-        annotations = ToolAnnotations(
-            title=tool_title,
-            readOnlyHint=not can_edit,
-            destructiveHint=can_edit,
-        )
-
-        return MCPTool(
-            fn=execute_fn,
-            name=func_name,
-            description=func_doc,
-            parameters=parameters,
-            fn_metadata=func_arg_metadata,
-            is_async=is_async,
-            # keep the value in sync with the kwarg name in Tool.apply_ex. The mcp sdk uses reflection to infer this
-            # when the tool is constructed via from_function (which is a bit crazy IMO, but well...)
-            context_kwarg="mcp_ctx",
-            annotations=annotations,
-            title=tool_title,
-        )
+        return SerenaFastMCPTool(tool, openai_tool_compatible=openai_tool_compatible, structured_output=structured_output)
 
     def _iter_tools(self) -> Iterator[Tool]:
         assert self.agent is not None
         yield from self.agent.get_exposed_tool_instances()
 
     # noinspection PyProtectedMember
-    def _set_mcp_tools(self, mcp: FastMCP, openai_tool_compatible: bool = False) -> None:
-        """Update the tools in the MCP server"""
+    def _set_mcp_tools(self, mcp: FastMCP, openai_tool_compatible: bool, structured_output: bool | None) -> None:
+        """
+        Update the tools in the MCP server
+
+        :param mcp: The MCP server to update
+        :param openai_tool_compatible: whether to process the tool schema to be compatible with OpenAI tools
+        :param structured_output: whether to use structured output for the tools (None = auto)
+        """
         if mcp is not None:
             mcp._tool_manager._tools = {}
             for tool in self._iter_tools():
-                mcp_tool = self.make_mcp_tool(tool, openai_tool_compatible=openai_tool_compatible)
+                mcp_tool = self.make_mcp_tool(tool, openai_tool_compatible=openai_tool_compatible, structured_output=structured_output)
                 mcp._tool_manager._tools[tool.get_name()] = mcp_tool
             log.info(f"Starting MCP server with {len(mcp._tool_manager._tools)} tools: {list(mcp._tool_manager._tools.keys())}")
 
@@ -358,7 +397,9 @@ class SerenaMCPFactory:
         :param mcp_server: the MCP server instance to configure
         """
         openai_tool_compatible = self.context.name in ["chatgpt", "codex", "oaicompat-agent"]
-        self._set_mcp_tools(mcp_server, openai_tool_compatible=openai_tool_compatible)
+        assert self.agent is not None
+        context = self.agent.get_context()
+        self._set_mcp_tools(mcp_server, openai_tool_compatible=openai_tool_compatible, structured_output=context.structured_tool_output)
         log.info("MCP server lifetime setup complete")
         try:
             yield

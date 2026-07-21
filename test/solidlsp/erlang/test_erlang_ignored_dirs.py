@@ -5,14 +5,12 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import Language
-from test.conftest import start_ls_context
-
-from . import ERLANG_LS_UNAVAILABLE, ERLANG_LS_UNAVAILABLE_REASON
+from test.conftest import language_tests_enabled, start_ls_context
 
 # These marks will be applied to all tests in this module
 pytestmark = [
     pytest.mark.erlang,
-    pytest.mark.skipif(ERLANG_LS_UNAVAILABLE, reason=f"Erlang LS not available: {ERLANG_LS_UNAVAILABLE_REASON}"),
+    pytest.mark.skipif(not language_tests_enabled(Language.ERLANG), reason="Erlang tests are disabled"),
 ]
 
 

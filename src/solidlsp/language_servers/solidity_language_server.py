@@ -10,7 +10,7 @@ import pathlib
 import platform
 import shutil
 import threading
-from time import sleep
+from time import monotonic, sleep
 from typing import Any
 
 from overrides import override
@@ -19,7 +19,6 @@ from solidlsp import ls_types
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, LSPConstants, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -40,6 +39,14 @@ class SolidityLanguageServer(SolidLanguageServer):
     Supports go-to-definition, find references, document symbols, hover, and diagnostics.
     Requires Node.js and npm to be installed.
     """
+
+    _VALIDATION_COMPLETION_TIMEOUT = 60.0
+    """upper bound for awaiting the validation-completion signal (``custom/validation-job-status``),
+    aligned with the indexing wait; on cold environments validation includes downloading the pinned
+    solc version"""
+
+    _POST_VALIDATION_PUBLISH_WAIT = 2.5
+    """grace period for the diagnostics publication that accompanies the completion signal"""
 
     @staticmethod
     def _determine_log_level(line: str) -> int:
@@ -67,6 +74,11 @@ class SolidityLanguageServer(SolidLanguageServer):
             "solidity",
             solidlsp_settings,
         )
+        self._validation_completed = threading.Event()
+        """set when the language server reports an asynchronous validation run as finished
+        (``custom/validation-job-status``); cleared at the start of each diagnostics request"""
+        self._last_validation_status: Any | None = None
+        """payload of the most recent ``custom/validation-job-status`` notification, kept for logging"""
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
@@ -178,21 +190,10 @@ class SolidityLanguageServer(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in {"artifacts", "cache", "typechain-types"}
 
-    @staticmethod
-    def _get_initialize_params(repository_absolute_path: str) -> InitializeParams:
+    def _create_base_initialize_params(self) -> dict:
         """Return LSP InitializeParams for the Solidity language server."""
-        root_uri = pathlib.Path(repository_absolute_path).as_uri()
-        return {  # type: ignore
+        return {
             "locale": "en",
-            "processId": os.getpid(),
-            "rootPath": repository_absolute_path,
-            "rootUri": root_uri,
-            "workspaceFolders": [
-                {
-                    "uri": root_uri,
-                    "name": os.path.basename(repository_absolute_path),
-                }
-            ],
             "capabilities": {
                 "textDocument": {
                     "synchronization": {
@@ -208,11 +209,11 @@ class SolidityLanguageServer(SolidLanguageServer):
                     "documentSymbol": {
                         "dynamicRegistration": True,
                         "hierarchicalDocumentSymbolSupport": True,
-                        "symbolKind": {"valueSet": list(range(1, 27))},  # type: ignore[arg-type]
+                        "symbolKind": {"valueSet": list(range(1, 27))},
                     },
                     "hover": {
                         "dynamicRegistration": True,
-                        "contentFormat": ["markdown", "plaintext"],  # type: ignore[list-item]
+                        "contentFormat": ["markdown", "plaintext"],
                     },
                     "publishDiagnostics": {"relatedInformation": True},
                 },
@@ -254,16 +255,24 @@ class SolidityLanguageServer(SolidLanguageServer):
             if indexed_count[0] >= expected_count:
                 all_indexed.set()
 
+        def on_validation_job_status(params: Any) -> None:
+            # signals completion of an asynchronous validation run (a forge/solc compile);
+            # the payload carries no document URI, so the event is global to the server instance
+            self._last_validation_status = params
+            log.debug(f"Solidity LSP: validation job finished: {params}")
+            self._validation_completed.set()
+
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("custom/file-indexed", on_file_indexed)
+        self.server.on_notification("custom/validation-job-status", on_validation_job_status)
 
         log.info("Starting Solidity language server process")
         self.server.start()
 
-        initialize_params = self._get_initialize_params(self.repository_root_path)
+        initialize_params = self._create_initialize_params()
         log.debug("Sending initialize request to Solidity language server")
         init_response = self.server.send.initialize(initialize_params)
         log.debug(f"Received initialize response from Solidity server: {init_response}")
@@ -312,9 +321,12 @@ class SolidityLanguageServer(SolidLanguageServer):
             "character": len(lines[-1]),
         }
 
+        # any validation that finishes after this point may satisfy the fallback wait below
+        self._validation_completed.clear()
+
         self.server.notify.did_open_text_document(
-            {
-                LSPConstants.TEXT_DOCUMENT: {  # type: ignore
+            {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                LSPConstants.TEXT_DOCUMENT: {
                     LSPConstants.URI: uri,
                     LSPConstants.LANGUAGE_ID: self.language_id,
                     LSPConstants.VERSION: 0,
@@ -324,12 +336,12 @@ class SolidityLanguageServer(SolidLanguageServer):
         )
         try:
             self.server.notify.did_change_text_document(
-                {
-                    LSPConstants.TEXT_DOCUMENT: {  # type: ignore
+                {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                    LSPConstants.TEXT_DOCUMENT: {
                         LSPConstants.URI: uri,
                         LSPConstants.VERSION: 1,
                     },
-                    LSPConstants.CONTENT_CHANGES: [  # type: ignore
+                    LSPConstants.CONTENT_CHANGES: [
                         {
                             LSPConstants.RANGE: {
                                 "start": {"line": 0, "character": 0},
@@ -340,16 +352,56 @@ class SolidityLanguageServer(SolidLanguageServer):
                     ],
                 }
             )
+            # fast path: wait for a non-empty diagnostics publication (warm environments)
             diagnostics = self._wait_for_relevant_published_diagnostics(
                 uri=uri,
                 after_generation=diagnostics_before_request,
                 timeout=self._get_published_diagnostics_wait_timeout(True),
                 allow_cached=True,
             )
+
+            # fallback: validation (a forge/solc compile) runs asynchronously in the server and can
+            # exceed the initial wait on slow or cold environments (e.g. CI runners downloading the
+            # pinned solc); await its completion signal, then take the publication made for this
+            # request, accepting an empty result as the validated answer. The signal carries no
+            # document URI, so a completion belonging to another document can wake the wait early;
+            # re-arm and keep waiting until the deadline in that case.
+            if diagnostics is None:
+                # fast path missed; validation is still running -- await its completion signal so the
+                # wait below is visible in logs on slow/cold environments
+                log.debug(
+                    f"Solidity diagnostics not yet published for {uri}; "
+                    f"awaiting validation completion (up to {self._VALIDATION_COMPLETION_TIMEOUT:.0f}s)"
+                )
+                deadline = monotonic() + self._VALIDATION_COMPLETION_TIMEOUT
+                while diagnostics is None:
+                    remaining = deadline - monotonic()
+                    if remaining <= 0 or not self._validation_completed.wait(timeout=remaining):
+                        log.warning(
+                            f"Solidity validation completion was not signalled within "
+                            f"{self._VALIDATION_COMPLETION_TIMEOUT:.0f}s for {uri} "
+                            f"(last status: {self._last_validation_status}); returning without diagnostics"
+                        )
+                        break
+                    diagnostics = self._wait_for_published_diagnostics(
+                        uri=uri,
+                        after_generation=diagnostics_before_request,
+                        timeout=self._POST_VALIDATION_PUBLISH_WAIT,
+                    )
+                    if diagnostics is None:
+                        # a completion fired but published nothing for our URI (e.g. a run for another
+                        # document); re-arm and keep waiting so the ongoing wait stays visible
+                        log.debug(f"Solidity validation completed without diagnostics for {uri} yet; continuing to wait")
+                        self._validation_completed.clear()
+                    else:
+                        log.debug(
+                            f"Solidity diagnostics resolved via validation completion "
+                            f"(status={self._last_validation_status}): {len(diagnostics)} diagnostic(s)"
+                        )
         finally:
             self.server.notify.did_close_text_document(
-                {
-                    LSPConstants.TEXT_DOCUMENT: {  # type: ignore
+                {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                    LSPConstants.TEXT_DOCUMENT: {
                         LSPConstants.URI: uri,
                     }
                 }

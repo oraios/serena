@@ -103,6 +103,7 @@ ls_specific_settings: {}
 # list of paths to ignore across all projects.
 # Same syntax as gitignore, so you can use * and **.
 # These patterns are merged additively with each project's own ignored_paths.
+# Quote patterns that start with `*`, e.g. `"**/bin/**"`.
 ignored_paths: []
 
 # list of regex patterns which, when matched, mark a memory entry as read‑only.
@@ -182,6 +183,21 @@ symbol_info_budget: 10
 # Default: "$projectDir/.serena" (data stored inside the project directory)
 # Example for a central location: "/projects-metadata/$projectFolderName/.serena"
 project_serena_folder_location: "$projectDir/.serena"
+
+# list of glob patterns for project root directories that are considered trusted.
+# Some project settings will only be applied if the project is trusted.
+# A glob pattern can contain the following:
+#       *  matches any sequence of characters except path separators
+#      **  matches any sequence of characters including path separators
+#       ?  matches any single character except path separators
+#   [abc]  matches any single character in the set (here: a, b, or c)
+# Path separators are normalised internally, so on Windows, both / and \ can be used in the patterns.
+# Example:
+#   trusted_project_path_patterns:
+#     - /home/user/projects/**
+#     - C:\Users\Anna\Dev\work\**
+# The pattern "**" matches any project path, so it can be used to trust all projects.
+trusted_project_path_patterns: []
 
 # the list of registered project paths (updated automatically).
 projects: []
