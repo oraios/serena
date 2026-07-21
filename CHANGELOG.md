@@ -2,6 +2,8 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+# v1.6.1 (2026-07-21)
+
 * General:
   - Fix: `FileUtils.read_file`'s `charset_normalizer` fallback (used when a file cannot be decoded with
     the project's configured `encoding`) decoded the raw bytes directly and therefore skipped the

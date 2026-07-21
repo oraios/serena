@@ -2810,7 +2810,7 @@ wheels = [
 
 [[package]]
 name = "serena-agent"
-version = "1.6.1.dev0"
+version = "1.6.1"
 source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
