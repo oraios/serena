@@ -18,7 +18,7 @@ from solidlsp.ls_config import Language
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_request import LanguageServerRequest
 from solidlsp.lsp_protocol_handler.lsp_requests import LspNotification
-from solidlsp.lsp_protocol_handler.lsp_types import ErrorCodes
+from solidlsp.lsp_protocol_handler.lsp_types import ErrorCodes, LSPErrorCodes
 from solidlsp.lsp_protocol_handler.server import (
     ENCODING,
     LSPError,
@@ -35,6 +35,13 @@ from solidlsp.lsp_protocol_handler.server import (
 from solidlsp.util import subprocess_util
 
 log = logging.getLogger(__name__)
+
+# Per the LSP spec, `ContentModified` (-32801) means the server discarded a stale, in-flight
+# computation because the workspace changed underneath it, not that the request itself is
+# invalid. A well-behaved client is expected to retry such requests rather than treat them as
+# a hard failure, so we do so here, generically, for all requests to any language server.
+_CONTENT_MODIFIED_MAX_ATTEMPTS = 5
+_CONTENT_MODIFIED_RETRY_DELAY = 0.2
 
 
 class LanguageServerTerminatedException(Exception):
@@ -298,29 +305,42 @@ class LanguageServerInterface(ABC):
 
     def send_request(self, method: str, params: dict | None = None) -> PayloadLike:
         """
-        Send request to the server, register the request id, and wait for the response
+        Send request to the server, register the request id, and wait for the response.
+
+        Requests that fail with the LSP `ContentModified` error (-32801) are retried a bounded
+        number of times with a short delay instead of being surfaced to the caller immediately;
+        see `_CONTENT_MODIFIED_MAX_ATTEMPTS` above.
         """
-        with self._request_id_lock:
-            request_id = self.request_id
-            self.request_id += 1
+        for attempt in range(1, _CONTENT_MODIFIED_MAX_ATTEMPTS + 1):
+            with self._request_id_lock:
+                request_id = self.request_id
+                self.request_id += 1
 
-        request = Request(request_id=request_id, method=method)
-        log.debug("Starting: %s", request)
+            request = Request(request_id=request_id, method=method)
+            log.debug("Starting: %s", request)
 
-        with self._response_handlers_lock:
-            self._pending_requests[request_id] = request
+            with self._response_handlers_lock:
+                self._pending_requests[request_id] = request
 
-        self._send_payload(make_request(method, request_id, params))
+            self._send_payload(make_request(method, request_id, params))
 
-        log.debug("Waiting for response to request %s with params:\n%s", method, params)
-        result = request.get_result(timeout=self._request_timeout)
-        log.debug("Completed: %s", request)
+            log.debug("Waiting for response to request %s with params:\n%s", method, params)
+            result = request.get_result(timeout=self._request_timeout)
+            log.debug("Completed: %s", request)
 
-        if result.is_error():
+            if not result.is_error():
+                log.debug("Returning result:\n%s", result.payload)
+                return result.payload
+
+            is_content_modified = isinstance(result.error, LSPError) and result.error.code == LSPErrorCodes.ContentModified
+            if attempt < _CONTENT_MODIFIED_MAX_ATTEMPTS and is_content_modified:
+                log.info("Request %s got ContentModified (-32801); retrying (%d/%d)", method, attempt, _CONTENT_MODIFIED_MAX_ATTEMPTS)
+                time.sleep(_CONTENT_MODIFIED_RETRY_DELAY)
+                continue
+
             raise SolidLSPException(f"Error processing request {method} with params:\n{params}", cause=result.error) from result.error
 
-        log.debug("Returning result:\n%s", result.payload)
-        return result.payload
+        raise AssertionError("unreachable")  # loop always returns or raises
 
     @abstractmethod
     def _send_payload(self, payload: StringDict) -> None:
