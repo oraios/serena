@@ -54,6 +54,8 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
             Don't adjust unless there is really no other way to get the content required for the task.
         :return: a JSON object containing symbols grouped by kind in a compact format.
         """
+        # Note: file system sync not required (relevant file is opened in the language server explicitly)
+
         if depth == -1:
             if relative_path.endswith((".java", ".kt")):
                 depth = 1
@@ -189,6 +191,8 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         :param max_answer_chars: max result length; -1 for default
         :return: symbols (with locations) matching the name.
         """
+        # Note: file system sync not required; the symbol finder opens all relevant source files explicitly in the case of changes
+
         if include_body:
             depth = 0  # ignore user-specified depth if include_body is True
         assert max_matches != 0, "max_matches must be > 0 or equal to -1."
@@ -685,6 +689,7 @@ class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
         :param new_name: the new name for the symbol
         :return: result summary indicating success or failure
         """
+        self.project.ls_sync_file_system_changes()
         code_editor = self.create_ls_code_editor()
         status_message = code_editor.rename_symbol(name_path, relative_path=relative_path, new_name=new_name)
         return status_message
