@@ -618,7 +618,12 @@ class Dashboard {
 
             let html = '<div class="config-grid">';
 
-            html += '<div class="config-label">Version:</div><div class="config-value">' + config.serena_version + '</div>';
+            html += '<div class="config-label">Version:</div><div class="config-value">' + config.serena_version;
+            if (config.newer_serena_version) {
+                html += ' <a class="newer-version-badge" href="https://github.com/oraios/serena/releases" target="_blank" rel="noopener">'
+                    + 'newer version available: ' + config.newer_serena_version + '</a>';
+            }
+            html += '</div>';
 
             // Project info
             html += '<div class="config-label">Active Project:</div>';

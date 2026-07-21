@@ -70,6 +70,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     when using plugin version 2023.3.3+
 
 * Dashboard:
+  - The version display now indicates when a newer Serena version is available
   - Fix: the "Last Execution" panel stayed on "Loading..." forever when there was no logged execution
     (e.g. a fresh server / no tool run yet), because `loadLastExecution()` only rendered the panel when
     the backend returned a non-null execution; the empty state is now rendered via the existing
