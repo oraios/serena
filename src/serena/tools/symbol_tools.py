@@ -54,6 +54,8 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
             Don't adjust unless there is really no other way to get the content required for the task.
         :return: a JSON object containing symbols grouped by kind in a compact format.
         """
+        # Note: file system sync not required (relevant file is opened in the language server explicitly)
+
         if depth == -1:
             if relative_path.endswith((".java", ".kt")):
                 depth = 1
@@ -189,6 +191,8 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         :param max_answer_chars: max result length; -1 for default
         :return: symbols (with locations) matching the name.
         """
+        # Note: file system sync not required; the symbol finder opens all relevant source files explicitly in the case of changes
+
         if include_body:
             depth = 0  # ignore user-specified depth if include_body is True
         assert max_matches != 0, "max_matches must be > 0 or equal to -1."
@@ -267,14 +271,14 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
 
         :param name_path: name path of the symbol
         :param relative_path: the relative path to the file containing the symbol for which to find references.
-            Note: for external dependencies, this must be an identifier starting with `<ext` that you have received
-            earlier (don't try to guess!).
         :param include_kinds: (optional) limits results to the given LSP symbol kinds (integers)
         :param exclude_kinds: optional list of LSP symbol kinds (integers) to exclude.
         :param max_answer_chars: max result length; -1 for default
         :return: a list of JSON objects with the symbols referencing the requested symbol
         """
-        self.project.ls_sync_file_system_changes()
+        # file system sync needed for case where symbol finder does not perform a global search, updating everything
+        if relative_path:
+            self.project.ls_sync_file_system_changes()
 
         include_body = False  # It is probably never a good idea to include the body of the referencing symbols
         parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
@@ -685,6 +689,7 @@ class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
         :param new_name: the new name for the symbol
         :return: result summary indicating success or failure
         """
+        self.project.ls_sync_file_system_changes()
         code_editor = self.create_ls_code_editor()
         status_message = code_editor.rename_symbol(name_path, relative_path=relative_path, new_name=new_name)
         return status_message

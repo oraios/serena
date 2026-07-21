@@ -259,7 +259,6 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
 
     symbol_dict_grouper = JetBrainsSymbolDictGrouper(["relative_path", "type"], ["type"], collapse_singleton=True)
 
-    # TODO: (maybe) - add content snippets showing the references like in LS based version?
     def apply(
         self,
         name_path: str,
@@ -273,6 +272,8 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
 
         :param name_path: name path of the symbol for which to find references
         :param relative_path: the relative path to the file containing the symbol (must be a file, not a directory)
+            Note: for external dependencies, this must be an identifier starting with `<ext` that you have received
+            earlier (don't try to guess!).
         :param max_answer_chars: max characters for the result (-1 for default). If exceeded, no content/a shortened result is returned.
         """
         relative_path = self._sanitize_input_param(relative_path)
