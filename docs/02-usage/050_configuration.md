@@ -697,6 +697,7 @@ The following settings are supported for the Java language server:
 | `gradle_wrapper_enabled` | `false` | Use the project's Gradle wrapper (`gradlew`) instead of the bundled Gradle distribution. Enable this for projects with custom plugins or repositories. |
 | `gradle_java_home` | `null` | Path to the JDK used by Gradle. When unset, Gradle uses `JAVA_HOME` if `use_system_java_home` is enabled and `JAVA_HOME` is set; otherwise it falls back to Serena's bundled JRE. |
 | `use_system_java_home` | `false` | Use the system's `JAVA_HOME` environment variable for JDTLS itself and, when `gradle_java_home` is unset, Gradle import. Enable this if your project requires a specific JDK vendor or version for Gradle's JDK checks. |
+| `runtimes` | `[]` | Extra JRE/JDK entries registered with JDT-LS via `java.configuration.runtimes`. Use this when a project's source/target level exceeds the JDK JDT-LS itself runs on (currently JDK 21 in default vscode-java VSIX mode). Each entry is a mapping with required `name` (e.g. `JavaSE-25`, matching the `JavaSE-NN` container the build tool requests) and `path` (JDK/JRE home directory; must exist), plus optional `default`, `sources`, and `javadoc` (passed through to JDT-LS). Entries extend rather than replace the bundled `JavaSE-21` runtime; an entry that reuses the `JavaSE-21` name overrides the bundled one. Changing this setting invalidates the JDTLS workspace hash so a fresh import is performed. |
 | `gradle_version` | `8.14.2` | (vscode-java mode only) Override the Gradle distribution version Serena downloads by default. |
 | `vscode_java_version` | `1.54.0-923` | (vscode-java mode only) Override the bundled `vscode-java` runtime bundle version Serena downloads by default. |
 | `intellicode_version` | `1.2.30` | (vscode-java mode only) Override the IntelliCode VSIX version Serena downloads by default. |
@@ -716,6 +717,10 @@ Notes:
 - In upstream-jdtls mode the `gradle_version`, `vscode_java_version`, `intellicode_version`,
   `intellicode_xmx`, `intellicode_xms` settings are silently ignored — they only apply to the
   vscode-java VSIX mode.
+- Without `runtimes`, JDT-LS only knows about the bundled `JavaSE-21` JRE. Projects that request a newer
+  container (e.g. `sourceCompatibility = JavaVersion.VERSION_25`) then fail to resolve JDK types such as
+  `java.lang.Object`. Register the matching installed JDK via `runtimes` instead of symlinking over Serena's
+  bundled JRE directory.
 
 Example: upstream-jdtls mode (offline / corporate network):
 
@@ -734,6 +739,19 @@ ls_specific_settings:
   java:
     gradle_wrapper_enabled: true
     use_system_java_home: true
+```
+
+Example: register an additional JDK for a project targeting a newer Java version:
+
+```yaml
+ls_specific_settings:
+  java:
+    runtimes:
+      - name: JavaSE-21
+        path: /usr/lib/jvm/java-21-openjdk
+      - name: JavaSE-25
+        path: /home/user/Java/jdk25
+        default: true
 ```
 
 #### Kotlin
@@ -913,6 +931,19 @@ Supported settings:
 | `ignore_vendor` | `true` | Ignore directories named `vendor` while indexing the project. |
 | `maxFileSize` | unset | Forwarded as `intelephense.files.maxSize` in `initializationOptions`. |
 | `maxMemory` | unset | Forwarded as `intelephense.maxMemory` in `initializationOptions`. |
+| `file_filter` | unset | Additional file extensions (with leading dot) to treat as PHP sources, e.g. `[".module", ".install"]`; added to the defaults `.php` / `.phtml` (#1710). |
+
+Example configuration making Drupal source files visible to the symbol tools:
+
+```yaml
+ls_specific_settings:
+  php:
+    file_filter: [".module", ".install", ".inc", ".theme", ".profile", ".engine"]
+```
+
+Notes:
+- Extensions added via `file_filter` are synced into Serena's PHP source-file matcher and pushed to Intelephense as `intelephense.files.associations` globs at startup, so `find_symbol` and the language server treat the same files as PHP sources.
+- The matcher is reset on every language server activation, so one project's `file_filter` does not leak into another.
 
 #### PHP (`Phpactor`)
 
@@ -948,8 +979,8 @@ Supported settings:
 
 | Setting | Default | Description |
 |---|---|---|
-| `pyright_version` | `1.1.403` | Override the exact Pyright package version Serena launches through `uvx` / `uv x`. |
-| `ls_path` | managed executable | Override `pyright-langserver` and bypass the managed `uvx` / `uv x` invocation. The default `--stdio` argument is still applied. |
+| `pyright_version` | `1.1.403` | Override the exact Pyright package version Serena launches through `uvx` / `uv tool run`. |
+| `ls_path` | managed executable | Override `pyright-langserver` and bypass the managed `uvx` / `uv tool run` invocation. The default `--stdio` argument is still applied. |
 
 ##### BasedPyright (`python_basedpyright`)
 
@@ -967,8 +998,8 @@ Supported settings:
 
 | Setting | Default | Description |
 |---|---|---|
-| `basedpyright_version` | `1.39.9` | Override the exact BasedPyright package version Serena launches through `uvx` / `uv x`. |
-| `ls_path` | managed executable | Override `basedpyright-langserver` and bypass the managed `uvx` / `uv x` invocation. The default `--stdio` argument is still applied. |
+| `basedpyright_version` | `1.39.9` | Override the exact BasedPyright package version Serena launches through `uvx` / `uv tool run`. |
+| `ls_path` | managed executable | Override `basedpyright-langserver` and bypass the managed `uvx` / `uv tool run` invocation. The default `--stdio` argument is still applied. |
 
 The generic [language-server launch settings](override-ls-path), including `ls_base_cmd`, `ls_args`,
 and `ls_extra_args`, apply to both servers. `ls_args` replaces the default arguments, while

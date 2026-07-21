@@ -324,6 +324,12 @@ class SolidLanguageServer(ABC):
     RAW_DOCUMENT_SYMBOL_CACHE_FILENAME = "raw_document_symbols.pkl"
     RAW_DOCUMENT_SYMBOL_CACHE_FILENAME_LEGACY_FALLBACK = "document_symbols_cache_v23-06-25.pkl"
     DOCUMENT_SYMBOL_CACHE_VERSION = 4
+    """
+    defines the version of the high-level document symbol format.
+    This should be incremented whenever there is a change in the way document symbols are stored.
+    For changes that affect the symbols of a particular language server implementation (subclass),
+    change :meth:`_document_symbols_cache_fingerprint` instead.
+    """
     DOCUMENT_SYMBOL_CACHE_FILENAME = "document_symbols.pkl"
 
     # Directories that should always be ignored regardless of language:
@@ -2891,13 +2897,14 @@ class SolidLanguageServer(ABC):
         Returns a fingerprint of any language server-specific aspects that result in changes
         to the high-level document symbol information.
 
-        Language servers must implement this method/change the return value
-          * whenever they change the `request_document_symbols` implementation to modify the returned content
-          * are reconfigured in a way that affects the returned contents (e.g. context-specific configuration
-            such as build flags or environment variables); configuration options can, in such cases, be
-            hashed together to produce a single fingerprint value.
+        Language servers must implement this method/change the return value if
+        the `request_document_symbols` implementation (or any of the methods called by it)
+        are changed to modify the returned content.
 
-        Whenever the value changes, the document symbols cache will be invalidated and re-populated.
+        Whenever the value changes, the high-level document symbols cache will be invalidated and re-populated.
+
+        Note: For aspects that change the values returned by the language server itself,
+        change `_raw_document_symbols_cache_fingerprint` instead.
 
         The value must be hashable and safe for inclusion in cache version tuples.
         E.g. use an integer, a string or a tuple of integers/strings.
@@ -2912,12 +2919,16 @@ class SolidLanguageServer(ABC):
         """
         Return the version for the document symbols cache.
 
-        Incorporates cache context fingerprint if provided by the language server.
+        Incorporates cache fingerprints if provided by the language server.
         """
-        fingerprint = self._document_symbols_cache_fingerprint()
-        if fingerprint is not None:
-            return (self.DOCUMENT_SYMBOL_CACHE_VERSION, fingerprint)
-        return self.DOCUMENT_SYMBOL_CACHE_VERSION
+        version: list[Hashable] = [self.DOCUMENT_SYMBOL_CACHE_VERSION]
+        high_level_fingerprint = self._document_symbols_cache_fingerprint()
+        if high_level_fingerprint is not None:
+            version.append(high_level_fingerprint)
+        raw_fingerprint = self._raw_document_symbols_cache_fingerprint()
+        if raw_fingerprint is not None:
+            version.append(raw_fingerprint)
+        return version[0] if len(version) == 1 else tuple(version)
 
     def _save_raw_document_symbols_cache(self) -> None:
         cache_file = self.cache_dir / self.RAW_DOCUMENT_SYMBOL_CACHE_FILENAME
@@ -2937,9 +2948,32 @@ class SolidLanguageServer(ABC):
                 e,
             )
 
-    def _raw_document_symbols_cache_version(self) -> tuple[Hashable, ...]:
-        base_version: tuple[Hashable, ...] = (self.RAW_DOCUMENT_SYMBOLS_CACHE_VERSION, self._ls_specific_raw_document_symbols_cache_version)
-        fingerprint = self._document_symbols_cache_fingerprint()
+    def _raw_document_symbols_cache_fingerprint(self) -> Hashable | None:
+        """
+        Returns a fingerprint of any language server-specific aspects that result in changes
+        to the raw document symbol information produced by the language server.
+
+        Language servers must implement this method/change the return value whenever they
+        are reconfigured or otherwise affected in a way that affects the contents returned
+        by the language server for document symbol requests (raw request result).
+        For example, this could be context-specific configuration such as build flags or environment variables;
+        configuration options can, in such cases, be hashed together to produce a single fingerprint value.
+
+        Whenever the value changes, the raw document symbols cache (as well as the high-level cache that
+        builds on the raw results) will be invalidated and re-populated.
+
+        The value must be hashable and safe for inclusion in cache version tuples.
+        E.g. use an integer, a string or a tuple of integers/strings.
+
+        For example, if there is a single aspect being considered, use an integer to reflect the version
+        of this aspect (incrementing it whenever the implementation changes).
+        If multiple versioned aspects exist, use a tuple of versions, etc.
+        """
+        return None
+
+    def _raw_document_symbols_cache_version(self) -> Hashable:
+        base_version = (self.RAW_DOCUMENT_SYMBOLS_CACHE_VERSION, self._ls_specific_raw_document_symbols_cache_version)
+        fingerprint = self._raw_document_symbols_cache_fingerprint()
         if fingerprint is not None:
             return (*base_version, fingerprint)
         return base_version

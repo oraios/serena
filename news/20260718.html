@@ -1,0 +1,19 @@
+<div class="news-item">
+    <h3>Trusted Projects</h3>
+    <p class="date">July 18, 2026</p>
+    <p>
+        Serena v1.6.0 introduced the notion of <i>trusted projects</i>.<br>
+        In particular, only trusted projects are allowed to run activation commands and configure language server-specific
+        settings at the project level.
+    </p>
+    <p>
+        To not break existing workflows, existing Serena configurations were migrated to trust all projects
+        by default (whereas new installations will have no trusted projects by default).
+    </p>
+    <p>
+        <b>Configure trusted projects!</b>
+        If you sometimes activate projects from untrusted sources, we highly recommend that you adjust
+        the <code>trusted_project_path_patterns</code> setting in
+        <a href="https://oraios.github.io/serena/02-usage/050_configuration.html#global-configuration" target="_blank">Serena's global configuration</a>.
+    </p>
+</div>

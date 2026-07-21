@@ -241,7 +241,7 @@ docker run --rm -i --network host -v /path/to/your/projects:/workspaces/projects
 This command mounts your projects into the container under `/workspaces/projects`, so when working with projects,
 you need to refer to them using the respective path (e.g. `/workspaces/projects/my-project`).
 
-Alternatively, you may use Docker compose with the `compose.yml` file provided in the repository.
+Alternatively, you may use Docker compose. Adjust the file `compose.yml`, which is provided in the repository, according to your needs.
 See our [advanced Docker usage](https://github.com/oraios/serena/blob/main/DOCKER.md) documentation for more detailed instructions, configuration options, and limitations.
 
 :::{note}

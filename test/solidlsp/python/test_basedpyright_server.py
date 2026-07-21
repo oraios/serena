@@ -69,7 +69,7 @@ def test_version_override_builds_uvx_command(tmp_path: Path, monkeypatch: pytest
     ]
 
 
-def test_builds_uv_x_fallback_command(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_builds_uv_tool_run_fallback_command(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     server = _make_basedpyright_server(tmp_path)
     provider = server._create_dependency_provider()
     monkeypatch.delenv("UVX", raising=False)
@@ -82,7 +82,8 @@ def test_builds_uv_x_fallback_command(tmp_path: Path, monkeypatch: pytest.Monkey
 
     assert command == [
         "/opt/bin/uv",
-        "x",
+        "tool",
+        "run",
         "-p",
         "3.13",
         "--from",

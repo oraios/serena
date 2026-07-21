@@ -913,6 +913,8 @@ class Dashboard {
                 if (response.status === 'success') {
                     if (response.last_execution !== null && response.last_execution.logged) {
                         self.displayLastExecution(response.last_execution);
+                    } else {
+                        self.displayLastExecution(null);
                     }
                 } else {
                     console.error('Error loading last execution:', response.message);

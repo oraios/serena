@@ -493,7 +493,7 @@ class Project(ToStringMixin):
                 ls_specific_settings=ls_specific_settings,
                 trace_lsp_communication=self.serena_config.trace_lsp_communication,
             )
-            self.language_server_manager = LanguageServerManager.from_languages(self.project_config.languages, factory)
+            self.language_server_manager = LanguageServerManager.from_languages(self.project_config.languages, factory, self)
             return self.language_server_manager
         except Exception as e:
             self._language_server_manager_init_error = e
@@ -556,6 +556,14 @@ class Project(ToStringMixin):
         else:
             log.info("Removing and stopping the language server for language %s ...", language.value)
             self.language_server_manager.remove_language_server(language)
+
+    def ls_sync_file_system_changes(self) -> int:
+        """
+        Synchronizes file system changes with the project's associated language server(s), if applicable
+        """
+        if self.language_server_manager:
+            return self.language_server_manager.sync_file_system_changes()
+        return 0
 
     def shutdown(self, timeout: float = 2.0) -> None:
         if self.language_server_manager is not None:

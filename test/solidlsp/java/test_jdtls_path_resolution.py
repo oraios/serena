@@ -644,3 +644,132 @@ class TestIsIgnoredDirname:
     @pytest.mark.parametrize("dirname", [".git", ".venv", ".idea", ".serena", ".mypy_cache"])
     def test_always_ignored_dirs_are_still_ignored(self, jdtls: EclipseJDTLS, dirname: str) -> None:
         assert jdtls.is_ignored_dirname(dirname) is True
+
+
+# ----------------------------------------------------------------------------
+# _resolve_configured_runtimes / configured `runtimes` initialize settings (#1478)
+# ----------------------------------------------------------------------------
+
+
+def _runtimes(initialize_params: dict) -> list[dict]:
+    """
+    Return the JDT-LS ``java.configuration.runtimes`` list from initialize parameters.
+
+    :param initialize_params: JDTLS initialize-parameter payload.
+    :return: The configured runtimes list.
+    """
+    return initialize_params["initializationOptions"]["settings"]["java"]["configuration"]["runtimes"]
+
+
+class TestResolveConfiguredRuntimes:
+    def test_empty_when_unset(self, custom_settings: SolidLSPSettings.CustomLSSettings) -> None:
+        server = object.__new__(EclipseJDTLS)
+        server._custom_settings = custom_settings
+        assert server._resolve_configured_runtimes() == []
+
+    def test_valid_entry_is_normalized(self, tmp_path: Path) -> None:
+        jdk = tmp_path / "jdk-25"
+        jdk.mkdir()
+        server = object.__new__(EclipseJDTLS)
+        server._custom_settings = SolidLSPSettings.CustomLSSettings(
+            {"runtimes": [{"name": "JavaSE-25", "path": str(jdk), "default": True}]}
+        )
+        assert server._resolve_configured_runtimes() == [{"name": "JavaSE-25", "path": str(jdk), "default": True}]
+
+    def test_optional_sources_and_javadoc_pass_through(self, tmp_path: Path) -> None:
+        jdk = tmp_path / "jdk-25"
+        jdk.mkdir()
+        server = object.__new__(EclipseJDTLS)
+        server._custom_settings = SolidLSPSettings.CustomLSSettings(
+            {"runtimes": [{"name": "JavaSE-25", "path": str(jdk), "sources": "/src", "javadoc": "/doc"}]}
+        )
+        assert server._resolve_configured_runtimes() == [{"name": "JavaSE-25", "path": str(jdk), "sources": "/src", "javadoc": "/doc"}]
+
+    def test_raises_when_runtimes_is_not_a_list(self) -> None:
+        server = object.__new__(EclipseJDTLS)
+        server._custom_settings = SolidLSPSettings.CustomLSSettings({"runtimes": {"name": "JavaSE-25", "path": "/x"}})
+        with pytest.raises(ValueError, match="must be a list"):
+            server._resolve_configured_runtimes()
+
+    @pytest.mark.parametrize(
+        "entry", [{"path": "/x"}, {"name": "JavaSE-25"}, "not-a-dict", 42], ids=["missing-name", "missing-path", "string", "int"]
+    )
+    def test_raises_for_malformed_entry(self, entry: object) -> None:
+        server = object.__new__(EclipseJDTLS)
+        server._custom_settings = SolidLSPSettings.CustomLSSettings({"runtimes": [entry]})
+        with pytest.raises(ValueError, match="requires at least a 'name' and a 'path' key"):
+            server._resolve_configured_runtimes()
+
+    def test_raises_for_nonexistent_path(self, tmp_path: Path) -> None:
+        server = object.__new__(EclipseJDTLS)
+        server._custom_settings = SolidLSPSettings.CustomLSSettings(
+            {"runtimes": [{"name": "JavaSE-25", "path": str(tmp_path / "missing-jdk")}]}
+        )
+        with pytest.raises(FileNotFoundError, match="does not exist"):
+            server._resolve_configured_runtimes()
+
+
+class TestConfiguredRuntimesInitializeSettings:
+    def test_bundled_runtime_is_sole_default_when_unconfigured(
+        self, tmp_path: Path, custom_settings: SolidLSPSettings.CustomLSSettings
+    ) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+
+        server = _make_uninitialized_jdtls(repo, {}, runtime_paths)
+
+        assert _runtimes(server._create_base_initialize_params()) == [
+            {"name": "JavaSE-21", "path": runtime_paths.jre_home_path, "default": True}
+        ]
+
+    def test_configured_runtime_extends_bundled_runtime(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+        jdk25 = tmp_path / "jdk-25"
+        jdk25.mkdir()
+
+        server = _make_uninitialized_jdtls(repo, {"runtimes": [{"name": "JavaSE-25", "path": str(jdk25)}]}, runtime_paths)
+
+        runtimes = _runtimes(server._create_base_initialize_params())
+        assert {"name": "JavaSE-21", "path": runtime_paths.jre_home_path, "default": True} in runtimes
+        assert {"name": "JavaSE-25", "path": str(jdk25)} in runtimes
+        assert len(runtimes) == 2
+
+    def test_configured_runtime_with_same_name_overrides_bundled_runtime(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+        override_jdk = tmp_path / "override-jdk-21"
+        override_jdk.mkdir()
+
+        server = _make_uninitialized_jdtls(repo, {"runtimes": [{"name": "JavaSE-21", "path": str(override_jdk)}]}, runtime_paths)
+
+        runtimes = _runtimes(server._create_base_initialize_params())
+        assert runtimes == [{"name": "JavaSE-21", "path": str(override_jdk)}]
+
+    def test_configured_default_unsets_bundled_default(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+        jdk25 = tmp_path / "jdk-25"
+        jdk25.mkdir()
+
+        server = _make_uninitialized_jdtls(repo, {"runtimes": [{"name": "JavaSE-25", "path": str(jdk25), "default": True}]}, runtime_paths)
+
+        runtimes = _runtimes(server._create_base_initialize_params())
+        bundled = next(r for r in runtimes if r["name"] == "JavaSE-21")
+        configured = next(r for r in runtimes if r["name"] == "JavaSE-25")
+        assert bundled["default"] is False
+        assert configured["default"] is True
+
+    def test_invalid_configured_runtime_raises_during_initialize_params(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+
+        server = _make_uninitialized_jdtls(repo, {"runtimes": [{"name": "JavaSE-25"}]}, runtime_paths)
+
+        with pytest.raises(ValueError, match="requires at least a 'name' and a 'path' key"):
+            server._create_base_initialize_params()

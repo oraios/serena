@@ -214,12 +214,7 @@ class LanguageServerDependencyProviderUvx(LanguageServerDependencyProviderBaseCo
         entrypoint: str,
         python_version: str = DEFAULT_UVX_PYTHON_VERSION,
     ) -> list[str]:
-        """Build a command that runs a pinned PyPI package's console script on demand via ``uvx`` / ``uv x``.
-
-        Resolution order:
-          1. Prefer ``uvx`` (env var ``UVX`` or PATH lookup).
-          2. Fall back to ``uv x`` if only ``uv`` is on PATH.
-          3. Raise ``RuntimeError`` if neither is available.
+        """Build a command that runs a pinned PyPI package's console script on demand via ``uvx`` / ``uv tool run``.
 
         :param package: PyPI package name (e.g. ``"pyright"``).
         :param version: Pinned package version.
@@ -234,7 +229,7 @@ class LanguageServerDependencyProviderUvx(LanguageServerDependencyProviderBaseCo
 
         uv_path = shutil.which("uv")
         if uv_path is not None:
-            return [uv_path, "x", *base_args]
+            return [uv_path, "tool", "run", *base_args]  # `uv tool run` is the same as `uvx`
 
         raise RuntimeError("Could not find 'uvx' or 'uv' in PATH. Install uv (https://docs.astral.sh/uv/).")
 
