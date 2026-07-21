@@ -36,6 +36,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     symbol range of such declarations starting at the identifier rather than the keyword (unlike
     `func` declarations); the range is now extended to include the keyword so the body and the
     replacement range stay consistent.
+  - `typescript` / `typescript_vts`: No longer ignore directories named `coverage`. This was intended to skip
+    coverage-report output, but matched by bare dirname and so also hid legitimate source directories named
+    `coverage` (e.g. `src/routes/coverage/`) from symbol tools. Generated report dirs are already covered by
+    gitignore. Fixes #1523.
 
 * Tools:
   - Fix: `search_for_pattern` marked one line too many as matched whenever a match ended with a line

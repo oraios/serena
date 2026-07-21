@@ -68,7 +68,6 @@ class VtsLanguageServer(SolidLanguageServer):
             "node_modules",
             "dist",
             "build",
-            "coverage",
         ]
 
     @classmethod
