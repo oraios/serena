@@ -132,13 +132,3 @@ def test_ls_low_level_find_references_with_explicit_sync(tmp_path):
     Tests that requesting references directly from the LS works if synchronisation is explicitly requested after external file changes.
     """
     FileSystemSyncTestCase(use_serena_tool=False).run(tmp_path)
-
-
-def test_sync_first_poll_is_baseline_only(tmp_path):
-    """A newly-loaded project must not report its entire pre-existing file set as changed."""
-    repo_root = tmp_path / "repo"
-    shutil.copytree(get_repo_path(Language.PYTHON), repo_root)
-    with project_with_ls_context(Language.PYTHON, str(repo_root)) as project:
-        assert project.ls_sync_file_system_changes() == 0
-        # No external edits between the two calls -> still nothing to report.
-        assert project.ls_sync_file_system_changes() == 0

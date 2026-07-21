@@ -280,11 +280,16 @@ class LanguageServerFileChangeNotifier:
     Detects changes to source files on disk and notifies language servers of those changes.
     """
 
-    def __init__(self, project: "Project", language_server_manager: LanguageServerManager) -> None:
+    def __init__(self, project: "Project", language_server_manager: LanguageServerManager, initial_poll: bool = True) -> None:
         self._project = project
         self._language_server_manager = language_server_manager
         self._freshness_last_seen_mtimes: dict[str, float] | None = None
         self._freshness_lock = threading.Lock()
+
+        if initial_poll:
+            # Establish the baseline for the first poll; no notifications are sent on the first call.
+            with LogTime("Initialising file change notifier (polling for baseline)"):
+                self.poll_and_notify()
 
     def poll_and_notify(self) -> int:
         """
