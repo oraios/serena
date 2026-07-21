@@ -267,8 +267,6 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
 
         :param name_path: name path of the symbol
         :param relative_path: the relative path to the file containing the symbol for which to find references.
-            Note: for external dependencies, this must be an identifier starting with `<ext` that you have received
-            earlier (don't try to guess!).
         :param include_kinds: (optional) limits results to the given LSP symbol kinds (integers)
         :param exclude_kinds: optional list of LSP symbol kinds (integers) to exclude.
         :param max_answer_chars: max result length; -1 for default
