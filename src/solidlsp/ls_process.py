@@ -7,7 +7,7 @@ import subprocess
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from queue import Empty, Queue
 from typing import IO, Any, AnyStr, cast
@@ -18,7 +18,7 @@ from solidlsp.ls_config import Language
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_request import LanguageServerRequest
 from solidlsp.lsp_protocol_handler.lsp_requests import LspNotification
-from solidlsp.lsp_protocol_handler.lsp_types import ErrorCodes
+from solidlsp.lsp_protocol_handler.lsp_types import ErrorCodes, LSPErrorCodes
 from solidlsp.lsp_protocol_handler.server import (
     ENCODING,
     LSPError,
@@ -35,6 +35,17 @@ from solidlsp.lsp_protocol_handler.server import (
 from solidlsp.util import subprocess_util
 
 log = logging.getLogger(__name__)
+
+# Per the LSP spec, `ContentModified` (-32801) means the server discarded a stale, in-flight
+# computation because the workspace changed underneath it, not that the request itself is
+# invalid. A well-behaved client is expected to retry such requests -- but only requests it has
+# declared, via `general.staleRequestSupport.retryOnContentModified` in its InitializeParams, that
+# it will retry. We honor that contract: `send_request` only retries methods a given language
+# server implementation has actually opted into via `set_content_modified_retry_methods` (see
+# `SolidLanguageServer._create_initialize_params`), so this mechanism is a no-op for any server
+# that hasn't declared such methods.
+_CONTENT_MODIFIED_MAX_ATTEMPTS = 3
+_CONTENT_MODIFIED_RETRY_DELAY = 0.2
 
 
 class LanguageServerTerminatedException(Exception):
@@ -155,11 +166,33 @@ class LanguageServerInterface(ABC):
         self._response_handlers_lock = threading.Lock()
         self._tasks_lock = threading.Lock()
 
+        self._content_modified_retry_methods: frozenset[str] = frozenset()
+        """
+        The set of LSP method names for which `send_request` will retry a `ContentModified`
+        (-32801) response instead of raising immediately. Empty by default, i.e. no retries,
+        since retrying is only correct for methods this client has told the server (via
+        `general.staleRequestSupport.retryOnContentModified`) that it will reissue; see
+        `set_content_modified_retry_methods`.
+        """
+
     def set_request_timeout(self, timeout: float | None) -> None:
         """
         :param timeout: the timeout, in seconds, for all requests sent to the language server.
         """
         self._request_timeout = timeout
+
+    def set_content_modified_retry_methods(self, methods: Iterable[str]) -> None:
+        """
+        Declares the LSP method names for which `send_request` should retry `ContentModified`
+        (-32801) responses. This should mirror whatever methods are declared in
+        `general.staleRequestSupport.retryOnContentModified` of the InitializeParams sent to the
+        server: that declaration is a promise to the server about which requests the client will
+        reissue on cancellation, so retrying anything outside of it would contradict what the
+        server was told.
+
+        :param methods: LSP method names (e.g. ``"textDocument/hover"``) eligible for retry.
+        """
+        self._content_modified_retry_methods = frozenset(methods)
 
     @abstractmethod
     def is_running(self) -> bool:
@@ -296,9 +329,9 @@ class LanguageServerInterface(ABC):
                 request.on_error(exception)
             self._pending_requests.clear()
 
-    def send_request(self, method: str, params: dict | None = None) -> PayloadLike:
+    def _send_request_once(self, method: str, params: dict | None) -> Request.Result:
         """
-        Send request to the server, register the request id, and wait for the response
+        Sends a single request to the server (no retries) and waits for its response.
         """
         with self._request_id_lock:
             request_id = self.request_id
@@ -315,12 +348,36 @@ class LanguageServerInterface(ABC):
         log.debug("Waiting for response to request %s with params:\n%s", method, params)
         result = request.get_result(timeout=self._request_timeout)
         log.debug("Completed: %s", request)
+        return result
 
-        if result.is_error():
-            raise SolidLSPException(f"Error processing request {method} with params:\n{params}", cause=result.error) from result.error
+    def send_request(self, method: str, params: dict | None = None) -> PayloadLike:
+        """
+        Send request to the server, register the request id, and wait for the response.
 
-        log.debug("Returning result:\n%s", result.payload)
-        return result.payload
+        If `method` is one of the methods registered via `set_content_modified_retry_methods`,
+        a response failing with the LSP `ContentModified` error (-32801) is retried a bounded
+        number of times with a short delay instead of being surfaced to the caller immediately;
+        see `_CONTENT_MODIFIED_MAX_ATTEMPTS` above. Methods that were not registered are never
+        retried, regardless of the error, so as to not retry requests behind the server's back.
+        """
+        result = self._send_request_once(method, params)
+        if not result.is_error():
+            log.debug("Returning result:\n%s", result.payload)
+            return result.payload
+
+        if method in self._content_modified_retry_methods:
+            for attempt in range(2, _CONTENT_MODIFIED_MAX_ATTEMPTS + 1):
+                is_content_modified = isinstance(result.error, LSPError) and result.error.code == LSPErrorCodes.ContentModified
+                if not is_content_modified:
+                    break
+                log.info("Request %s got ContentModified (-32801); retrying (%d/%d)", method, attempt, _CONTENT_MODIFIED_MAX_ATTEMPTS)
+                time.sleep(_CONTENT_MODIFIED_RETRY_DELAY)
+                result = self._send_request_once(method, params)
+                if not result.is_error():
+                    log.debug("Returning result:\n%s", result.payload)
+                    return result.payload
+
+        raise SolidLSPException(f"Error processing request {method} with params:\n{params}", cause=result.error) from result.error
 
     @abstractmethod
     def _send_payload(self, payload: StringDict) -> None:

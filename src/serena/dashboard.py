@@ -10,6 +10,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import cached_property
 from html import escape
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Self
@@ -26,7 +27,9 @@ from serena.config.serena_config import SerenaConfig, SerenaPaths
 from serena.constants import SERENA_DASHBOARD_DIR, SerenaPorts
 from serena.task_executor import TaskExecutor
 from serena.util.logging import MemoryLogHandler
+from serena.util.pypi import PyPIPackageInfo
 from serena.util.pywebview import WebViewWithTray
+from serena.util.version import Version
 
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
@@ -71,6 +74,7 @@ class ResponseConfigOverview(BaseModel):
     encoding: str | None
     current_client: str | None
     serena_version: str
+    newer_serena_version: str | None
 
 
 class ResponseAvailableLanguages(BaseModel):
@@ -223,6 +227,27 @@ class SerenaDashboardAPI:
     @property
     def memory_log_handler(self) -> MemoryLogHandler:
         return self._memory_log_handler
+
+    @cached_property
+    def _newer_serena_version(self) -> str | None:
+        """The version of a newer serena-agent package release on PyPI, if any.
+
+        The result is computed only once (on first access) and cached thereafter.
+
+        :return: the latest version available on PyPI if it is newer than the running version, else None
+        """
+        try:
+            # query PyPI for the latest released version
+            latest_serena_version = PyPIPackageInfo("serena-agent").get_latest_version(timeout_secs=3)
+
+            # compare against the running version
+            latest_version = Version(latest_serena_version)
+            current_version = Version(self._agent.version)
+            if not current_version.is_at_least(*latest_version.components):
+                return latest_serena_version
+        except Exception as e:
+            log.warning("Failed to check for newer Serena version on PyPI: %s", e)
+        return None
 
     def _setup_routes(self) -> None:
         @self._app.route("/")
@@ -606,6 +631,7 @@ class SerenaDashboardAPI:
             encoding=encoding,
             current_client=Tool.get_last_tool_call_client_str(),
             serena_version=self._agent.version,
+            newer_serena_version=self._newer_serena_version,
         )
 
     def _on_agent_config_changed(self) -> None:

@@ -547,17 +547,8 @@ class SolidLanguageServer(ABC):
         """
         self.server.on_any_notification(self._observe_server_notification)
 
-        # Set up the pathspec matcher for the ignored paths
-        # for all absolute paths in ignored_paths, convert them to relative paths
-        processed_patterns = []
-        for pattern in set(config.ignored_paths):
-            # Normalize separators (pathspec expects forward slashes)
-            pattern = pattern.replace(os.path.sep, "/")
-            processed_patterns.append(pattern)
-        log.debug(f"Processing {len(processed_patterns)} ignored paths from the config")
-
-        # Create a pathspec matcher from the processed patterns
-        self._ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)
+        # create a pathspec matcher from the given patterns
+        self._ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, config.ignored_paths)
 
         self._has_waited_for_cross_file_references = False
 
@@ -3203,4 +3194,17 @@ class SolidLanguageServer(ABC):
         """
         Create the InitializeParams object to send to the language server during initialization.
         """
-        return self._create_initialize_params_builder().with_base_options(self._create_base_initialize_params()).build()
+        params = self._create_initialize_params_builder().with_base_options(self._create_base_initialize_params()).build()
+        self._register_content_modified_retry_methods(params)
+        return params
+
+    def _register_content_modified_retry_methods(self, params: InitializeParams) -> None:
+        """
+        Reads back `general.staleRequestSupport.retryOnContentModified` from the InitializeParams
+        we are about to send and registers it with the underlying `LanguageServerInterface`, so
+        that `send_request` only retries `ContentModified` (-32801) responses for methods we have
+        actually told the server we will retry (see `LanguageServerInterface.send_request`).
+        """
+        general_capabilities = cast(dict, params.get("capabilities", {})).get("general", {})
+        retry_methods = general_capabilities.get("staleRequestSupport", {}).get("retryOnContentModified", [])
+        self.server.set_content_modified_retry_methods(retry_methods)

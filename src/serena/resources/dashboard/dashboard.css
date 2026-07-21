@@ -556,6 +556,24 @@ code, pre, kbd, samp,
     color: var(--text-primary);
 }
 
+.newer-version-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 10px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.newer-version-badge:hover {
+    background: var(--btn-secondary-hover);
+}
+
 .config-list {
     list-style: none;
     padding: 0;
