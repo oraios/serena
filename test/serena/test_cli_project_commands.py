@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 import pytest
+from click import Command, Option
 from click.testing import CliRunner
 
 from serena.cli import ProjectCommands, TopLevelCommands, find_project_root
@@ -49,6 +50,14 @@ def temp_project_dir_with_python_file():
 def cli_runner():
     """Create a CliRunner for testing Click commands."""
     return CliRunner()
+
+
+@pytest.mark.parametrize("command", [ProjectCommands.create, ProjectCommands.index])
+def test_language_server_aliases_bind_to_language_parameter(command: Command) -> None:
+    language_option = next(option for option in command.params if isinstance(option, Option) and "--ls" in option.opts)
+
+    assert language_option.name == "language"
+    assert language_option.opts == ["--ls", "--language"]
 
 
 class TestProjectCreate:
