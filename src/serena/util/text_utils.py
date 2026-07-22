@@ -5,6 +5,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
+from functools import lru_cache
 from typing import Any, Literal, Self
 
 from bs4 import BeautifulSoup
@@ -240,6 +241,43 @@ def expand_braces(pattern: str) -> list[str]:
     return patterns
 
 
+@lru_cache(maxsize=256)
+def _translate_glob_no_double_star(pattern: str) -> str:
+    res = []
+    i = 0
+    n = len(pattern)
+    while i < n:
+        c = pattern[i]
+        i += 1
+        if c == "*":
+            if not res or res[-1] != "[^/]*":
+                res.append("[^/]*")
+        elif c == "?":
+            res.append("[^/]")
+        elif c == "[":
+            j = i
+            if j < n and pattern[j] == "!":
+                j += 1
+            if j < n and pattern[j] == "]":
+                j += 1
+            while j < n and pattern[j] != "]":
+                j += 1
+            if j >= n:
+                res.append(r"\[")
+            else:
+                stuff = pattern[i:j]
+                if stuff.startswith("!"):
+                    stuff = "^" + stuff[1:]
+                elif stuff.startswith("^"):
+                    stuff = r"\^" + stuff
+                res.append(f"[{stuff}]")
+                i = j + 1
+        else:
+            res.append(re.escape(c))
+    inner = "".join(res)
+    return f"(?s:{inner})\\Z"
+
+
 def glob_match(pattern: str, path: str) -> bool:
     """
     Match a file path against a glob pattern.
@@ -289,8 +327,8 @@ def glob_match(pattern: str, path: str) -> bool:
 
         return False
     else:
-        # Simple pattern without **, use fnmatch directly
-        return fnmatch.fnmatch(path, pattern)
+        # Simple pattern without **, translate bare * and ? to not match /
+        return bool(re.match(_translate_glob_no_double_star(pattern), path))
 
 
 class GlobMatcher:

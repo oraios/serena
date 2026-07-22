@@ -593,10 +593,16 @@ class TestGlobMatch:
         [
             # Basic wildcard patterns
             ("*.py", "file.py", True),
+            ("*.py", "src/file.py", False),
             ("*.py", "file.txt", False),
             ("*agent.py", "agent.py", True),
             ("*agent.py", "process_isolated_agent.py", True),
+            ("*agent.py", "src/agent.py", False),
             ("*agent.py", "agent_test.py", False),
+            ("a?b.py", "acb.py", True),
+            ("a?b.py", "a/b.py", False),
+            ("src/*.py", "src/file.py", True),
+            ("src/*.py", "src/sub/file.py", False),
             # Double asterisk patterns
             ("**agent.py", "agent.py", True),
             ("**agent.py", "src/agent.py", True),
