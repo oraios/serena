@@ -18,7 +18,7 @@ from serena.config.serena_config import (
 )
 from serena.constants import PROJECT_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
 from serena.project import MemoryManager, Project
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from test.conftest import create_default_serena_config
 
 
@@ -42,7 +42,7 @@ class TestProjectConfigAutogenerate:
         config = ProjectConfig.autogenerate(self.project_path, self.serena_config, save_to_disk=False)
 
         assert config.project_name == self.project_path.name
-        assert config.languages == []
+        assert config.language_servers == []
 
     def test_autogenerate_empty_directory_logs_warning(self, caplog):
         """Test that autogenerate logs a warning when no language files are found."""
@@ -62,7 +62,7 @@ class TestProjectConfigAutogenerate:
 
         # Verify the configuration
         assert config.project_name == self.project_path.name
-        assert config.languages == [Language.PYTHON]
+        assert config.language_servers == [LanguageServerId.PYTHON]
 
     def test_autogenerate_with_python_files_and_custom_ls_priorities(self):
         """Test successful autogeneration with Python source files, using custom language server priorities."""
@@ -71,14 +71,14 @@ class TestProjectConfigAutogenerate:
         python_file.write_text("def hello():\n    print('Hello, world!')\n")
 
         serena_config = deepcopy(self.serena_config)
-        serena_config.ls_priorities = {Language.PYTHON_TY.value: 3}
+        serena_config.ls_priorities = {LanguageServerId.PYTHON_TY.value: 3}
 
         # Run autogenerate
         config = ProjectConfig.autogenerate(self.project_path, serena_config, save_to_disk=False)
 
         # Verify the configuration
         assert config.project_name == self.project_path.name
-        assert config.languages == [Language.PYTHON_TY]
+        assert config.language_servers == [LanguageServerId.PYTHON_TY]
 
     def test_autogenerate_with_js_files(self):
         """Test successful autogeneration with JavaScript source files."""
@@ -88,7 +88,7 @@ class TestProjectConfigAutogenerate:
         # Run autogenerate - should pick Python as dominant
         config = ProjectConfig.autogenerate(self.project_path, self.serena_config, save_to_disk=False)
 
-        assert config.languages == [Language.TYPESCRIPT]
+        assert config.language_servers == [LanguageServerId.TYPESCRIPT]
 
     def test_autogenerate_with_multiple_languages(self):
         """Test autogeneration picks dominant language when multiple are present."""
@@ -100,7 +100,7 @@ class TestProjectConfigAutogenerate:
         # Run autogenerate - should pick Python as dominant
         config = ProjectConfig.autogenerate(self.project_path, self.serena_config, save_to_disk=False)
 
-        assert config.languages == [Language.PYTHON]
+        assert config.language_servers == [LanguageServerId.PYTHON]
 
     def test_autogenerate_saves_to_disk(self):
         """Test that autogenerate can save the configuration to disk."""
@@ -116,7 +116,7 @@ class TestProjectConfigAutogenerate:
         assert config_path.exists()
 
         # Verify the content
-        assert config.languages == [Language.GO]
+        assert config.language_servers == [LanguageServerId.GO]
 
     def test_autogenerate_nonexistent_path(self):
         """Test that autogenerate raises FileNotFoundError for non-existent path."""
@@ -140,7 +140,7 @@ class TestProjectConfigAutogenerate:
         config = ProjectConfig.autogenerate(self.project_path, self.serena_config, save_to_disk=False)
 
         assert config.project_name == self.project_path.name
-        assert config.languages == []
+        assert config.language_servers == []
 
     def test_autogenerate_custom_project_name(self):
         """Test autogenerate with custom project name."""
@@ -153,7 +153,7 @@ class TestProjectConfigAutogenerate:
         config = ProjectConfig.autogenerate(self.project_path, self.serena_config, project_name=custom_name, save_to_disk=False)
 
         assert config.project_name == custom_name
-        assert config.languages == [Language.TYPESCRIPT]
+        assert config.language_servers == [LanguageServerId.TYPESCRIPT]
 
 
 class TestProjectConfig:
@@ -168,14 +168,14 @@ class TestProjectConfigLanguageBackend:
     def test_language_backend_defaults_to_none(self):
         config = ProjectConfig(
             project_name="test",
-            languages=[Language.PYTHON],
+            language_servers=[LanguageServerId.PYTHON],
         )
         assert config.language_backend is None
 
     def test_language_backend_can_be_set(self):
         config = ProjectConfig(
             project_name="test",
-            languages=[Language.PYTHON],
+            language_servers=[LanguageServerId.PYTHON],
             language_backend=LanguageBackend.JETBRAINS,
         )
         assert config.language_backend == LanguageBackend.JETBRAINS
@@ -183,7 +183,7 @@ class TestProjectConfigLanguageBackend:
     def test_language_backend_roundtrips_through_yaml(self):
         config = ProjectConfig(
             project_name="test",
-            languages=[Language.PYTHON],
+            language_servers=[LanguageServerId.PYTHON],
             language_backend=LanguageBackend.JETBRAINS,
         )
         d = config._to_yaml_dict()
@@ -192,7 +192,7 @@ class TestProjectConfigLanguageBackend:
     def test_language_backend_none_roundtrips_through_yaml(self):
         config = ProjectConfig(
             project_name="test",
-            languages=[Language.PYTHON],
+            language_servers=[LanguageServerId.PYTHON],
         )
         d = config._to_yaml_dict()
         assert d["language_backend"] is None
@@ -232,7 +232,7 @@ def _make_config_with_project(
         project_root=str(Path(__file__).parent.parent / "resources" / "repos" / "python" / "test_repo"),
         project_config=ProjectConfig(
             project_name=project_name,
-            languages=[Language.PYTHON],
+            language_servers=[LanguageServerId.PYTHON],
             language_backend=language_backend,
         ),
         serena_config=config,
@@ -286,7 +286,7 @@ class TestEffectiveLanguageBackend:
             project_root=str(Path(__file__).parent.parent / "resources" / "repos" / "java" / "test_repo"),
             project_config=ProjectConfig(
                 project_name="jb_proj",
-                languages=[Language.JAVA],
+                language_servers=[LanguageServerId.JAVA],
                 language_backend=LanguageBackend.JETBRAINS,
             ),
             serena_config=config,
@@ -309,7 +309,7 @@ class TestEffectiveLanguageBackend:
             project_root=str(Path(__file__).parent.parent / "resources" / "repos" / "python" / "test_repo"),
             project_config=ProjectConfig(
                 project_name="lsp_proj2",
-                languages=[Language.PYTHON],
+                language_servers=[LanguageServerId.PYTHON],
                 language_backend=LanguageBackend.LSP,
             ),
             serena_config=config,
@@ -332,7 +332,7 @@ class TestEffectiveLanguageBackend:
             project_root=str(Path(__file__).parent.parent / "resources" / "repos" / "python" / "test_repo"),
             project_config=ProjectConfig(
                 project_name="proj2",
-                languages=[Language.PYTHON],
+                language_servers=[LanguageServerId.PYTHON],
                 language_backend=None,
             ),
             serena_config=config,
@@ -432,7 +432,7 @@ class TestProjectSerenaDataFolder:
     def _make_project(self, serena_config: "SerenaConfig | None" = None) -> Project:
         project_config = ProjectConfig(
             project_name="myproject",
-            languages=[Language.PYTHON],
+            language_servers=[LanguageServerId.PYTHON],
         )
         project = Project(
             project_root=str(self.project_path),
@@ -679,11 +679,11 @@ class TestProjectConfigActivationCommand:
         return data
 
     def test_activation_command_defaults_to_none(self):
-        config = ProjectConfig(project_name="test", languages=[Language.PYTHON])
+        config = ProjectConfig(project_name="test", language_servers=[LanguageServerId.PYTHON])
         assert config.activation_command is None
 
     def test_activation_command_timeout_default(self):
-        config = ProjectConfig(project_name="test", languages=[Language.PYTHON])
+        config = ProjectConfig(project_name="test", language_servers=[LanguageServerId.PYTHON])
         assert config.activation_command_timeout == 180.0
 
     def test_activation_command_parsed_from_dict(self):

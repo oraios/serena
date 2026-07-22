@@ -21,7 +21,7 @@ import logging
 import pytest
 
 from solidlsp import ls_process
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_process import LanguageServerInterface, Request
 from solidlsp.lsp_protocol_handler.lsp_types import LSPErrorCodes
@@ -40,7 +40,7 @@ class _ScriptedServer(LanguageServerInterface):
     """
 
     def __init__(self, results: list[Request.Result], retry_methods: tuple[str, ...] = ("textDocument/hover",)) -> None:
-        super().__init__(Language.PYTHON, lambda _line: logging.INFO)
+        super().__init__(LanguageServerId.PYTHON, lambda _line: logging.INFO)
         self._results = list(results)
         self.sent_payload_count = 0
         self.set_content_modified_retry_methods(retry_methods)

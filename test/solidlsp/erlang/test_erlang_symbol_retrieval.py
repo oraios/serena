@@ -12,21 +12,21 @@ import os
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
-from test.conftest import language_tests_enabled
+from test.conftest import language_server_tests_enabled
 
 # These marks will be applied to all tests in this module
 pytestmark = [
     pytest.mark.erlang,
-    pytest.mark.skipif(not language_tests_enabled(Language.ERLANG), reason="Erlang tests are disabled"),
+    pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.ERLANG), reason="Erlang tests are disabled"),
 ]
 
 
 class TestErlangLanguageServerSymbols:
     """Test the Erlang language server's symbol-related functionality."""
 
-    @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
     def test_request_containing_symbol_function(self, language_server: SolidLanguageServer) -> None:
         """Test request_containing_symbol for a function."""
         # Test for a position inside the create_user function
@@ -53,7 +53,7 @@ class TestErlangLanguageServerSymbols:
             if "body" in containing_symbol:
                 assert "create_user" in containing_symbol["body"].get_text()
 
-    @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
     def test_request_containing_symbol_module(self, language_server: SolidLanguageServer) -> None:
         """Test request_containing_symbol for a module."""
         # Test for a position inside the models module but outside any function
@@ -78,7 +78,7 @@ class TestErlangLanguageServerSymbols:
             assert "models" in containing_symbol["name"] or "module" in containing_symbol["name"].lower()
             assert containing_symbol["kind"] == SymbolKind.Module or containing_symbol["kind"] == SymbolKind.Class
 
-    @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
     def test_request_containing_symbol_nested(self, language_server: SolidLanguageServer) -> None:
         """Test request_containing_symbol with nested scopes."""
         # Test for a position inside a function which is inside a module
@@ -107,7 +107,7 @@ class TestErlangLanguageServerSymbols:
             expected_names = ["create_user", "models"]
             assert any(name in containing_symbol["name"] for name in expected_names)
 
-    @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
     def test_request_containing_symbol_none(self, language_server: SolidLanguageServer) -> None:
         """Test request_containing_symbol for a position with no containing symbol."""
         # Test for a position outside any function/module (e.g., in comments)
@@ -119,7 +119,7 @@ class TestErlangLanguageServerSymbols:
         # This is acceptable behavior for module-level positions
         assert containing_symbol is None or containing_symbol == {} or "models" in str(containing_symbol)
 
-    @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
     def test_request_referencing_symbols_record(self, language_server: SolidLanguageServer) -> None:
         """Test request_referencing_symbols for a record."""
         # Test referencing symbols for user record
@@ -149,7 +149,7 @@ class TestErlangLanguageServerSymbols:
             # We expect some references from models.erl
             assert len(models_references) >= 0  # At least attempt to find references
 
-    @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
     def test_request_referencing_symbols_function(self, language_server: SolidLanguageServer) -> None:
         """Test request_referencing_symbols for a function."""
         # Test referencing symbols for create_user function
@@ -181,7 +181,7 @@ class TestErlangLanguageServerSymbols:
             ]
             assert len(service_references) >= 0  # At least attempt to find references
 
-    @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
     def test_request_referencing_symbols_none(self, language_server: SolidLanguageServer) -> None:
         """Test request_referencing_symbols for a position with no symbol."""
         file_path = os.path.join("src", "models.erl")
@@ -196,7 +196,7 @@ class TestErlangLanguageServerSymbols:
             pass
 
     # Tests for request_defining_symbol
-    @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
     def test_request_defining_symbol_function_call(self, language_server: SolidLanguageServer) -> None:
         """Test request_defining_symbol for a function call."""
         # Find a place where models:create_user is called in services.erl
@@ -220,7 +220,7 @@ class TestErlangLanguageServerSymbols:
             if "location" in defining_symbol and "uri" in defining_symbol["location"]:
                 assert "models.erl" in defining_symbol["location"]["uri"]
 
-    @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
     def test_request_defining_symbol_record_usage(self, language_server: SolidLanguageServer) -> None:
         """Test request_defining_symbol for a record usage."""
         # Find a place where #user{} record is used in models.erl
@@ -243,7 +243,7 @@ class TestErlangLanguageServerSymbols:
             if "location" in defining_symbol and "uri" in defining_symbol["location"]:
                 assert "records.hrl" in defining_symbol["location"]["uri"]
 
-    @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
     def test_request_defining_symbol_module_call(self, language_server: SolidLanguageServer) -> None:
         """Test request_defining_symbol for a module function call."""
         # Find a place where utils:validate_input is called
@@ -264,7 +264,7 @@ class TestErlangLanguageServerSymbols:
         if defining_symbol:
             assert "validate" in defining_symbol.get("name", "") or "email" in defining_symbol.get("name", "")
 
-    @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
     def test_request_defining_symbol_none(self, language_server: SolidLanguageServer) -> None:
         """Test request_defining_symbol for a position with no symbol."""
         # Test for a position with no symbol (e.g., whitespace or comment)
@@ -275,7 +275,7 @@ class TestErlangLanguageServerSymbols:
         # Should return None or empty
         assert defining_symbol is None or defining_symbol == {}
 
-    @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
     def test_symbol_methods_integration(self, language_server: SolidLanguageServer) -> None:
         """Test integration between different symbol methods."""
         file_path = os.path.join("src", "models.erl")
@@ -310,7 +310,7 @@ class TestErlangLanguageServerSymbols:
         reason="Known intermittent timeout issue in Erlang LS in CI environments. May pass locally but can timeout on slower CI systems.",
         strict=False,
     )
-    @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
     def test_symbol_tree_structure(self, language_server: SolidLanguageServer) -> None:
         """Test that symbol tree structure is correctly built."""
         symbol_tree = language_server.request_full_symbol_tree()
@@ -336,7 +336,7 @@ class TestErlangLanguageServerSymbols:
             found_modules = [name for name in expected_modules if any(name in fname for fname in file_names)]
             assert len(found_modules) > 0, f"Expected to find some modules from {expected_modules}, but got {file_names}"
 
-    @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
     def test_request_dir_overview(self, language_server: SolidLanguageServer) -> None:
         """Test request_dir_overview functionality."""
         src_overview = language_server.request_dir_overview("src")
@@ -353,7 +353,7 @@ class TestErlangLanguageServerSymbols:
         found_terms = [term for term in expected_terms if term in overview_text]
         assert len(found_terms) > 0, f"Expected to find some terms from {expected_terms} in overview"
 
-    @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
     def test_containing_symbol_of_record_field(self, language_server: SolidLanguageServer) -> None:
         """Test containing symbol for record field access."""
         file_path = os.path.join("src", "models.erl")
@@ -378,7 +378,7 @@ class TestErlangLanguageServerSymbols:
             expected_names = ["create_user", "update_user", "format_user_info"]
             assert any(name in containing_symbol["name"] for name in expected_names)
 
-    @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
     def test_containing_symbol_of_spec(self, language_server: SolidLanguageServer) -> None:
         """Test containing symbol for function specs."""
         file_path = os.path.join("src", "models.erl")
@@ -410,7 +410,7 @@ class TestErlangLanguageServerSymbols:
         "Similar to known Next LS timeout issues.",
         strict=False,
     )
-    @pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
     def test_referencing_symbols_across_files(self, language_server: SolidLanguageServer) -> None:
         """Test finding references across different files."""
         # Test that we can find references to models module functions in services.erl

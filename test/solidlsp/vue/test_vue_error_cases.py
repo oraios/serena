@@ -4,7 +4,7 @@ import sys
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 
 pytestmark = pytest.mark.vue
 
@@ -28,7 +28,7 @@ class TypeScriptServerBehavior:
 
 
 class TestVueInvalidPositions:
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_negative_line_number(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "components", "CalculatorInput.vue")
 
@@ -36,7 +36,7 @@ class TestVueInvalidPositions:
 
         assert result is None or result == {}, f"Negative line number should return None or empty dict, got: {result}"
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_negative_character_number(self, language_server: SolidLanguageServer) -> None:
         """Test requesting containing symbol with negative character number.
 
@@ -50,7 +50,7 @@ class TestVueInvalidPositions:
         # Should handle gracefully - return None or empty dict
         assert result is None or result == {}, f"Negative character number should return None or empty dict, got: {result}"
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_line_number_beyond_file_length(self, language_server: SolidLanguageServer) -> None:
         """Test requesting containing symbol beyond file length.
 
@@ -67,7 +67,7 @@ class TestVueInvalidPositions:
         # Verify it's an index error for list access
         assert "list index out of range" in str(exc_info.value), f"Expected 'list index out of range' error, got: {exc_info.value}"
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_character_number_beyond_line_length(self, language_server: SolidLanguageServer) -> None:
         """Test requesting containing symbol beyond line length.
 
@@ -81,7 +81,7 @@ class TestVueInvalidPositions:
         # Should handle gracefully - return None or empty dict
         assert result is None or result == {}, f"Character beyond line length should return None or empty dict, got: {result}"
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_references_at_negative_line(self, language_server: SolidLanguageServer) -> None:
         """Test requesting references with negative line number."""
         from solidlsp.ls_exceptions import SolidLSPException
@@ -96,7 +96,7 @@ class TestVueInvalidPositions:
                 language_server.request_references(file_path, -1, 0)
             assert "Bad line number" in str(exc_info.value) or "Debug Failure" in str(exc_info.value)
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_definition_at_invalid_position(self, language_server: SolidLanguageServer) -> None:
         """Test requesting definition at invalid position."""
         from solidlsp.ls_exceptions import SolidLSPException
@@ -115,7 +115,7 @@ class TestVueInvalidPositions:
 class TestVueNonExistentFiles:
     """Tests for handling non-existent files."""
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_requesting_on_nonexistent_file(self, language_server: SolidLanguageServer) -> None:
         """Test requesting references from non-existent file.
 
@@ -134,7 +134,7 @@ class TestVueNonExistentFiles:
 class TestVueUndefinedSymbols:
     """Tests for handling undefined or unreferenced symbols."""
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_references_for_unreferenced_symbol(self, language_server: SolidLanguageServer) -> None:
         """Test requesting references for a symbol that has no references.
 
@@ -166,7 +166,7 @@ class TestVueUndefinedSymbols:
             f"Got {len(refs)} references. This is not necessarily an error, just documenting behavior."
         )
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_containing_symbol_at_whitespace_only_line(self, language_server: SolidLanguageServer) -> None:
         """Test requesting containing symbol at a whitespace-only line.
 
@@ -182,7 +182,7 @@ class TestVueUndefinedSymbols:
             f"Whitespace line should return None, empty dict, or valid symbol. Got: {result}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_definition_at_keyword_position(self, language_server: SolidLanguageServer) -> None:
         """Test requesting definition at language keyword position.
 
@@ -201,7 +201,7 @@ class TestVueUndefinedSymbols:
 class TestVueEdgeCasePositions:
     """Tests for edge case positions (0,0 and file boundaries)."""
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_containing_symbol_at_file_start(self, language_server: SolidLanguageServer) -> None:
         """Test requesting containing symbol at position (0,0).
 
@@ -218,7 +218,7 @@ class TestVueEdgeCasePositions:
             f"Position 0,0 should return None, empty dict, or valid symbol. Got: {result}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_references_at_file_start(self, language_server: SolidLanguageServer) -> None:
         """Test requesting references at position (0,0).
 
@@ -232,7 +232,7 @@ class TestVueEdgeCasePositions:
         # Should handle gracefully
         assert result is None or isinstance(result, list), f"Position 0,0 should return None or list. Got: {type(result)}"
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_definition_at_file_start(self, language_server: SolidLanguageServer) -> None:
         """Test requesting definition at position (0,0).
 
@@ -246,7 +246,7 @@ class TestVueEdgeCasePositions:
         # Should handle gracefully
         assert isinstance(result, list), f"request_definition should return a list. Got: {type(result)}"
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_containing_symbol_in_template_section(self, language_server: SolidLanguageServer) -> None:
         """Test requesting containing symbol in the template section.
 
@@ -264,7 +264,7 @@ class TestVueEdgeCasePositions:
             f"Template position should return None, empty dict, or valid symbol. Got: {result}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_zero_character_positions(self, language_server: SolidLanguageServer) -> None:
         """Test requesting symbols at character position 0 (start of lines).
 
@@ -285,7 +285,7 @@ class TestVueEdgeCasePositions:
 class TestVueTypescriptFileErrors:
     """Tests for error handling in TypeScript files within Vue projects."""
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_typescript_file_invalid_position(self, language_server: SolidLanguageServer) -> None:
         """Test requesting symbols from TypeScript file at invalid position.
 
@@ -299,7 +299,7 @@ class TestVueTypescriptFileErrors:
         # Should handle gracefully
         assert result is None or result == {}, f"Invalid position in .ts file should return None or empty dict. Got: {result}"
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_typescript_file_beyond_bounds(self, language_server: SolidLanguageServer) -> None:
         """Test requesting symbols from TypeScript file beyond file bounds.
 
@@ -319,7 +319,7 @@ class TestVueTypescriptFileErrors:
 class TestVueReferenceEdgeCases:
     """Tests for edge cases in reference finding."""
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_referencing_symbols_at_invalid_position(self, language_server: SolidLanguageServer) -> None:
         """Test requesting referencing symbols at invalid position."""
         from solidlsp.ls_exceptions import SolidLSPException
@@ -334,7 +334,7 @@ class TestVueReferenceEdgeCases:
                 list(language_server.request_referencing_symbols(file_path, -1, -1, include_self=False))
             assert "Bad line number" in str(exc_info.value) or "Debug Failure" in str(exc_info.value)
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_defining_symbol_at_invalid_position(self, language_server: SolidLanguageServer) -> None:
         """Test requesting defining symbol at invalid position."""
         from solidlsp.ls_exceptions import SolidLSPException
@@ -349,7 +349,7 @@ class TestVueReferenceEdgeCases:
                 language_server.request_defining_symbol(file_path, -1, -1)
             assert "Bad line number" in str(exc_info.value) or "Debug Failure" in str(exc_info.value)
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_referencing_symbols_beyond_file_bounds(self, language_server: SolidLanguageServer) -> None:
         """Test requesting referencing symbols beyond file bounds."""
         from solidlsp.ls_exceptions import SolidLSPException

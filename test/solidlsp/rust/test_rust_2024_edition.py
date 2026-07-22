@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_utils import SymbolUtils
 from test.conftest import start_ls_context
 
@@ -19,7 +19,7 @@ def rust_language_server() -> Iterator[SolidLanguageServer]:
         pytest.skip("Rust 2024 edition test repository not found")
 
     # Create and start the language server for the 2024 edition repo
-    with start_ls_context(Language.RUST, str(test_repo_2024_path)) as ls:
+    with start_ls_context(LanguageServerId.RUST, str(test_repo_2024_path)) as ls:
         yield ls
 
 

@@ -4,7 +4,7 @@ from collections.abc import Sequence
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_utils import SymbolUtils
 from test.conftest import PYTHON_LANGUAGE_BACKENDS, start_ls_context
 
@@ -61,15 +61,15 @@ class TestLanguageServerCommonFunctionality:
         symbols_in_subfolder_scripts = ["parse_args", "create_sample_users"]
         all_symbols = symbols_in_subfolder_test_repo + symbols_in_subfolder_scripts
 
-        with start_ls_context(language=Language.PYTHON, workspace_folders=["."]) as ls:
+        with start_ls_context(ls_id=LanguageServerId.PYTHON, workspace_folders=["."]) as ls:
             ls.request_full_symbol_tree()
             check(ls, present=all_symbols)
 
-        with start_ls_context(language=Language.PYTHON, workspace_folders=["./test_repo"]) as ls:
+        with start_ls_context(ls_id=LanguageServerId.PYTHON, workspace_folders=["./test_repo"]) as ls:
             ls.request_full_symbol_tree()
             check(ls, present=symbols_in_subfolder_test_repo, absent=symbols_in_subfolder_scripts)
 
-        with start_ls_context(language=Language.PYTHON, workspace_folders=["./scripts"]) as ls:
+        with start_ls_context(ls_id=LanguageServerId.PYTHON, workspace_folders=["./scripts"]) as ls:
             ls.request_full_symbol_tree()
             check(ls, present=symbols_in_subfolder_scripts, absent=symbols_in_subfolder_test_repo)
 

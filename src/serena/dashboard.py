@@ -514,7 +514,7 @@ class SerenaDashboardAPI:
         active_project_name = project.project_name if project else None
         project_info = {
             "name": active_project_name,
-            "language": ", ".join([l.value for l in project.project_config.languages]) if project else None,
+            "language": ", ".join([l.value for l in project.project_config.language_servers]) if project else None,
             "path": str(project.project_root) if project else None,
         }
 
@@ -608,7 +608,7 @@ class SerenaDashboardAPI:
         # Get list of languages for the active project
         languages = []
         if project is not None:
-            languages = [lang.value for lang in project.project_config.languages]
+            languages = [lang.value for lang in project.project_config.language_servers]
 
         # Get file encoding for the active project
         encoding = None
@@ -638,15 +638,15 @@ class SerenaDashboardAPI:
         self._current_config_overview = self._compute_config_overview().model_dump()
 
     def _get_available_languages(self) -> ResponseAvailableLanguages:
-        from solidlsp.ls_config import Language
+        from solidlsp.ls_config import LanguageServerId
 
         def run() -> ResponseAvailableLanguages:
-            all_languages = [lang.value for lang in Language.iter_all(include_experimental=True)]
+            all_languages = [lang.value for lang in LanguageServerId.iter_all(include_experimental=True)]
 
             # Filter out already added languages for the active project
             project = self._agent.get_active_project()
             if project:
-                current_languages = [lang.value for lang in project.project_config.languages]
+                current_languages = [lang.value for lang in project.project_config.language_servers]
                 available_languages = [lang for lang in all_languages if lang not in current_languages]
             else:
                 available_languages = all_languages
@@ -776,24 +776,24 @@ class SerenaDashboardAPI:
         return {}
 
     def _add_language(self, request_add_language: RequestAddLanguage) -> None:
-        from solidlsp.ls_config import Language
+        from solidlsp.ls_config import LanguageServerId
 
         try:
-            language = Language(request_add_language.language)
+            language = LanguageServerId(request_add_language.language)
         except ValueError:
-            raise ValueError(f"Invalid language: {request_add_language.language}")
+            raise ValueError(f"Invalid language server identifier: {request_add_language.language}")
         # add_language is already thread-safe
-        self._agent.add_language(language)
+        self._agent.add_language_server(language)
 
     def _remove_language(self, request_remove_language: RequestRemoveLanguage) -> None:
-        from solidlsp.ls_config import Language
+        from solidlsp.ls_config import LanguageServerId
 
         try:
-            language = Language(request_remove_language.language)
+            language = LanguageServerId(request_remove_language.language)
         except ValueError:
-            raise ValueError(f"Invalid language: {request_remove_language.language}")
+            raise ValueError(f"Invalid language server identifier: {request_remove_language.language}")
         # remove_language is already thread-safe
-        self._agent.remove_language(language)
+        self._agent.remove_language_server(language)
 
     @staticmethod
     def _find_first_free_port(start_port: int, host: str) -> int:

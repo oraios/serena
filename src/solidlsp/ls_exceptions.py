@@ -2,7 +2,7 @@
 This module contains the exceptions raised by the framework.
 """
 
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 
 
 class SolidLSPException(Exception):
@@ -28,14 +28,14 @@ class SolidLSPException(Exception):
 
         return isinstance(self.cause, LanguageServerTerminatedException)
 
-    def get_affected_language(self) -> Language | None:
+    def get_affected_language(self) -> LanguageServerId | None:
         """
         :return: the affected language for the case where the exception is caused by the language server having terminated
         """
         from .ls_process import LanguageServerTerminatedException
 
         if isinstance(self.cause, LanguageServerTerminatedException):
-            return self.cause.language
+            return self.cause.ls_id
         return None
 
     def __str__(self) -> str:

@@ -5,7 +5,7 @@ from textwrap import dedent
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from test.conftest import start_ls_context
 from test.solidlsp.conftest import document_symbol_names
 
@@ -56,7 +56,7 @@ def basedpyright_project(tmp_path_factory: pytest.TempPathFactory) -> Path:
 @pytest.fixture(scope="module")
 def basedpyright_language_server(basedpyright_project: Path) -> Iterator[SolidLanguageServer]:
     with start_ls_context(
-        language=Language.PYTHON_BASEDPYRIGHT,
+        ls_id=LanguageServerId.PYTHON_BASEDPYRIGHT,
         repo_path=str(basedpyright_project),
     ) as language_server:
         yield language_server
@@ -66,7 +66,7 @@ def test_basedpyright_starts(
     basedpyright_language_server: SolidLanguageServer,
     basedpyright_project: Path,
 ) -> None:
-    assert basedpyright_language_server.language == Language.PYTHON_BASEDPYRIGHT
+    assert basedpyright_language_server.ls_id == LanguageServerId.PYTHON_BASEDPYRIGHT
     assert basedpyright_language_server.is_running()
     assert Path(basedpyright_language_server.language_server.repository_root_path).resolve() == basedpyright_project.resolve()
 

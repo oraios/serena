@@ -1,7 +1,8 @@
 # the name by which the project can be referenced within Serena/when chatting with the LLM.
 project_name: "serena"
 
-# list of languages for which language servers are started (LSP backend only); choose from:
+
+# list of language servers to start when using the LSP backend; choose from:
 #   ada                 al                  angular             ansible             bash
 #   bsl                 clojure             cpp                 cpp_ccls            crystal
 #   csharp              csharp_omnisharp    cue                 dart                elixir
@@ -19,7 +20,7 @@ project_name: "serena"
 #   (This list may be outdated; generated with scripts/print_language_list.py;
 #   For the current list, see values of Language enum here:
 #   https://github.com/oraios/serena/blob/main/src/solidlsp/ls_config.py)
-# For some languages, there are alternative language servers, e.g. csharp_omnisharp, ruby_solargraph.)
+# For some languages, there are several alternative language servers, e.g. csharp_omnisharp, ruby_solargraph.)
 # Note:
 #   - For C, use cpp
 #   - For JavaScript, use typescript
@@ -28,20 +29,27 @@ project_name: "serena"
 #   - For SCSS / Sass / plain CSS, use scss (some-sass-language-server handles all three)
 #   - For Free Pascal/Lazarus, use pascal
 # Special requirements:
-#   Some languages require additional setup/installations.
+#   Some language servers require additional setup/installations.
 #   See here for details: https://oraios.github.io/serena/01-about/020_programming-languages.html#language-servers
-# When using multiple languages, the first language server that supports a given file will be used for that file.
-# The first language is the default language and the respective language server will be used as a fallback.
+# When using multiple language servers, the first language server that supports a given file will be used for that file.
+# The first language server is the default language and the respective language server will be used as a fallback.
 # Note that when using the JetBrains backend, language servers are not used and this list is correspondingly ignored.
-languages:
-- python
-- typescript
+language_servers:
+  - python
+  - typescript
 
 # whether to use project's .gitignore files to ignore files
 ignore_all_files_in_gitignore: true
 
 # list of additional paths to ignore in this project.
 # Same syntax as gitignore, so you can use * and **.
+# Important: quote patterns that start with `*`, otherwise YAML treats them as aliases.
+# Example:
+#   ignored_paths:
+#     - "examples/**"
+#     - ".worktrees/**"
+#     - "**/bin/**"
+#     - "**/obj/**"
 # Note: global ignored_paths from serena_config.yml are also applied additively.
 ignored_paths: []
 
@@ -179,9 +187,9 @@ ls_workspace_folders:
 # Paths can be absolute or relative to the project root.
 # Each folder is registered as an LSP workspace folder, enabling language servers to discover
 # symbols and references across package boundaries, but these folders are not indexed by Serena,
-# i.e. the respective symbols will not be found using Serena's symbol search tool.
+# i.e. the respective symbols will not be found using Serena's symbol search tools.
 # Example:
 #   additional_workspace_folders:
-#     - "../sibling-package"
-#     - "../shared-lib"
+#     - ../sibling-package
+#     - ../shared-lib
 ls_additional_workspace_folders: []

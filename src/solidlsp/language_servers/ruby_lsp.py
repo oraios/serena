@@ -18,7 +18,7 @@ import threading
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeResult
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -107,7 +107,7 @@ class RubyLsp(SolidLanguageServer):
         Setup runtime dependencies for ruby-lsp and return the command list to start the server.
         Installation strategy: Bundler project > global ruby-lsp > gem install ruby-lsp at the pinned version
         """
-        ls_specific_settings = solidlsp_settings.get_ls_specific_settings(Language.RUBY)
+        ls_specific_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.RUBY)
         ruby_lsp_version = ls_specific_settings.get("ruby_lsp_version", RUBY_LSP_VERSION)
         # Detect Ruby version manager environment
         # Using the version manager's exec wrapper ensures commands run with the correct Ruby version

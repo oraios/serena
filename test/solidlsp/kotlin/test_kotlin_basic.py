@@ -3,10 +3,10 @@ import os
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
-from test.conftest import language_tests_enabled
+from test.conftest import language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
@@ -14,17 +14,17 @@ from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name,
 # (2 CPUs, 7GB RAM). First start succeeds but subsequent starts fail with cancelled (-32800).
 # Tests pass reliably on developer machines. See PR #1061 for investigation details.
 # (The CI quarantine lives centrally in test/conftest.py::_determine_disabled_languages.)
-@pytest.mark.skipif(not language_tests_enabled(Language.KOTLIN), reason="Kotlin tests are disabled")
+@pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.KOTLIN), reason="Kotlin tests are disabled")
 @pytest.mark.kotlin
 class TestKotlinLanguageServer:
-    @pytest.mark.parametrize("language_server", [Language.KOTLIN], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.KOTLIN], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
         symbols = language_server.request_full_symbol_tree()
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Main"), "Main class not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Utils"), "Utils class not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Model"), "Model class not found in symbol tree"
 
-    @pytest.mark.parametrize("language_server", [Language.KOTLIN], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.KOTLIN], indirect=True)
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
         # Use correct Kotlin file paths
         file_path = os.path.join("src", "main", "kotlin", "test_repo", "Utils.kt")
@@ -52,14 +52,14 @@ class TestKotlinLanguageServer:
             "Main should reference Model (tried all positions in selectionRange)"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.KOTLIN], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.KOTLIN], indirect=True)
     def test_overview_methods(self, language_server: SolidLanguageServer) -> None:
         symbols = language_server.request_full_symbol_tree()
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Main"), "Main missing from overview"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Utils"), "Utils missing from overview"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Model"), "Model missing from overview"
 
-    @pytest.mark.parametrize("language_server", [Language.KOTLIN], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.KOTLIN], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

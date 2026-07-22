@@ -3,7 +3,7 @@ import os
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
@@ -11,12 +11,12 @@ from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name,
 
 @pytest.mark.haxe
 class TestHaxeLanguageServer:
-    @pytest.mark.parametrize("language_server", [Language.HAXE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HAXE], indirect=True)
     def test_ls_is_running(self, language_server: SolidLanguageServer) -> None:
         """Test that the Haxe language server starts successfully."""
         assert language_server.is_running()
 
-    @pytest.mark.parametrize("language_server", [Language.HAXE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HAXE], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
         symbols = language_server.request_full_symbol_tree()
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Main"), "Main class not found in symbol tree"
@@ -26,7 +26,7 @@ class TestHaxeLanguageServer:
         assert SymbolUtils.symbol_tree_contains_name(symbols, "addNumbers"), "addNumbers method not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "formatMessage"), "formatMessage method not found in symbol tree"
 
-    @pytest.mark.parametrize("language_server", [Language.HAXE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HAXE], indirect=True)
     def test_bare_symbol_names(self, language_server: SolidLanguageServer) -> None:
         """Test that symbol names do not contain unexpected formatting characters."""
         all_symbols = request_all_symbols(language_server)
@@ -40,7 +40,7 @@ class TestHaxeLanguageServer:
                 pytrace=False,
             )
 
-    @pytest.mark.parametrize("language_server", [Language.HAXE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HAXE], indirect=True)
     def test_find_references_within_file(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "Main.hx")
         all_symbols, _ = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
@@ -69,7 +69,7 @@ class TestHaxeLanguageServer:
             f"Expected all greet references in Main.hx, got {actual_locations}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.HAXE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HAXE], indirect=True)
     def test_find_references_across_files(self, language_server: SolidLanguageServer) -> None:
         # Test addNumbers which is defined in Helper.hx and used in Main.hx
         helper_path = os.path.join("src", "utils", "Helper.hx")
@@ -103,7 +103,7 @@ class TestHaxeLanguageServer:
         main_refs = [loc for loc in actual_locations if loc["uri_suffix"] == "Main.hx"]
         assert len(main_refs) >= 2, f"Expected at least 2 references in Main.hx (lines 16 and 30), got {main_refs}"
 
-    @pytest.mark.parametrize("language_server", [Language.HAXE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HAXE], indirect=True)
     def test_document_symbols_structure(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "Main.hx")
         result = language_server.request_document_symbols(file_path)
@@ -139,14 +139,14 @@ class TestHaxeLanguageServer:
                     SymbolKind.Property,
                 ), f"Expected message to be Field/Variable, got {sym.get('kind')}"
 
-    @pytest.mark.parametrize("language_server", [Language.HAXE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HAXE], indirect=True)
     def test_workspace_symbol(self, language_server: SolidLanguageServer) -> None:
         result = language_server.request_workspace_symbol("Helper")
         assert result is not None, "Workspace symbol search returned None"
         assert len(result) > 0, "Workspace symbol search returned no results"
         assert any("Helper" in str(s.get("name", "")) for s in result), f"Expected at least one result containing 'Helper', got {result}"
 
-    @pytest.mark.parametrize("language_server", [Language.HAXE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HAXE], indirect=True)
     def test_go_to_definition_within_file(self, language_server: SolidLanguageServer) -> None:
         """Go to definition of greet from its call site in Main.hx -- should resolve within the same file."""
         main_path = os.path.join("src", "Main.hx")
@@ -161,7 +161,7 @@ class TestHaxeLanguageServer:
         definition_lines = [d["range"]["start"]["line"] for d in definitions if "Main.hx" in d.get("uri", d.get("relativePath", ""))]
         assert 22 in definition_lines, f"Expected definition of greet at line 22 in Main.hx, got lines {definition_lines}"
 
-    @pytest.mark.parametrize("language_server", [Language.HAXE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HAXE], indirect=True)
     def test_go_to_definition(self, language_server: SolidLanguageServer) -> None:
         """Go to definition of addNumbers from a call site in Main.hx -- should resolve to Helper.hx."""
         main_path = os.path.join("src", "Main.hx")
@@ -176,7 +176,7 @@ class TestHaxeLanguageServer:
         definition_lines = [d["range"]["start"]["line"] for d in definitions if "Helper.hx" in d.get("uri", d.get("relativePath", ""))]
         assert 18 in definition_lines, f"Expected definition of addNumbers at line 18 in Helper.hx, got lines {definition_lines}"
 
-    @pytest.mark.parametrize("language_server", [Language.HAXE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HAXE], indirect=True)
     def test_hover(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "Main.hx")
         result = language_server.request_document_symbols(file_path)
@@ -190,7 +190,7 @@ class TestHaxeLanguageServer:
         hover_str = str(hover)
         assert "String" in hover_str or "greet" in hover_str, f"Expected hover to contain type info, got {hover_str}"
 
-    @pytest.mark.parametrize("language_server", [Language.HAXE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HAXE], indirect=True)
     def test_hover_on_class_declaration(self, language_server: SolidLanguageServer) -> None:
         """Hovering on a class name should return hover info."""
         file_path = os.path.join("src", "Main.hx")
@@ -206,7 +206,7 @@ class TestHaxeLanguageServer:
         hover_str = str(hover)
         assert "Main" in hover_str, f"Expected hover to contain 'Main', got {hover_str}"
 
-    @pytest.mark.parametrize("language_server", [Language.HAXE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HAXE], indirect=True)
     def test_rename_symbol(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "Main.hx")
         result = language_server.request_document_symbols(file_path)
@@ -222,7 +222,7 @@ class TestHaxeLanguageServer:
         assert "Main.hx" in edits_str, f"Expected rename edits for Main.hx, got {edits}"
         assert "sayHello" in edits_str, f"Expected new name 'sayHello' in rename edits, got {edits}"
 
-    @pytest.mark.parametrize("language_server", [Language.HAXE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HAXE], indirect=True)
     def test_completions(self, language_server: SolidLanguageServer) -> None:
         """Request completions after Helper. in calculateResult — should return Helper's static methods."""
         file_path = os.path.join("src", "Main.hx")
@@ -233,7 +233,7 @@ class TestHaxeLanguageServer:
         completion_texts = [c.get("completionText", c.get("label", "")) for c in completions]
         assert "addNumbers" in completion_texts, f"Expected 'addNumbers' in completions after Helper., got {completion_texts[:10]}"
 
-    @pytest.mark.parametrize("language_server", [Language.HAXE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HAXE], indirect=True)
     def test_document_overview(self, language_server: SolidLanguageServer) -> None:
         overview = language_server.request_document_overview(os.path.join("src", "Main.hx"))
         assert overview, "Document overview returned empty list"
@@ -248,7 +248,7 @@ class TestHaxeLanguageServer:
             assert s.get("name"), "Symbol missing 'name' field"
             assert s.get("kind"), "Symbol missing 'kind' field"
 
-    @pytest.mark.parametrize("language_server", [Language.HAXE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HAXE], indirect=True)
     def test_rapid_successive_requests(self, language_server: SolidLanguageServer) -> None:
         """Verify that rapid successive requests don't return empty results.
 

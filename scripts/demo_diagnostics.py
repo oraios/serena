@@ -23,7 +23,7 @@ from serena.tools import (
     GetDiagnosticsForSymbolTool,
     ReplaceContentTool,
 )
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 
 SEPARATOR = "=" * 80
 REPO_PATH = Path(REPO_ROOT)
@@ -40,7 +40,7 @@ def make_agent() -> SerenaAgent:
         project_root=str(REPO_PATH),
         project_config=ProjectConfig(
             project_name="demo_serena_repo",
-            languages=[Language.PYTHON],
+            language_servers=[LanguageServerId.PYTHON],
             ignored_paths=[],
             excluded_tools=[],
             read_only=False,

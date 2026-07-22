@@ -12,13 +12,13 @@ Two paths are exercised:
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
 
 @pytest.mark.angular
 class TestAngularDiagnostics:
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_component_class_diagnostics(self, language_server: SolidLanguageServer) -> None:
         """The component's ``count: number = 'not-a-number'`` must be flagged by tsserver."""
         assert_file_diagnostics(
@@ -28,7 +28,7 @@ class TestAngularDiagnostics:
             min_count=1,
         )
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_template_diagnostics(self, language_server: SolidLanguageServer) -> None:
         """The template's ``{{ undefinedSignal() }}`` must be flagged by ngserver.
 

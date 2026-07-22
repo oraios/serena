@@ -7,20 +7,22 @@ These tests validate symbol finding and cross-file reference capabilities for Ni
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
-from test.conftest import is_ci, language_tests_enabled
+from test.conftest import is_ci, language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
-pytestmark = pytest.mark.skipif(not language_tests_enabled(Language.NIX), reason="Nix tests are disabled (nixd not available)")
+pytestmark = pytest.mark.skipif(
+    not language_server_tests_enabled(LanguageServerId.NIX), reason="Nix tests are disabled (nixd not available)"
+)
 
 
 @pytest.mark.nix
 class TestNixLanguageServer:
     """Test Nix language server symbol finding capabilities."""
 
-    @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
     def test_find_symbols_in_default_nix(self, language_server: SolidLanguageServer) -> None:
         """Test finding specific symbols in default.nix."""
         symbols = language_server.request_document_symbols("default.nix").get_all_symbols_and_roots()
@@ -40,7 +42,7 @@ class TestNixLanguageServer:
         found_attrs = symbol_names & expected_attrs
         assert found_attrs == expected_attrs, f"Expected exactly {expected_attrs}, found {found_attrs}"
 
-    @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
     def test_find_symbols_in_utils(self, language_server: SolidLanguageServer) -> None:
         """Test finding symbols in lib/utils.nix."""
         symbols = language_server.request_document_symbols("lib/utils.nix").get_all_symbols_and_roots()
@@ -56,7 +58,7 @@ class TestNixLanguageServer:
         found_modules = symbol_names & expected_modules
         assert found_modules == expected_modules, f"Expected exactly {expected_modules}, found {found_modules}"
 
-    @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
     def test_find_symbols_in_flake(self, language_server: SolidLanguageServer) -> None:
         """Test finding symbols in flake.nix."""
         symbols = language_server.request_document_symbols("flake.nix").get_all_symbols_and_roots()
@@ -70,7 +72,7 @@ class TestNixLanguageServer:
         # Flakes must have either inputs or outputs
         assert "inputs" in symbol_names or "outputs" in symbol_names, "Flake must have inputs or outputs"
 
-    @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
     def test_find_symbols_in_module(self, language_server: SolidLanguageServer) -> None:
         """Test finding symbols in a NixOS module."""
         symbols = language_server.request_document_symbols("modules/example.nix").get_all_symbols_and_roots()
@@ -84,7 +86,7 @@ class TestNixLanguageServer:
         # NixOS modules must have either options or config
         assert "options" in symbol_names or "config" in symbol_names, "Module must have options or config"
 
-    @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
     def test_find_references_within_file(self, language_server: SolidLanguageServer) -> None:
         """Test finding references within the same file."""
         symbols = language_server.request_document_symbols("default.nix").get_all_symbols_and_roots()
@@ -117,7 +119,7 @@ class TestNixLanguageServer:
             assert 66 in ref_lines, f"Should find makeGreeting inherit at line 67, found at lines {[l + 1 for l in ref_lines]}"
 
     @pytest.mark.xfail(is_ci, reason="Test is flaky")  # TODO: Re-enable if the hover test becomes more stable (#1040)
-    @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
     def test_hover_information(self, language_server: SolidLanguageServer) -> None:
         """Test hover information for symbols."""
         # Get hover info for makeGreeting function
@@ -129,7 +131,7 @@ class TestNixLanguageServer:
             # If hover info is provided, it should have proper structure
             assert "contents" in hover_info or "value" in hover_info, "Hover should have contents or value"
 
-    @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
     def test_cross_file_references_utils_import(self, language_server: SolidLanguageServer) -> None:
         """Test finding cross-file references for imported utils."""
         # Find references to 'utils' which is imported in default.nix from lib/utils.nix
@@ -152,7 +154,7 @@ class TestNixLanguageServer:
                 f"Should find utils import or usage, found references at lines {[l + 1 for l in ref_lines]}"
             )
 
-    @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
     def test_verify_imports_exist(self, language_server: SolidLanguageServer) -> None:
         """Verify that our test files have proper imports set up."""
         # Verify that default.nix imports utils from lib/utils.nix
@@ -175,7 +177,7 @@ class TestNixLanguageServer:
         assert "math" in utils_names, "math should be found in lib/utils.nix"
         assert "strings" in utils_names, "strings should be found in lib/utils.nix"
 
-    @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
     def test_go_to_definition_cross_file(self, language_server: SolidLanguageServer) -> None:
         """Test go-to-definition from default.nix to lib/utils.nix."""
         # Line 24 in default.nix: unique = utils.lists.unique;
@@ -191,7 +193,7 @@ class TestNixLanguageServer:
                 "Definition should relate to utils import or utils.nix file"
             )
 
-    @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
     def test_definition_navigation_in_flake(self, language_server: SolidLanguageServer) -> None:
         """Test definition navigation in flake.nix."""
         # Test that we can navigate to definitions within flake.nix
@@ -206,7 +208,7 @@ class TestNixLanguageServer:
                 "Should find hello-custom definition in flake.nix"
             )
 
-    @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
     def test_full_symbol_tree(self, language_server: SolidLanguageServer) -> None:
         """Test that full symbol tree is not empty."""
         symbols = language_server.request_full_symbol_tree()
@@ -219,7 +221,7 @@ class TestNixLanguageServer:
         assert isinstance(root, dict), "Root should be a dict"
         assert "name" in root, "Root should have a name"
 
-    @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []
@@ -249,7 +251,7 @@ class TestNixLanguageServer:
                 pytrace=False,
             )
 
-    @pytest.mark.parametrize("language_server", [Language.NIX], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
     def test_file_diagnostics(self, language_server: SolidLanguageServer) -> None:
         assert_file_diagnostics(
             language_server,

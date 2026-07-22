@@ -39,7 +39,7 @@ from serena.constants import (
 from serena.prompt_factory import SerenaPromptFactory
 from serena.util.cli_util import AutoRegisteringGroup
 from serena.util.logging import MemoryLogHandler
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
 from solidlsp.util.subprocess_util import subprocess_kwargs
 
@@ -701,13 +701,13 @@ class ProjectCommands(AutoRegisteringGroup):
         if os.path.exists(yml_path):
             raise FileExistsError(f"Project file {yml_path} already exists.")
 
-        languages: list[Language] = []
+        languages: list[LanguageServerId] = []
         if language:
             for lang in language:
                 try:
-                    languages.append(Language(lang.lower()))
+                    languages.append(LanguageServerId(lang.lower()))
                 except ValueError:
-                    all_langs = [l.value for l in Language]
+                    all_langs = [l.value for l in LanguageServerId]
                     raise ValueError(f"Unknown language '{lang}'. Supported: {all_langs}")
 
         generated_conf = ProjectConfig.autogenerate(
@@ -717,8 +717,8 @@ class ProjectCommands(AutoRegisteringGroup):
             languages=languages if languages else None,
             interactive=True,
         )
-        languages_str = ", ".join([lang.value for lang in generated_conf.languages]) if generated_conf.languages else "N/A"
-        click.echo(f"Generated project with languages {{{languages_str}}} at {yml_path}.")
+        languages_str = ", ".join([lang.value for lang in generated_conf.language_servers]) if generated_conf.language_servers else "N/A"
+        click.echo(f"Generated project with language servers {{{languages_str}}} at {yml_path}.")
         registered_project = serena_config.get_registered_project(str(project_root))
         if registered_project is None:
             registered_project = RegisteredProject(str(project_root), generated_conf)
@@ -731,7 +731,11 @@ class ProjectCommands(AutoRegisteringGroup):
     @click.argument("project_path", type=click.Path(exists=True, file_okay=False), default=os.getcwd())
     @click.option("--name", type=str, default=None, help="Project name; defaults to directory name if not specified.")
     @click.option(
-        "--language", type=str, multiple=True, help="Programming language(s); inferred if not specified. Can be passed multiple times."
+        "--ls",
+        "--language",
+        type=str,
+        multiple=True,
+        help="Programming language(s); inferred if not specified. Can be passed multiple times.",
     )
     @click.option("--index", is_flag=True, help="Index the project after creation.")
     @click.option(
@@ -761,6 +765,7 @@ class ProjectCommands(AutoRegisteringGroup):
     @click.argument("project", type=PROJECT_TYPE, default=os.getcwd(), required=False)
     @click.option("--name", type=str, default=None, help="Project name (only used if auto-creating project.yml).")
     @click.option(
+        "--ls",
         "--language",
         type=str,
         multiple=True,
@@ -801,13 +806,13 @@ class ProjectCommands(AutoRegisteringGroup):
 
             collected_exceptions: list[Exception] = []
             files_failed = []
-            language_file_counts: dict[Language, int] = collections.defaultdict(lambda: 0)
+            language_file_counts: dict[LanguageServerId, int] = collections.defaultdict(lambda: 0)
             last_save_time = time.monotonic()
             for i, f in enumerate(tqdm(files, desc="Indexing")):
                 try:
                     ls = ls_mgr.get_language_server(f)
                     ls.request_document_symbols(f)
-                    language_file_counts[ls.language] += 1
+                    language_file_counts[ls.ls_id] += 1
                 except Exception as e:
                     log.error(f"Failed to index {f}, continuing.")
                     collected_exceptions.append(e)
@@ -882,7 +887,7 @@ class ProjectCommands(AutoRegisteringGroup):
         ls_mgr = proj.create_language_server_manager()
         try:
             for ls in ls_mgr.iter_language_servers():
-                click.echo(f"Indexing for language {ls.language.value} …")
+                click.echo(f"Indexing for language {ls.ls_id.value} …")
                 document_symbols = ls.request_document_symbols(file)
                 symbols, _ = document_symbols.get_all_symbols_and_roots()
                 if verbose:

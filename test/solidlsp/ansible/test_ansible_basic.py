@@ -11,24 +11,26 @@ from pathlib import Path
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
-from test.conftest import language_tests_enabled
+from solidlsp.ls_config import LanguageServerId
+from test.conftest import language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
-@pytest.mark.skipif(not language_tests_enabled(Language.ANSIBLE), reason="Ansible tests are disabled (no native Windows support)")
+@pytest.mark.skipif(
+    not language_server_tests_enabled(LanguageServerId.ANSIBLE), reason="Ansible tests are disabled (no native Windows support)"
+)
 @pytest.mark.ansible
 class TestAnsibleLanguageServerBasics:
     """Test basic Ansible language server functionality."""
 
-    @pytest.mark.parametrize("language_server", [Language.ANSIBLE], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.ANSIBLE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANSIBLE], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.ANSIBLE], indirect=True)
     def test_ls_is_running(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Language server starts and points to the correct repo."""
         assert language_server.is_running()
         assert Path(language_server.language_server.repository_root_path).resolve() == repo_path.resolve()
 
-    @pytest.mark.parametrize("language_server", [Language.ANSIBLE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANSIBLE], indirect=True)
     def test_hover_on_module_contains_documentation(self, language_server: SolidLanguageServer) -> None:
         """Hover on ansible.builtin.package returns module documentation."""
         # playbook.yml line 10 (0-indexed): "ansible.builtin.package:"
@@ -43,7 +45,7 @@ class TestAnsibleLanguageServerBasics:
             hover_text = str(hover_value)
         assert "package" in hover_text.lower(), f"Hover should mention 'package', got: {hover_text[:300]}"
 
-    @pytest.mark.parametrize("language_server", [Language.ANSIBLE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANSIBLE], indirect=True)
     def test_completions_contain_module_names(self, language_server: SolidLanguageServer) -> None:
         """Completions at a task keyword position return Ansible module names."""
         # playbook.yml line 10 (0-indexed), col 6: inside a task block
@@ -54,7 +56,7 @@ class TestAnsibleLanguageServerBasics:
         assert labels, f"Expected completions with completionText, got: {result[:3]}"
 
     @pytest.mark.xfail(reason="Seems like ansible LS lacks basic functionality at the moment, textDocument/documentSymbol doesn't work")
-    @pytest.mark.parametrize("language_server", [Language.ANSIBLE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANSIBLE], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

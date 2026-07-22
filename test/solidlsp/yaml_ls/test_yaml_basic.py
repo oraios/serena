@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
@@ -18,17 +18,17 @@ from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name,
 class TestYAMLLanguageServerBasics:
     """Test basic functionality of the YAML language server."""
 
-    @pytest.mark.parametrize("language_server", [Language.YAML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.YAML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.YAML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.YAML], indirect=True)
     def test_yaml_language_server_initialization(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that YAML language server can be initialized successfully."""
         assert language_server is not None
-        assert language_server.language == Language.YAML
+        assert language_server.ls_id == LanguageServerId.YAML
         assert language_server.is_running()
         assert Path(language_server.language_server.repository_root_path).resolve() == repo_path.resolve()
 
-    @pytest.mark.parametrize("language_server", [Language.YAML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.YAML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.YAML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.YAML], indirect=True)
     def test_yaml_config_file_symbols(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test document symbols detection in config.yaml with specific symbol verification."""
         all_symbols, root_symbols = language_server.request_document_symbols("config.yaml").get_all_symbols_and_roots()
@@ -61,8 +61,8 @@ class TestYAMLLanguageServerBasics:
         assert debug_symbol is not None, "Should find 'debug' symbol"
         assert debug_symbol.get("kind") == 17, "'debug' should have kind 17 (boolean)"
 
-    @pytest.mark.parametrize("language_server", [Language.YAML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.YAML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.YAML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.YAML], indirect=True)
     def test_yaml_services_file_symbols(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test symbol detection in services.yml Docker Compose file."""
         all_symbols, root_symbols = language_server.request_document_symbols("services.yml").get_all_symbols_and_roots()
@@ -89,8 +89,8 @@ class TestYAMLLanguageServerBasics:
         for ports_sym in ports_symbols:
             assert ports_sym.get("kind") == 18, "'ports' should have kind 18 (array)"
 
-    @pytest.mark.parametrize("language_server", [Language.YAML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.YAML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.YAML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.YAML], indirect=True)
     def test_yaml_data_file_symbols(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test symbol detection in data.yaml file with array structures."""
         all_symbols, root_symbols = language_server.request_document_symbols("data.yaml").get_all_symbols_and_roots()
@@ -110,8 +110,8 @@ class TestYAMLLanguageServerBasics:
         assert "email" in symbol_names, "Should detect 'email' fields"
         assert "roles" in symbol_names, "Should detect 'roles' arrays"
 
-    @pytest.mark.parametrize("language_server", [Language.YAML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.YAML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.YAML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.YAML], indirect=True)
     def test_yaml_symbols_with_body(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test request_document_symbols with body extraction."""
         all_symbols, root_symbols = language_server.request_document_symbols("config.yaml").get_all_symbols_and_roots()
@@ -147,8 +147,8 @@ class TestYAMLLanguageServerBasics:
         assert "host: localhost" in db_body, "Body should contain host configuration"
         assert "port: 5432" in db_body, "Body should contain port configuration"
 
-    @pytest.mark.parametrize("language_server", [Language.YAML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.YAML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.YAML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.YAML], indirect=True)
     def test_yaml_symbol_ranges(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that symbols have proper range information."""
         all_symbols, root_symbols = language_server.request_document_symbols("config.yaml").get_all_symbols_and_roots()
@@ -177,7 +177,7 @@ class TestYAMLLanguageServerBasics:
         assert app_port is not None, "Should find 'port' under 'app'"
         assert app_port["range"]["start"]["character"] == 2, "'port' should be indented 2 spaces"
 
-    @pytest.mark.parametrize("language_server", [Language.YAML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.YAML], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

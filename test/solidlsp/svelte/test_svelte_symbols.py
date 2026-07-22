@@ -17,7 +17,7 @@ import pytest
 
 from serena.project import Project
 from serena.symbol import LanguageServerSymbolRetriever
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
 
 pytestmark = pytest.mark.svelte
@@ -27,7 +27,7 @@ GAME_TS = os.path.join("src", "lib", "game.ts")
 
 
 class TestSvelteTypeScriptSymbolDiscovery:
-    @pytest.mark.parametrize("project_with_ls", [Language.SVELTE], indirect=True)
+    @pytest.mark.parametrize("project_with_ls", [LanguageServerId.SVELTE], indirect=True)
     def test_find_symbol_in_typescript_file(self, project_with_ls: Project) -> None:
         retriever = LanguageServerSymbolRetriever(project_with_ls)
 
@@ -47,7 +47,7 @@ class TestSvelteTypeScriptSymbolDiscovery:
         assert len(enter_symbols) == 1, enter_symbols
         assert enter_symbols[0].get_name_path() == "Game/enter"
 
-    @pytest.mark.parametrize("project_with_ls", [Language.SVELTE], indirect=True)
+    @pytest.mark.parametrize("project_with_ls", [LanguageServerId.SVELTE], indirect=True)
     def test_find_referencing_symbols_locates_typescript_symbol(self, project_with_ls: Project) -> None:
         retriever = LanguageServerSymbolRetriever(project_with_ls)
 

@@ -15,7 +15,7 @@ rest of the PHP suite.
 
 import pytest
 
-from solidlsp.ls_config import FilenameMatcher, Language
+from solidlsp.ls_config import FilenameMatcher, LanguageServerId
 from solidlsp.ls_utils import SymbolUtils
 from test.conftest import get_repo_path, start_ls_context
 
@@ -24,14 +24,14 @@ class TestPhpSourceFnMatcherDefaults:
     def test_phtml_matched_by_default_for_all_php_language_servers(self) -> None:
         # .phtml is a standard (yet outdated) PHP extension, so all PHP language servers treat it
         # as a PHP source by default (#1710).
-        for language in (Language.PHP, Language.PHP_PHPACTOR, Language.PHP_PHPANTOM):
+        for language in (LanguageServerId.PHP, LanguageServerId.PHP_PHPACTOR, LanguageServerId.PHP_PHPANTOM):
             matcher = language.get_source_fn_matcher()
             assert matcher.is_relevant_filename("index.php"), f"{language}: .php not matched"
             assert matcher.is_relevant_filename("template.phtml"), f"{language}: .phtml not matched"
 
     def test_module_not_matched_by_default(self) -> None:
         # guard for the integration test below: .module files only become visible via file_filter
-        assert not Language.PHP.get_source_fn_matcher().is_relevant_filename("hooks.module")
+        assert not LanguageServerId.PHP.get_source_fn_matcher().is_relevant_filename("hooks.module")
 
     def test_file_extensions_property_returns_copy(self) -> None:
         # _create_base_initialize_params derives the files.associations globs from this property;
@@ -54,14 +54,14 @@ class TestFileFilterIntegration:
 
     def test_module_file_symbols_and_references_visible(self) -> None:
         with start_ls_context(
-            Language.PHP,
-            ls_specific_settings={Language.PHP: {"file_filter": [".module"]}},
+            LanguageServerId.PHP,
+            ls_specific_settings={LanguageServerId.PHP: {"file_filter": [".module"]}},
         ) as ls:
             # Layer 2 (files.associations) must be asserted FIRST: the reference in the
             # never-opened drupal_module.module can only come from the server's association-driven
             # background index. request_full_symbol_tree below didOpens every matched file in the
             # LS, after which this assertion could pass even without the associations.
-            helper_php_path = str(get_repo_path(Language.PHP) / "helper.php")
+            helper_php_path = str(get_repo_path(LanguageServerId.PHP) / "helper.php")
             references = ls.request_references(helper_php_path, 2, len("function "))
             assert any(ref["uri"].endswith("drupal_module.module") for ref in references), (
                 f"helperFunction call in drupal_module.module not found in references: {references}"

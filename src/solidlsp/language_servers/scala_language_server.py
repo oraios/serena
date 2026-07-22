@@ -52,7 +52,7 @@ def _get_scala_settings(solidlsp_settings: SolidLSPSettings) -> dict[str, object
         - on_stale_lock: StaleLockMode
         - log_multi_instance_notice: bool
     """
-    from solidlsp.ls_config import Language
+    from solidlsp.ls_config import LanguageServerId
 
     defaults: dict[str, object] = {
         "metals_version": DEFAULT_METALS_VERSION,
@@ -64,7 +64,7 @@ def _get_scala_settings(solidlsp_settings: SolidLSPSettings) -> dict[str, object
     if not solidlsp_settings.ls_specific_settings:
         return defaults
 
-    scala_settings = solidlsp_settings.get_ls_specific_settings(Language.SCALA)
+    scala_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.SCALA)
 
     # Parse stale lock mode with validation
     on_stale_lock_str = scala_settings.get("on_stale_lock", DEFAULT_ON_STALE_LOCK)
@@ -120,7 +120,7 @@ class ScalaLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             ProcessLaunchInfo(cmd=scala_lsp_executable_path, cwd=repository_root_path),
-            config.code_language.value,
+            config.ls_id.value,
             solidlsp_settings,
         )
 

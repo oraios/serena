@@ -11,13 +11,13 @@ prefixes / empty rules / etc.) so only syntax-level errors surface here.
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
 
 @pytest.mark.scss
 class TestScssDiagnostics:
-    @pytest.mark.parametrize("language_server", [Language.SCSS], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SCSS], indirect=True)
     def test_scss_file_diagnostics(self, language_server: SolidLanguageServer) -> None:
         assert_file_diagnostics(
             language_server,
@@ -26,7 +26,7 @@ class TestScssDiagnostics:
             min_count=1,
         )
 
-    @pytest.mark.parametrize("language_server", [Language.SCSS], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SCSS], indirect=True)
     def test_plain_css_file_diagnostics(self, language_server: SolidLanguageServer) -> None:
         """Plain ``.css`` diagnostics flow through the same Some Sass server.
 

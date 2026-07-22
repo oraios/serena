@@ -23,7 +23,7 @@ from overrides import override
 
 from solidlsp import ls_types
 from solidlsp.ls import LSPConstants, RawDocumentSymbol, SolidLanguageServer
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import FileUtils
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -119,7 +119,7 @@ class PowerShellLanguageServer(SolidLanguageServer):
     @classmethod
     def _get_pses_path(cls, solidlsp_settings: SolidLSPSettings) -> str | None:
         """Get the path to PowerShell Editor Services installation."""
-        ps_settings = solidlsp_settings.get_ls_specific_settings(Language.POWERSHELL)
+        ps_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.POWERSHELL)
         pses_version = ps_settings.get("pses_version", DEFAULT_PSES_VERSION)
         install_dir = _pses_install_dir(cls.ls_resources_dir(solidlsp_settings), pses_version)
         start_script = install_dir / "PowerShellEditorServices" / "Start-EditorServices.ps1"
@@ -132,7 +132,7 @@ class PowerShellLanguageServer(SolidLanguageServer):
     @classmethod
     def _download_pses(cls, solidlsp_settings: SolidLSPSettings) -> str:
         """Download and install PowerShell Editor Services."""
-        ps_settings = solidlsp_settings.get_ls_specific_settings(Language.POWERSHELL)
+        ps_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.POWERSHELL)
         pses_version = ps_settings.get("pses_version", DEFAULT_PSES_VERSION)
         download_url = (
             f"https://github.com/PowerShell/PowerShellEditorServices/releases/download/v{pses_version}/PowerShellEditorServices.zip"
@@ -184,7 +184,7 @@ class PowerShellLanguageServer(SolidLanguageServer):
 
         # The bundled modules path is the directory containing PowerShellEditorServices
         bundled_modules_path = str(Path(pses_path).parent)
-        psscriptanalyzer_version = solidlsp_settings.get_ls_specific_settings(Language.POWERSHELL).get(
+        psscriptanalyzer_version = solidlsp_settings.get_ls_specific_settings(LanguageServerId.POWERSHELL).get(
             "psscriptanalyzer_version", PSSCRIPTANALYZER_VERSION
         )
         psscriptanalyzer_path = Path(bundled_modules_path) / "PSScriptAnalyzer" / psscriptanalyzer_version

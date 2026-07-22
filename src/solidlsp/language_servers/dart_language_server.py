@@ -8,7 +8,7 @@ from solidlsp.ls import RawDocumentSymbol, SolidLanguageServer
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
-from ..ls_config import Language, LanguageServerConfig
+from ..ls_config import LanguageServerConfig, LanguageServerId
 from .common import RuntimeDependency, RuntimeDependencyCollection
 
 log = logging.getLogger(__name__)
@@ -73,7 +73,7 @@ class DartLanguageServer(SolidLanguageServer):
 
     @classmethod
     def _setup_runtime_dependencies(cls, solidlsp_settings: SolidLSPSettings) -> str:
-        dart_settings = solidlsp_settings.get_ls_specific_settings(Language.DART)
+        dart_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.DART)
         dart_sdk_version = dart_settings.get("dart_sdk_version", DEFAULT_DART_SDK_VERSION)
         deps = RuntimeDependencyCollection(
             [

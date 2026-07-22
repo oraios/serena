@@ -15,20 +15,22 @@ Test Repository Structure:
 import pytest
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import Language
-from test.conftest import language_tests_enabled
+from solidlsp.ls_config import LanguageServerId
+from test.conftest import language_server_tests_enabled
 
-pytestmark = pytest.mark.skipif(not language_tests_enabled(Language.LEAN4), reason="Lean4 tests are disabled (lean not available)")
+pytestmark = pytest.mark.skipif(
+    not language_server_tests_enabled(LanguageServerId.LEAN4), reason="Lean4 tests are disabled (lean not available)"
+)
 
 
 @pytest.mark.lean4
 class TestLean4LanguageServer:
-    @pytest.mark.parametrize("language_server", [Language.LEAN4], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LEAN4], indirect=True)
     def test_ls_is_running(self, language_server: SolidLanguageServer) -> None:
         """Test that the Lean 4 language server starts successfully."""
         assert language_server.is_running()
 
-    @pytest.mark.parametrize("language_server", [Language.LEAN4], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LEAN4], indirect=True)
     def test_helper_symbols(self, language_server: SolidLanguageServer) -> None:
         """
         Test symbol discovery in Helper.lean.
@@ -51,7 +53,7 @@ class TestLean4LanguageServer:
         missing = expected_symbols - symbol_names
         assert not missing, f"Missing expected symbols in Helper.lean: {missing}"
 
-    @pytest.mark.parametrize("language_server", [Language.LEAN4], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LEAN4], indirect=True)
     def test_main_symbols(self, language_server: SolidLanguageServer) -> None:
         """
         Test symbol discovery in Main.lean.
@@ -70,7 +72,7 @@ class TestLean4LanguageServer:
         missing = expected_symbols - symbol_names
         assert not missing, f"Missing expected symbols in Main.lean: {missing}"
 
-    @pytest.mark.parametrize("language_server", [Language.LEAN4], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LEAN4], indirect=True)
     def test_within_file_references(self, language_server: SolidLanguageServer) -> None:
         """
         Test within-file reference tracking for isPositive.
@@ -89,7 +91,7 @@ class TestLean4LanguageServer:
             f"Expected isPositive reference at Helper.lean:15 (in absolute), got: {ref_locations}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.LEAN4], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LEAN4], indirect=True)
     def test_cross_file_references_add(self, language_server: SolidLanguageServer) -> None:
         """
         Test cross-file reference tracking for add function.
@@ -111,7 +113,7 @@ class TestLean4LanguageServer:
             f"Expected add references at Main.lean lines 7 or 15, got lines: {main_ref_lines}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.LEAN4], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LEAN4], indirect=True)
     def test_cross_file_references_calculator(self, language_server: SolidLanguageServer) -> None:
         """
         Test cross-file reference tracking for Calculator structure.
@@ -132,7 +134,7 @@ class TestLean4LanguageServer:
             f"Expected Calculator references at Main.lean lines 5 or 13, got lines: {main_ref_lines}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.LEAN4], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LEAN4], indirect=True)
     def test_go_to_definition_within_file(self, language_server: SolidLanguageServer) -> None:
         """
         Test go-to-definition within a file.
@@ -149,7 +151,7 @@ class TestLean4LanguageServer:
         assert def_location["uri"].endswith("Main.lean"), f"Expected definition in Main.lean, got: {def_location['uri']}"
         assert def_location["range"]["start"]["line"] == 5, f"Expected definition at line 5, got: {def_location['range']['start']['line']}"
 
-    @pytest.mark.parametrize("language_server", [Language.LEAN4], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LEAN4], indirect=True)
     def test_go_to_definition_across_files(self, language_server: SolidLanguageServer) -> None:
         """
         Test go-to-definition across files.

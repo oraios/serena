@@ -5,32 +5,34 @@ from unittest import mock
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_utils import SymbolUtils
 from solidlsp.settings import SolidLSPSettings
-from test.conftest import language_tests_enabled
+from test.conftest import language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
-pytestmark = pytest.mark.skipif(not language_tests_enabled(Language.BSL), reason="BSL tests are disabled (niche, slow and flaky)")
+pytestmark = pytest.mark.skipif(
+    not language_server_tests_enabled(LanguageServerId.BSL), reason="BSL tests are disabled (niche, slow and flaky)"
+)
 
 
 @pytest.mark.bsl
 class TestBSLLanguageServer:
-    @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.BSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.BSL], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.BSL], indirect=True)
     def test_ls_is_running(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Language server starts and attaches to the test repository."""
         assert language_server.is_running()
         assert Path(language_server.language_server.repository_root_path).resolve() == repo_path.resolve()
 
-    @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.BSL], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
         symbols = language_server.request_full_symbol_tree()
         assert SymbolUtils.symbol_tree_contains_name(symbols, "ВывестиСообщение"), "ВывестиСообщение not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "ПолучитьПриветствие"), "ПолучитьПриветствие not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Инициализировать"), "Инициализировать not found in symbol tree"
 
-    @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.BSL], indirect=True)
     def test_document_symbols(self, language_server: SolidLanguageServer) -> None:
         doc_symbols = language_server.request_document_symbols("CommonModule.bsl")
         all_symbols, _ = doc_symbols.get_all_symbols_and_roots()
@@ -39,7 +41,7 @@ class TestBSLLanguageServer:
         assert "ПолучитьПриветствие" in names, f"ПолучитьПриветствие not found in CommonModule.bsl symbols. Found: {names}"
         assert "ВызватьПриветствие" in names, f"ВызватьПриветствие not found in CommonModule.bsl symbols. Found: {names}"
 
-    @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.BSL], indirect=True)
     def test_full_symbol_tree_within_file(self, language_server: SolidLanguageServer) -> None:
         """Scoping the full-tree request to a single file returns that file's symbols."""
         symbols = language_server.request_full_symbol_tree(within_relative_path="ObjectModule.bsl")
@@ -50,7 +52,7 @@ class TestBSLLanguageServer:
             "ПолучитьСостояние not found in ObjectModule.bsl symbol tree"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.BSL], indirect=True)
     def test_find_references_within_file(self, language_server: SolidLanguageServer) -> None:
         # CommonModule.bsl (0-indexed):
         # line 2: Процедура ВывестиСообщение(Текст) Экспорт  <- declaration (name starts at col 10)
@@ -66,7 +68,7 @@ class TestBSLLanguageServer:
         matching_lines = [ref["range"]["start"]["line"] for ref in refs if "CommonModule.bsl" in ref.get("relativePath", "")]
         assert 12 in matching_lines, f"Expected a reference on line 12 (0-indexed), got lines: {matching_lines}"
 
-    @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.BSL], indirect=True)
     def test_find_references_to_function_within_file(self, language_server: SolidLanguageServer) -> None:
         # CommonModule.bsl (0-indexed):
         # line 6: Функция ПолучитьПриветствие(Имя) Экспорт  <- declaration (name starts at col 8)
@@ -88,7 +90,7 @@ class TestBSLLanguageServer:
     _CROSS_REF_MODULE1 = os.path.join("src", "CommonModules", "ОбщийМодуль1", "Ext", "Module.bsl")
     _CROSS_REF_MODULE2 = os.path.join("src", "CommonModules", "ОбщийМодуль2", "Ext", "Module.bsl")
 
-    @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.BSL], indirect=True)
     def test_find_references_across_files(self, language_server: SolidLanguageServer) -> None:
         """``request_references`` from the declaration must include the cross-module call-site."""
         # ОбщийМодуль1 / Ext / Module.bsl (0-indexed):
@@ -104,7 +106,7 @@ class TestBSLLanguageServer:
         call_site_lines = [ref["range"]["start"]["line"] for ref in refs if "ОбщийМодуль2" in ref.get("relativePath", "")]
         assert 3 in call_site_lines, f"Expected a reference at ОбщийМодуль2/Module.bsl line 3, got lines: {call_site_lines}"
 
-    @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.BSL], indirect=True)
     def test_find_definition_across_files(self, language_server: SolidLanguageServer) -> None:
         """``request_definition`` from a cross-module call-site must resolve to the other module."""
         # cursor on "ВывестиСообщение" inside
@@ -116,7 +118,7 @@ class TestBSLLanguageServer:
         target_lines = [d["range"]["start"]["line"] for d in definitions if "ОбщийМодуль1" in d.get("relativePath", "")]
         assert 2 in target_lines, f"Expected the definition to point at ОбщийМодуль1/Module.bsl line 2, got: {target_lines}"
 
-    @pytest.mark.parametrize("language_server", [Language.BSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.BSL], indirect=True)
     def test_bare_symbol_names(self, language_server: SolidLanguageServer) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed = [s for s in all_symbols if has_malformed_name(s)]
@@ -133,15 +135,15 @@ class TestBSLLanguageServer:
 
 
 def test_bsl_filename_matcher() -> None:
-    matcher = Language.BSL.get_source_fn_matcher()
+    matcher = LanguageServerId.BSL.get_source_fn_matcher()
     assert matcher.is_relevant_filename("module.bsl")
     assert matcher.is_relevant_filename("script.os")
     assert not matcher.is_relevant_filename("module.py")
 
 
 def test_bsl_enum_registration() -> None:
-    assert Language.BSL.value == "bsl"
-    assert Language.BSL.get_ls_class().__name__ == "BSLLanguageServer"
+    assert LanguageServerId.BSL.value == "bsl"
+    assert LanguageServerId.BSL.get_ls_class().__name__ == "BSLLanguageServer"
 
 
 def test_bsl_dependency_provider_default_version() -> None:
@@ -153,7 +155,7 @@ def test_bsl_dependency_provider_default_version() -> None:
 
     settings = SolidLSPSettings()
     provider = BSLLanguageServer.DependencyProvider(
-        settings.get_ls_specific_settings(Language.BSL),
+        settings.get_ls_specific_settings(LanguageServerId.BSL),
         "/tmp/ls_resources",
     )
 
@@ -174,9 +176,9 @@ def test_bsl_dependency_provider_custom_version_no_sha() -> None:
     from solidlsp.language_servers.common import RuntimeDependencyCollection
 
     settings = SolidLSPSettings()
-    settings.ls_specific_settings[Language.BSL] = {"bsl_ls_version": "0.28.0"}
+    settings.ls_specific_settings[LanguageServerId.BSL] = {"bsl_ls_version": "0.28.0"}
     provider = BSLLanguageServer.DependencyProvider(
-        settings.get_ls_specific_settings(Language.BSL),
+        settings.get_ls_specific_settings(LanguageServerId.BSL),
         "/tmp/ls_resources",
     )
 
@@ -214,9 +216,9 @@ def test_bsl_launch_command_uses_ls_path_without_download() -> None:
     from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
 
     settings = SolidLSPSettings()
-    settings.ls_specific_settings[Language.BSL] = {"ls_path": "/custom/path/bsl-language-server.jar"}
+    settings.ls_specific_settings[LanguageServerId.BSL] = {"ls_path": "/custom/path/bsl-language-server.jar"}
     provider = BSLLanguageServer.DependencyProvider(
-        settings.get_ls_specific_settings(Language.BSL),
+        settings.get_ls_specific_settings(LanguageServerId.BSL),
         "/tmp/ls_resources",
     )
 
@@ -241,9 +243,9 @@ def test_bsl_launch_command_requires_java() -> None:
     from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
 
     settings = SolidLSPSettings()
-    settings.ls_specific_settings[Language.BSL] = {"ls_path": "/custom/path/bsl-language-server.jar"}
+    settings.ls_specific_settings[LanguageServerId.BSL] = {"ls_path": "/custom/path/bsl-language-server.jar"}
     provider = BSLLanguageServer.DependencyProvider(
-        settings.get_ls_specific_settings(Language.BSL),
+        settings.get_ls_specific_settings(LanguageServerId.BSL),
         "/tmp/ls_resources",
     )
 
@@ -258,9 +260,9 @@ def test_bsl_launch_command_rejects_old_java() -> None:
     from solidlsp.language_servers.bsl_language_server import BSL_LS_MIN_JAVA_VERSION, BSLLanguageServer
 
     settings = SolidLSPSettings()
-    settings.ls_specific_settings[Language.BSL] = {"ls_path": "/custom/path/bsl-language-server.jar"}
+    settings.ls_specific_settings[LanguageServerId.BSL] = {"ls_path": "/custom/path/bsl-language-server.jar"}
     provider = BSLLanguageServer.DependencyProvider(
-        settings.get_ls_specific_settings(Language.BSL),
+        settings.get_ls_specific_settings(LanguageServerId.BSL),
         "/tmp/ls_resources",
     )
 

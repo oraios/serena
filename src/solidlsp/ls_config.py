@@ -87,7 +87,7 @@ class FilenameMatcher:
         return False
 
 
-class Language(str, Enum):
+class LanguageServerId(str, Enum):
     """
     Enumeration of language servers supported by SolidLSP.
     """
@@ -895,7 +895,7 @@ class LanguageServerConfig:
     Configuration parameters for a language server instance
     """
 
-    code_language: Language
+    ls_id: LanguageServerId
     """
     defines the language server to use
     """

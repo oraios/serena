@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from test.conftest import start_ls_context
 from test.solidlsp.conftest import PYTHON_BACKEND_LANGUAGES
 
@@ -16,7 +16,7 @@ pytestmark = pytest.mark.python
 def ls_with_ignored_dirs() -> Generator[SolidLanguageServer, None, None]:
     """Fixture to set up an LS for the python test repo with the 'scripts' directory ignored."""
     ignored_paths = ["scripts", "custom_test"]
-    with start_ls_context(language=Language.PYTHON, ignored_paths=ignored_paths) as ls:
+    with start_ls_context(ls_id=LanguageServerId.PYTHON, ignored_paths=ignored_paths) as ls:
         yield ls
 
 
@@ -47,7 +47,7 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
 def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
     """Tests that refs and symbols with glob patterns are ignored."""
     ignored_paths = ["*ipts", "custom_t*"]
-    with start_ls_context(language=Language.PYTHON, repo_path=str(repo_path), ignored_paths=ignored_paths) as ls:
+    with start_ls_context(ls_id=LanguageServerId.PYTHON, repo_path=str(repo_path), ignored_paths=ignored_paths) as ls:
         # same as in the above tests
         root = ls.request_full_symbol_tree()[0]
         root_children = root["children"]

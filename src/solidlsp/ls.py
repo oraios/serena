@@ -31,7 +31,7 @@ from solidlsp.dependency_provider import (
     LanguageServerDependencyProviderUvx,
 )
 from solidlsp.initialize_params import DefaultInitializeParamsBuilder, InitializeParamsBuilder
-from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
+from solidlsp.ls_config import FilenameMatcher, LanguageServerConfig, LanguageServerId
 from solidlsp.ls_exceptions import InvalidTextLocationError, SolidLSPException
 from solidlsp.ls_process import LanguageServerInterface, StdioLanguageServer
 from solidlsp.ls_types import UnifiedSymbolInformation
@@ -383,8 +383,8 @@ class SolidLanguageServer(ABC):
             return logging.INFO
 
     @classmethod
-    def get_language_enum_instance(cls) -> Language:
-        return Language.from_ls_class(cls)
+    def get_language_server_id(cls) -> LanguageServerId:
+        return LanguageServerId.from_ls_class(cls)
 
     @classmethod
     def supports_implementation_request(cls) -> bool:
@@ -442,7 +442,7 @@ class SolidLanguageServer(ABC):
         # Ensure repository_root_path is absolute to avoid issues with file URIs
         repository_root_path = os.path.abspath(repository_root_path)
 
-        ls_class = config.code_language.get_ls_class()
+        ls_class = config.ls_id.get_ls_class()
         # All language server implementations are required to use the same signature of the constructor
         # (which differs from the signature of the base class constructor).
         ls = ls_class(config, repository_root_path, solidlsp_settings)
@@ -481,13 +481,13 @@ class SolidLanguageServer(ABC):
         """
         self.config = config
         self._solidlsp_settings = solidlsp_settings
-        lang = self.get_language_enum_instance()
-        self._custom_settings = solidlsp_settings.get_ls_specific_settings(lang)
+        ls_id = self.get_language_server_id()
+        self._custom_settings = solidlsp_settings.get_ls_specific_settings(ls_id)
         """
         the (user-provided) language server-specific settings
         """
         self._ls_resources_dir = self.ls_resources_dir(solidlsp_settings)
-        log.debug(f"Custom config (LS-specific settings) for {lang}: {self._custom_settings}")
+        log.debug(f"Custom config (LS-specific settings) for {ls_id}: {self._custom_settings}")
         self._encoding = config.encoding
         self.repository_root_path: str = repository_root_path
 
@@ -500,15 +500,15 @@ class SolidLanguageServer(ABC):
         default language identifier to be passed to the language server in `textDocument/didOpen` notifications.
         """
         self.open_file_buffers: dict[str, LSPFileBuffer] = {}
-        self.language = self.get_language_enum_instance()
+        self.ls_id = self.get_language_server_id()
         """
-        identifies the language server (not to be confused with the language id passed to the language server)
+        identifies the language server (not to be confused with the language_id passed to the language server)
         """
         # The source filename matcher is a @cache'd per-language singleton. A previous project may
         # have extended it (e.g. Perl's file_filter adding .cgi); reset it here so every activation
         # starts from the language's default extensions, then language-server subclasses re-apply
         # their own settings during the rest of __init__.
-        self.language.get_source_fn_matcher().reset()
+        self.ls_id.get_source_fn_matcher().reset()
         self._published_diagnostics: dict[str, list[ls_types.Diagnostic]] = {}
         self._published_diagnostics_generation_by_uri: dict[str, int] = {}
         self._published_diagnostics_generation = 0
@@ -611,7 +611,7 @@ class SolidLanguageServer(ABC):
         log.debug(f"Creating language server instance with {language_id=} and {process_launch_info}")
         return StdioLanguageServer(
             process_launch_info,
-            language=self.language,
+            ls_id=self.ls_id,
             determine_log_level=self._determine_log_level,
             logger=logging_fn,
             start_independent_lsp_process=self.config.start_independent_lsp_process,
@@ -1167,7 +1167,7 @@ class SolidLanguageServer(ABC):
           are understood by this language server or are discovered as containing sources indirectly, e.g. via references
         """
         # By default, use the matcher of the language
-        return self.language.get_source_fn_matcher()
+        return self.ls_id.get_source_fn_matcher()
 
     def is_ignored_path(self, relative_path: str, ignore_unsupported_files: bool = True) -> bool:
         """
@@ -3131,7 +3131,7 @@ class SolidLanguageServer(ABC):
 
         :return: self for method chaining
         """
-        log.info(f"Starting language server with language {self.language_server.language} for {self.language_server.repository_root_path}")
+        log.info(f"Starting language server {self.language_server.ls_id} for {self.language_server.repository_root_path}")
         self.server_started = True
         self._start_server()
         return self

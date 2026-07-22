@@ -18,7 +18,7 @@ from overrides import override
 from solidlsp import ls_types
 from solidlsp.language_servers.common import quote_windows_path
 from solidlsp.ls import DocumentSymbols, LSPFileBuffer, RawDocumentSymbol, SolidLanguageServer
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils
 from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink
@@ -240,7 +240,7 @@ class ALLanguageServer(SolidLanguageServer):
             log.warning(f"AL_EXTENSION_PATH set but directory not found: {env_path}")
 
         # Check the resolved-version download location (versioned for non-INITIAL, legacy "al-extension" for INITIAL)
-        al_settings = solidlsp_settings.get_ls_specific_settings(Language.AL)
+        al_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.AL)
         al_extension_version = al_settings.get("al_extension_version", DEFAULT_AL_EXTENSION_VERSION)
         default_path = os.path.join(cls.ls_resources_dir(solidlsp_settings), _al_extension_dirname(al_extension_version), "extension")
         if os.path.exists(default_path):
@@ -265,7 +265,7 @@ class ALLanguageServer(SolidLanguageServer):
             Path to installed extension or None if download failed
 
         """
-        al_settings = solidlsp_settings.get_ls_specific_settings(Language.AL)
+        al_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.AL)
         al_extension_version = al_settings.get("al_extension_version", DEFAULT_AL_EXTENSION_VERSION)
         al_extension_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), _al_extension_dirname(al_extension_version))
         al_extension_url = (

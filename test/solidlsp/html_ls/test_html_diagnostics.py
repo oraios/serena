@@ -16,12 +16,12 @@ diagnostic request, which is the practical purpose for this LS.
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 
 
 @pytest.mark.html
 class TestHtmlDiagnostics:
-    @pytest.mark.parametrize("language_server", [Language.HTML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HTML], indirect=True)
     def test_diagnostics_endpoint_returns_list(self, language_server: SolidLanguageServer) -> None:
         diagnostics = language_server.request_text_document_diagnostics("diagnostics_sample.html", min_severity=1)
         assert isinstance(diagnostics, list), diagnostics
