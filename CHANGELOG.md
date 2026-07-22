@@ -14,6 +14,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add `serena-hooks --client=grok`, including Grok-native PreToolUse allow/deny output.
   - PreToolUse remind hook: coerce non-string shell command values instead of failing, and recognize
     `target_file`/`targetFile` file-path keys (shared payload parsing, applies to all hook clients).
+  - Fix: `serena-hooks cleanup --client=codex` used as a Codex `Stop` hook now always prints valid
+    Stop-hook JSON (`{"continue": true}`) and no longer crashes when the payload has no session id or
+    stdin is empty, so Codex stops reporting `hook returned invalid stop hook JSON output` (#1533).
 
 
 # v1.6.1 (2026-07-21)
