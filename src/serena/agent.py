@@ -1028,7 +1028,7 @@ class SerenaAgent:
         else:
             msg = f"The project with name '{proj.project_name}' at {proj.project_root} is activated."
         if self._language_backend == LanguageBackend.LSP:
-            languages_str = ", ".join([lang.value for lang in proj.project_config.languages])
+            languages_str = ", ".join([lang.value for lang in proj.project_config.language_servers])
             msg += f"\nProgramming languages: {languages_str}."
         msg += f"File encoding: {proj.project_config.encoding}."
 

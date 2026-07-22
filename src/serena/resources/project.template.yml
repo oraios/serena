@@ -1,7 +1,7 @@
 # the name by which the project can be referenced within Serena/when chatting with the LLM.
 project_name: "project_name"
 
-# list of languages for which language servers are started (LSP backend only); choose from:
+# list of language servers to start when using the LSP backend; choose from:
 #   ada                 al                  angular             ansible             bash
 #   bsl                 clojure             cpp                 cpp_ccls            crystal
 #   csharp              csharp_omnisharp    cue                 dart                elixir
@@ -19,7 +19,7 @@ project_name: "project_name"
 #   (This list may be outdated; generated with scripts/print_language_list.py;
 #   For the current list, see values of Language enum here:
 #   https://github.com/oraios/serena/blob/main/src/solidlsp/ls_config.py)
-# For some languages, there are alternative language servers, e.g. csharp_omnisharp, ruby_solargraph.)
+# For some languages, there are several alternative language servers, e.g. csharp_omnisharp, ruby_solargraph.)
 # Note:
 #   - For C, use cpp
 #   - For JavaScript, use typescript
@@ -28,12 +28,12 @@ project_name: "project_name"
 #   - For SCSS / Sass / plain CSS, use scss (some-sass-language-server handles all three)
 #   - For Free Pascal/Lazarus, use pascal
 # Special requirements:
-#   Some languages require additional setup/installations.
+#   Some language servers require additional setup/installations.
 #   See here for details: https://oraios.github.io/serena/01-about/020_programming-languages.html#language-servers
-# When using multiple languages, the first language server that supports a given file will be used for that file.
-# The first language is the default language and the respective language server will be used as a fallback.
+# When using multiple language servers, the first language server that supports a given file will be used for that file.
+# The first language server is the default language and the respective language server will be used as a fallback.
 # Note that when using the JetBrains backend, language servers are not used and this list is correspondingly ignored.
-languages: ["python"]
+language_servers: ["python"]
 
 # the encoding used by text files in the project
 # For a list of possible encodings, see https://docs.python.org/3.11/library/codecs.html#standard-encodings

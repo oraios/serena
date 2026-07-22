@@ -717,8 +717,8 @@ class ProjectCommands(AutoRegisteringGroup):
             languages=languages if languages else None,
             interactive=True,
         )
-        languages_str = ", ".join([lang.value for lang in generated_conf.languages]) if generated_conf.languages else "N/A"
-        click.echo(f"Generated project with languages {{{languages_str}}} at {yml_path}.")
+        languages_str = ", ".join([lang.value for lang in generated_conf.language_servers]) if generated_conf.language_servers else "N/A"
+        click.echo(f"Generated project with language servers {{{languages_str}}} at {yml_path}.")
         registered_project = serena_config.get_registered_project(str(project_root))
         if registered_project is None:
             registered_project = RegisteredProject(str(project_root), generated_conf)
@@ -731,7 +731,11 @@ class ProjectCommands(AutoRegisteringGroup):
     @click.argument("project_path", type=click.Path(exists=True, file_okay=False), default=os.getcwd())
     @click.option("--name", type=str, default=None, help="Project name; defaults to directory name if not specified.")
     @click.option(
-        "--language", type=str, multiple=True, help="Programming language(s); inferred if not specified. Can be passed multiple times."
+        "--ls",
+        "--language",
+        type=str,
+        multiple=True,
+        help="Programming language(s); inferred if not specified. Can be passed multiple times.",
     )
     @click.option("--index", is_flag=True, help="Index the project after creation.")
     @click.option(
@@ -761,6 +765,7 @@ class ProjectCommands(AutoRegisteringGroup):
     @click.argument("project", type=PROJECT_TYPE, default=os.getcwd(), required=False)
     @click.option("--name", type=str, default=None, help="Project name (only used if auto-creating project.yml).")
     @click.option(
+        "--ls",
         "--language",
         type=str,
         multiple=True,

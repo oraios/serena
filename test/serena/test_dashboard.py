@@ -31,7 +31,7 @@ class _DummyAgent:
 def _make_dashboard(project_languages: list[LanguageServerId] | None) -> SerenaDashboardAPI:
     project = None
     if project_languages is not None:
-        project = SimpleNamespace(project_config=SimpleNamespace(languages=project_languages))
+        project = SimpleNamespace(project_config=SimpleNamespace(language_servers=project_languages))
     agent = _DummyAgent(project)
     return SerenaDashboardAPI(memory_log_handler=_DummyMemoryLogHandler(), tool_names=[], agent=agent, tool_usage_stats=None)
 

@@ -25,7 +25,7 @@ def _make_project(
     )
     project_config = ProjectConfig(
         project_name="test-activation",
-        languages=[LanguageServerId.PYTHON],
+        language_servers=[LanguageServerId.PYTHON],
         activation_command=activation_command,
         activation_command_timeout=activation_command_timeout,
     )

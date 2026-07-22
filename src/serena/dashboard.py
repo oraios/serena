@@ -514,7 +514,7 @@ class SerenaDashboardAPI:
         active_project_name = project.project_name if project else None
         project_info = {
             "name": active_project_name,
-            "language": ", ".join([l.value for l in project.project_config.languages]) if project else None,
+            "language": ", ".join([l.value for l in project.project_config.language_servers]) if project else None,
             "path": str(project.project_root) if project else None,
         }
 
@@ -608,7 +608,7 @@ class SerenaDashboardAPI:
         # Get list of languages for the active project
         languages = []
         if project is not None:
-            languages = [lang.value for lang in project.project_config.languages]
+            languages = [lang.value for lang in project.project_config.language_servers]
 
         # Get file encoding for the active project
         encoding = None
@@ -646,7 +646,7 @@ class SerenaDashboardAPI:
             # Filter out already added languages for the active project
             project = self._agent.get_active_project()
             if project:
-                current_languages = [lang.value for lang in project.project_config.languages]
+                current_languages = [lang.value for lang in project.project_config.language_servers]
                 available_languages = [lang for lang in all_languages if lang not in current_languages]
             else:
                 available_languages = all_languages

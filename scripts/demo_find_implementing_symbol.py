@@ -27,7 +27,7 @@ def make_agent(project_root: Path, language: LanguageServerId, project_name: str
         project_root=str(project_root),
         project_config=ProjectConfig(
             project_name=project_name,
-            languages=[language],
+            language_servers=[language],
             ignored_paths=[],
             excluded_tools=[],
             read_only=False,

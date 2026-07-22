@@ -245,13 +245,13 @@ class TestProjectCreateHelper:
         config = ProjectCommands._create_project(temp_project_dir_with_python_file, "my-project", ()).project_config
         assert isinstance(config, ProjectConfig)
         assert config.project_name == "my-project"
-        assert len(config.languages) >= 1
+        assert len(config.language_servers) >= 1
 
     def test_create_project_helper_with_languages(self, temp_project_dir):
         """Test _create_project with language specification."""
         config = ProjectCommands._create_project(temp_project_dir, None, ("python", "typescript")).project_config
         assert isinstance(config, ProjectConfig)
-        assert len(config.languages) >= 1
+        assert len(config.language_servers) >= 1
 
     def test_create_project_helper_file_exists_error(self, temp_project_dir):
         """Test _create_project raises error if project.yml exists."""

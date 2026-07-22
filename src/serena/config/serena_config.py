@@ -321,7 +321,7 @@ class ProjectConfigAutoGenerationMode(Enum):
 @dataclass(kw_only=True)
 class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
     project_name: str
-    languages: list[LanguageServerId]
+    language_servers: list[LanguageServerId]
     ignored_paths: list[str] = field(default_factory=list)
     ls_workspace_folders: list[str] = field(default_factory=lambda: ["."])
     ls_additional_workspace_folders: list[str] = field(default_factory=list)
@@ -338,8 +338,8 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
     # class-level members
     SERENA_PROJECT_FILE = "project.yml"
     SERENA_LOCAL_PROJECT_FILE = "project.local.yml"
-    FIELDS_WITHOUT_DEFAULTS = {"project_name", "languages"}
-    RENAMED_FIELDS = {"additional_workspace_folders": "ls_additional_workspace_folders"}
+    FIELDS_WITHOUT_DEFAULTS = {"project_name", "language_servers"}
+    RENAMED_FIELDS = {"additional_workspace_folders": "ls_additional_workspace_folders", "languages": "language_servers"}
     YAML_COMMENT_NORMALISATION = YamlCommentNormalisation.LEADING
     """
     the comment normalisation strategy to use when loading/saving project configuration files.
@@ -457,7 +457,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
                 languages_to_use = [lang.value for lang in languages]
             config_with_comments, _ = cls._load_yaml_dict(PROJECT_TEMPLATE_FILE)
             config_with_comments["project_name"] = project_name
-            config_with_comments["languages"] = languages_to_use
+            config_with_comments["language_servers"] = languages_to_use
 
             project_yml_path = serena_config.get_project_yml_location(str(project_root))
             if save_to_disk:
@@ -478,7 +478,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
                 def async_language_determination():
                     try:
                         with LogTime("Asynchronous language determination", logger=log):
-                            project_config.languages = cls._determine_project_language_servers(
+                            project_config.language_servers = cls._determine_project_language_servers(
                                 str(project_root), interactive=False, serena_config=serena_config
                             )
                             if save_to_disk:
@@ -540,8 +540,8 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         # backward compatibility
         # NOTE: This must also work for project.local.yml files, which may be highly incomplete
         # * handle single "language" field
-        if "languages" not in data and "language" in data:
-            data["languages"] = [data["language"]]
+        if "language" in data and not ("languages" in data or "language_servers" in data):
+            data["language_servers"] = [data["language"]]
             del data["language"]
         # * handle renamed fields
         for old_key, new_key in cls.RENAMED_FIELDS.items():
@@ -580,18 +580,18 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         """
         # map languages to list of enum items, checking for errors
         lang_name_mapping = {"javascript": "typescript"}
-        languages: list[LanguageServerId] = []
-        for language_str in data["languages"]:
-            orig_language_str = language_str
+        ls_ids: list[LanguageServerId] = []
+        for ls_str in data["language_servers"]:
+            orig_language_str = ls_str
             try:
-                language_str = language_str.lower()
-                if language_str in lang_name_mapping:
-                    language_str = lang_name_mapping[language_str]
-                language = LanguageServerId(language_str)
-                languages.append(language)
+                ls_str = ls_str.lower()
+                if ls_str in lang_name_mapping:
+                    ls_str = lang_name_mapping[ls_str]
+                ls_id = LanguageServerId(ls_str)
+                ls_ids.append(ls_id)
             except ValueError as e:
                 raise ValueError(
-                    f"Invalid language: {orig_language_str}.\nValid language_strings are: {[l.value for l in LanguageServerId]}"
+                    f"Invalid language server: '{orig_language_str}'.\nValid values are: {[l.value for l in LanguageServerId]}"
                 ) from e
 
         # Validate activation_command_timeout
@@ -632,7 +632,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
 
         return cls(
             project_name=data["project_name"],
-            languages=languages,
+            language_servers=ls_ids,
             ignored_paths=ignored_paths,
             ls_workspace_folders=data["ls_workspace_folders"],
             ls_additional_workspace_folders=additional_workspace_folders,
@@ -669,7 +669,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
                 del d[k]
 
         # map fields using non-primitive types to a YAML-compatible representation
-        d["languages"] = [lang.value for lang in self.languages]
+        d["language_servers"] = [lang.value for lang in self.language_servers]
         d["language_backend"] = self.language_backend.value if self.language_backend is not None else None
         d["line_ending"] = self.line_ending.value if self.line_ending is not None else None
 

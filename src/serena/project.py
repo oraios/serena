@@ -238,7 +238,7 @@ class Project(ToStringMixin):
             if self.language_backend.is_lsp():
                 if os.path.isfile(abs_path):
                     is_file_in_supported_language = False
-                    for language in self.project_config.languages:
+                    for language in self.project_config.language_servers:
                         fn_matcher = language.get_source_fn_matcher()
                         if fn_matcher.is_relevant_filename(abs_path):
                             is_file_in_supported_language = True
