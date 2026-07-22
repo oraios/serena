@@ -733,9 +733,10 @@ class ProjectCommands(AutoRegisteringGroup):
     @click.option(
         "--ls",
         "--language",
+        "language",
         type=str,
         multiple=True,
-        help="Programming language(s); inferred if not specified. Can be passed multiple times.",
+        help="Language server(s); inferred if not specified. Can be passed multiple times.",
     )
     @click.option("--index", is_flag=True, help="Index the project after creation.")
     @click.option(
@@ -767,9 +768,10 @@ class ProjectCommands(AutoRegisteringGroup):
     @click.option(
         "--ls",
         "--language",
+        "language",
         type=str,
         multiple=True,
-        help="Programming language(s) (only used if auto-creating project.yml). Inferred if not specified.",
+        help="Language server(s) (only used if auto-creating project.yml). Inferred if not specified.",
     )
     @click.option(
         "--log-level",
