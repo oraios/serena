@@ -317,7 +317,8 @@ class TestSearchFiles:
             (["a.py", "b.txt", "c.py"], "match", "*.py", "c.*", ["a.py"], "Include .py, exclude c.*"),
             # Directory matching - Using pathspec patterns
             (["main.c", "test/main.c"], "match", "test/*", None, ["test/main.c"], "Include files in test/ subdir"),
-            (["data/a.csv", "data/b.log"], "match", "data/*", "*.log", ["data/a.csv"], "Include data/*, exclude *.log"),
+            # A bare `*.log` no longer crosses `/` (see #1732); use `data/*.log` to exclude within data/.
+            (["data/a.csv", "data/b.log"], "match", "data/*", "data/*.log", ["data/a.csv"], "Include data/*, exclude data/*.log"),
             (["src/a.py", "tests/b.py"], "match", "src/**", "tests/**", ["src/a.py"], "Include src/**, exclude tests/**"),
             (["src/mod/a.py", "tests/b.py"], "match", "**/*.py", "tests/**", ["src/mod/a.py"], "Include **/*.py, exclude tests/**"),
             (["file.py", "dir/file.py"], "match", "dir/*.py", None, ["dir/file.py"], "Include files directly in dir"),
