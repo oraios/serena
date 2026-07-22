@@ -309,6 +309,12 @@ class TopLevelCommands(AutoRegisteringGroup):
     @click.option("--trace-lsp-communication", type=bool, is_flag=False, default=None, help="Whether to trace LSP communication.")
     @click.option("--tool-timeout", type=float, default=None, help="Override tool execution timeout in config.")
     @click.option(
+        "--headless",
+        is_flag=True,
+        default=False,
+        help="Headless means nothing with a GUI will be started. This includes JetBrains IDEs, the dashboard, etc.",
+    )
+    @click.option(
         "--project-from-cwd",
         is_flag=True,
         default=False,
@@ -331,6 +337,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None,
         trace_lsp_communication: bool | None,
         tool_timeout: float | None,
+        headless: bool,
     ) -> None:
         from serena.mcp import SerenaMCPFactory
 
@@ -382,6 +389,7 @@ class TopLevelCommands(AutoRegisteringGroup):
             log_level=log_level,
             trace_lsp_communication=trace_lsp_communication,
             tool_timeout=tool_timeout,
+            headless=headless,
         )
         if project_file_arg:
             log.warning(
