@@ -5,8 +5,10 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   - Add Grok Build support (context `grok`, setup CLI, hooks)
 
-* Language Servers:
-    - Add `python_basedpyright` as an alternative Python language server
+* Language Servers: 
+  - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
+    project creation) 
+  - Add `python_basedpyright` as an alternative Python language server
 
 * Hooks:
   - Add `serena-hooks --client=grok`, including Grok-native PreToolUse allow/deny output.

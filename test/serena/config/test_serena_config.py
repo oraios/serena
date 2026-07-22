@@ -2,6 +2,7 @@ import logging
 import os
 import shutil
 import tempfile
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -62,6 +63,22 @@ class TestProjectConfigAutogenerate:
         # Verify the configuration
         assert config.project_name == self.project_path.name
         assert config.languages == [Language.PYTHON]
+
+    def test_autogenerate_with_python_files_and_custom_ls_priorities(self):
+        """Test successful autogeneration with Python source files, using custom language server priorities."""
+        # Create a Python file
+        python_file = self.project_path / "main.py"
+        python_file.write_text("def hello():\n    print('Hello, world!')\n")
+
+        serena_config = deepcopy(self.serena_config)
+        serena_config.ls_priorities = {Language.PYTHON_TY.value: 3}
+
+        # Run autogenerate
+        config = ProjectConfig.autogenerate(self.project_path, serena_config, save_to_disk=False)
+
+        # Verify the configuration
+        assert config.project_name == self.project_path.name
+        assert config.languages == [Language.PYTHON_TY]
 
     def test_autogenerate_with_js_files(self):
         """Test successful autogeneration with JavaScript source files."""

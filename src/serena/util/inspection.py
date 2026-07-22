@@ -27,7 +27,7 @@ def iter_subclasses(
             yield from iter_subclasses(subclass, recursive, inclusion_predicate)
 
 
-def determine_programming_language_composition(repo_path: str) -> dict[Language, float]:
+def determine_programming_language_composition(repo_path: str, languages: list[Language] | None = None) -> dict[Language, float]:
     """
     Determine the programming language composition of a repository.
 
@@ -36,18 +36,20 @@ def determine_programming_language_composition(repo_path: str) -> dict[Language,
     belong to no supported language (images, plain text, licenses, lock files, etc.)
     from diluting language percentages in repositories where such files dominate.
 
-    :param repo_path: Path to the repository to analyze
-    :return: Dictionary mapping languages to percentages of recognised source files
-        matching each language (denominator = files matched by at least one language)
+    :param repo_path: path to the repository to analyze
+    :param languages: the list of languages to consider; if None, use default languages
+    :return: dictionary mapping languages to percentages of recognised source files
+        matching the respective language (denominator = files matched by at least one language)
     """
+    if languages is None:
+        languages = list(Language.iter_all(include_experimental=False))
+
     all_files = find_all_non_ignored_files(repo_path)
 
     if not all_files:
         return {}
 
-    # collect all language matchers once
-    all_languages = list(Language.iter_all(include_experimental=False))
-    matchers = {lang: lang.get_source_fn_matcher() for lang in all_languages}
+    matchers = {lang: lang.get_source_fn_matcher() for lang in languages}
 
     # count files per language in a single pass over the files
     language_counts: dict[Language, int] = {}
