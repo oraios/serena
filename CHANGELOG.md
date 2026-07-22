@@ -30,6 +30,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - During project creation, language composition percentages are now computed relative to the total number 
     of recognised source files instead of all files, i.e. unrecognised files are ignored in the percentage 
     computation.
+  - Security: bump `mcp` 1.27.0 -> 1.28.1 (3 HIGH CVEs) and pin transitive `pillow==12.3.0` (6 HIGH CVEs)
+    and `click==8.3.3`.
 
 * CLI:
   - Fix `--project-from-cwd` hijacking git worktrees nested under a Serena project. `find_project_root`
@@ -46,6 +48,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add tool parameter alias support, adding `name_path` as an alias for `name_path_pattern` in `find_symbol` tools
   - Allow `query_project` tool to access read-only tools that are not enabled in the current configuration
   - Make tool call errors surface explicitly as errors at the MCP protocol level
+  - `execute_shell_command` is now optional (disabled by default) and must be explicitly enabled via
+    `included_optional_tools`. It remains available in the `agent` and `desktop-app` contexts, which
+    enable it by default. Its `cwd` argument is now confined to the project root (a best-effort guard
+    against accidental out-of-tree operations, not a sandbox).
 
 * Language Servers:
   - C/C++ (clangd): improve support and documentation for Unreal Engine 5 projects.

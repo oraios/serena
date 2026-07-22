@@ -9,6 +9,8 @@ prompt: |
   To illustrate complex relationships, consider creating diagrams in addition to your text-based communication
   (depending on the options for text, html, mermaid diagrams, etc. that you are provided with in your initial instructions).
 excluded_tools: []
-included_optional_tools: []
+# execute_shell_command is optional (disabled by default); this chat context intends to provide it
+included_optional_tools:
+  - execute_shell_command
 
 tool_description_overrides: {}
