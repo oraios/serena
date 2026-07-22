@@ -247,7 +247,7 @@ ls_specific_settings:
 These settings are supported by all language servers whose dependency provider derives from
 `LanguageServerDependencyProviderBaseCommand`, and `ls_path` is additionally exposed by some implementations explicitly.
 Common examples include: `ansible`, `bash`, `bsl`, `clojure`, `cpp`, `cpp_ccls`, `hlsl`, `html`, `kotlin`, `lean4`, `luau`, `markdown`, `php`,
-`php_phpactor`, `python`, `rust`, `scss`, `solidity`, `systemverilog`, `toml`, `typescript`, and `yaml`.
+`nix`, `php_phpactor`, `python`, `rust`, `scss`, `solidity`, `systemverilog`, `toml`, `typescript`, and `yaml`.
 
 If `ls_path` is set, Serena's managed download or install is bypassed for that language server.
 In that case, any server-specific version or registry settings do not apply.
@@ -843,6 +843,44 @@ Supported settings:
 |---|---|---|
 | `matlab_path` | auto-detected | Path to the MATLAB installation. This overrides `MATLAB_PATH` and auto-detection, but not Serena's managed extension download. |
 | `matlab_extension_version` | `1.3.9` | Override the MathWorks VS Code extension version Serena downloads. |
+
+#### Nix
+
+Serena uses [nixd](https://github.com/nix-community/nixd) for Nix support.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | PATH/common-path discovery followed by managed installation | Absolute path to a nixd executable or launcher. When set, Serena bypasses its nixd discovery, installation, and version check. |
+| `config_path` | `null` | Absolute path to a UTF-8 JSON file containing the value of the `nixd` settings section. A leading `~` is expanded. |
+
+Example:
+
+```yaml
+ls_specific_settings:
+  nix:
+    ls_path: /absolute/path/to/nixd-project
+    config_path: /absolute/path/to/nixd-settings.json
+```
+
+The JSON document contains the settings object directly, without an outer `nixd` key:
+
+```json
+{
+  "formatting": {
+    "command": ["alejandra"]
+  },
+  "nixpkgs": {
+    "expr": "import <nixpkgs> { }"
+  },
+  "options": {}
+}
+```
+
+Serena loads this file once when creating the language server, uses it as nixd's `initializationOptions`, and serves the same effective
+settings through LSP `workspace/configuration` requests. Existing `initializationOptions` configured under `ls_specific_settings.nix`
+remain top-level overrides and are reflected in both paths. Restart Serena after changing the JSON file.
 
 
 #### Pascal (`pasls`)
