@@ -33,6 +33,7 @@ Some of the configurable settings include:
   * logging settings
   * the set of trusted project paths
   * advanced settings specific to individual language servers (see [below](ls-specific-settings))
+  * priorities of language servers, which affect auto-detection 
 
 The global configuration settings apply to all projects.
 Some of the settings it contains can, however, be *extended* or *overridden* in project-specific settings, contexts and modes.

@@ -356,11 +356,20 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         return ["project_name"]
 
     @classmethod
-    def _determine_project_languages(cls, project_root: str, interactive: bool) -> list[Language]:
-        # determine languages automatically
+    def _determine_project_languages(cls, project_root: str, interactive: bool, serena_config: "SerenaConfig") -> list[Language]:
         log.info("Determining programming languages used in the project")
-        language_composition = determine_programming_language_composition(project_root)
-        log.info("Language composition: %s", language_composition)
+
+        # determine languages to be considered and their priorities
+        language_priorities = {}
+        for language in Language:
+            priority = serena_config.get_ls_priority(language)
+            if priority > 0:
+                language_priorities[language] = priority
+
+        log.debug("Language priorities: %s", language_priorities)
+        language_composition = determine_programming_language_composition(project_root, list(language_priorities.keys()))
+        log.info("Project language composition: %s", language_composition)
+
         if len(language_composition) == 0:
             log.warning(
                 "No source files for supported language servers were found in %s. "
@@ -374,7 +383,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         else:
             # sort languages by number of files found
             languages_and_percentages = sorted(
-                language_composition.items(), key=lambda item: (item[1], item[0].get_priority()), reverse=True
+                language_composition.items(), key=lambda item: (item[1], language_priorities[item[0]]), reverse=True
             )
             # find the language with the highest percentage and enable it
             top_language_pair = languages_and_percentages[0]
@@ -395,6 +404,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
                     if enable:
                         languages_to_use.append(lang)
                 print()
+
         log.info("Using languages: %s", languages_to_use)
         return languages_to_use
 
@@ -438,7 +448,9 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
                     use_asynchronous_language_determination = True
                     languages_to_use = []  # temporarily empty, will be determined in background thread
                 else:
-                    determined_languages = cls._determine_project_languages(str(project_root), interactive=interactive)
+                    determined_languages = cls._determine_project_languages(
+                        str(project_root), interactive=interactive, serena_config=serena_config
+                    )
                     languages_to_use = [l.value for l in determined_languages]
             else:
                 languages_to_use = [lang.value for lang in languages]
@@ -465,7 +477,9 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
                 def async_language_determination():
                     try:
                         with LogTime("Asynchronous language determination", logger=log):
-                            project_config.languages = cls._determine_project_languages(str(project_root), interactive=False)
+                            project_config.languages = cls._determine_project_languages(
+                                str(project_root), interactive=False, serena_config=serena_config
+                            )
                             if save_to_disk:
                                 project_config.save(project_yml_path)
                     finally:
@@ -912,6 +926,11 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
     The default "**" considers all project roots as trusted, which is necessary for backward compatibility.
     The default will apply if a user does not yet have the setting, while new users will get the value
     defined in the configuration template file. 
+    """
+
+    ls_priorities: dict[str, int] | None = None
+    """
+    mapping from language server keys to their priority (higher number = higher priority).
     """
 
     # settings with overridden defaults
@@ -1431,3 +1450,19 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
             if log_choice:
                 log.info(f"Using language backend from global configuration: {language_backend.name}")
         return language_backend
+
+    def get_ls_priority(self, language: Language) -> int:
+        """
+        Gets the priority value associated with a language server
+
+        :param language: identifies the language server
+        :return: the integer priority
+        """
+        if self.ls_priorities is not None:
+            try:
+                configured_value = self.ls_priorities.get(language.value)
+                if configured_value is not None:
+                    return int(configured_value)
+            except Exception as e:
+                log.error("Error reading language priority for %s: %s. Using default priority.", language.value, e)
+        return language.get_priority()

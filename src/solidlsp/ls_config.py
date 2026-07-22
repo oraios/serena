@@ -288,7 +288,7 @@ class Language(str, Enum):
     """
 
     @classmethod
-    def iter_all(cls, include_experimental: bool = False, include_non_programming_languages: bool = True) -> Iterable[Self]:
+    def iter_all(cls, include_experimental: bool = True, include_non_programming_languages: bool = True) -> Iterable[Self]:
         for lang in cls:
             if include_experimental or not lang.is_experimental():
                 if include_non_programming_languages or lang.is_programming_language():
@@ -296,11 +296,8 @@ class Language(str, Enum):
 
     def is_experimental(self) -> bool:
         """
-        Check if the language server is experimental or deprecated.
-
-        Note for serena users/developers:
-        Experimental languages are not autodetected and must be explicitly specified
-        in the project.yml configuration.
+        Check if the language server is experimental (potentially not robust),
+        secondary (not default for respective language) or deprecated.
         """
         return self in {
             self.ANSIBLE,
