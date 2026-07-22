@@ -17,19 +17,19 @@ import pytest
 
 from serena.util.text_utils import find_text_coordinates
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from test.solidlsp.conftest import read_repo_file, request_all_symbols
 
 
 @pytest.mark.angular
 class TestAngularLanguageServerBasics:
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.ANGULAR], indirect=True)
     def test_ls_is_running(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         assert language_server.is_running()
         assert Path(language_server.language_server.repository_root_path).resolve() == repo_path.resolve()
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_component_class_symbols(self, language_server: SolidLanguageServer) -> None:
         """The Angular LS exposes the component class methods/fields via tsserver."""
         all_symbols, _ = language_server.request_document_symbols("src/app/app.component.ts").get_all_symbols_and_roots()
@@ -37,14 +37,14 @@ class TestAngularLanguageServerBasics:
         for expected in ("AppComponent", "title", "userName", "items", "greeting", "setName"):
             assert expected in names, f"Expected '{expected}' in component symbols: {names}"
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_service_class_symbols(self, language_server: SolidLanguageServer) -> None:
         all_symbols, _ = language_server.request_document_symbols("src/app/greeting.service.ts").get_all_symbols_and_roots()
         names = [s["name"] for s in all_symbols]
         for expected in ("GreetingService", "greet", "defaultName"):
             assert expected in names, f"Expected '{expected}' in service symbols: {names}"
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_full_symbol_tree_includes_all_files(self, language_server: SolidLanguageServer) -> None:
         all_symbols = request_all_symbols(language_server)
         relative_paths = {s.get("location", {}).get("relativePath") for s in all_symbols}
@@ -59,7 +59,7 @@ class TestAngularLanguageServerBasics:
         ):
             assert f in relative_paths, f"Expected {f} to appear in symbol tree, got {relative_paths}"
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_template_definition_to_component_method(self, language_server: SolidLanguageServer) -> None:
         """Resolve `greeting()` interpolation in the template to its component method.
 
@@ -79,7 +79,7 @@ class TestAngularLanguageServerBasics:
             f"Expected definition to resolve into app.component.ts, got URIs: {target_uris}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_plain_html_document_symbols(self, language_server: SolidLanguageServer) -> None:
         """DocumentSymbol on plain index.html should come back from the HTML companion.
 
@@ -94,7 +94,7 @@ class TestAngularLanguageServerBasics:
         for expected in ("html", "head", "body", "app-root"):
             assert expected in names, f"Expected '{expected}' in plain-HTML symbol list, got: {names}"
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_template_html_document_symbols(self, language_server: SolidLanguageServer) -> None:
         """DocumentSymbol on an Angular template must return the HTML element tree.
 
@@ -108,7 +108,7 @@ class TestAngularLanguageServerBasics:
         for expected in ("section", "h1", "p", "input", "ul", "app-item-card"):
             assert expected in names, f"Expected '{expected}' in template HTML symbol list, got: {names}"
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_ts_method_references_include_template_usage(self, language_server: SolidLanguageServer) -> None:
         """References on a .ts component method must include its template callers.
 
@@ -134,7 +134,7 @@ class TestAngularLanguageServerBasics:
 class TestAngularHover:
     """Hover routing — .ts goes to the companion tsserver, .html goes to ngserver."""
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_hover_on_ts_method(self, language_server: SolidLanguageServer) -> None:
         """Hover on a .ts method declaration is routed through the companion TS server
         and must yield a non-empty MarkupContent describing the method signature.
@@ -153,7 +153,7 @@ class TestAngularHover:
         text = contents["value"] if isinstance(contents, dict) else str(contents)
         assert "setName" in text, f"Expected setName in hover text, got: {text}"
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_hover_on_template_method_call(self, language_server: SolidLanguageServer) -> None:
         """Hover on a method call inside an Angular template ({{ greeting() }}) goes
         through ngserver and must yield Angular-aware type info.
@@ -174,7 +174,7 @@ class TestAngularHover:
 class TestAngularDefinitionRouting:
     """Cross-file definition for the binding flavours not covered by basic tests."""
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_definition_from_property_binding(self, language_server: SolidLanguageServer) -> None:
         """Property binding ``[value]="userName()"`` must resolve to the component's
         ``userName`` signal field declaration in app.component.ts.
@@ -193,7 +193,7 @@ class TestAngularDefinitionRouting:
             f"Expected definition to resolve into app.component.ts, got URIs: {target_uris}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_definition_from_event_binding(self, language_server: SolidLanguageServer) -> None:
         """Event binding ``(input)="setName(...)"`` must resolve to the component's
         ``setName`` method declaration in app.component.ts.
@@ -211,7 +211,7 @@ class TestAngularDefinitionRouting:
             f"Expected definition to resolve into app.component.ts, got URIs: {target_uris}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_definition_service_import_in_component(self, language_server: SolidLanguageServer) -> None:
         """The ``GreetingService`` symbol used in the constructor parameter list
         of AppComponent must resolve to greeting.service.ts via the companion TS server.
@@ -231,7 +231,7 @@ class TestAngularDefinitionRouting:
             f"Expected definition to resolve into greeting.service.ts, got URIs: {target_uris}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_definition_from_child_component_selector(self, language_server: SolidLanguageServer) -> None:
         """The ``<app-item-card>`` element in the parent template must resolve to the
         ItemCardComponent class declaration in item-card.component.ts.
@@ -258,7 +258,7 @@ class TestAngularDefinitionRouting:
 class TestAngularRename:
     """Rename routing returns a WorkspaceEdit without applying it (safe for fixtures)."""
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_rename_method_returns_edits_for_ts_and_template(self, language_server: SolidLanguageServer) -> None:
         """Renaming the ``setName`` method from its .ts declaration must return a
         WorkspaceEdit that touches both app.component.ts (declaration + any TS calls)
@@ -289,7 +289,7 @@ class TestAngularRename:
 class TestAngularSymbolStructure:
     """Hierarchical symbol structure — class symbols must contain method/field children."""
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_component_class_has_methods_and_fields_as_children(self, language_server: SolidLanguageServer) -> None:
         """``request_document_symbols`` should return AppComponent as a class symbol
         whose children include its methods (``greeting``, ``setName``) and signal
@@ -306,7 +306,7 @@ class TestAngularSymbolStructure:
         for expected in ("greeting", "setName", "title", "userName", "items"):
             assert expected in child_names, f"Expected '{expected}' as child of AppComponent, got: {child_names}"
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_pipe_class_in_symbol_tree(self, language_server: SolidLanguageServer) -> None:
         """A custom pipe (``ExclaimPipe``) declared in exclaim.pipe.ts must appear in
         the workspace symbol tree alongside the components and the service.
@@ -321,7 +321,7 @@ class TestAngularSymbolStructure:
 class TestAngularImplementations:
     """``textDocument/implementation`` is routed through tsserver via the Angular plugin."""
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_find_implementations_of_interface_method(self, language_server: SolidLanguageServer) -> None:
         """``Greeter.greet`` is implemented by ``GreetingService``; ``request_implementation``
         invoked at the interface declaration must point at the service.

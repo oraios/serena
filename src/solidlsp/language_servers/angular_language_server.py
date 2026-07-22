@@ -69,7 +69,7 @@ from solidlsp.language_servers.typescript_language_server import (
 )
 from solidlsp.language_servers.vscode_html_language_server import VsCodeHtmlLanguageServer
 from solidlsp.ls import LanguageServerDependencyProvider, LSPFileBuffer, SolidLanguageServer
-from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
+from solidlsp.ls_config import FilenameMatcher, LanguageServerConfig, LanguageServerId
 from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, SymbolInformation
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -97,13 +97,13 @@ class AngularTypeScriptServer(TypeScriptLanguageServer):
 
     @classmethod
     @override
-    def get_language_enum_instance(cls) -> Language:
-        return Language.TYPESCRIPT
+    def get_language_server_id(cls) -> LanguageServerId:
+        return LanguageServerId.TYPESCRIPT
 
     def get_source_fn_matcher(self) -> FilenameMatcher:
         # Use the Angular matcher so .html template files aren't filtered out of
         # reference / search results when the companion is asked about them.
-        return Language.ANGULAR.get_source_fn_matcher()
+        return LanguageServerId.ANGULAR.get_source_fn_matcher()
 
     class DependencyProvider(TypeScriptLanguageServer.DependencyProvider):
         """Dependency provider that returns a pre-resolved executable path.
@@ -293,8 +293,8 @@ class AngularLanguageServer(SolidLanguageServer):
         assert shutil.which("node") is not None, "node is not installed or isn't in PATH. Please install NodeJS and try again."
         assert shutil.which("npm") is not None, "npm is not installed or isn't in PATH. Please install npm and try again."
 
-        ng_settings = solidlsp_settings.get_ls_specific_settings(Language.ANGULAR)
-        ts_settings = solidlsp_settings.get_ls_specific_settings(Language.TYPESCRIPT)
+        ng_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.ANGULAR)
+        ts_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.TYPESCRIPT)
         ls_version = ng_settings.get("angular_language_server_version", DEFAULT_ANGULAR_LANGUAGE_SERVER_VERSION)
         svc_version = ng_settings.get("angular_language_service_version", DEFAULT_ANGULAR_LANGUAGE_SERVICE_VERSION)
         ts_version = ng_settings.get("typescript_version", ts_settings.get("typescript_version", DEFAULT_TYPESCRIPT_VERSION))
@@ -368,7 +368,7 @@ class AngularLanguageServer(SolidLanguageServer):
 
     def _start_typescript_server(self) -> None:
         try:
-            ts_config = LanguageServerConfig(code_language=Language.TYPESCRIPT, trace_lsp_communication=False)
+            ts_config = LanguageServerConfig(ls_id=LanguageServerId.TYPESCRIPT, trace_lsp_communication=False)
             log.info("Creating companion AngularTypeScriptServer")
             self._ts_server = AngularTypeScriptServer(
                 config=ts_config,
@@ -413,7 +413,7 @@ class AngularLanguageServer(SolidLanguageServer):
         non-fatal: we log and fall back to returning an empty list.
         """
         try:
-            html_config = LanguageServerConfig(code_language=Language.HTML, trace_lsp_communication=False)
+            html_config = LanguageServerConfig(ls_id=LanguageServerId.HTML, trace_lsp_communication=False)
             log.info("Creating companion VsCodeHtmlLanguageServer")
             self._html_server = VsCodeHtmlLanguageServer(
                 config=html_config,

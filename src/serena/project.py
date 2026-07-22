@@ -20,7 +20,7 @@ from serena.util.file_proxy import FileCollection, FileProxy
 from serena.util.file_system import GitignoreParser, match_path, scan_directory
 from serena.util.text_utils import MatchedConsecutiveLines, search_files
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
@@ -493,7 +493,7 @@ class Project(ToStringMixin):
                 ls_specific_settings=ls_specific_settings,
                 trace_lsp_communication=self.serena_config.trace_lsp_communication,
             )
-            self.language_server_manager = LanguageServerManager.from_languages(self.project_config.languages, factory, self)
+            self.language_server_manager = LanguageServerManager.from_languages(self.project_config.language_servers, factory, self)
             return self.language_server_manager
         except Exception as e:
             self._language_server_manager_init_error = e
@@ -512,50 +512,50 @@ class Project(ToStringMixin):
             raise Exception(msg.build())
         return self.language_server_manager
 
-    def add_language(self, language: Language) -> None:
+    def add_language_server(self, ls_id: LanguageServerId) -> None:
         """
-        Adds a new programming language to the project configuration, starting the corresponding
-        language server instance if the LS manager is active.
+        Adds a new language server to the project configuration, starting the corresponding
+        server instance if the LS manager is active.
         The project configuration is saved to disk after adding the language.
 
-        :param language: the programming language to add
+        :param ls_id: the language server to add
         """
-        if language in self.project_config.languages:
-            log.info(f"Language {language.value} is already present in the project configuration.")
+        if ls_id in self.project_config.language_servers:
+            log.info(f"Language server {ls_id.value} is already present in the project configuration.")
             return
 
         # start the language server (if the LS manager is active)
         if self.language_server_manager is None:
             log.info("Language server manager is not active; skipping language server startup for the new language.")
         else:
-            log.info("Adding and starting the language server for new language %s ...", language.value)
-            self.language_server_manager.add_language_server(language)
+            log.info("Adding and starting the language server '%s' ...", ls_id.value)
+            self.language_server_manager.add_language_server(ls_id)
 
         # update the project configuration
-        self.project_config.languages.append(language)
+        self.project_config.language_servers.append(ls_id)
         self.save_config()
 
-    def remove_language(self, language: Language) -> None:
+    def remove_language_server(self, ls_id: LanguageServerId) -> None:
         """
-        Removes a programming language from the project configuration, stopping the corresponding
-        language server instance if the LS manager is active.
+        Removes a language server from the project configuration, stopping the corresponding
+        server instance if the LS manager is active.
         The project configuration is saved to disk after removing the language.
 
-        :param language: the programming language to remove
+        :param ls_id: the language server to remove
         """
-        if language not in self.project_config.languages:
-            log.info(f"Language {language.value} is not present in the project configuration.")
+        if ls_id not in self.project_config.language_servers:
+            log.info(f"Language {ls_id.value} is not present in the project configuration.")
             return
         # update the project configuration
-        self.project_config.languages.remove(language)
+        self.project_config.language_servers.remove(ls_id)
         self.save_config()
 
         # stop the language server (if the LS manager is active)
         if self.language_server_manager is None:
             log.info("Language server manager is not active; skipping language server shutdown for the removed language.")
         else:
-            log.info("Removing and stopping the language server for language %s ...", language.value)
-            self.language_server_manager.remove_language_server(language)
+            log.info("Removing and stopping the language server for language %s ...", ls_id.value)
+            self.language_server_manager.remove_language_server(ls_id)
 
     def ls_sync_file_system_changes(self) -> int:
         """

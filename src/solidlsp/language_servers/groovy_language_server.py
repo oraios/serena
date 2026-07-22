@@ -8,7 +8,7 @@ import os
 import shlex
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.ls_utils import FileUtils, PlatformUtils
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -82,7 +82,7 @@ class GroovyLanguageServer(SolidLanguageServer):
         ls_jar_options = []
 
         if solidlsp_settings.ls_specific_settings:
-            groovy_settings = solidlsp_settings.get_ls_specific_settings(Language.GROOVY)
+            groovy_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.GROOVY)
             jar_options_str = groovy_settings.get("ls_jar_options", "")
             if jar_options_str:
                 ls_jar_options = shlex.split(jar_options_str)
@@ -111,7 +111,7 @@ class GroovyLanguageServer(SolidLanguageServer):
         Setup runtime dependencies for Groovy Language Server and return paths.
         """
         platform_id = PlatformUtils.get_platform_id()
-        groovy_settings = solidlsp_settings.get_ls_specific_settings(Language.GROOVY)
+        groovy_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.GROOVY)
         vscode_java_version = groovy_settings.get("vscode_java_version", DEFAULT_VSCODE_JAVA_VERSION)
         vscode_java_tag = f"v{vscode_java_version.rsplit('-', 1)[0]}"
 
@@ -125,7 +125,7 @@ class GroovyLanguageServer(SolidLanguageServer):
         java_path = None
 
         if solidlsp_settings and solidlsp_settings.ls_specific_settings:
-            groovy_settings = solidlsp_settings.get_ls_specific_settings(Language.GROOVY)
+            groovy_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.GROOVY)
             custom_java_home = groovy_settings.get("ls_java_home_path")
             if custom_java_home:
                 log.info(f"Using custom Java home path from configuration: {custom_java_home}")
@@ -226,7 +226,7 @@ class GroovyLanguageServer(SolidLanguageServer):
         Find Groovy Language Server JAR file
         """
         if solidlsp_settings and solidlsp_settings.ls_specific_settings:
-            groovy_settings = solidlsp_settings.get_ls_specific_settings(Language.GROOVY)
+            groovy_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.GROOVY)
             config_jar_path = groovy_settings.get("ls_jar_path")
             if config_jar_path and os.path.exists(config_jar_path):
                 log.info(f"Using Groovy LS JAR from configuration: {config_jar_path}")

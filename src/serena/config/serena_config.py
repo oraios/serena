@@ -32,10 +32,10 @@ from serena.constants import (
     SERENA_FILE_ENCODING,
     SERENA_MANAGED_DIR_NAME,
 )
-from serena.util.inspection import determine_programming_language_composition
+from serena.util.inspection import compute_language_server_support_composition
 from serena.util.text_utils import glob_match
 from serena.util.yaml import YamlCommentNormalisation, load_yaml, normalise_yaml_comments, save_yaml, transfer_yaml_comments
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 
 from ..analytics import RegisteredTokenCountEstimator
 from ..util.class_decorators import singleton
@@ -321,7 +321,7 @@ class ProjectConfigAutoGenerationMode(Enum):
 @dataclass(kw_only=True)
 class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
     project_name: str
-    languages: list[Language]
+    languages: list[LanguageServerId]
     ignored_paths: list[str] = field(default_factory=list)
     ls_workspace_folders: list[str] = field(default_factory=lambda: ["."])
     ls_additional_workspace_folders: list[str] = field(default_factory=list)
@@ -356,57 +356,58 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         return ["project_name"]
 
     @classmethod
-    def _determine_project_languages(cls, project_root: str, interactive: bool, serena_config: "SerenaConfig") -> list[Language]:
-        log.info("Determining programming languages used in the project")
+    def _determine_project_language_servers(
+        cls, project_root: str, interactive: bool, serena_config: "SerenaConfig"
+    ) -> list[LanguageServerId]:
+        log.info("Determining suitable language servers for the project")
 
-        # determine languages to be considered and their priorities
-        language_priorities = {}
-        for language in Language:
+        # determine language servers to be considered and their priorities
+        ls_priorities = {}
+        for language in LanguageServerId:
             priority = serena_config.get_ls_priority(language)
             if priority > 0:
-                language_priorities[language] = priority
+                ls_priorities[language] = priority
 
-        log.debug("Language priorities: %s", language_priorities)
-        language_composition = determine_programming_language_composition(project_root, list(language_priorities.keys()))
-        log.info("Project language composition: %s", language_composition)
+        log.debug("Language server priorities: %s", ls_priorities)
+        ls_composition = compute_language_server_support_composition(project_root, list(ls_priorities.keys()))
+        log.info("Project composition: %s", ls_composition)
 
-        if len(language_composition) == 0:
+        if len(ls_composition) == 0:
             log.warning(
                 "No source files for supported language servers were found in %s. "
-                "Creating project with no configured languages. "
+                "Creating project with no configured language servers. "
                 "Symbol-related tools (e.g. find_symbol, get_symbols_overview) will not work "
                 "when using the LSP backend. You can add languages later via the Serena dashboard "
                 "or by manually editing the project configuration.",
                 project_root,
             )
-            languages_to_use = []
+            language_servers_to_use = []
         else:
             # sort languages by number of files found
-            languages_and_percentages = sorted(
-                language_composition.items(), key=lambda item: (item[1], language_priorities[item[0]]), reverse=True
-            )
+            languages_and_percentages = sorted(ls_composition.items(), key=lambda item: (item[1], ls_priorities[item[0]]), reverse=True)
             # find the language with the highest percentage and enable it
             top_language_pair = languages_and_percentages[0]
             other_language_pairs = languages_and_percentages[1:]
-            languages_to_use = [top_language_pair[0]]
+            language_servers_to_use = [top_language_pair[0]]
             # if in interactive mode, ask the user which other languages to enable
             if len(other_language_pairs) > 0 and interactive:
                 print(
-                    "Detected and enabled main language '%s' (%.2f%% of source files)." % (top_language_pair[0].value, top_language_pair[1])
+                    "Detected and enabled main language server '%s' (%.2f%% of source files)."
+                    % (top_language_pair[0].value, top_language_pair[1])
                 )
-                print(f"Additionally detected {len(other_language_pairs)} other language(s).\n")
-                print("Note: Enable only languages you need symbolic retrieval/editing capabilities for.")
-                print("      Additional language servers use resources and some languages may require additional")
+                print(f"Additionally detected {len(other_language_pairs)} other applicable language servers.\n")
+                print("Note: Enable only servers for languages you need symbolic retrieval/editing capabilities for.")
+                print("      Additional language servers use resources and some may require additional")
                 print("      system-level installations/configuration (see Serena documentation).")
-                print("\nWhich additional languages do you want to enable?")
-                for lang, perc in other_language_pairs:
-                    enable = ask_yes_no("Enable %s (%.2f%% of source files)?" % (lang.value, perc), default=False)
+                print("\nWhich additional language servers do you want to enable?")
+                for ls_id, perc in other_language_pairs:
+                    enable = ask_yes_no("Enable %s (%.2f%% of source files)?" % (ls_id.value, perc), default=False)
                     if enable:
-                        languages_to_use.append(lang)
+                        language_servers_to_use.append(ls_id)
                 print()
 
-        log.info("Using languages: %s", languages_to_use)
-        return languages_to_use
+        log.info("Using language servers: %s", language_servers_to_use)
+        return language_servers_to_use
 
     @classmethod
     def autogenerate(
@@ -414,7 +415,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         project_root: str | Path,
         serena_config: "SerenaConfig",
         project_name: str | None = None,
-        languages: list[Language] | None = None,
+        languages: list[LanguageServerId] | None = None,
         save_to_disk: bool = True,
         interactive: bool = False,
         asynchronous: bool = False,
@@ -448,7 +449,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
                     use_asynchronous_language_determination = True
                     languages_to_use = []  # temporarily empty, will be determined in background thread
                 else:
-                    determined_languages = cls._determine_project_languages(
+                    determined_languages = cls._determine_project_language_servers(
                         str(project_root), interactive=interactive, serena_config=serena_config
                     )
                     languages_to_use = [l.value for l in determined_languages]
@@ -477,7 +478,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
                 def async_language_determination():
                     try:
                         with LogTime("Asynchronous language determination", logger=log):
-                            project_config.languages = cls._determine_project_languages(
+                            project_config.languages = cls._determine_project_language_servers(
                                 str(project_root), interactive=False, serena_config=serena_config
                             )
                             if save_to_disk:
@@ -579,18 +580,18 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         """
         # map languages to list of enum items, checking for errors
         lang_name_mapping = {"javascript": "typescript"}
-        languages: list[Language] = []
+        languages: list[LanguageServerId] = []
         for language_str in data["languages"]:
             orig_language_str = language_str
             try:
                 language_str = language_str.lower()
                 if language_str in lang_name_mapping:
                     language_str = lang_name_mapping[language_str]
-                language = Language(language_str)
+                language = LanguageServerId(language_str)
                 languages.append(language)
             except ValueError as e:
                 raise ValueError(
-                    f"Invalid language: {orig_language_str}.\nValid language_strings are: {[l.value for l in Language]}"
+                    f"Invalid language: {orig_language_str}.\nValid language_strings are: {[l.value for l in LanguageServerId]}"
                 ) from e
 
         # Validate activation_command_timeout
@@ -1451,18 +1452,18 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
                 log.info(f"Using language backend from global configuration: {language_backend.name}")
         return language_backend
 
-    def get_ls_priority(self, language: Language) -> int:
+    def get_ls_priority(self, ls_id: LanguageServerId) -> int:
         """
         Gets the priority value associated with a language server
 
-        :param language: identifies the language server
+        :param ls_id: identifies the language server
         :return: the integer priority
         """
         if self.ls_priorities is not None:
             try:
-                configured_value = self.ls_priorities.get(language.value)
+                configured_value = self.ls_priorities.get(ls_id.value)
                 if configured_value is not None:
                     return int(configured_value)
             except Exception as e:
-                log.error("Error reading language priority for %s: %s. Using default priority.", language.value, e)
-        return language.get_priority()
+                log.error("Error reading language priority for %s: %s. Using default priority.", ls_id.value, e)
+        return ls_id.get_priority()

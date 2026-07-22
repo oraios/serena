@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
@@ -24,14 +24,14 @@ class TestAdaLanguageServer:
     obviously test-affecting.
     """
 
-    @pytest.mark.parametrize("language_server", [Language.ADA], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.ADA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ADA], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.ADA], indirect=True)
     def test_ls_is_running(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         assert language_server.is_running()
         assert Path(language_server.language_server.repository_root_path).resolve() == repo_path.resolve()
 
-    @pytest.mark.parametrize("language_server", [Language.ADA], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.ADA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ADA], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.ADA], indirect=True)
     def test_find_definition_within_file(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         # main.adb (1-indexed source / 0-indexed LSP):
         #   5/4:    Greeting : constant String := Helper.Greet ("Ada");
@@ -47,8 +47,8 @@ class TestAdaLanguageServer:
         # `Greeting` is declared on LSP line 4; ALS points at the identifier (column 3).
         assert loc["range"]["start"]["line"] == 4
 
-    @pytest.mark.parametrize("language_server", [Language.ADA], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.ADA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ADA], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.ADA], indirect=True)
     def test_find_definition_across_files(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         # main.adb LSP line 4 / column 40 sits on the `G` of `Helper.Greet`:
         #   `   Greeting : constant String := Helper.Greet ("Ada");`
@@ -65,8 +65,8 @@ class TestAdaLanguageServer:
         assert loc["range"]["start"]["line"] == 4
         assert loc["range"]["start"]["character"] == 12
 
-    @pytest.mark.parametrize("language_server", [Language.ADA], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.ADA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ADA], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.ADA], indirect=True)
     def test_find_references_within_file(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         # Click on `Helper` in `with Helper;` (main.adb LSP line 1, column 5).
         # Serena's request_references uses includeDeclaration=False, so we need a symbol with
@@ -80,8 +80,8 @@ class TestAdaLanguageServer:
         # The qualifier usage on LSP line 4 of main.adb must appear among the references.
         assert 4 in ref_lines_in_main, f"Expected reference on line 4 of main.adb, got {ref_lines_in_main}"
 
-    @pytest.mark.parametrize("language_server", [Language.ADA], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.ADA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ADA], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.ADA], indirect=True)
     def test_find_references_across_files(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         # Click on the `G` of `Greet` in the spec:
         # helper.ads LSP line 4: `   function Greet (Name : String) return String;`
@@ -94,7 +94,7 @@ class TestAdaLanguageServer:
         # The call site in main.adb must appear in the references.
         assert "main.adb" in ref_files, f"Expected reference in main.adb, got {ref_files}"
 
-    @pytest.mark.parametrize("language_server", [Language.ADA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ADA], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
         from solidlsp.ls_utils import SymbolUtils
 
@@ -103,7 +103,7 @@ class TestAdaLanguageServer:
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Greet"), "Greet subprogram not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Main"), "Main procedure not found in symbol tree"
 
-    @pytest.mark.parametrize("language_server", [Language.ADA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ADA], indirect=True)
     def test_document_symbols_helper(self, language_server: SolidLanguageServer) -> None:
         doc_symbols = language_server.request_document_symbols(str(Path("src") / "helper.ads"))
         all_symbols, _ = doc_symbols.get_all_symbols_and_roots()
@@ -111,7 +111,7 @@ class TestAdaLanguageServer:
         assert "Helper" in names, f"Helper package not found in helper.ads document symbols. Found: {names}"
         assert "Greet" in names, f"Greet not found in helper.ads document symbols. Found: {names}"
 
-    @pytest.mark.parametrize("language_server", [Language.ADA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ADA], indirect=True)
     def test_document_symbols_hierarchical_structure(self, language_server: SolidLanguageServer) -> None:
         """ALS must return hierarchical DocumentSymbol[] with subprograms nested under their package."""
         all_symbols, root_symbols = language_server.request_document_symbols(str(Path("src") / "helper.ads")).get_all_symbols_and_roots()
@@ -129,7 +129,7 @@ class TestAdaLanguageServer:
         # Greet must NOT appear at root level — that would indicate the flat fallback format.
         assert "Greet" not in root_names, f"Greet should be a child of Helper, not at root level. Roots: {root_names}"
 
-    @pytest.mark.parametrize("language_server", [Language.ADA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ADA], indirect=True)
     def test_bare_symbol_names(self, language_server: SolidLanguageServer) -> None:
         # ALS surfaces a few Ada-specific synthetic groupings as symbols:
         #   - "With clauses" — namespace-kind group containing all `with` statements in a unit

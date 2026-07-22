@@ -39,7 +39,7 @@ from serena.constants import (
 from serena.prompt_factory import SerenaPromptFactory
 from serena.util.cli_util import AutoRegisteringGroup
 from serena.util.logging import MemoryLogHandler
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
 from solidlsp.util.subprocess_util import subprocess_kwargs
 
@@ -701,13 +701,13 @@ class ProjectCommands(AutoRegisteringGroup):
         if os.path.exists(yml_path):
             raise FileExistsError(f"Project file {yml_path} already exists.")
 
-        languages: list[Language] = []
+        languages: list[LanguageServerId] = []
         if language:
             for lang in language:
                 try:
-                    languages.append(Language(lang.lower()))
+                    languages.append(LanguageServerId(lang.lower()))
                 except ValueError:
-                    all_langs = [l.value for l in Language]
+                    all_langs = [l.value for l in LanguageServerId]
                     raise ValueError(f"Unknown language '{lang}'. Supported: {all_langs}")
 
         generated_conf = ProjectConfig.autogenerate(
@@ -801,13 +801,13 @@ class ProjectCommands(AutoRegisteringGroup):
 
             collected_exceptions: list[Exception] = []
             files_failed = []
-            language_file_counts: dict[Language, int] = collections.defaultdict(lambda: 0)
+            language_file_counts: dict[LanguageServerId, int] = collections.defaultdict(lambda: 0)
             last_save_time = time.monotonic()
             for i, f in enumerate(tqdm(files, desc="Indexing")):
                 try:
                     ls = ls_mgr.get_language_server(f)
                     ls.request_document_symbols(f)
-                    language_file_counts[ls.language] += 1
+                    language_file_counts[ls.ls_id] += 1
                 except Exception as e:
                     log.error(f"Failed to index {f}, continuing.")
                     collected_exceptions.append(e)
@@ -882,7 +882,7 @@ class ProjectCommands(AutoRegisteringGroup):
         ls_mgr = proj.create_language_server_manager()
         try:
             for ls in ls_mgr.iter_language_servers():
-                click.echo(f"Indexing for language {ls.language.value} …")
+                click.echo(f"Indexing for language {ls.ls_id.value} …")
                 document_symbols = ls.request_document_symbols(file)
                 symbols, _ = document_symbols.get_all_symbols_and_roots()
                 if verbose:

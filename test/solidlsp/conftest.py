@@ -1,14 +1,14 @@
 from pathlib import Path
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
 
 PYTHON_BACKEND_LANGUAGES = [
-    Language.PYTHON,
-    Language.PYTHON_TY,
-    Language.PYTHON_PYREFLY,
-    Language.PYTHON_BASEDPYRIGHT,
+    LanguageServerId.PYTHON,
+    LanguageServerId.PYTHON_TY,
+    LanguageServerId.PYTHON_PYREFLY,
+    LanguageServerId.PYTHON_BASEDPYRIGHT,
 ]
 
 

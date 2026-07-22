@@ -8,7 +8,7 @@ like request_document_symbols using the bash test repository.
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
@@ -16,13 +16,13 @@ from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name,
 class TestBashLanguageServerBasics:
     """Test basic functionality of the bash language server."""
 
-    @pytest.mark.parametrize("language_server", [Language.BASH], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.BASH], indirect=True)
     def test_bash_language_server_initialization(self, language_server: SolidLanguageServer) -> None:
         """Test that bash language server can be initialized successfully."""
         assert language_server is not None
-        assert language_server.language == Language.BASH
+        assert language_server.ls_id == LanguageServerId.BASH
 
-    @pytest.mark.parametrize("language_server", [Language.BASH], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.BASH], indirect=True)
     def test_bash_request_document_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test request_document_symbols for bash files."""
         # Test getting symbols from main.sh
@@ -38,7 +38,7 @@ class TestBashLanguageServerBasics:
         assert "main" in function_names, "Should find main function"
         assert len(function_symbols) >= 3, f"Should find at least 3 functions, found {len(function_symbols)}"
 
-    @pytest.mark.parametrize("language_server", [Language.BASH], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.BASH], indirect=True)
     def test_bash_request_document_symbols_with_body(self, language_server: SolidLanguageServer) -> None:
         """Test request_document_symbols with body extraction."""
         # Test with include_body=True
@@ -55,7 +55,7 @@ class TestBashLanguageServerBasics:
             assert "function greet_user()" in body, "Function body should contain function definition"
             assert "case" in body.lower(), "Function body should contain case statement"
 
-    @pytest.mark.parametrize("language_server", [Language.BASH], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.BASH], indirect=True)
     def test_bash_utils_functions(self, language_server: SolidLanguageServer) -> None:
         """Test function detection in utils.sh file."""
         # Test with utils.sh as well
@@ -81,7 +81,7 @@ class TestBashLanguageServerBasics:
 
         assert len(utils_function_symbols) >= 8, f"Should find at least 8 functions in utils.sh, found {len(utils_function_symbols)}"
 
-    @pytest.mark.parametrize("language_server", [Language.BASH], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.BASH], indirect=True)
     def test_bash_function_syntax_patterns(self, language_server: SolidLanguageServer) -> None:
         """Test that LSP detects different bash function syntax patterns correctly."""
         # Test main.sh (has both 'function' keyword and traditional syntax)
@@ -121,7 +121,7 @@ class TestBashLanguageServerBasics:
         assert len(main_functions) >= 3, f"Should find at least 3 functions in main.sh, found {len(main_functions)}"
         assert len(utils_functions) >= 8, f"Should find at least 8 functions in utils.sh, found {len(utils_functions)}"
 
-    @pytest.mark.parametrize("language_server", [Language.BASH], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.BASH], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

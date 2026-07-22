@@ -11,7 +11,7 @@ from collections.abc import Iterable
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_utils import DotnetVersion, FileUtils, PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -152,7 +152,7 @@ class OmniSharp(SolidLanguageServer):
         with open(os.path.join(os.path.dirname(__file__), "omnisharp", "runtime_dependencies.json"), encoding="utf-8") as f:
             d = json.load(f)
             del d["_description"]
-        omnisharp_settings = solidlsp_settings.get_ls_specific_settings(Language.CSHARP_OMNISHARP)
+        omnisharp_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.CSHARP_OMNISHARP)
         omnisharp_version = omnisharp_settings.get("omnisharp_version", DEFAULT_OMNISHARP_VERSION)
         razor_omnisharp_version = omnisharp_settings.get("razor_omnisharp_version", DEFAULT_RAZOR_OMNISHARP_VERSION)
         for dependency in d["runtimeDependencies"]:

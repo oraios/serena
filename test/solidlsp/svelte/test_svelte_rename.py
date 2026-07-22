@@ -6,7 +6,7 @@ import pytest
 
 from serena.util.text_utils import find_text_coordinates
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import TextEdit, WorkspaceEdit
 from test.solidlsp.conftest import read_repo_file
 
@@ -52,7 +52,7 @@ def _assert_rename_edit(
 
 
 class TestSvelteRename:
-    @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SVELTE], indirect=True)
     def test_rename_svelte_export_updates_svelte_importers(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "lib", "components", "Counter.svelte")
         coords = find_text_coordinates(read_repo_file(language_server, file_path), r"(count)")
@@ -65,7 +65,7 @@ class TestSvelteRename:
             {"src/lib/components/Counter.svelte", "src/lib/components/Header.svelte"},
         )
 
-    @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SVELTE], indirect=True)
     def test_rename_svelte_export_updates_ts_and_svelte_files(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "lib", "components", "Words.svelte")
         coords = find_text_coordinates(read_repo_file(language_server, file_path), r"(words)")
@@ -83,7 +83,7 @@ class TestSvelteRename:
             },
         )
 
-    @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SVELTE], indirect=True)
     def test_rename_ts_export_declaration_site_workspace_edit(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "routes", "(sverdle)", "words.server.ts")
         coords = find_text_coordinates(read_repo_file(language_server, file_path), r"(allowed)")
@@ -98,7 +98,7 @@ class TestSvelteRename:
             {"src/routes/(sverdle)/words.server.ts"},
         )
 
-    @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SVELTE], indirect=True)
     def test_rename_ts_class_cross_file_workspace_edit_when_supported(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "lib", "game.ts")
         coords = find_text_coordinates(read_repo_file(language_server, file_path), r"(Game)")

@@ -14,7 +14,7 @@ import pytest
 from serena.agent import SerenaAgent
 from serena.project import Project
 from serena.tools import FindReferencingSymbolsTool
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from test.conftest import agent_for_project_context, get_repo_path
 
 pytestmark = pytest.mark.python
@@ -73,10 +73,10 @@ class FileSystemSyncTestCase:
     def run(self, tmp_path):
         # Work on an isolated copy so we can freely create/edit/delete files under the project root.
         repo_root = tmp_path / "repo"
-        shutil.copytree(get_repo_path(Language.PYTHON), repo_root)
+        shutil.copytree(get_repo_path(LanguageServerId.PYTHON), repo_root)
         caller_abs = repo_root / self._CALLER_REL_PATH
 
-        with agent_for_project_context(Language.PYTHON, str(repo_root)) as agent:
+        with agent_for_project_context(LanguageServerId.PYTHON, str(repo_root)) as agent:
             project = agent.get_active_project_or_raise()
 
             # Warm the reference index, then establish the freshness baseline (first poll never notifies).

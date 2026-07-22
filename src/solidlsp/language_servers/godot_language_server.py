@@ -81,7 +81,7 @@ class GodotLanguageServer(SolidLanguageServer):
         self._conn_info = TCPConnectionInfo(host="127.0.0.1", port=port)
         return TCPLanguageServer(
             connection_info=self._conn_info,
-            language=self.language,
+            ls_id=self.ls_id,
             determine_log_level=self._determine_log_level,
             logger=logging_fn,
             request_timeout=request_timeout,

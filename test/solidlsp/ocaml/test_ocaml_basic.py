@@ -3,23 +3,23 @@ import os
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_utils import SymbolUtils
-from test.conftest import language_tests_enabled
+from test.conftest import language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
-@pytest.mark.skipif(not language_tests_enabled(Language.OCAML), reason="OCaml tests are disabled (opam not available)")
+@pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.OCAML), reason="OCaml tests are disabled (opam not available)")
 @pytest.mark.ocaml
 class TestOCamlLanguageServer:
-    @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.OCAML], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
         symbols = language_server.request_full_symbol_tree()
         assert SymbolUtils.symbol_tree_contains_name(symbols, "DemoModule"), "DemoModule not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "fib"), "fib not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "someFunction"), "someFunction function not found in symbol tree"
 
-    @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.OCAML], indirect=True)
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("lib", "test_repo.ml")
 
@@ -38,7 +38,7 @@ class TestOCamlLanguageServer:
         lib_refs = [ref for ref in refs if "lib/test_repo.ml" in ref.get("uri", "")]
         assert len(lib_refs) >= 3, f"Expected at least 3 references in lib/test_repo.ml, found {len(lib_refs)}"
 
-    @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.OCAML], indirect=True)
     def test_mixed_ocaml_modules(self, language_server: SolidLanguageServer) -> None:
         """Test that the language server can find symbols from OCaml modules"""
         # Test that full symbol tree includes symbols from various file types
@@ -52,7 +52,7 @@ class TestOCamlLanguageServer:
 
     def test_reason_file_patterns(self) -> None:
         """Test that OCaml language configuration recognizes Reason file extensions"""
-        ocaml_lang = Language.OCAML
+        ocaml_lang = LanguageServerId.OCAML
         file_matcher = ocaml_lang.get_source_fn_matcher()
 
         # Test OCaml extensions
@@ -67,7 +67,7 @@ class TestOCamlLanguageServer:
         assert not file_matcher.is_relevant_filename("test.py"), "Should not match .py files"
         assert not file_matcher.is_relevant_filename("test.js"), "Should not match .js files"
 
-    @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.OCAML], indirect=True)
     def test_module_hierarchy_navigation(self, language_server: SolidLanguageServer) -> None:
         """Test navigation within module hierarchy including DemoModule."""
         file_path = os.path.join("lib", "test_repo.ml")
@@ -86,7 +86,7 @@ class TestOCamlLanguageServer:
         lib_refs = [ref for ref in refs if "lib/test_repo.ml" in ref.get("uri", "")]
         assert len(lib_refs) >= 1, f"Expected at least 1 reference in lib/test_repo.ml, found {len(lib_refs)}"
 
-    @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.OCAML], indirect=True)
     def test_let_binding_references(self, language_server: SolidLanguageServer) -> None:
         """Test finding references to let-bound values across files."""
         file_path = os.path.join("lib", "test_repo.ml")
@@ -105,7 +105,7 @@ class TestOCamlLanguageServer:
         ml_refs = [ref for ref in refs if "lib/test_repo.ml" in ref.get("uri", "")]
         assert len(ml_refs) >= 1, f"Expected at least 1 reference in lib/test_repo.ml, found {len(ml_refs)}"
 
-    @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.OCAML], indirect=True)
     def test_recursive_function_analysis(self, language_server: SolidLanguageServer) -> None:
         """Test that recursive function calls are properly identified within the definition file."""
         file_path = os.path.join("lib", "test_repo.ml")
@@ -130,7 +130,7 @@ class TestOCamlLanguageServer:
         unique_lines = len(set(ref_lines))
         assert unique_lines >= 2, f"Recursive calls should appear on multiple lines, found {unique_lines} unique lines"
 
-    @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.OCAML], indirect=True)
     def test_open_statement_resolution(self, language_server: SolidLanguageServer) -> None:
         """Test that open statements allow unqualified access to module contents."""
         # In bin/main.ml, fib is called without Test_repo prefix due to 'open Test_repo'
@@ -152,7 +152,7 @@ class TestOCamlLanguageServer:
         symbols, _roots = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         assert len(symbols) > 0, "Should find symbols in main.ml that use opened modules"
 
-    @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.OCAML], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

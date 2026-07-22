@@ -19,7 +19,7 @@ from serena.constants import SERENA_MANAGED_DIR_NAME
 from serena.project import Project
 from serena.util.file_system import GitignoreParser
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.settings import SolidLSPSettings
 
 from .solidlsp.clojure import is_clojure_cli_available
@@ -39,47 +39,47 @@ def resources_dir() -> Path:
 
 
 class LanguageParamRequest:
-    param: Language
+    param: LanguageServerId
 
 
-_LANGUAGE_REPO_ALIASES: dict[Language, Language] = {
-    Language.CPP_CCLS: Language.CPP,
-    Language.PHP_PHPACTOR: Language.PHP,
-    Language.PHP_PHPANTOM: Language.PHP,
-    Language.PYTHON_JEDI: Language.PYTHON,
-    Language.PYTHON_BASEDPYRIGHT: Language.PYTHON,
-    Language.PYTHON_TY: Language.PYTHON,
-    Language.RUBY_SOLARGRAPH: Language.RUBY,
-    Language.PYTHON_TY: Language.PYTHON,
-    Language.PYTHON_PYREFLY: Language.PYTHON,
+_LANGUAGE_REPO_ALIASES: dict[LanguageServerId, LanguageServerId] = {
+    LanguageServerId.CPP_CCLS: LanguageServerId.CPP,
+    LanguageServerId.PHP_PHPACTOR: LanguageServerId.PHP,
+    LanguageServerId.PHP_PHPANTOM: LanguageServerId.PHP,
+    LanguageServerId.PYTHON_JEDI: LanguageServerId.PYTHON,
+    LanguageServerId.PYTHON_BASEDPYRIGHT: LanguageServerId.PYTHON,
+    LanguageServerId.PYTHON_TY: LanguageServerId.PYTHON,
+    LanguageServerId.RUBY_SOLARGRAPH: LanguageServerId.RUBY,
+    LanguageServerId.PYTHON_TY: LanguageServerId.PYTHON,
+    LanguageServerId.PYTHON_PYREFLY: LanguageServerId.PYTHON,
 }
 
-PYTHON_LANGUAGE_BACKENDS = [Language.PYTHON, Language.PYTHON_TY, Language.PYTHON_BASEDPYRIGHT]
+PYTHON_LANGUAGE_BACKENDS = [LanguageServerId.PYTHON, LanguageServerId.PYTHON_TY, LanguageServerId.PYTHON_BASEDPYRIGHT]
 
 
-def get_repo_path(language: Language) -> Path:
+def get_repo_path(language: LanguageServerId) -> Path:
     repo_language = _LANGUAGE_REPO_ALIASES.get(language, language)
     return Path(__file__).parent / "resources" / "repos" / repo_language / "test_repo"
 
 
 def _create_ls(
-    language: Language,
+    ls_id: LanguageServerId,
     repo_path: str | None = None,
     ignored_paths: list[str] | None = None,
     trace_lsp_communication: bool = False,
-    ls_specific_settings: dict[Language, dict[str, Any]] | None = None,
+    ls_specific_settings: dict[LanguageServerId, dict[str, Any]] | None = None,
     workspace_folders: list[str] | None = None,
     additional_workspace_folders: list[str] | None = None,
     solidlsp_dir: Path | None = None,
 ) -> SolidLanguageServer:
     ignored_paths = ignored_paths or []
     if repo_path is None:
-        repo_path = str(get_repo_path(language))
+        repo_path = str(get_repo_path(ls_id))
     gitignore_parser = GitignoreParser(str(repo_path))
     for spec in gitignore_parser.get_ignore_specs():
         ignored_paths.extend(spec.patterns)
     config = LanguageServerConfig(
-        code_language=language,
+        ls_id=ls_id,
         ignored_paths=ignored_paths,
         trace_lsp_communication=trace_lsp_communication,
         workspace_folders=workspace_folders or ["."],
@@ -100,17 +100,17 @@ def _create_ls(
 
 @contextmanager
 def start_ls_context(
-    language: Language,
+    ls_id: LanguageServerId,
     repo_path: str | None = None,
     ignored_paths: list[str] | None = None,
     trace_lsp_communication: bool = False,
-    ls_specific_settings: dict[Language, dict[str, Any]] | None = None,
+    ls_specific_settings: dict[LanguageServerId, dict[str, Any]] | None = None,
     workspace_folders: list[str] | None = None,
     additional_workspace_folders: list[str] | None = None,
     solidlsp_dir: Path | None = None,
 ) -> Iterator[SolidLanguageServer]:
     ls = _create_ls(
-        language,
+        ls_id,
         repo_path,
         ignored_paths,
         trace_lsp_communication,
@@ -119,14 +119,14 @@ def start_ls_context(
         additional_workspace_folders,
         solidlsp_dir,
     )
-    log.info(f"Starting language server for {language} {repo_path}")
+    log.info(f"Starting language server for {ls_id} {repo_path}")
     with ls.start_server_context():
         yield ls
 
 
 @contextmanager
-def start_default_ls_context(language: Language) -> Iterator[SolidLanguageServer]:
-    with start_ls_context(language) as ls:
+def start_default_ls_context(ls_id: LanguageServerId) -> Iterator[SolidLanguageServer]:
+    with start_ls_context(ls_id) as ls:
         yield ls
 
 
@@ -134,8 +134,8 @@ def create_default_serena_config():
     return SerenaConfig().with_headless_mode_overrides()
 
 
-def _create_default_project(language: Language, repo_root_override: str | None = None) -> Project:
-    repo_path = str(get_repo_path(language)) if repo_root_override is None else repo_root_override
+def _create_default_project(ls_id: LanguageServerId, repo_root_override: str | None = None) -> Project:
+    repo_path = str(get_repo_path(ls_id)) if repo_root_override is None else repo_root_override
     return Project.load(repo_path, serena_config=create_default_serena_config())
 
 
@@ -193,9 +193,9 @@ def language_server(request: LanguageParamRequest):
 
 
 @contextmanager
-def project_context(language: Language, repo_root_override: str | None = None) -> Iterator[Project]:
+def project_context(ls_id: LanguageServerId, repo_root_override: str | None = None) -> Iterator[Project]:
     """Context manager that creates a Project for the specified language and ensures proper cleanup."""
-    project = _create_default_project(language, repo_root_override)
+    project = _create_default_project(ls_id, repo_root_override)
     try:
         yield project
     finally:
@@ -233,16 +233,16 @@ def project(request: LanguageParamRequest, repo_root_override: str | None = None
 
 
 @contextmanager
-def project_with_ls_context(language: Language, repo_root_override: str | None = None) -> Iterator[Project]:
+def project_with_ls_context(ls_id: LanguageServerId, repo_root_override: str | None = None) -> Iterator[Project]:
     """Context manager that creates a Project with an active language server for the specified language."""
-    with project_context(language, repo_root_override) as project:
+    with project_context(ls_id, repo_root_override) as project:
         project.create_language_server_manager()
         yield project
 
 
 @contextmanager
-def agent_for_project_context(language: Language, repo_root_override: str | None = None) -> Iterator[SerenaAgent]:
-    project_root = str(get_repo_path(language)) if repo_root_override is None else repo_root_override
+def agent_for_project_context(ls_id: LanguageServerId, repo_root_override: str | None = None) -> Iterator[SerenaAgent]:
+    project_root = str(get_repo_path(ls_id)) if repo_root_override is None else repo_root_override
     agent = SerenaAgent(project=project_root, serena_config=create_default_serena_config())
 
     # wait for agent to be ready
@@ -273,50 +273,50 @@ is_macos = platform.system() == "Darwin"
 is_linux = platform.system() == "Linux"
 
 
-_LANGUAGE_PYTEST_MARKERS: dict[Language, list[MarkDecorator | Mark]] = {
-    Language.ADA: [pytest.mark.ada],
-    Language.CLOJURE: [pytest.mark.clojure],
-    Language.CPP: [pytest.mark.cpp],
-    Language.CPP_CCLS: [pytest.mark.cpp],
-    Language.CUE: [pytest.mark.cue],
-    Language.CSHARP: [pytest.mark.csharp],
-    Language.FSHARP: [pytest.mark.fsharp],
-    Language.GO: [pytest.mark.go],
-    Language.HAXE: [pytest.mark.haxe],
-    Language.JAVA: [pytest.mark.java],
-    Language.KOTLIN: [pytest.mark.kotlin],
-    Language.LEAN4: [pytest.mark.lean4],
-    Language.LATEX: [pytest.mark.latex],
-    Language.MSL: [pytest.mark.msl],
-    Language.PHP: [pytest.mark.php],
-    Language.PHP_PHPACTOR: [pytest.mark.php],
-    Language.PHP_PHPANTOM: [pytest.mark.php],
-    Language.POWERSHELL: [pytest.mark.powershell],
-    Language.PYTHON: [pytest.mark.python],
-    Language.PYTHON_JEDI: [pytest.mark.python],
-    Language.PYTHON_TY: [pytest.mark.python],
-    Language.PYTHON_PYREFLY: [pytest.mark.python],
-    Language.PYTHON_BASEDPYRIGHT: [pytest.mark.python],
-    Language.RUST: [pytest.mark.rust],
-    Language.TYPESCRIPT: [pytest.mark.typescript],
-    Language.BSL: [pytest.mark.bsl],
-    Language.SVELTE: [pytest.mark.svelte],
-    Language.ANGULAR: [pytest.mark.angular],
-    Language.HTML: [pytest.mark.html],
-    Language.SCSS: [pytest.mark.scss],
+_LANGUAGE_PYTEST_MARKERS: dict[LanguageServerId, list[MarkDecorator | Mark]] = {
+    LanguageServerId.ADA: [pytest.mark.ada],
+    LanguageServerId.CLOJURE: [pytest.mark.clojure],
+    LanguageServerId.CPP: [pytest.mark.cpp],
+    LanguageServerId.CPP_CCLS: [pytest.mark.cpp],
+    LanguageServerId.CUE: [pytest.mark.cue],
+    LanguageServerId.CSHARP: [pytest.mark.csharp],
+    LanguageServerId.FSHARP: [pytest.mark.fsharp],
+    LanguageServerId.GO: [pytest.mark.go],
+    LanguageServerId.HAXE: [pytest.mark.haxe],
+    LanguageServerId.JAVA: [pytest.mark.java],
+    LanguageServerId.KOTLIN: [pytest.mark.kotlin],
+    LanguageServerId.LEAN4: [pytest.mark.lean4],
+    LanguageServerId.LATEX: [pytest.mark.latex],
+    LanguageServerId.MSL: [pytest.mark.msl],
+    LanguageServerId.PHP: [pytest.mark.php],
+    LanguageServerId.PHP_PHPACTOR: [pytest.mark.php],
+    LanguageServerId.PHP_PHPANTOM: [pytest.mark.php],
+    LanguageServerId.POWERSHELL: [pytest.mark.powershell],
+    LanguageServerId.PYTHON: [pytest.mark.python],
+    LanguageServerId.PYTHON_JEDI: [pytest.mark.python],
+    LanguageServerId.PYTHON_TY: [pytest.mark.python],
+    LanguageServerId.PYTHON_PYREFLY: [pytest.mark.python],
+    LanguageServerId.PYTHON_BASEDPYRIGHT: [pytest.mark.python],
+    LanguageServerId.RUST: [pytest.mark.rust],
+    LanguageServerId.TYPESCRIPT: [pytest.mark.typescript],
+    LanguageServerId.BSL: [pytest.mark.bsl],
+    LanguageServerId.SVELTE: [pytest.mark.svelte],
+    LanguageServerId.ANGULAR: [pytest.mark.angular],
+    LanguageServerId.HTML: [pytest.mark.html],
+    LanguageServerId.SCSS: [pytest.mark.scss],
 }
 
 
-def get_pytest_markers(language: Language) -> list[MarkDecorator | Mark]:
-    """Pytest markers for a language.
+def get_pytest_markers(ls_id: LanguageServerId) -> list[MarkDecorator | Mark]:
+    """Pytest markers for a language server.
 
-    Returns the primary language marker plus the central enablement skip derived from
+    Returns the primary language server marker plus the central enablement skip derived from
     ``language_tests_enabled()`` -- so per-language availability/reliability lives in exactly one
     place (``_determine_disabled_languages``) instead of being duplicated per marker or per test file.
     """
     return [
-        *_LANGUAGE_PYTEST_MARKERS[language],
-        pytest.mark.skipif(not language_tests_enabled(language), reason=f"{language.value} tests are disabled in this environment"),
+        *_LANGUAGE_PYTEST_MARKERS[ls_id],
+        pytest.mark.skipif(not language_server_tests_enabled(ls_id), reason=f"{ls_id.value} tests are disabled in this environment"),
     ]
 
 
@@ -395,9 +395,9 @@ def _is_ocaml_lsp_available() -> bool:
         return False
 
 
-def _determine_disabled_languages() -> list[Language]:
+def _determine_disabled_language_servers() -> list[LanguageServerId]:
     """
-    Determine which language tests are disabled in the current environment.
+    Determine which language server tests are disabled in the current environment.
 
     Every language falls into exactly ONE of the categories below; a language that is not appended
     here is **category 4 (enabled everywhere)**, e.g. python, typescript, go, java, kotlin-locally.
@@ -412,112 +412,112 @@ def _determine_disabled_languages() -> list[Language]:
     4. ENABLED EVERYWHERE -- not listed in this function at all.
     5. DISABLED ONLY ON CI (resource/stability reasons) even though the precondition holds locally.
     """
-    result: list[Language] = []
+    result: list[LanguageServerId] = []
 
     # === 1. Always disabled (flaky / broken everywhere) ===
-    result.append(Language.BSL)  # 1C:Enterprise; niche and the tests are slow and flaky
-    result.append(Language.FSHARP)  # F# language server is currently unreliable
+    result.append(LanguageServerId.BSL)  # 1C:Enterprise; niche and the tests are slow and flaky
+    result.append(LanguageServerId.FSHARP)  # F# language server is currently unreliable
 
     # === 2. Disabled off-CI if the precondition is missing; expected to be present on CI ===
     if _sh.which("terraform") is None and not is_ci:
-        result.append(Language.TERRAFORM)
+        result.append(LanguageServerId.TERRAFORM)
     if _sh.which("regal") is None and not is_ci:
-        result.append(Language.REGO)
+        result.append(LanguageServerId.REGO)
     if _sh.which("elm") is None and not is_ci:
-        result.append(Language.ELM)
+        result.append(LanguageServerId.ELM)
     # qmlls is installed (standalone build; see pytest.yml) only on the Ubuntu other-langs CI batch. It is
     # expected there, so a missing binary on Linux CI is NOT skipped here -- the test runs and fails loudly,
     # catching a CI setup regression. On Windows/macOS CI (never installed) and off-CI without the binary it skips.
     if (_sh.which("qmlls6") is None and _sh.which("qmlls") is None) and not (is_ci and is_linux):
-        result.append(Language.QML)
+        result.append(LanguageServerId.QML)
 
     # === 3. Disabled wherever the precondition is missing (including on CI) ===
     # 3a. Platform precondition: these language servers have no native Windows support.
     if is_windows:
-        result.append(Language.ANSIBLE)  # ansible-language-server has no native Windows support
+        result.append(LanguageServerId.ANSIBLE)  # ansible-language-server has no native Windows support
     if not is_macos:
-        result.append(Language.SWIFT)  # swiftly toolchain is only set up on the macOS native batch
+        result.append(LanguageServerId.SWIFT)  # swiftly toolchain is only set up on the macOS native batch
     # 3b. Toolchain / language-server availability (the LS/compiler must be on PATH or installed).
     if _sh.which("clangd") is None:
-        result.append(Language.CPP)
+        result.append(LanguageServerId.CPP)
     if _sh.which("ccls") is None or is_windows:  # no recent ccls binary is available for Windows
-        result.append(Language.CPP_CCLS)
+        result.append(LanguageServerId.CPP_CCLS)
     if _sh.which("php") is None:
-        result.append(Language.PHP_PHPACTOR)
-        result.append(Language.PHP_PHPANTOM)
+        result.append(LanguageServerId.PHP_PHPACTOR)
+        result.append(LanguageServerId.PHP_PHPANTOM)
     if not is_clojure_cli_available():
-        result.append(Language.CLOJURE)
+        result.append(LanguageServerId.CLOJURE)
     if _sh.which("verible-verilog-ls") is None:
-        result.append(Language.SYSTEMVERILOG)
+        result.append(LanguageServerId.SYSTEMVERILOG)
     if not _is_matlab_available():
-        result.append(Language.MATLAB)
+        result.append(LanguageServerId.MATLAB)
     if ERLANG_LS_UNAVAILABLE:  # no Erlang-OTP / no rebar3 / Windows -- see test/solidlsp/erlang
-        result.append(Language.ERLANG)
+        result.append(LanguageServerId.ERLANG)
     if EXPERT_UNAVAILABLE:  # Elixir not installed -- see test/solidlsp/elixir
-        result.append(Language.ELIXIR)
+        result.append(LanguageServerId.ELIXIR)
     if _sh.which("lean") is None:
-        result.append(Language.LEAN4)
+        result.append(LanguageServerId.LEAN4)
     if _sh.which("crystalline") is None:
-        result.append(Language.CRYSTAL)
+        result.append(LanguageServerId.CRYSTAL)
     if _sh.which("julia") is None:  # LanguageServer.jl is auto-installed by the LS when julia is present
-        result.append(Language.JULIA)
+        result.append(LanguageServerId.JULIA)
     if _sh.which("nixd") is None:
-        result.append(Language.NIX)
+        result.append(LanguageServerId.NIX)
     if _sh.which("haskell-language-server-wrapper") is None:
-        result.append(Language.HASKELL)
+        result.append(LanguageServerId.HASKELL)
     if not _is_r_language_server_available():  # `which("R")` isn't enough -- needs the languageserver package
-        result.append(Language.R)
+        result.append(LanguageServerId.R)
     if not _is_ocaml_lsp_available():  # opam alone isn't enough -- needs the ocaml-lsp-server package
-        result.append(Language.OCAML)
+        result.append(LanguageServerId.OCAML)
     if not _is_perl_language_server_available():  # perl ships with the OS; the LS module is the real signal
-        result.append(Language.PERL)
+        result.append(LanguageServerId.PERL)
 
     # === 4. Enabled everywhere: every language NOT listed in this function (python, go, java, ...) ===
 
     # === 5. Disabled only on CI (works locally; too unstable/costly on the CI runners) ===
     if is_ci:
-        result.append(Language.KOTLIN)  # IntelliJ-based Kotlin LSP crashes on JVM restart under CI memory limits
+        result.append(LanguageServerId.KOTLIN)  # IntelliJ-based Kotlin LSP crashes on JVM restart under CI memory limits
 
     return result
 
 
-_disabled_languages = _determine_disabled_languages()
+_disabled_language_servers = _determine_disabled_language_servers()
 
 
-def language_tests_enabled(language: Language) -> bool:
+def language_server_tests_enabled(ls_id: LanguageServerId) -> bool:
     """
-    Check if tests for the given language are enabled in the current environment.
+    Check if tests for the given language server are enabled in the current environment.
 
-    :param language: the language to check
+    :param ls_id: the language server to check
     :return: True if tests for the language are enabled, False otherwise
     """
-    return language not in _disabled_languages
+    return ls_id not in _disabled_language_servers
 
 
-def language_supports_implementation(language: Language) -> bool:
+def ls_supports_implementation(language: LanguageServerId) -> bool:
     return language.supports_implementation_request()
 
 
-def languages_supporting_implementation(*languages: Language) -> list[Language]:
-    return [language for language in languages if language_supports_implementation(language)]
+def language_servers_supporting_implementation(*languages: LanguageServerId) -> list[LanguageServerId]:
+    return [language for language in languages if ls_supports_implementation(language)]
 
 
 _VERIFIED_IMPLEMENTATION_LANGUAGES = {
-    Language.ANGULAR,
-    Language.CSHARP,
-    Language.GO,
-    Language.JAVA,
-    Language.RUST,
-    Language.TYPESCRIPT,
+    LanguageServerId.ANGULAR,
+    LanguageServerId.CSHARP,
+    LanguageServerId.GO,
+    LanguageServerId.JAVA,
+    LanguageServerId.RUST,
+    LanguageServerId.TYPESCRIPT,
 }
 
 
-def language_has_verified_implementation_support(language: Language) -> bool:
+def ls_has_verified_implementation_support(language: LanguageServerId) -> bool:
     """
     True only for languages where the server advertises implementation support and
     the repo fixtures contain a verified working go-to-implementation scenario.
     """
-    return language in _VERIFIED_IMPLEMENTATION_LANGUAGES and language_supports_implementation(language)
+    return language in _VERIFIED_IMPLEMENTATION_LANGUAGES and ls_supports_implementation(language)
 
 
 def find_identifier_position(file_path: Path, identifier: str) -> tuple[int, int] | None:

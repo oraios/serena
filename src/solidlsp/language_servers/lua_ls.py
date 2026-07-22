@@ -15,7 +15,7 @@ from pathlib import Path
 from overrides import override
 
 from solidlsp.ls import RawDocumentSymbol, SolidLanguageServer
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import FileUtils
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -91,7 +91,7 @@ class LuaLanguageServer(SolidLanguageServer):
         ]
 
         if solidlsp_settings is not None:
-            lua_settings = solidlsp_settings.get_ls_specific_settings(Language.LUA)
+            lua_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.LUA)
             lua_ls_version = lua_settings.get("lua_language_server_version", DEFAULT_LUA_LS_VERSION)
             ls_resource_dir = _lua_ls_install_dir(LuaLanguageServer.ls_resources_dir(solidlsp_settings), lua_ls_version)
             possible_paths.extend(
@@ -118,7 +118,7 @@ class LuaLanguageServer(SolidLanguageServer):
     @staticmethod
     def _download_lua_ls(solidlsp_settings: SolidLSPSettings) -> str:
         """Download and install lua-language-server if not present."""
-        lua_settings = solidlsp_settings.get_ls_specific_settings(Language.LUA)
+        lua_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.LUA)
         lua_ls_version = lua_settings.get("lua_language_server_version", DEFAULT_LUA_LS_VERSION)
         system = platform.system()
         machine = platform.machine().lower()

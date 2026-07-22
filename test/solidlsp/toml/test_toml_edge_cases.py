@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 
 pytestmark = pytest.mark.toml
 
@@ -22,8 +22,8 @@ pytestmark = pytest.mark.toml
 class TestTomlEdgeCases:
     """Test TOML language server handling of edge cases and advanced features."""
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_inline_table_detection(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that inline tables are properly detected."""
         all_symbols, root_symbols = language_server.request_document_symbols("config.toml").get_all_symbols_and_roots()
@@ -42,8 +42,8 @@ class TestTomlEdgeCases:
         # Inline tables should be kind 19 (object)
         assert endpoint_symbol.get("kind") == 19, "Inline table should have kind 19 (object)"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_nested_table_detection(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that deeply nested tables are properly detected."""
         all_symbols, root_symbols = language_server.request_document_symbols("config.toml").get_all_symbols_and_roots()
@@ -57,8 +57,8 @@ class TestTomlEdgeCases:
         assert has_ssl, f"Should detect 'server.ssl' nested table, got: {symbol_names}"
         assert has_pool, f"Should detect 'database.pool' nested table, got: {symbol_names}"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_array_of_tables_detection(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that [[array_of_tables]] syntax is properly detected."""
         all_symbols, root_symbols = language_server.request_document_symbols("config.toml").get_all_symbols_and_roots()
@@ -75,8 +75,8 @@ class TestTomlEdgeCases:
         # Array of tables should be kind 18 (array)
         assert endpoints_symbol.get("kind") == 18, "Array of tables should have kind 18 (array)"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_multiline_string_handling(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that multiline strings are handled correctly."""
         all_symbols, root_symbols = language_server.request_document_symbols("config.toml").get_all_symbols_and_roots()
@@ -93,8 +93,8 @@ class TestTomlEdgeCases:
         # String type should be kind 15
         assert conn_symbol.get("kind") == 15, "Multiline string should have kind 15 (string)"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_array_value_detection(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that array values are properly detected."""
         all_symbols, root_symbols = language_server.request_document_symbols("config.toml").get_all_symbols_and_roots()
@@ -111,8 +111,8 @@ class TestTomlEdgeCases:
         # Arrays should have kind 18
         assert outputs_symbol.get("kind") == 18, "'outputs' should have kind 18 (array)"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_float_value_detection(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that float values are properly detected."""
         all_symbols, root_symbols = language_server.request_document_symbols("config.toml").get_all_symbols_and_roots()
@@ -128,8 +128,8 @@ class TestTomlEdgeCases:
         # Numbers should have kind 16
         assert timeout_symbol.get("kind") == 16, "'timeout' should have kind 16 (number)"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_datetime_value_detection(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that datetime values are detected."""
         all_symbols, root_symbols = language_server.request_document_symbols("config.toml").get_all_symbols_and_roots()
@@ -141,8 +141,8 @@ class TestTomlEdgeCases:
         assert "created" in symbol_names, "Should detect 'created' datetime field"
         assert "updated" in symbol_names, "Should detect 'updated' datetime field"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_symbol_body_with_inline_table(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that symbol bodies include inline table content."""
         all_symbols, root_symbols = language_server.request_document_symbols("config.toml").get_all_symbols_and_roots()
@@ -156,8 +156,8 @@ class TestTomlEdgeCases:
             # Body should contain the inline table syntax
             assert "url" in body or "version" in body, f"Body should contain inline table contents, got: {body}"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_symbol_ranges_in_config(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that symbol ranges are correct in config.toml."""
         all_symbols, root_symbols = language_server.request_document_symbols("config.toml").get_all_symbols_and_roots()
@@ -172,8 +172,8 @@ class TestTomlEdgeCases:
         assert server_range["start"]["line"] >= 0, "Server should start at or near the beginning"
         assert server_range["end"]["line"] > server_range["start"]["line"], "Server block should span multiple lines"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_comment_handling(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that comments don't interfere with symbol detection."""
         all_symbols, root_symbols = language_server.request_document_symbols("config.toml").get_all_symbols_and_roots()
@@ -186,8 +186,8 @@ class TestTomlEdgeCases:
 
         assert len(found_sections) >= 4, f"Should find most sections despite comments, found: {found_sections}"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_special_characters_in_strings(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that strings with escape sequences are handled."""
         all_symbols, root_symbols = language_server.request_document_symbols("config.toml").get_all_symbols_and_roots()
@@ -203,8 +203,8 @@ class TestTomlEdgeCases:
 class TestTomlDependencyTables:
     """Test handling of dependency-style tables common in Cargo.toml and pyproject.toml."""
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_complex_dependency_inline_table(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test detection of complex inline table dependencies like serde = { version = "1.0", features = ["derive"] }."""
         all_symbols, root_symbols = language_server.request_document_symbols("Cargo.toml").get_all_symbols_and_roots()
@@ -222,8 +222,8 @@ class TestTomlDependencyTables:
         # Dependency with inline table should be kind 19 (object)
         assert serde_symbol.get("kind") == 19, "Complex dependency should have kind 19 (object)"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_simple_dependency_string(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test detection of simple string dependencies like proptest = "1.0"."""
         all_symbols, root_symbols = language_server.request_document_symbols("Cargo.toml").get_all_symbols_and_roots()
@@ -240,8 +240,8 @@ class TestTomlDependencyTables:
         # Simple string dependency should be kind 15 (string)
         assert proptest_symbol.get("kind") == 15, "Simple string dependency should have kind 15 (string)"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_pyproject_dependencies_array(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test detection of pyproject.toml dependencies array."""
         all_symbols, root_symbols = language_server.request_document_symbols("pyproject.toml").get_all_symbols_and_roots()
@@ -258,8 +258,8 @@ class TestTomlDependencyTables:
         # Dependencies array should be kind 18 (array)
         assert deps_symbol.get("kind") == 18, "Dependencies array should have kind 18 (array)"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_optional_dependencies_table(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test detection of optional-dependencies in pyproject.toml."""
         all_symbols, root_symbols = language_server.request_document_symbols("pyproject.toml").get_all_symbols_and_roots()

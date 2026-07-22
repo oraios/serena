@@ -10,7 +10,7 @@ import pytest
 
 from serena.util.text_utils import find_text_coordinates
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import Location
 from test.solidlsp.conftest import read_repo_file
 
@@ -35,7 +35,7 @@ def _rel(location: Location) -> str:
 class TestLatexReferences:
     """texlab reference/definition resolution within and across files."""
 
-    @pytest.mark.parametrize("language_server", [Language.LATEX], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LATEX], indirect=True)
     def test_within_file_ref_resolves_to_section(self, language_server: SolidLanguageServer) -> None:
         r"""A ``\ref`` resolves to the sectioning command labelled in the same file."""
         ref = _coords(language_server, MAIN, r"forward to Section~\\ref\{(sec:methods)\}")
@@ -47,7 +47,7 @@ class TestLatexReferences:
         assert _rel(definitions[0]) == "main.tex"
         assert definitions[0]["range"]["start"]["line"] == section.line
 
-    @pytest.mark.parametrize("language_server", [Language.LATEX], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LATEX], indirect=True)
     def test_within_file_references_list_all_uses(self, language_server: SolidLanguageServer) -> None:
         r"""Requesting references on a within-file label returns both ``\ref`` uses."""
         label = _coords(language_server, MAIN, r"\\label\{(sec:methods)\}")
@@ -57,7 +57,7 @@ class TestLatexReferences:
         assert {_rel(ref) for ref in references} == {"main.tex"}
         assert len(references) == 2, references
 
-    @pytest.mark.parametrize("language_server", [Language.LATEX], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LATEX], indirect=True)
     def test_cross_file_ref_resolves_across_files(self, language_server: SolidLanguageServer) -> None:
         r"""A ``\ref`` in main.tex resolves to a ``\label`` defined in another file."""
         ref = _coords(language_server, MAIN, r"see Section~\\ref\{(sec:background)\}")
@@ -69,7 +69,7 @@ class TestLatexReferences:
         assert _rel(definitions[0]) == "sections/background.tex"
         assert definitions[0]["range"]["start"]["line"] == section.line
 
-    @pytest.mark.parametrize("language_server", [Language.LATEX], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LATEX], indirect=True)
     def test_cross_file_references_point_back_to_main(self, language_server: SolidLanguageServer) -> None:
         r"""References on a cross-file label include the ``\ref`` site in main.tex."""
         label = _coords(language_server, BACKGROUND, r"\\label\{(sec:background)\}")
@@ -79,7 +79,7 @@ class TestLatexReferences:
 
         assert any(_rel(ref) == "main.tex" and ref["range"]["start"]["line"] == ref_in_main.line for ref in references), references
 
-    @pytest.mark.parametrize("language_server", [Language.LATEX], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LATEX], indirect=True)
     def test_citation_resolves_to_bib_entry(self, language_server: SolidLanguageServer) -> None:
         r"""A ``\cite`` resolves to its entry in the BibTeX file."""
         cite = _coords(language_server, MAIN, r"Knuth~\\cite\{(knuth1984)\}")

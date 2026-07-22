@@ -12,7 +12,7 @@ from typing import Any
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import DidChangeConfigurationParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -120,7 +120,7 @@ class PerlLanguageServer(SolidLanguageServer):
         ``ignore_dirs``); falls back to the defaults otherwise. Extracted as a pure function so the
         configuration plumbing can be unit-tested without starting the language server.
         """
-        perl_settings = solidlsp_settings.get_ls_specific_settings(Language.PERL)
+        perl_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.PERL)
         file_filter = perl_settings.get("file_filter", list(_DEFAULT_FILE_FILTER))
         ignore_dirs = perl_settings.get("ignore_dirs", list(_DEFAULT_IGNORE_DIRS))
         return file_filter, ignore_dirs
@@ -135,7 +135,7 @@ class PerlLanguageServer(SolidLanguageServer):
         language composition detection. Without this, ``find_symbol`` would not surface symbols in
         files whose extensions were added to ``file_filter`` (#1449).
         """
-        Language.PERL.get_source_fn_matcher().add_extensions(*file_filter)
+        LanguageServerId.PERL.get_source_fn_matcher().add_extensions(*file_filter)
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         # Setup runtime dependencies before initializing

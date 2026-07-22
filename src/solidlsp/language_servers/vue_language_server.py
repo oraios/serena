@@ -22,7 +22,7 @@ from solidlsp.language_servers.typescript_language_server import (
     prefer_non_node_modules_definition,
 )
 from solidlsp.ls import LanguageServerDependencyProvider, LSPFileBuffer, SolidLanguageServer
-from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
+from solidlsp.ls_config import FilenameMatcher, LanguageServerConfig, LanguageServerId
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_types import Location
 from solidlsp.ls_utils import PathUtils
@@ -39,19 +39,19 @@ class VueTypeScriptServer(TypeScriptLanguageServer):
 
     @classmethod
     @override
-    def get_language_enum_instance(cls) -> Language:
+    def get_language_server_id(cls) -> LanguageServerId:
         """Return TYPESCRIPT since this is a TypeScript language server variant.
 
         Note: VueTypeScriptServer is a companion server that uses TypeScript's language server
         with the Vue TypeScript plugin. It reports as TYPESCRIPT to maintain compatibility
         with the TypeScript language server infrastructure.
         """
-        return Language.TYPESCRIPT
+        return LanguageServerId.TYPESCRIPT
 
     def get_source_fn_matcher(self) -> FilenameMatcher:
         # must override with Vue-specific matcher to ensure .vue files are included (as they can be discovered via references,
         # for instance; otherwise, we may find references in .vue files but then filter the results out, because .vue files are ignored.)
-        return Language.VUE.get_source_fn_matcher()
+        return LanguageServerId.VUE.get_source_fn_matcher()
 
     class DependencyProvider(TypeScriptLanguageServer.DependencyProvider):
         """Dependency provider that returns a pre-resolved executable path.
@@ -536,10 +536,10 @@ class VueLanguageServer(SolidLanguageServer):
         assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
         # Get TypeScript version settings from TypeScript language server settings
-        typescript_config = solidlsp_settings.get_ls_specific_settings(Language.TYPESCRIPT)
+        typescript_config = solidlsp_settings.get_ls_specific_settings(LanguageServerId.TYPESCRIPT)
         typescript_version = typescript_config.get("typescript_version", "5.9.3")
         typescript_language_server_version = typescript_config.get("typescript_language_server_version", "5.1.3")
-        vue_config = solidlsp_settings.get_ls_specific_settings(Language.VUE)
+        vue_config = solidlsp_settings.get_ls_specific_settings(LanguageServerId.VUE)
         vue_language_server_version = vue_config.get("vue_language_server_version", "3.1.5")
         npm_registry = vue_config.get("npm_registry", typescript_config.get("npm_registry"))
 
@@ -659,7 +659,7 @@ class VueLanguageServer(SolidLanguageServer):
             vue_ts_plugin_path = os.path.join(self._vue_ls_dir, "node_modules", "@vue", "typescript-plugin")
 
             ts_config = LanguageServerConfig(
-                code_language=Language.TYPESCRIPT,
+                ls_id=LanguageServerId.TYPESCRIPT,
                 trace_lsp_communication=False,
             )
 

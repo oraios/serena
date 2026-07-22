@@ -13,7 +13,7 @@ from overrides import override
 from serena.util.dotnet import DotNETUtil
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -71,7 +71,7 @@ class FSharpLanguageServer(SolidLanguageServer):
         """
         Setup runtime dependencies for F# Language Server and return the command to start the server.
         """
-        fsharp_settings = solidlsp_settings.get_ls_specific_settings(Language.FSHARP)
+        fsharp_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.FSHARP)
         fsautocomplete_version = fsharp_settings.get("fsautocomplete_version", DEFAULT_FSAUTOCOMPLETE_VERSION)
         dotnet_exe = DotNETUtil("8.0", allow_higher_version=True).get_dotnet_path_or_raise()
 

@@ -14,7 +14,7 @@ from typing import IO, Any, AnyStr, cast
 
 from sensai.util.string import ToStringMixin
 
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_request import LanguageServerRequest
 from solidlsp.lsp_protocol_handler.lsp_requests import LspNotification
@@ -53,10 +53,10 @@ class LanguageServerTerminatedException(Exception):
     Exception raised when the language server process has terminated unexpectedly.
     """
 
-    def __init__(self, message: str, language: Language, cause: Exception | None = None) -> None:
+    def __init__(self, message: str, ls_id: LanguageServerId, cause: Exception | None = None) -> None:
         super().__init__(message)
         self.message = message
-        self.language = language
+        self.ls_id = ls_id
         self.cause = cause
 
     def __str__(self) -> str:
@@ -116,18 +116,18 @@ class LanguageServerInterface(ABC):
 
     def __init__(
         self,
-        language: Language,
+        ls_id: LanguageServerId,
         determine_log_level: Callable[[str], int],
         logger: Callable[[str, str, StringDict | str], None] | None = None,
         request_timeout: float | None = None,
     ) -> None:
         """
-        :param language: the language
+        :param ls_id: the language server identifier
         :param determine_log_level: a function for log lines read from stderr, which determines the log level
         :param logger: the trace logger function
         :param request_timeout: the timeout, in seconds, for all requests sent to the language server. If None, no timeout will be applied.
         """
-        self.language = language
+        self.ls_id = ls_id
         self._determine_log_level = determine_log_level
         self.send = LanguageServerRequest(self)
         """
@@ -486,7 +486,7 @@ class StdioLanguageServer(LanguageServerInterface):
     def __init__(
         self,
         process_launch_info: ProcessLaunchInfo,
-        language: Language,
+        ls_id: LanguageServerId,
         determine_log_level: Callable[[str], int],
         logger: Callable[[str, str, StringDict | str], None] | None = None,
         start_independent_lsp_process: bool = True,
@@ -494,13 +494,13 @@ class StdioLanguageServer(LanguageServerInterface):
     ) -> None:
         """
         :param process_launch_info: the information required to launch the language server process
-        :param language: the language
+        :param ls_id: the language
         :param determine_log_level: a function for log lines read from stderr, which determines the log level
         :param logger: the trace logger function
         :param start_independent_lsp_process: whether to start the language server process in an independent process group
         :param request_timeout: the timeout, in seconds, for all requests sent to the language server. If None, no timeout will be applied.
         """
-        super().__init__(language, determine_log_level, logger, request_timeout)
+        super().__init__(ls_id, determine_log_level, logger, request_timeout)
 
         self.process_launch_info = process_launch_info
         self.process: subprocess.Popen[bytes] | None = None
@@ -547,12 +547,12 @@ class StdioLanguageServer(LanguageServerInterface):
         # start threads to read stdout and stderr of the process
         threading.Thread(
             target=self._read_ls_process_stdout,
-            name=f"LSP-stdout-reader:{self.language.value}",
+            name=f"LSP-stdout-reader:{self.ls_id.value}",
             daemon=True,
         ).start()
         threading.Thread(
             target=self._read_ls_process_stderr,
-            name=f"LSP-stderr-reader:{self.language.value}",
+            name=f"LSP-stderr-reader:{self.ls_id.value}",
             daemon=True,
         ).start()
 
@@ -571,7 +571,7 @@ class StdioLanguageServer(LanguageServerInterface):
                 # Ignore errors here, we are proceeding to terminate anyway.
             # terminate the process
             subprocess_util.terminate_process_tree_with_kill_fallback(
-                self.process, terminate_timeout=timeout, process_name=f"LS[{self.language.value}]"
+                self.process, terminate_timeout=timeout, process_name=f"LS[{self.ls_id.value}]"
             )
         finally:
             self.process = None
@@ -594,7 +594,7 @@ class StdioLanguageServer(LanguageServerInterface):
                 if process.poll() is not None:
                     raise LanguageServerTerminatedException(
                         f"Process terminated while trying to read response (read {len(data)} of {num_bytes} bytes before termination)",
-                        language=self.language,
+                        ls_id=self.ls_id,
                     )
                 # Process still running but no data available yet, retry after a short delay
                 time.sleep(0.01)
@@ -631,15 +631,15 @@ class StdioLanguageServer(LanguageServerInterface):
         except LanguageServerTerminatedException as e:
             exception = e
         except (BrokenPipeError, ConnectionResetError) as e:
-            exception = LanguageServerTerminatedException("Language server process terminated while reading stdout", self.language, cause=e)
+            exception = LanguageServerTerminatedException("Language server process terminated while reading stdout", self.ls_id, cause=e)
         except Exception as e:
             exception = LanguageServerTerminatedException(
-                "Unexpected error while reading stdout from language server process", self.language, cause=e
+                "Unexpected error while reading stdout from language server process", self.ls_id, cause=e
             )
         log.info("Language server stdout reader thread has terminated")
         if not self._is_stopping:
             if exception is None:
-                exception = LanguageServerTerminatedException("Language server stdout read process terminated unexpectedly", self.language)
+                exception = LanguageServerTerminatedException("Language server stdout read process terminated unexpectedly", self.ls_id)
             log.error(str(exception))
             self._cancel_pending_requests(exception)
 
@@ -704,12 +704,12 @@ class TCPLanguageServer(LanguageServerInterface):
     def __init__(
         self,
         connection_info: TCPConnectionInfo,
-        language: Language,
+        ls_id: LanguageServerId,
         determine_log_level: Callable[[str], int],
         logger: Callable[[str, str, StringDict | str], None] | None = None,
         request_timeout: float | None = None,
     ) -> None:
-        super().__init__(language, determine_log_level, logger, request_timeout)
+        super().__init__(ls_id, determine_log_level, logger, request_timeout)
         self._connection_info = connection_info
         self._sock: socket.socket | None = None
         self._file: Any = None  # socket.makefile("rb") - buffered reader
@@ -747,7 +747,7 @@ class TCPLanguageServer(LanguageServerInterface):
 
         threading.Thread(
             target=self._read_loop,
-            name=f"LSP-tcp-reader:{self.language.value}",
+            name=f"LSP-tcp-reader:{self.ls_id.value}",
             daemon=True,
         ).start()
 
@@ -788,7 +788,7 @@ class TCPLanguageServer(LanguageServerInterface):
                 log.error("Failed to write to TCP language server: %s", e)
                 self._sock = None
                 self._file = None
-                self._cancel_pending_requests(LanguageServerTerminatedException("TCP send error", self.language, cause=e))
+                self._cancel_pending_requests(LanguageServerTerminatedException("TCP send error", self.ls_id, cause=e))
 
     def _read_loop(self) -> None:
         """Read Content-Length-framed LSP messages from the TCP socket and dispatch them."""
@@ -802,7 +802,7 @@ class TCPLanguageServer(LanguageServerInterface):
                     line = f.readline()
                 except OSError as exc:
                     if not self._is_stopping:
-                        exception = LanguageServerTerminatedException("TCP read error", self.language, cause=exc)
+                        exception = LanguageServerTerminatedException("TCP read error", self.ls_id, cause=exc)
                     break
                 if not line:
                     break
@@ -824,17 +824,17 @@ class TCPLanguageServer(LanguageServerInterface):
                     body = f.read(num_bytes)
                 except OSError as exc:
                     if not self._is_stopping:
-                        exception = LanguageServerTerminatedException("TCP read error", self.language, cause=exc)
+                        exception = LanguageServerTerminatedException("TCP read error", self.ls_id, cause=exc)
                     break
                 if len(body) < num_bytes:
                     break
                 self._handle_body(body)
         except Exception as exc:
-            exception = LanguageServerTerminatedException("Unexpected error in TCP language server read loop", self.language, cause=exc)
+            exception = LanguageServerTerminatedException("Unexpected error in TCP language server read loop", self.ls_id, cause=exc)
         log.info("TCP language server read loop has terminated")
         if not self._is_stopping:
             if exception is None:
-                exception = LanguageServerTerminatedException("TCP language server read loop terminated unexpectedly", self.language)
+                exception = LanguageServerTerminatedException("TCP language server read loop terminated unexpectedly", self.ls_id)
             log.error(str(exception))
             self._cancel_pending_requests(exception)
             # Clear the socket so is_running() returns False, allowing _ensure_functional_ls

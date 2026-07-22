@@ -2,18 +2,18 @@ import pytest
 
 from serena.project import Project
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind, UnifiedSymbolInformation
-from test.conftest import language_tests_enabled
+from test.conftest import language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 from . import CORE_PATH, UTILS_PATH
 
 
-@pytest.mark.skipif(not language_tests_enabled(Language.CLOJURE), reason="Clojure tests are disabled")
+@pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.CLOJURE), reason="Clojure tests are disabled")
 @pytest.mark.clojure
 class TestLanguageServerBasics:
-    @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CLOJURE], indirect=True)
     def test_basic_definition(self, language_server: SolidLanguageServer):
         """
         Test finding definition of 'greet' function call in core.clj
@@ -27,7 +27,7 @@ class TestLanguageServerBasics:
         assert definition["relativePath"] == CORE_PATH
         assert definition["range"]["start"]["line"] == 2, "Should find the definition of greet function at line 2"
 
-    @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CLOJURE], indirect=True)
     def test_cross_file_references(self, language_server: SolidLanguageServer):
         """
         Test finding references to 'multiply' function from core.clj
@@ -42,7 +42,7 @@ class TestLanguageServerBasics:
         )
         assert usage_found, "Should find multiply usage in utils.clj"
 
-    @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CLOJURE], indirect=True)
     def test_completions(self, language_server: SolidLanguageServer):
         with language_server.open_file(UTILS_PATH):
             # After "core/" in calculate-area
@@ -53,7 +53,7 @@ class TestLanguageServerBasics:
             completion_texts = [item["completionText"] for item in result]
             assert any("multiply" in text for text in completion_texts), "Should find 'multiply' function in completions after 'core/'"
 
-    @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CLOJURE], indirect=True)
     def test_document_symbols(self, language_server: SolidLanguageServer):
         symbols, _ = language_server.request_document_symbols(CORE_PATH).get_all_symbols_and_roots()
 
@@ -66,7 +66,7 @@ class TestLanguageServerBasics:
         for func_name in expected_functions:
             assert func_name in symbol_names, f"Should find {func_name} function in symbols"
 
-    @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CLOJURE], indirect=True)
     def test_hover(self, language_server: SolidLanguageServer):
         """Test hover on greet function"""
         result = language_server.request_hover(CORE_PATH, 2, 7)
@@ -82,7 +82,7 @@ class TestLanguageServerBasics:
         else:
             assert False, f"Unexpected contents format: {type(contents)}"
 
-    @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CLOJURE], indirect=True)
     def test_workspace_symbols(self, language_server: SolidLanguageServer):
         # Search for functions containing "add"
         result = language_server.request_workspace_symbol("add")
@@ -93,7 +93,7 @@ class TestLanguageServerBasics:
         symbol_names = [symbol["name"] for symbol in result]
         assert any("add" in name.lower() for name in symbol_names), f"Should find 'add' function in symbols: {symbol_names}"
 
-    @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CLOJURE], indirect=True)
     def test_namespace_functions(self, language_server: SolidLanguageServer):
         """Test definition lookup for core/greet usage in utils.clj"""
         # Position of 'greet' in core/greet call
@@ -105,7 +105,7 @@ class TestLanguageServerBasics:
         definition = result[0]
         assert definition["relativePath"] == CORE_PATH, "Should find the definition of greet in core.clj"
 
-    @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CLOJURE], indirect=True)
     def test_request_references_with_content(self, language_server: SolidLanguageServer):
         """Test references to multiply function with content"""
         references = language_server.request_references(CORE_PATH, 12, 6)
@@ -130,7 +130,7 @@ class TestLanguageServerBasics:
         utils_content = utils_refs[0].to_display_string()
         assert "calculate-area" in utils_content
 
-    @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CLOJURE], indirect=True)
     def test_request_full_symbol_tree(self, language_server: SolidLanguageServer):
         """Test retrieving the full symbol tree for project overview
         We just check that we find some expected symbols.
@@ -172,7 +172,7 @@ class TestLanguageServerBasics:
                 f"Symbol tree structure:\n{traverse_symbols(result)}"
             )
 
-    @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CLOJURE], indirect=True)
     def test_request_referencing_symbols(self, language_server: SolidLanguageServer):
         """Test finding symbols that reference a given symbol
         Finds references to the 'multiply' function.
@@ -188,10 +188,10 @@ class TestLanguageServerBasics:
         assert found_relevant_references, f"Should have found calculate-area referencing multiply, but got: {result}"
 
 
-@pytest.mark.skipif(not language_tests_enabled(Language.CLOJURE), reason="Clojure tests are disabled")
+@pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.CLOJURE), reason="Clojure tests are disabled")
 @pytest.mark.clojure
 class TestProjectBasics:
-    @pytest.mark.parametrize("project", [Language.CLOJURE], indirect=True)
+    @pytest.mark.parametrize("project", [LanguageServerId.CLOJURE], indirect=True)
     def test_retrieve_content_around_line(self, project: Project):
         """Test retrieving content around specific lines"""
         # Test retrieving content around the greet function definition (line 2)
@@ -209,7 +209,7 @@ class TestProjectBasics:
         content_str = result.to_display_string()
         assert "multiply" in content_str, "Should contain multiply function"
 
-    @pytest.mark.parametrize("project", [Language.CLOJURE], indirect=True)
+    @pytest.mark.parametrize("project", [LanguageServerId.CLOJURE], indirect=True)
     def test_search_files_for_pattern(self, project: Project) -> None:
         result = project.search_project_files_for_pattern("defn.*greet")
 
@@ -225,7 +225,7 @@ class TestProjectBasics:
         utils_matches = [match for match in result if match.source_file_path and "utils.clj" in match.source_file_path]
         assert len(utils_matches) > 0, "Should find require statement in utils.clj"
 
-    @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CLOJURE], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

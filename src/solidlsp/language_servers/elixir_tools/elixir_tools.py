@@ -10,7 +10,7 @@ from typing import Any
 from overrides import override
 
 from solidlsp.ls import RawDocumentSymbol, SolidLanguageServer
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.ls_utils import FileUtils, PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -77,7 +77,7 @@ class ElixirTools(SolidLanguageServer):
         Setup runtime dependencies for Expert.
         Downloads the Expert binary for the current platform and returns the path to the executable.
         """
-        elixir_settings = solidlsp_settings.get_ls_specific_settings(Language.ELIXIR)
+        elixir_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.ELIXIR)
         expert_version = elixir_settings.get("expert_version", EXPERT_VERSION)
         # Check if Elixir is available first
         elixir_version = cls._get_elixir_version()

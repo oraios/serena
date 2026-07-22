@@ -14,7 +14,7 @@ import pytest
 from _pytest.logging import LogCaptureFixture
 
 from solidlsp.language_servers.scala_language_server import ScalaLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.settings import SolidLSPSettings
 from solidlsp.util.metals_db_utils import MetalsDbStatus, MetalsLockInfo
 
@@ -69,7 +69,7 @@ class TestStaleLockHandling:
         ):
             # Create instance without calling __init__
             ls = object.__new__(ScalaLanguageServer)
-            settings = SolidLSPSettings(ls_specific_settings={Language.SCALA: {"on_stale_lock": "auto-clean"}})
+            settings = SolidLSPSettings(ls_specific_settings={LanguageServerId.SCALA: {"on_stale_lock": "auto-clean"}})
 
             # Call the method under test
             ls._check_metals_db_status(str(tmp_path), settings)
@@ -100,7 +100,7 @@ class TestStaleLockHandling:
             caplog.at_level(logging.WARNING),
         ):
             ls = object.__new__(ScalaLanguageServer)
-            settings = SolidLSPSettings(ls_specific_settings={Language.SCALA: {"on_stale_lock": "warn"}})
+            settings = SolidLSPSettings(ls_specific_settings={LanguageServerId.SCALA: {"on_stale_lock": "warn"}})
 
             ls._check_metals_db_status(str(tmp_path), settings)
 
@@ -128,7 +128,7 @@ class TestStaleLockHandling:
             pytest.raises(MetalsStaleLockError) as exc_info,
         ):
             ls = object.__new__(ScalaLanguageServer)
-            settings = SolidLSPSettings(ls_specific_settings={Language.SCALA: {"on_stale_lock": "fail"}})
+            settings = SolidLSPSettings(ls_specific_settings={LanguageServerId.SCALA: {"on_stale_lock": "fail"}})
 
             ls._check_metals_db_status(str(tmp_path), settings)
 
@@ -160,7 +160,7 @@ class TestStaleLockHandling:
             ls = object.__new__(ScalaLanguageServer)
             settings = SolidLSPSettings(
                 ls_specific_settings={
-                    Language.SCALA: {
+                    LanguageServerId.SCALA: {
                         "on_stale_lock": "auto-clean",
                         "log_multi_instance_notice": True,
                     }
@@ -198,7 +198,7 @@ class TestStaleLockHandling:
             ls = object.__new__(ScalaLanguageServer)
             settings = SolidLSPSettings(
                 ls_specific_settings={
-                    Language.SCALA: {
+                    LanguageServerId.SCALA: {
                         "on_stale_lock": "auto-clean",
                         "log_multi_instance_notice": False,
                     }
@@ -226,7 +226,7 @@ class TestStaleLockHandling:
             caplog.at_level(logging.DEBUG),
         ):
             ls = object.__new__(ScalaLanguageServer)
-            settings = SolidLSPSettings(ls_specific_settings={Language.SCALA: {"on_stale_lock": "auto-clean"}})
+            settings = SolidLSPSettings(ls_specific_settings={LanguageServerId.SCALA: {"on_stale_lock": "auto-clean"}})
 
             # Should complete without error
             ls._check_metals_db_status(str(tmp_path), settings)
@@ -251,7 +251,7 @@ class TestStaleLockHandling:
             caplog.at_level(logging.DEBUG),
         ):
             ls = object.__new__(ScalaLanguageServer)
-            settings = SolidLSPSettings(ls_specific_settings={Language.SCALA: {"on_stale_lock": "auto-clean"}})
+            settings = SolidLSPSettings(ls_specific_settings={LanguageServerId.SCALA: {"on_stale_lock": "auto-clean"}})
 
             # Should complete without error
             ls._check_metals_db_status(str(tmp_path), settings)

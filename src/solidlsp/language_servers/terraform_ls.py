@@ -5,7 +5,7 @@ import shutil
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.ls_utils import PlatformUtils
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -124,7 +124,7 @@ class TerraformLS(SolidLanguageServer):
         Downloads and installs terraform-ls if not already present.
         """
         cls._ensure_tf_command_available()
-        terraform_settings = solidlsp_settings.get_ls_specific_settings(Language.TERRAFORM)
+        terraform_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.TERRAFORM)
         terraform_ls_version = terraform_settings.get("terraform_ls_version", DEFAULT_TERRAFORM_LS_VERSION)
         platform_id = PlatformUtils.get_platform_id()
         deps = RuntimeDependencyCollection(

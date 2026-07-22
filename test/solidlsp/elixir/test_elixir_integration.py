@@ -12,11 +12,14 @@ import pytest
 
 from serena.project import Project
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
-from test.conftest import language_tests_enabled
+from solidlsp.ls_config import LanguageServerId
+from test.conftest import language_server_tests_enabled
 
 # These marks will be applied to all tests in this module
-pytestmark = [pytest.mark.elixir, pytest.mark.skipif(not language_tests_enabled(Language.ELIXIR), reason="Elixir tests are disabled")]
+pytestmark = [
+    pytest.mark.elixir,
+    pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.ELIXIR), reason="Elixir tests are disabled"),
+]
 
 
 class TestElixirIntegration:
@@ -42,7 +45,7 @@ class TestElixirIntegration:
         assert (repo_path / "test" / "test_repo_test.exs").exists(), "test file should exist"
         assert (repo_path / "test" / "models_test.exs").exists(), "models test should exist"
 
-    @pytest.mark.parametrize("language_server", [Language.ELIXIR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ELIXIR], indirect=True)
     def test_cross_file_symbol_resolution(self, language_server: SolidLanguageServer):
         """Test that symbols can be resolved across different files."""
         # Test that User struct from models.ex can be found when referenced in services.ex
@@ -67,7 +70,7 @@ class TestElixirIntegration:
             # Should point to models.ex
             assert "models.ex" in defining_symbol["location"]["uri"]
 
-    @pytest.mark.parametrize("language_server", [Language.ELIXIR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ELIXIR], indirect=True)
     def test_module_hierarchy_understanding(self, language_server: SolidLanguageServer):
         """Test that the language server understands Elixir module hierarchy."""
         models_file = os.path.join("lib", "models.ex")
@@ -91,7 +94,7 @@ class TestElixirIntegration:
 
     def test_file_extension_matching(self):
         """Test that the Elixir language recognizes the correct file extensions."""
-        language = Language.ELIXIR
+        language = LanguageServerId.ELIXIR
         matcher = language.get_source_fn_matcher()
 
         # Test Elixir file extensions
@@ -110,7 +113,7 @@ class TestElixirIntegration:
 
 
 class TestElixirProject:
-    @pytest.mark.parametrize("project", [Language.ELIXIR], indirect=True)
+    @pytest.mark.parametrize("project", [LanguageServerId.ELIXIR], indirect=True)
     def test_comprehensive_symbol_search(self, project: Project):
         """Test comprehensive symbol search across the entire project."""
         # Search for all function definitions
@@ -138,7 +141,7 @@ class TestElixirProject:
             models_structs = [m for m in struct_matches if m.source_file_path and "models.ex" in m.source_file_path]
             assert len(models_structs) > 0, "Should find struct definitions in models.ex"
 
-    @pytest.mark.parametrize("project", [Language.ELIXIR], indirect=True)
+    @pytest.mark.parametrize("project", [LanguageServerId.ELIXIR], indirect=True)
     def test_protocol_and_implementation_understanding(self, project: Project):
         """Test that the language server understands Elixir protocols and implementations."""
         # Search for protocol definitions

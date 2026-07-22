@@ -10,12 +10,12 @@ excluded, and those are handled by gitignore.
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 
 pytestmark = pytest.mark.typescript
 
 
-@pytest.mark.parametrize("language_server", [Language.TYPESCRIPT], indirect=True)
+@pytest.mark.parametrize("language_server", [LanguageServerId.TYPESCRIPT], indirect=True)
 class TestTypescriptIgnoredDirectories:
     """TypeScript-specific directory ignoring behavior."""
 

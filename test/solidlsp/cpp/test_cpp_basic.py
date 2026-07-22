@@ -14,18 +14,18 @@ from pathlib import Path
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_utils import SymbolUtils
-from test.conftest import get_repo_path, language_tests_enabled, start_ls_context
+from test.conftest import get_repo_path, language_server_tests_enabled, start_ls_context
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
-_cpp_servers: list[Language] = [Language.CPP]
-if language_tests_enabled(Language.CPP_CCLS):
-    _cpp_servers.append(Language.CPP_CCLS)
+_cpp_servers: list[LanguageServerId] = [LanguageServerId.CPP]
+if language_server_tests_enabled(LanguageServerId.CPP_CCLS):
+    _cpp_servers.append(LanguageServerId.CPP_CCLS)
 
 
-@pytest.mark.parametrize("language", [Language.CPP, Language.CPP_CCLS])
-def test_source_fn_matcher_includes_ino(language: Language) -> None:
+@pytest.mark.parametrize("language", [LanguageServerId.CPP, LanguageServerId.CPP_CCLS])
+def test_source_fn_matcher_includes_ino(language: LanguageServerId) -> None:
     """Arduino .ino sketches are C++ and must route to the C++ language server.
 
     This is a pure matcher check; it needs no running language server.
@@ -172,7 +172,7 @@ int use_add() {
 @pytest.mark.cpp
 class TestCppDocumentSymbolCache:
     def _copy_cpp_fixture(self, tmp_path: Path) -> Path:
-        fixture_path = get_repo_path(Language.CPP)
+        fixture_path = get_repo_path(LanguageServerId.CPP)
         target_path = tmp_path / "test_repo"
         shutil.copytree(fixture_path, target_path)
         return target_path
@@ -180,7 +180,7 @@ class TestCppDocumentSymbolCache:
     def test_cache_invalidates_when_clangd_context_changes(self, tmp_path: Path) -> None:
         repo_path = self._copy_cpp_fixture(tmp_path)
         ls_settings_alt = {
-            Language.CPP: {
+            LanguageServerId.CPP: {
                 "compile_commands_dir": ".serena-alt",
             }
         }
@@ -201,7 +201,7 @@ class TestCppDocumentSymbolCache:
             assert ls._raw_document_symbols_cache_is_modified
             assert ls._document_symbols_cache_is_modified
 
-        with start_ls_context(Language.CPP, repo_path=str(repo_path), solidlsp_dir=tmp_path) as ls_default:
+        with start_ls_context(LanguageServerId.CPP, repo_path=str(repo_path), solidlsp_dir=tmp_path) as ls_default:
             _ = ls_default.request_document_symbols(main_cpp)
 
             default_raw_cache_version = ls_default._raw_document_symbols_cache_version()
@@ -212,7 +212,7 @@ class TestCppDocumentSymbolCache:
             cache_files = [p for p in cache_dir.rglob("*") if p.is_file()]
             assert cache_files, f"Expected SolidLSP to create cache artifacts under {cache_dir}"
 
-        with start_ls_context(Language.CPP, repo_path=str(repo_path), solidlsp_dir=tmp_path) as ls_default_again:
+        with start_ls_context(LanguageServerId.CPP, repo_path=str(repo_path), solidlsp_dir=tmp_path) as ls_default_again:
             assert ls_default_again.cache_dir == cache_dir
             _assert_caches_loaded_and_clean(ls_default_again)
             _ = ls_default_again.request_document_symbols(main_cpp)
@@ -220,7 +220,7 @@ class TestCppDocumentSymbolCache:
             assert not ls_default_again._document_symbols_cache_is_modified
 
         with start_ls_context(
-            Language.CPP,
+            LanguageServerId.CPP,
             repo_path=str(repo_path),
             ls_specific_settings=ls_settings_alt,
             solidlsp_dir=tmp_path,

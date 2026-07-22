@@ -115,7 +115,7 @@ class Intelephense(SolidLanguageServer):
         # such that Serena's symbol tools treat the added extensions as PHP sources as well (#1710)
         file_filter = self._custom_settings.get("file_filter")
         if file_filter:
-            self.language.get_source_fn_matcher().add_extensions(*file_filter)
+            self.ls_id.get_source_fn_matcher().add_extensions(*file_filter)
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
@@ -201,7 +201,7 @@ class Intelephense(SolidLanguageServer):
         # the initialize request: Intelephense reads configuration exclusively from
         # workspace/didChangeConfiguration (its initializationOptions only cover storagePath,
         # globalStoragePath, clearCache and licenceKey).
-        associations = [f"*{ext}" for ext in self.language.get_source_fn_matcher().file_extensions]
+        associations = [f"*{ext}" for ext in self.ls_id.get_source_fn_matcher().file_extensions]
         intelephense_config: DidChangeConfigurationParams = {"settings": {"intelephense": {"files": {"associations": associations}}}}
         log.info(f"Sending workspace/didChangeConfiguration with file associations: {associations}")
         self.server.notify.workspace_did_change_configuration(intelephense_config)

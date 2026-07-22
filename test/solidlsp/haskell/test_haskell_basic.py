@@ -16,18 +16,20 @@ Test Repository Structure:
 import pytest
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
-from test.conftest import language_tests_enabled
+from test.conftest import language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
-pytestmark = pytest.mark.skipif(not language_tests_enabled(Language.HASKELL), reason="Haskell tests are disabled (HLS not available)")
+pytestmark = pytest.mark.skipif(
+    not language_server_tests_enabled(LanguageServerId.HASKELL), reason="Haskell tests are disabled (HLS not available)"
+)
 
 
 @pytest.mark.haskell
 class TestHaskellLanguageServer:
-    @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HASKELL], indirect=True)
     def test_calculator_module_symbols(self, language_server: SolidLanguageServer):
         """
         Test precise symbol discovery in Calculator.hs.
@@ -66,7 +68,7 @@ class TestHaskellLanguageServer:
             23,
         ], f"Calculator should be a data type (kind 1, 5, or 23), got kind {calculator_symbol['kind']}"
 
-    @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HASKELL], indirect=True)
     def test_helper_module_symbols(self, language_server: SolidLanguageServer):
         """
         Test precise symbol discovery in Helper.hs.
@@ -93,7 +95,7 @@ class TestHaskellLanguageServer:
         extra = symbol_names - expected_symbols - {"Helper"}
         assert not extra, f"Unexpected symbols in Helper.hs: {extra}"
 
-    @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HASKELL], indirect=True)
     def test_main_module_imports(self, language_server: SolidLanguageServer):
         """
         Test that Main.hs properly references both Calculator and Helper modules.
@@ -106,7 +108,7 @@ class TestHaskellLanguageServer:
         # Main.hs should have the main function
         assert "main" in symbol_names, "Main.hs should contain 'main' function"
 
-    @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HASKELL], indirect=True)
     def test_cross_file_references_validateNumber(self, language_server: SolidLanguageServer):
         """
         Test cross-file reference tracking for validateNumber function.
@@ -132,7 +134,7 @@ class TestHaskellLanguageServer:
             f"got {len(calculator_refs)} references in Calculator.hs"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HASKELL], indirect=True)
     def test_within_file_references_isNegative(self, language_server: SolidLanguageServer):
         """
         Test within-file reference tracking for isNegative function.
@@ -152,7 +154,7 @@ class TestHaskellLanguageServer:
             f"All isNegative references should be in Helper.hs, got: {reference_paths}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HASKELL], indirect=True)
     def test_function_references_from_main(self, language_server: SolidLanguageServer):
         """
         Test that functions used in Main.hs can be traced back to their definitions.
@@ -175,7 +177,7 @@ class TestHaskellLanguageServer:
             f"Expected 'add' to be referenced in Main.hs or Calculator.hs, got: {add_ref_paths}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HASKELL], indirect=True)
     def test_multiply_function_usage_in_calculate(self, language_server: SolidLanguageServer):
         """
         Test that multiply function usage is tracked within Calculator module.
@@ -198,7 +200,7 @@ class TestHaskellLanguageServer:
             f"Expected 'multiply' to be referenced in Calculator.hs, got: {multiply_ref_paths}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HASKELL], indirect=True)
     def test_data_type_constructor_references(self, language_server: SolidLanguageServer):
         """
         Test that Calculator data type constructor usage is tracked.
@@ -221,7 +223,7 @@ class TestHaskellLanguageServer:
             f"Expected Calculator to be referenced in Main.hs or Calculator.hs, got: {calc_ref_paths}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HASKELL], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []
@@ -242,7 +244,7 @@ class TestHaskellLanguageServer:
             ]
             pytest.fail(f"Found malformed symbols: {diagnostics}", pytrace=False)
 
-    @pytest.mark.parametrize("language_server", [Language.HASKELL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HASKELL], indirect=True)
     def test_file_diagnostics(self, language_server: SolidLanguageServer) -> None:
         assert_file_diagnostics(
             language_server,

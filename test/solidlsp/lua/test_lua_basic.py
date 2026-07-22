@@ -8,9 +8,9 @@ for Lua modules and functions.
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
-from test.conftest import find_identifier_position, get_repo_path, language_has_verified_implementation_support
+from test.conftest import find_identifier_position, get_repo_path, ls_has_verified_implementation_support
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
@@ -18,7 +18,7 @@ from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name,
 class TestLuaLanguageServer:
     """Test Lua language server symbol finding and cross-file references."""
 
-    @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LUA], indirect=True)
     def test_find_symbols_in_calculator(self, language_server: SolidLanguageServer) -> None:
         """Test finding specific functions in calculator.lua."""
         symbols = language_server.request_document_symbols("src/calculator.lua").get_all_symbols_and_roots()
@@ -48,7 +48,7 @@ class TestLuaLanguageServer:
         assert "multiply" in function_names, "multiply function not found"
         assert "factorial" in function_names, "factorial function not found"
 
-    @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LUA], indirect=True)
     def test_find_symbols_in_utils(self, language_server: SolidLanguageServer) -> None:
         """Test finding specific functions in utils.lua."""
         symbols = language_server.request_document_symbols("src/utils.lua").get_all_symbols_and_roots()
@@ -83,11 +83,11 @@ class TestLuaLanguageServer:
         # Check for Logger class/table
         assert "Logger" in all_symbols or any("Logger" in s for s in all_symbols), "Logger not found in symbols"
 
-    if language_has_verified_implementation_support(Language.LUA):
+    if ls_has_verified_implementation_support(LanguageServerId.LUA):
 
-        @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
+        @pytest.mark.parametrize("language_server", [LanguageServerId.LUA], indirect=True)
         def test_find_implementations(self, language_server: SolidLanguageServer) -> None:
-            repo_path = get_repo_path(Language.LUA)
+            repo_path = get_repo_path(LanguageServerId.LUA)
             pos = find_identifier_position(repo_path / "src" / "animals.lua", "speak")
             assert pos is not None, "Could not find Animal:speak in fixture"
 
@@ -97,9 +97,9 @@ class TestLuaLanguageServer:
                 f"Expected Dog:speak in implementations, got: {implementations}"
             )
 
-        @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
+        @pytest.mark.parametrize("language_server", [LanguageServerId.LUA], indirect=True)
         def test_request_implementing_symbols(self, language_server: SolidLanguageServer) -> None:
-            repo_path = get_repo_path(Language.LUA)
+            repo_path = get_repo_path(LanguageServerId.LUA)
             pos = find_identifier_position(repo_path / "src" / "animals.lua", "speak")
             assert pos is not None, "Could not find Animal:speak in fixture"
 
@@ -110,7 +110,7 @@ class TestLuaLanguageServer:
                 for symbol in implementing_symbols
             ), f"Expected Dog:speak symbol, got: {implementing_symbols}"
 
-    @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LUA], indirect=True)
     def test_find_symbols_in_main(self, language_server: SolidLanguageServer) -> None:
         """Test finding functions in main.lua."""
         symbols = language_server.request_document_symbols("main.lua").get_all_symbols_and_roots()
@@ -133,7 +133,7 @@ class TestLuaLanguageServer:
         assert "test_calculator" in function_names, "test_calculator function not found"
         assert "test_utils" in function_names, "test_utils function not found"
 
-    @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LUA], indirect=True)
     def test_cross_file_references_calculator_add(self, language_server: SolidLanguageServer) -> None:
         """Test finding cross-file references to calculator.add function."""
         symbols = language_server.request_document_symbols("src/calculator.lua").get_all_symbols_and_roots()
@@ -189,7 +189,7 @@ class TestLuaLanguageServer:
         main_refs = [ref for ref in refs if "main.lua" in ref.get("uri", "")]
         assert len(main_refs) > 0, "calculator.add should be called in main.lua"
 
-    @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LUA], indirect=True)
     def test_cross_file_references_utils_trim(self, language_server: SolidLanguageServer) -> None:
         """Test finding cross-file references to utils.trim function."""
         symbols = language_server.request_document_symbols("src/utils.lua").get_all_symbols_and_roots()
@@ -245,7 +245,7 @@ class TestLuaLanguageServer:
         main_refs = [ref for ref in refs if "main.lua" in ref.get("uri", "")]
         assert len(main_refs) > 0, "utils.trim should be called in main.lua"
 
-    @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LUA], indirect=True)
     def test_hover_information(self, language_server: SolidLanguageServer) -> None:
         """Test hover information for symbols."""
         # Get hover info for a function
@@ -257,7 +257,7 @@ class TestLuaLanguageServer:
         if isinstance(hover_info, dict):
             assert "contents" in hover_info or "value" in hover_info, "Hover should have contents"
 
-    @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LUA], indirect=True)
     def test_full_symbol_tree(self, language_server: SolidLanguageServer) -> None:
         """Test that full symbol tree is not empty."""
         symbols = language_server.request_full_symbol_tree()
@@ -270,7 +270,7 @@ class TestLuaLanguageServer:
         assert isinstance(root, dict), "Root should be a dict"
         assert "name" in root, "Root should have a name"
 
-    @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LUA], indirect=True)
     def test_references_between_test_and_source(self, language_server: SolidLanguageServer) -> None:
         """Test finding references from test files to source files."""
         # Check if test_calculator.lua references calculator module
@@ -283,7 +283,7 @@ class TestLuaLanguageServer:
         symbol_list = test_symbols[0] if isinstance(test_symbols, tuple) else test_symbols
         assert len(symbol_list) > 0, "test_calculator.lua should have symbols"
 
-    @pytest.mark.parametrize("language_server", [Language.LUA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LUA], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

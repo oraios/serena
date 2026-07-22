@@ -638,10 +638,10 @@ class SerenaDashboardAPI:
         self._current_config_overview = self._compute_config_overview().model_dump()
 
     def _get_available_languages(self) -> ResponseAvailableLanguages:
-        from solidlsp.ls_config import Language
+        from solidlsp.ls_config import LanguageServerId
 
         def run() -> ResponseAvailableLanguages:
-            all_languages = [lang.value for lang in Language.iter_all(include_experimental=True)]
+            all_languages = [lang.value for lang in LanguageServerId.iter_all(include_experimental=True)]
 
             # Filter out already added languages for the active project
             project = self._agent.get_active_project()
@@ -776,24 +776,24 @@ class SerenaDashboardAPI:
         return {}
 
     def _add_language(self, request_add_language: RequestAddLanguage) -> None:
-        from solidlsp.ls_config import Language
+        from solidlsp.ls_config import LanguageServerId
 
         try:
-            language = Language(request_add_language.language)
+            language = LanguageServerId(request_add_language.language)
         except ValueError:
-            raise ValueError(f"Invalid language: {request_add_language.language}")
+            raise ValueError(f"Invalid language server identifier: {request_add_language.language}")
         # add_language is already thread-safe
-        self._agent.add_language(language)
+        self._agent.add_language_server(language)
 
     def _remove_language(self, request_remove_language: RequestRemoveLanguage) -> None:
-        from solidlsp.ls_config import Language
+        from solidlsp.ls_config import LanguageServerId
 
         try:
-            language = Language(request_remove_language.language)
+            language = LanguageServerId(request_remove_language.language)
         except ValueError:
-            raise ValueError(f"Invalid language: {request_remove_language.language}")
+            raise ValueError(f"Invalid language server identifier: {request_remove_language.language}")
         # remove_language is already thread-safe
-        self._agent.remove_language(language)
+        self._agent.remove_language_server(language)
 
     @staticmethod
     def _find_first_free_port(start_port: int, host: str) -> int:
