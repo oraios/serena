@@ -12,6 +12,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
     project creation) 
   - Add `python_basedpyright` as an alternative Python language server
+  - Nix/nixd: support custom `ls_path` launchers and external JSON settings through `config_path` #1737
 
 * JetBrains:
   - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file
