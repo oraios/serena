@@ -16,10 +16,9 @@ from serena.tools import SUCCESS_RESULT, EditedFileContext, EditingToolWithDiagn
 from serena.util.file_system import scan_directory
 from serena.util.text_utils import (
     ContentReplacer,
+    GlobMatcher,
     MultiFileContentReplacer,
     ReplacementOccurrence,
-    expand_braces,
-    glob_match,
 )
 from solidlsp.ls_utils import TextUtils
 
@@ -350,13 +349,13 @@ class ReplaceInFilesTool(EditingToolWithDiagnostics):
                 is_ignored_file=self.project.is_ignored_path,
                 relative_to=self.get_project_root(),
             )
-        include_patterns = expand_braces(paths_include_glob.strip()) if paths_include_glob.strip() else None
-        exclude_patterns = expand_braces(paths_exclude_glob.strip()) if paths_exclude_glob.strip() else None
+        include_glob_matcher = GlobMatcher(paths_include_glob.strip()) if paths_include_glob.strip() else None
+        exclude_glob_matcher = GlobMatcher(paths_exclude_glob.strip()) if paths_exclude_glob.strip() else None
         files: list[tuple[str, str]] = []
         for path in sorted(rel_paths):
-            if include_patterns and not any(glob_match(p, path) for p in include_patterns):
+            if include_glob_matcher and not include_glob_matcher.matches(path):
                 continue
-            if exclude_patterns and any(glob_match(p, path) for p in exclude_patterns):
+            if exclude_glob_matcher and exclude_glob_matcher.matches(path):
                 continue
             try:
                 files.append((path, self.project.read_file(path)))

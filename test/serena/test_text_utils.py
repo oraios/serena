@@ -3,7 +3,7 @@ from collections.abc import Callable
 import pytest
 
 from serena.util.file_proxy import FileCollection, FileProxy
-from serena.util.text_utils import LineType, MultiFileContentReplacer, search_files, search_text
+from serena.util.text_utils import GlobMatcher, LineType, MultiFileContentReplacer, search_files, search_text
 
 
 class TestSearchText:
@@ -555,9 +555,7 @@ class TestGlobMatch:
     )
     def test_glob_match(self, pattern, path, expected):
         """Test glob_match function with various patterns."""
-        from serena.util.text_utils import glob_match
-
-        assert glob_match(pattern, path) == expected
+        assert GlobMatcher(pattern).matches(path) == expected
 
 
 class TestExpandBraces:
@@ -582,9 +580,9 @@ class TestExpandBraces:
     )
     def test_expand_braces(self, pattern, expected):
         """Test brace expansion for glob patterns."""
-        from serena.util.text_utils import expand_braces
+        from serena.util.text_utils import _expand_braces
 
-        assert sorted(expand_braces(pattern)) == sorted(expected)
+        assert sorted(_expand_braces(pattern)) == sorted(expected)
 
     @pytest.mark.parametrize(
         "pattern",
@@ -596,10 +594,10 @@ class TestExpandBraces:
     )
     def test_expand_braces_rejects_malformed_braces(self, pattern):
         """Malformed brace globs should fail instead of looping forever."""
-        from serena.util.text_utils import expand_braces
+        from serena.util.text_utils import _expand_braces
 
         with pytest.raises(ValueError, match="Invalid glob brace expression"):
-            expand_braces(pattern)
+            _expand_braces(pattern)
 
 
 class TestMultiFileContentReplacer:

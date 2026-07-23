@@ -33,7 +33,7 @@ from serena.constants import (
     SERENA_MANAGED_DIR_NAME,
 )
 from serena.util.inspection import compute_language_server_support_composition
-from serena.util.text_utils import glob_match
+from serena.util.text_utils import GlobMatcher
 from serena.util.yaml import YamlCommentNormalisation, load_yaml, normalise_yaml_comments, save_yaml, transfer_yaml_comments
 from solidlsp.ls_config import LanguageServerId
 
@@ -1437,7 +1437,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         """
         project_root_str = str(project_root)
         for pattern in self.trusted_project_path_patterns:
-            if glob_match(pattern, project_root_str):
+            if GlobMatcher(pattern).matches(project_root_str):
                 return True
         return False
 

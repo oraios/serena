@@ -4,11 +4,11 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from functools import lru_cache
 from typing import Any, Literal, Self
 
 from bs4 import BeautifulSoup
 from joblib import Parallel, delayed
+from sensai.util.string import ToStringMixin
 
 from serena.util.file_proxy import FileCollection, FileProxy
 from solidlsp.ls_utils import TextUtils
@@ -185,7 +185,7 @@ def search_text(
     return matches
 
 
-def expand_braces(pattern: str) -> list[str]:
+def _expand_braces(pattern: str) -> list[str]:
     """
     Expands brace patterns in a glob string.
     For example, "**/*.{js,jsx,ts,tsx}" becomes ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx"].
@@ -212,7 +212,6 @@ def expand_braces(pattern: str) -> list[str]:
     return patterns
 
 
-@lru_cache(maxsize=256)
 def _translate_glob_to_regex(pattern: str) -> str:
     res = []
     i = 0
@@ -263,9 +262,9 @@ def _translate_glob_to_regex(pattern: str) -> str:
     return f"(?s:{inner})\\Z"
 
 
-def glob_match(pattern: str, path: str) -> bool:
+class GlobMatcher(ToStringMixin):
     """
-    Match a file path against a glob pattern.
+    Supports matching a file path against a glob pattern.
 
     Supports standard glob patterns:
     - * matches any number of characters except /
@@ -275,28 +274,23 @@ def glob_match(pattern: str, path: str) -> bool:
 
     Supports brace expansion:
     - {a,b,c} expands to multiple patterns (including nesting)
-
-    Unsupported patterns:
-    - Bash extended glob features are unavailable in Python's fnmatch
-    - Extended globs like !(), ?(), +(), *(), @() are not supported
-
-    :param pattern: Glob pattern (e.g., 'src/**/*.py', '**agent.py')
-    :param path: File path to match against
-    :return: True if path matches pattern
     """
-    # normalise backslashes to forward slashes in both path and pattern
-    pattern = pattern.replace("\\", "/")
-    path = path.replace("\\", "/")
 
-    return bool(re.match(_translate_glob_to_regex(pattern), path))
-
-
-class GlobMatcher:
     def __init__(self, expr: str):
-        self._patterns = expand_braces(expr)
+        """
+        :param expr: a glob pattern which may make use of brace expansion (e.g., "src/**/*.{js,jsx,ts,tsx}")
+        """
+        expr = expr.replace("\\", "/")  # normalise backslashes to forward slashes
+        self._glob_expr = expr
+        self._glob_patterns = _expand_braces(expr)
+        self._regex_patterns = [re.compile(_translate_glob_to_regex(p)) for p in self._glob_patterns]
+
+    def _tostring_includes(self) -> list[str]:
+        return ["_glob_expr"]
 
     def matches(self, path: str) -> bool:
-        return any(glob_match(p, path) for p in self._patterns)
+        path = path.replace("\\", "/")  # normalise backslashes to forward slashes
+        return any(regex.match(path) for regex in self._regex_patterns)
 
 
 def search_files(
