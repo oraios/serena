@@ -1,4 +1,3 @@
-import fnmatch
 import hashlib
 import logging
 import re
@@ -214,7 +213,7 @@ def expand_braces(pattern: str) -> list[str]:
 
 
 @lru_cache(maxsize=256)
-def _translate_glob_no_double_star(pattern: str) -> str:
+def _translate_glob_to_regex(pattern: str) -> str:
     res = []
     i = 0
     n = len(pattern)
@@ -222,8 +221,22 @@ def _translate_glob_no_double_star(pattern: str) -> str:
         c = pattern[i]
         i += 1
         if c == "*":
-            if not res or res[-1] != "[^/]*":
-                res.append("[^/]*")
+            if i < n and pattern[i] == "*":  # **
+                i += 1
+                if i < n and pattern[i] == "/":  # **/
+                    i += 1
+                    if res and res[-1] == "/":  # /**/
+                        res = res[:-1]
+                        res.append("(?:/|/.*/)")
+                    elif res:  # c**/ (with c != '/')
+                        res.append(".*/")
+                    else:  # **/ at the start of the pattern
+                        res.append("(?:.*/)?")
+                else:  # c**d  (with c, d != '/')
+                    res.append(".*")
+            else:  # single *
+                if not res or res[-1] != "[^/]*":
+                    res.append("[^/]*")
         elif c == "?":
             res.append("[^/]")
         elif c == "[":
@@ -271,36 +284,11 @@ def glob_match(pattern: str, path: str) -> bool:
     :param path: File path to match against
     :return: True if path matches pattern
     """
-    pattern = pattern.replace("\\", "/")  # Normalize backslashes to forward slashes
-    path = path.replace("\\", "/")  # Normalize path backslashes to forward slashes
+    # normalise backslashes to forward slashes in both path and pattern
+    pattern = pattern.replace("\\", "/")
+    path = path.replace("\\", "/")
 
-    # Handle ** patterns that should match zero or more directories
-    if "**" in pattern:
-        # Method 1: Standard fnmatch (matches one or more directories)
-        regex1 = fnmatch.translate(pattern)
-        if re.match(regex1, path):
-            return True
-
-        # Method 2: Handle zero-directory case by removing /** entirely
-        # Convert "src/**/test.py" to "src/test.py"
-        if "/**/" in pattern:
-            zero_dir_pattern = pattern.replace("/**/", "/")
-            regex2 = fnmatch.translate(zero_dir_pattern)
-            if re.match(regex2, path):
-                return True
-
-        # Method 3: Handle leading ** case by removing **/
-        # Convert "**/test.py" to "test.py"
-        if pattern.startswith("**/"):
-            zero_dir_pattern = pattern[3:]  # Remove "**/"
-            regex3 = fnmatch.translate(zero_dir_pattern)
-            if re.match(regex3, path):
-                return True
-
-        return False
-    else:
-        # Simple pattern without **, translate bare * and ? to not match /
-        return bool(re.match(_translate_glob_no_double_star(pattern), path))
+    return bool(re.match(_translate_glob_to_regex(pattern), path))
 
 
 class GlobMatcher:
