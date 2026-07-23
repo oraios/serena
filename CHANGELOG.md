@@ -12,6 +12,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     project creation) 
   - Add `python_basedpyright` as an alternative Python language server
 
+* JetBrains:
+  - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file
+
 * Hooks:
   - Add `serena-hooks --client=grok`, including Grok-native PreToolUse allow/deny output.
   - PreToolUse remind hook: coerce non-string shell command values instead of failing, and recognize

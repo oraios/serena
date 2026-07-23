@@ -296,15 +296,20 @@ class Project(ToStringMixin):
             # occurs, in particular, if paths are on different drives on Windows
             return False
 
-    def relative_path_exists(self, relative_path: str) -> bool:
+    def relative_path_exists(self, relative_path: str, require_file: bool = False) -> bool:
         """
         Checks if the given relative path exists in the project directory.
 
         :param relative_path: the path to check, relative to the project root
+        :param require_file: whether to return True only if the path exists and is a file
         :return: True if the path exists, False otherwise
         """
         abs_path = Path(self.project_root) / relative_path
-        return abs_path.exists()
+        exists = abs_path.exists()
+        if require_file:
+            return exists and abs_path.is_file()
+        else:
+            return exists
 
     def validate_relative_path(self, relative_path: str, require_not_ignored: bool = False) -> None:
         """

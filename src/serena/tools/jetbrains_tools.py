@@ -54,6 +54,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
          * an absolute name path "/class/method" (absolute name path), which requires an exact match of the full name path within the source file.
         Append an index `[i]` to match a specific overload only, e.g. "MyClass/my_method[1]".
         In any path component, using `*` will match any sequence of characters (excluding /), e.g. "Class/*substring*" matches a member substring.
+        A pattern must not contain only wildcards (e.g. "*" or "/*").
 
         :param name_path_pattern: the name path matching pattern (see above)
         :param depth: depth up to which descendants shall be retrieved (e.g. use 1 to also retrieve immediate children;
@@ -72,6 +73,18 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         :param max_answer_chars: max characters for the result (-1 for default). If exceeded, no content/a shortened result is returned.
         :return: symbols matching the name.
         """
+        # check input
+        # - pattern with only wildcards is invalid, but in some cases we delegate to the overview tool
+        if name_path_pattern.replace("*", "").replace("/", "") == "":
+            if relative_path:
+                if self.project.relative_path_exists(relative_path, require_file=True):
+                    overview_tool = self.agent.get_tool(JetBrainsGetSymbolsOverviewTool)
+                    overview_response = overview_tool.apply(relative_path, depth=depth)
+                    return self._wrapped_tool_response(
+                        overview_response, f"Wildcard-only pattern not admitted; used {overview_tool.get_name()} instead"
+                    )
+            raise ValueError("name_path_pattern must not be empty or contain only wildcards; consider using the overview tool")
+
         if include_body:
             depth = 0  # ignore user-specified depth if body is requested
 
