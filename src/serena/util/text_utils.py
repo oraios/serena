@@ -117,34 +117,12 @@ class MatchedConsecutiveLines:
         return cls(lines=text_lines, source_file_path=source_file_path)
 
 
-def glob_to_regex(glob_pat: str) -> str:
-    regex_parts: list[str] = []
-    i = 0
-    while i < len(glob_pat):
-        ch = glob_pat[i]
-        if ch == "*":
-            regex_parts.append(".*")
-        elif ch == "?":
-            regex_parts.append(".")
-        elif ch == "\\":
-            i += 1
-            if i < len(glob_pat):
-                regex_parts.append(re.escape(glob_pat[i]))
-            else:
-                regex_parts.append("\\")
-        else:
-            regex_parts.append(re.escape(ch))
-        i += 1
-    return "".join(regex_parts)
-
-
 def search_text(
     pattern: str,
     content: str | None = None,
     source_file_path: str | None = None,
     context_lines_before: int = 0,
     context_lines_after: int = 0,
-    is_glob: bool = False,
     multiline: bool = True,
 ) -> list[MatchedConsecutiveLines]:
     """
@@ -156,8 +134,6 @@ def search_text(
         this has to be passed and the file will be read.
     :param context_lines_before: Number of context lines to include before matches
     :param context_lines_after: Number of context lines to include after matches
-    :param is_glob: If True, pattern is treated as a glob-like pattern (e.g., "*.py", "test_??.py")
-             and will be converted to regex internally
     :param multiline: whether to apply multi-line matching, enabling the flags re.DOTALL and re.MULTILINE
     :return: List of `TextSearchMatch` objects
     :raises: ValueError if the pattern is not valid
@@ -172,10 +148,6 @@ def search_text(
     matches = []
     lines = TextUtils.split_lines(content)
     total_lines = len(lines)
-
-    # Convert pattern to a compiled regex if it's a string
-    if is_glob:
-        pattern = glob_to_regex(pattern)
 
     # For multiline matches, optionally use DOTALL so '.' matches newlines
     flags = (re.MULTILINE | re.DOTALL) if multiline else 0

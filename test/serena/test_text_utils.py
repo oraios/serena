@@ -1,10 +1,9 @@
-import re
 from collections.abc import Callable
 
 import pytest
 
 from serena.util.file_proxy import FileCollection, FileProxy
-from serena.util.text_utils import LineType, MultiFileContentReplacer, glob_to_regex, search_files, search_text
+from serena.util.text_utils import LineType, MultiFileContentReplacer, search_files, search_text
 
 
 class TestSearchText:
@@ -176,94 +175,6 @@ class TestSearchText:
         # All matched lines should have match_type == LineType.MATCH
         match_lines = [line for line in multiline_match.lines if line.match_type == LineType.MATCH]
         assert len(match_lines) >= 3
-
-    def test_search_text_with_glob_pattern(self):
-        """Test searching with glob-like patterns."""
-        content = """
-        class UserService:
-            def get_user(self, user_id):
-                return {"id": user_id, "name": "Test User"}
-
-            def create_user(self, user_data):
-                print(f"Creating user: {user_data}")
-                return {"id": 123, **user_data}
-
-            def update_user(self, user_id, user_data):
-                print(f"Updating user {user_id} with {user_data}")
-                return True
-        """
-
-        # Search with a glob pattern for all user methods
-        matches = search_text("*_user*", content=content, is_glob=True, multiline=False)
-
-        assert len(matches) == 3
-        assert "get_user" in matches[0].lines[0].line_content
-        assert "create_user" in matches[1].lines[0].line_content
-        assert "update_user" in matches[2].lines[0].line_content
-
-    def test_search_text_with_complex_glob_pattern(self):
-        """Test searching with more complex glob patterns."""
-        content = """
-        def process_data(data):
-            return [transform(item) for item in data]
-
-        def transform(item):
-            if isinstance(item, dict):
-                return {k: v.upper() if isinstance(v, str) else v for k, v in item.items()}
-            elif isinstance(item, list):
-                return [x * 2 for x in item if isinstance(x, (int, float))]
-            elif isinstance(item, str):
-                return item.upper()
-            else:
-                return item
-        """
-
-        # Search with a simplified glob pattern to find all isinstance occurrences
-        matches = search_text("*isinstance*", content=content, is_glob=True, multiline=False)
-
-        # Should match lines with isinstance(item, dict) and isinstance(item, list)
-        assert len(matches) >= 2
-        instance_matches = [
-            line.line_content
-            for match in matches
-            for line in match.lines
-            if line.match_type == LineType.MATCH and "isinstance(item," in line.line_content
-        ]
-        assert len(instance_matches) >= 2
-        assert any("isinstance(item, dict)" in line for line in instance_matches)
-        assert any("isinstance(item, list)" in line for line in instance_matches)
-
-    def test_search_text_glob_with_special_chars(self):
-        """Glob patterns containing regex special characters should match literally."""
-        content = """
-        def func_square():
-            print("value[42]")
-
-        def func_curly():
-            print("value{bar}")
-        """
-
-        matches_square = search_text(r"*\[42\]*", content=content, is_glob=True, multiline=False)
-        assert len(matches_square) == 1
-        assert "[42]" in matches_square[0].lines[0].line_content
-
-        matches_curly = search_text("*{bar}*", content=content, is_glob=True, multiline=False)
-        assert len(matches_curly) == 1
-        assert "{bar}" in matches_curly[0].lines[0].line_content
-
-    def test_glob_to_regex_question_matches_single_char(self):
-        """A glob '?' matches exactly one character, matching glob_match's documented semantics."""
-        rx = glob_to_regex("a?c")
-        assert re.fullmatch(rx, "abc") is not None
-        assert re.fullmatch(rx, "ac") is None
-        assert re.fullmatch(rx, "abbc") is None
-
-    def test_search_text_glob_question_single_char(self):
-        """search_text('c?t', is_glob=True) must match 'cat' (one char), not 'coat' (two chars)."""
-        content = "value_cat_end\nvalue_coat_end"
-        matches = search_text("c?t", content=content, is_glob=True, multiline=False)
-        assert len(matches) == 1
-        assert "value_cat_end" in matches[0].lines[0].line_content
 
     def test_search_text_no_matches(self):
         """Test searching with a pattern that doesn't match anything."""
