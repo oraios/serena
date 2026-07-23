@@ -19,6 +19,35 @@ def subprocess_kwargs() -> dict:
     return kwargs
 
 
+def subprocess_run(
+    cmd: list[str] | str, timeout: int | None = None, check: bool = False, capture_output: bool = True, text: bool = True, **kwargs
+) -> subprocess.CompletedProcess:
+    """
+    Runs a command in a subprocess, applying safe default settings.
+
+    The stdin of the subprocess is set to DEVNULL to avoid interference with the parent process' stdin;
+    this cannot be overridden by passing a different value for stdin in kwargs.
+
+    :param cmd: the command to run, specified as a list of arguments or a string
+    :param timeout: the timeout in seconds for the command to complete; if None, no timeout is applied
+    :param check: if True, raises CalledProcessError if the command exits with a non-zero status
+    :param capture_output: if True, captures stdout and stderr; otherwise, they are not captured
+    :param text: if True, captures output as text (str); otherwise, captures as bytes
+    :return: a CompletedProcess instance containing information about the completed process
+    """
+    kwargs = dict(kwargs)
+    kwargs.update(subprocess_kwargs())
+    kwargs.update(
+        {
+            "timeout": timeout,
+            "capture_output": capture_output,
+            "text": text,
+            "stdin": subprocess.DEVNULL,  # important to avoid interference with parent process' stdin
+        }
+    )
+    return subprocess.run(cmd, check=check, **kwargs)
+
+
 def convert_shell_cmd(cmd: str | list[str]) -> str:
     """
     Converts a command (specified as a list or string) to a format supported by subprocess calls with shell=True on the current platform,

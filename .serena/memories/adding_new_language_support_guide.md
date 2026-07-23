@@ -61,6 +61,7 @@ To implement a new language server using the DependencyProvider pattern:
 
 **Implementation Pointers::**
   - Override `create_launch_command_env` if the launch command needs environment variables to be set (defaults to `{}` in the base implementation)
+  - When calling subprocesses, e.g. to install dependencies, do not use `subprocess.run` directly; instead, use the `subprocess_run` helper method from `solidlsp.utils.subprocess_utils`
 
 You should look at at least one existing implementation of each base class to understand how they work.
 
