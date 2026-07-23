@@ -31,6 +31,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     and the request used to map diagnostics onto owning symbols just threw. `AnsibleLanguageServer` now
     overrides that request to return `None` directly, so diagnostics fall back to being grouped under
     the file-level path as already documented #1758
+  - Fix: F#'s `module <Name>` declarations reported a `selectionRange` pointing at the `module`
+    keyword instead of at `<Name>`, so looking up hover/references from a module symbol's position
+    returned the keyword's own docs instead of the module's #925
 
 * JetBrains:
   - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file
