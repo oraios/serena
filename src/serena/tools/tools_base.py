@@ -438,6 +438,24 @@ class Tool(Component):
     def _to_json(x: Any) -> str:
         return json.dumps(x, ensure_ascii=False)
 
+    def _wrapped_tool_response(self, response: Any, message: str) -> str:
+        """
+        Wraps an existing tool response in an object with a message and the original response, i.e. returns
+        `{"message": message, "response": response}` stringified.
+        If the original response is a JSON string, it will be parsed and included as an object.
+
+        :param response: the original response (if it is a string, it will be parsed as JSON if possible)
+        :param message: the message to attach
+        :return: stringified JSON response with the message and the original response
+        """
+        response_obj = response
+        if isinstance(response, str):
+            try:
+                response_obj = json.loads(response)
+            except json.JSONDecodeError:
+                pass
+        return self._to_json({"message": message, "response": response_obj})
+
 
 class EditingToolWithDiagnostics(Tool, ToolMarkerCanEdit):
     """
