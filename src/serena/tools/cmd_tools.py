@@ -47,6 +47,6 @@ class ExecuteShellCommandTool(Tool, ToolMarkerCanEdit):
                         f"Specified a relative working directory ({cwd}), but the resulting path is not a directory: {_cwd}"
                     )
 
-        result = execute_shell_command(command, cwd=_cwd, capture_stderr=capture_stderr)
+        result = execute_shell_command(command, cwd=_cwd, capture_stderr=capture_stderr, timeout=self.agent.serena_config.tool_timeout)
         result = result.model_dump_json()
         return self._limit_length(result, max_answer_chars)

@@ -7,6 +7,11 @@ Status of the `main` branch. Changes prior to the next official version change w
   - The `languages` key in project configurations was changed to `language_servers` to better reflect
     the actual semantics (configurations are automatically migrated)
   - Fix: glob matching bare `*` and `?` in non-`**` patterns matched across `/`, contradicting documented behaviour #1732
+  - Fix: `execute_shell_command` had no timeout, so a hung command blocked indefinitely. Since the
+    agent's task executor runs on a single dispatcher thread that waits for the current task before
+    picking up the next, this also stalled every subsequent tool call, not just the shell command
+    itself. `ExecuteShellCommandTool` now bounds shell commands with the existing `tool_timeout`
+    config value and terminates the process tree (not just the top-level shell) on expiry #1251
 
 * Language Servers: 
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
