@@ -1,10 +1,9 @@
-import re
 from collections.abc import Callable
 
 import pytest
 
 from serena.util.file_proxy import FileCollection, FileProxy
-from serena.util.text_utils import LineType, MultiFileContentReplacer, glob_to_regex, search_files, search_text
+from serena.util.text_utils import GlobMatcher, LineType, MultiFileContentReplacer, search_files, search_text
 
 
 class TestSearchText:
@@ -177,94 +176,6 @@ class TestSearchText:
         match_lines = [line for line in multiline_match.lines if line.match_type == LineType.MATCH]
         assert len(match_lines) >= 3
 
-    def test_search_text_with_glob_pattern(self):
-        """Test searching with glob-like patterns."""
-        content = """
-        class UserService:
-            def get_user(self, user_id):
-                return {"id": user_id, "name": "Test User"}
-
-            def create_user(self, user_data):
-                print(f"Creating user: {user_data}")
-                return {"id": 123, **user_data}
-
-            def update_user(self, user_id, user_data):
-                print(f"Updating user {user_id} with {user_data}")
-                return True
-        """
-
-        # Search with a glob pattern for all user methods
-        matches = search_text("*_user*", content=content, is_glob=True, multiline=False)
-
-        assert len(matches) == 3
-        assert "get_user" in matches[0].lines[0].line_content
-        assert "create_user" in matches[1].lines[0].line_content
-        assert "update_user" in matches[2].lines[0].line_content
-
-    def test_search_text_with_complex_glob_pattern(self):
-        """Test searching with more complex glob patterns."""
-        content = """
-        def process_data(data):
-            return [transform(item) for item in data]
-
-        def transform(item):
-            if isinstance(item, dict):
-                return {k: v.upper() if isinstance(v, str) else v for k, v in item.items()}
-            elif isinstance(item, list):
-                return [x * 2 for x in item if isinstance(x, (int, float))]
-            elif isinstance(item, str):
-                return item.upper()
-            else:
-                return item
-        """
-
-        # Search with a simplified glob pattern to find all isinstance occurrences
-        matches = search_text("*isinstance*", content=content, is_glob=True, multiline=False)
-
-        # Should match lines with isinstance(item, dict) and isinstance(item, list)
-        assert len(matches) >= 2
-        instance_matches = [
-            line.line_content
-            for match in matches
-            for line in match.lines
-            if line.match_type == LineType.MATCH and "isinstance(item," in line.line_content
-        ]
-        assert len(instance_matches) >= 2
-        assert any("isinstance(item, dict)" in line for line in instance_matches)
-        assert any("isinstance(item, list)" in line for line in instance_matches)
-
-    def test_search_text_glob_with_special_chars(self):
-        """Glob patterns containing regex special characters should match literally."""
-        content = """
-        def func_square():
-            print("value[42]")
-
-        def func_curly():
-            print("value{bar}")
-        """
-
-        matches_square = search_text(r"*\[42\]*", content=content, is_glob=True, multiline=False)
-        assert len(matches_square) == 1
-        assert "[42]" in matches_square[0].lines[0].line_content
-
-        matches_curly = search_text("*{bar}*", content=content, is_glob=True, multiline=False)
-        assert len(matches_curly) == 1
-        assert "{bar}" in matches_curly[0].lines[0].line_content
-
-    def test_glob_to_regex_question_matches_single_char(self):
-        """A glob '?' matches exactly one character, matching glob_match's documented semantics."""
-        rx = glob_to_regex("a?c")
-        assert re.fullmatch(rx, "abc") is not None
-        assert re.fullmatch(rx, "ac") is None
-        assert re.fullmatch(rx, "abbc") is None
-
-    def test_search_text_glob_question_single_char(self):
-        """search_text('c?t', is_glob=True) must match 'cat' (one char), not 'coat' (two chars)."""
-        content = "value_cat_end\nvalue_coat_end"
-        matches = search_text("c?t", content=content, is_glob=True, multiline=False)
-        assert len(matches) == 1
-        assert "value_cat_end" in matches[0].lines[0].line_content
-
     def test_search_text_no_matches(self):
         """Test searching with a pattern that doesn't match anything."""
         content = """
@@ -317,7 +228,8 @@ class TestSearchFiles:
             (["a.py", "b.txt", "c.py"], "match", "*.py", "c.*", ["a.py"], "Include .py, exclude c.*"),
             # Directory matching - Using pathspec patterns
             (["main.c", "test/main.c"], "match", "test/*", None, ["test/main.c"], "Include files in test/ subdir"),
-            (["data/a.csv", "data/b.log"], "match", "data/*", "*.log", ["data/a.csv"], "Include data/*, exclude *.log"),
+            # A bare `*.log` no longer crosses `/` (see #1732); use `data/*.log` to exclude within data/.
+            (["data/a.csv", "data/b.log"], "match", "data/*", "data/*.log", ["data/a.csv"], "Include data/*, exclude data/*.log"),
             (["src/a.py", "tests/b.py"], "match", "src/**", "tests/**", ["src/a.py"], "Include src/**, exclude tests/**"),
             (["src/mod/a.py", "tests/b.py"], "match", "**/*.py", "tests/**", ["src/mod/a.py"], "Include **/*.py, exclude tests/**"),
             (["file.py", "dir/file.py"], "match", "dir/*.py", None, ["dir/file.py"], "Include files directly in dir"),
@@ -593,23 +505,33 @@ class TestGlobMatch:
         [
             # Basic wildcard patterns
             ("*.py", "file.py", True),
+            ("*.py", "src/file.py", False),
             ("*.py", "file.txt", False),
             ("*agent.py", "agent.py", True),
             ("*agent.py", "process_isolated_agent.py", True),
+            ("*agent.py", "src/agent.py", False),
             ("*agent.py", "agent_test.py", False),
+            ("a?b.py", "acb.py", True),
+            ("a?b.py", "a/b.py", False),
+            ("src/*.py", "src/file.py", True),
+            ("src/*.py", "src/sub/file.py", False),
             # Double asterisk patterns
             ("**agent.py", "agent.py", True),
+            ("**/agent.py", "agent.py", True),
+            ("**/agent.py", "src/serena/agent.py", True),
+            ("src/**/agent.py", "src/agent.py", True),
+            ("src/**/agent.py", "src/serena/foo/agent.py", True),
+            ("src/s**a/agent.py", "src/serena/agent.py", True),
+            ("src/s**a/agent.py", "src/serena/a/agent.py", True),
             ("**agent.py", "src/agent.py", True),
             ("**agent.py", "src/serena/agent.py", True),
             ("**agent.py", "src/serena/process_isolated_agent.py", True),
             ("**agent.py", "agent_test.py", False),
-            # Prefix with double asterisk
             ("src/**agent.py", "src/agent.py", True),
             ("src/**agent.py", "src/serena/agent.py", True),
             ("src/**agent.py", "src/serena/process_isolated_agent.py", True),
             ("src/**agent.py", "other/agent.py", False),
             ("src/**agent.py", "src/agent_test.py", False),
-            # Directory patterns
             ("src/**", "src/file.py", True),
             ("src/**", "src/dir/file.py", True),
             ("src/**", "other/file.py", False),
@@ -620,13 +542,20 @@ class TestGlobMatch:
             # Simple patterns without asterisks
             ("src/file.py", "src/file.py", True),
             ("src/file.py", "src/other.py", False),
+            # Patterns with backslash
+            ("src\\file.py", "src/file.py", True),
+            ("src\\file.py", "src\\file.py", True),
+            ("src\\file.py", "src/other.py", False),
+            # Patterns with []
+            ("file[0-9].py", "file1.py", True),
+            ("file[0-9].py", "filea.py", False),
+            ("file[!0-9].py", "filea.py", True),
+            ("file[!0-9].py", "file1.py", False),
         ],
     )
     def test_glob_match(self, pattern, path, expected):
         """Test glob_match function with various patterns."""
-        from serena.util.text_utils import glob_match
-
-        assert glob_match(pattern, path) == expected
+        assert GlobMatcher(pattern).matches(path) == expected
 
 
 class TestExpandBraces:
@@ -651,9 +580,7 @@ class TestExpandBraces:
     )
     def test_expand_braces(self, pattern, expected):
         """Test brace expansion for glob patterns."""
-        from serena.util.text_utils import expand_braces
-
-        assert sorted(expand_braces(pattern)) == sorted(expected)
+        assert sorted(GlobMatcher._expand_braces(pattern)) == sorted(expected)
 
     @pytest.mark.parametrize(
         "pattern",
@@ -665,10 +592,8 @@ class TestExpandBraces:
     )
     def test_expand_braces_rejects_malformed_braces(self, pattern):
         """Malformed brace globs should fail instead of looping forever."""
-        from serena.util.text_utils import expand_braces
-
         with pytest.raises(ValueError, match="Invalid glob brace expression"):
-            expand_braces(pattern)
+            GlobMatcher._expand_braces(pattern)
 
 
 class TestMultiFileContentReplacer:

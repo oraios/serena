@@ -1,4 +1,3 @@
-import fnmatch
 import hashlib
 import logging
 import re
@@ -9,6 +8,7 @@ from typing import Any, Literal, Self
 
 from bs4 import BeautifulSoup
 from joblib import Parallel, delayed
+from sensai.util.string import ToStringMixin
 
 from serena.util.file_proxy import FileCollection, FileProxy
 from solidlsp.ls_utils import TextUtils
@@ -116,34 +116,12 @@ class MatchedConsecutiveLines:
         return cls(lines=text_lines, source_file_path=source_file_path)
 
 
-def glob_to_regex(glob_pat: str) -> str:
-    regex_parts: list[str] = []
-    i = 0
-    while i < len(glob_pat):
-        ch = glob_pat[i]
-        if ch == "*":
-            regex_parts.append(".*")
-        elif ch == "?":
-            regex_parts.append(".")
-        elif ch == "\\":
-            i += 1
-            if i < len(glob_pat):
-                regex_parts.append(re.escape(glob_pat[i]))
-            else:
-                regex_parts.append("\\")
-        else:
-            regex_parts.append(re.escape(ch))
-        i += 1
-    return "".join(regex_parts)
-
-
 def search_text(
     pattern: str,
     content: str | None = None,
     source_file_path: str | None = None,
     context_lines_before: int = 0,
     context_lines_after: int = 0,
-    is_glob: bool = False,
     multiline: bool = True,
 ) -> list[MatchedConsecutiveLines]:
     """
@@ -155,8 +133,6 @@ def search_text(
         this has to be passed and the file will be read.
     :param context_lines_before: Number of context lines to include before matches
     :param context_lines_after: Number of context lines to include after matches
-    :param is_glob: If True, pattern is treated as a glob-like pattern (e.g., "*.py", "test_??.py")
-             and will be converted to regex internally
     :param multiline: whether to apply multi-line matching, enabling the flags re.DOTALL and re.MULTILINE
     :return: List of `TextSearchMatch` objects
     :raises: ValueError if the pattern is not valid
@@ -171,10 +147,6 @@ def search_text(
     matches = []
     lines = TextUtils.split_lines(content)
     total_lines = len(lines)
-
-    # Convert pattern to a compiled regex if it's a string
-    if is_glob:
-        pattern = glob_to_regex(pattern)
 
     # For multiline matches, optionally use DOTALL so '.' matches newlines
     flags = (re.MULTILINE | re.DOTALL) if multiline else 0
@@ -213,36 +185,9 @@ def search_text(
     return matches
 
 
-def expand_braces(pattern: str) -> list[str]:
+class GlobMatcher(ToStringMixin):
     """
-    Expands brace patterns in a glob string.
-    For example, "**/*.{js,jsx,ts,tsx}" becomes ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx"].
-    Handles multiple brace sets as well.
-    """
-    patterns = [pattern]
-    while any("{" in p or "}" in p for p in patterns):
-        new_patterns = []
-        for p in patterns:
-            match = re.search(r"\{([^{}]*)\}", p)
-            if match:
-                options_expr = match.group(1)
-                if not options_expr:
-                    raise ValueError(f"Invalid glob brace expression in {pattern!r}: empty braces are not allowed")
-
-                prefix = p[: match.start()]
-                suffix = p[match.end() :]
-                options = options_expr.split(",")
-                for option in options:
-                    new_patterns.append(f"{prefix}{option}{suffix}")
-            else:
-                raise ValueError(f"Invalid glob brace expression in {pattern!r}: unmatched brace")
-        patterns = new_patterns
-    return patterns
-
-
-def glob_match(pattern: str, path: str) -> bool:
-    """
-    Match a file path against a glob pattern.
+    Supports matching a file path against a glob pattern.
 
     Supports standard glob patterns:
     - * matches any number of characters except /
@@ -252,53 +197,100 @@ def glob_match(pattern: str, path: str) -> bool:
 
     Supports brace expansion:
     - {a,b,c} expands to multiple patterns (including nesting)
-
-    Unsupported patterns:
-    - Bash extended glob features are unavailable in Python's fnmatch
-    - Extended globs like !(), ?(), +(), *(), @() are not supported
-
-    :param pattern: Glob pattern (e.g., 'src/**/*.py', '**agent.py')
-    :param path: File path to match against
-    :return: True if path matches pattern
     """
-    pattern = pattern.replace("\\", "/")  # Normalize backslashes to forward slashes
-    path = path.replace("\\", "/")  # Normalize path backslashes to forward slashes
 
-    # Handle ** patterns that should match zero or more directories
-    if "**" in pattern:
-        # Method 1: Standard fnmatch (matches one or more directories)
-        regex1 = fnmatch.translate(pattern)
-        if re.match(regex1, path):
-            return True
-
-        # Method 2: Handle zero-directory case by removing /** entirely
-        # Convert "src/**/test.py" to "src/test.py"
-        if "/**/" in pattern:
-            zero_dir_pattern = pattern.replace("/**/", "/")
-            regex2 = fnmatch.translate(zero_dir_pattern)
-            if re.match(regex2, path):
-                return True
-
-        # Method 3: Handle leading ** case by removing **/
-        # Convert "**/test.py" to "test.py"
-        if pattern.startswith("**/"):
-            zero_dir_pattern = pattern[3:]  # Remove "**/"
-            regex3 = fnmatch.translate(zero_dir_pattern)
-            if re.match(regex3, path):
-                return True
-
-        return False
-    else:
-        # Simple pattern without **, use fnmatch directly
-        return fnmatch.fnmatch(path, pattern)
-
-
-class GlobMatcher:
     def __init__(self, expr: str):
-        self._patterns = expand_braces(expr)
+        """
+        :param expr: a glob pattern which may make use of brace expansion (e.g., "src/**/*.{js,jsx,ts,tsx}")
+        """
+        expr = expr.replace("\\", "/")  # normalise backslashes to forward slashes
+        self._glob_expr = expr
+        self._glob_patterns = self._expand_braces(expr)
+        self._regex_patterns = [re.compile(self._translate_glob_to_regex(p)) for p in self._glob_patterns]
+
+    def _tostring_includes(self) -> list[str]:
+        return ["_glob_expr"]
+
+    @staticmethod
+    def _expand_braces(pattern: str) -> list[str]:
+        """
+        Expands brace patterns in a glob string.
+        For example, "**/*.{js,jsx,ts,tsx}" becomes ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx"].
+        Handles multiple brace sets as well.
+        """
+        patterns = [pattern]
+        while any("{" in p or "}" in p for p in patterns):
+            new_patterns = []
+            for p in patterns:
+                match = re.search(r"\{([^{}]*)\}", p)
+                if match:
+                    options_expr = match.group(1)
+                    if not options_expr:
+                        raise ValueError(f"Invalid glob brace expression in {pattern!r}: empty braces are not allowed")
+
+                    prefix = p[: match.start()]
+                    suffix = p[match.end() :]
+                    options = options_expr.split(",")
+                    for option in options:
+                        new_patterns.append(f"{prefix}{option}{suffix}")
+                else:
+                    raise ValueError(f"Invalid glob brace expression in {pattern!r}: unmatched brace")
+            patterns = new_patterns
+        return patterns
+
+    @staticmethod
+    def _translate_glob_to_regex(pattern: str) -> str:
+        res = []
+        i = 0
+        n = len(pattern)
+        while i < n:
+            c = pattern[i]
+            i += 1
+            if c == "*":
+                if i < n and pattern[i] == "*":  # **
+                    i += 1
+                    if i < n and pattern[i] == "/":  # **/
+                        i += 1
+                        if res and res[-1] == "/":  # /**/
+                            res = res[:-1]
+                            res.append("(?:/|/.*/)")
+                        elif res:  # c**/ (with c != '/')
+                            res.append(".*/")
+                        else:  # **/ at the start of the pattern
+                            res.append("(?:.*/)?")
+                    else:  # c**d  (with c, d != '/')
+                        res.append(".*")
+                else:  # single *
+                    if not res or res[-1] != "[^/]*":
+                        res.append("[^/]*")
+            elif c == "?":
+                res.append("[^/]")
+            elif c == "[":
+                j = i
+                if j < n and pattern[j] == "!":
+                    j += 1
+                if j < n and pattern[j] == "]":
+                    j += 1
+                while j < n and pattern[j] != "]":
+                    j += 1
+                if j >= n:
+                    res.append(r"\[")
+                else:
+                    stuff = pattern[i:j]
+                    if stuff.startswith("!"):
+                        stuff = "^" + stuff[1:]
+                    elif stuff.startswith("^"):
+                        stuff = r"\^" + stuff
+                    res.append(f"[{stuff}]")
+                    i = j + 1
+            else:
+                res.append(re.escape(c))
+        inner = "".join(res)
+        return f"(?s:{inner})\\Z"
 
     def matches(self, path: str) -> bool:
-        return any(glob_match(p, path) for p in self._patterns)
+        path = path.replace("\\", "/")  # normalise backslashes to forward slashes
+        return any(regex.match(path) for regex in self._regex_patterns)
 
 
 def search_files(
