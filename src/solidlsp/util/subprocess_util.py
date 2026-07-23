@@ -1,11 +1,40 @@
 import logging
 import platform
+import signal
 import subprocess
 
 import oslex
 import psutil
 
 log = logging.getLogger(__name__)
+
+# Resolved once at import time rather than inside the preexec_fn below: preexec_fn runs in the
+# forked child before exec(), where only async-signal-safe operations are safe to perform, and an
+# import/ctypes.CDLL lookup at that point is not.
+_libc = None
+if platform.system() == "Linux":
+    import ctypes
+
+    _libc = ctypes.CDLL("libc.so.6", use_errno=True)
+_PR_SET_PDEATHSIG = 1
+
+
+def set_pdeathsig_on_parent_exit() -> None:
+    """
+    preexec_fn for subprocess.Popen (Linux only, no-op elsewhere): asks the kernel to send this
+    process SIGTERM if its parent dies for any reason, including SIGKILL, via
+    prctl(PR_SET_PDEATHSIG). This is the only mechanism that can free the child when the parent
+    is killed rather than exiting gracefully, since a graceful exit is required to run any
+    signal-the-tree cleanup code ourselves.
+
+    Only protects the immediate process this is passed to. When launching with shell=True, that
+    process is the shell, not the program it runs, so the registration alone will not protect a
+    program the shell forks as a child; see convert_shell_cmd's `exec` prefix, which makes the
+    shell replace itself with the program instead of forking it, so the same PID (and therefore
+    the same PDEATHSIG registration, which execve preserves) carries through.
+    """
+    if _libc is not None:
+        _libc.prctl(_PR_SET_PDEATHSIG, signal.SIGTERM)
 
 
 def subprocess_kwargs() -> dict:
@@ -48,18 +77,22 @@ def subprocess_run(
     return subprocess.run(cmd, check=check, **kwargs)
 
 
-def convert_shell_cmd(cmd: str | list[str]) -> str:
+def convert_shell_cmd(cmd: str | list[str], use_exec: bool = False) -> str:
     """
     Converts a command (specified as a list or string) to a format supported by subprocess calls with shell=True on the current platform,
     applying necessary escaping and quoting if the command is specified as a list of arguments.
 
     :param cmd: the command to convert, specified as a list of arguments
+    :param use_exec: if True (POSIX only; must not be set on Windows), prefix the command with the shell's
+        `exec` builtin, so the shell replaces its own process image with the command instead of forking it
+        as a child. Combined with set_pdeathsig_on_parent_exit, this is what makes the parent-death signal
+        reach the actual program rather than only the intermediate shell.
     :return: a suitable representation of the command for subprocess calls on the current platform
     """
-    if isinstance(cmd, list):
-        return oslex.join(cmd)
-    else:
-        return cmd
+    cmd_str = oslex.join(cmd) if isinstance(cmd, list) else cmd
+    if use_exec:
+        cmd_str = f"exec {cmd_str}"
+    return cmd_str
 
 
 def _signal_process_tree(process: subprocess.Popen[bytes], terminate: bool = True) -> None:
