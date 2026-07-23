@@ -580,9 +580,7 @@ class TestExpandBraces:
     )
     def test_expand_braces(self, pattern, expected):
         """Test brace expansion for glob patterns."""
-        from serena.util.text_utils import _expand_braces
-
-        assert sorted(_expand_braces(pattern)) == sorted(expected)
+        assert sorted(GlobMatcher._expand_braces(pattern)) == sorted(expected)
 
     @pytest.mark.parametrize(
         "pattern",
@@ -594,10 +592,8 @@ class TestExpandBraces:
     )
     def test_expand_braces_rejects_malformed_braces(self, pattern):
         """Malformed brace globs should fail instead of looping forever."""
-        from serena.util.text_utils import _expand_braces
-
         with pytest.raises(ValueError, match="Invalid glob brace expression"):
-            _expand_braces(pattern)
+            GlobMatcher._expand_braces(pattern)
 
 
 class TestMultiFileContentReplacer:

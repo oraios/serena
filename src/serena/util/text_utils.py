@@ -185,83 +185,6 @@ def search_text(
     return matches
 
 
-def _expand_braces(pattern: str) -> list[str]:
-    """
-    Expands brace patterns in a glob string.
-    For example, "**/*.{js,jsx,ts,tsx}" becomes ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx"].
-    Handles multiple brace sets as well.
-    """
-    patterns = [pattern]
-    while any("{" in p or "}" in p for p in patterns):
-        new_patterns = []
-        for p in patterns:
-            match = re.search(r"\{([^{}]*)\}", p)
-            if match:
-                options_expr = match.group(1)
-                if not options_expr:
-                    raise ValueError(f"Invalid glob brace expression in {pattern!r}: empty braces are not allowed")
-
-                prefix = p[: match.start()]
-                suffix = p[match.end() :]
-                options = options_expr.split(",")
-                for option in options:
-                    new_patterns.append(f"{prefix}{option}{suffix}")
-            else:
-                raise ValueError(f"Invalid glob brace expression in {pattern!r}: unmatched brace")
-        patterns = new_patterns
-    return patterns
-
-
-def _translate_glob_to_regex(pattern: str) -> str:
-    res = []
-    i = 0
-    n = len(pattern)
-    while i < n:
-        c = pattern[i]
-        i += 1
-        if c == "*":
-            if i < n and pattern[i] == "*":  # **
-                i += 1
-                if i < n and pattern[i] == "/":  # **/
-                    i += 1
-                    if res and res[-1] == "/":  # /**/
-                        res = res[:-1]
-                        res.append("(?:/|/.*/)")
-                    elif res:  # c**/ (with c != '/')
-                        res.append(".*/")
-                    else:  # **/ at the start of the pattern
-                        res.append("(?:.*/)?")
-                else:  # c**d  (with c, d != '/')
-                    res.append(".*")
-            else:  # single *
-                if not res or res[-1] != "[^/]*":
-                    res.append("[^/]*")
-        elif c == "?":
-            res.append("[^/]")
-        elif c == "[":
-            j = i
-            if j < n and pattern[j] == "!":
-                j += 1
-            if j < n and pattern[j] == "]":
-                j += 1
-            while j < n and pattern[j] != "]":
-                j += 1
-            if j >= n:
-                res.append(r"\[")
-            else:
-                stuff = pattern[i:j]
-                if stuff.startswith("!"):
-                    stuff = "^" + stuff[1:]
-                elif stuff.startswith("^"):
-                    stuff = r"\^" + stuff
-                res.append(f"[{stuff}]")
-                i = j + 1
-        else:
-            res.append(re.escape(c))
-    inner = "".join(res)
-    return f"(?s:{inner})\\Z"
-
-
 class GlobMatcher(ToStringMixin):
     """
     Supports matching a file path against a glob pattern.
@@ -282,11 +205,88 @@ class GlobMatcher(ToStringMixin):
         """
         expr = expr.replace("\\", "/")  # normalise backslashes to forward slashes
         self._glob_expr = expr
-        self._glob_patterns = _expand_braces(expr)
-        self._regex_patterns = [re.compile(_translate_glob_to_regex(p)) for p in self._glob_patterns]
+        self._glob_patterns = self._expand_braces(expr)
+        self._regex_patterns = [re.compile(self._translate_glob_to_regex(p)) for p in self._glob_patterns]
 
     def _tostring_includes(self) -> list[str]:
         return ["_glob_expr"]
+
+    @staticmethod
+    def _expand_braces(pattern: str) -> list[str]:
+        """
+        Expands brace patterns in a glob string.
+        For example, "**/*.{js,jsx,ts,tsx}" becomes ["**/*.js", "**/*.jsx", "**/*.ts", "**/*.tsx"].
+        Handles multiple brace sets as well.
+        """
+        patterns = [pattern]
+        while any("{" in p or "}" in p for p in patterns):
+            new_patterns = []
+            for p in patterns:
+                match = re.search(r"\{([^{}]*)\}", p)
+                if match:
+                    options_expr = match.group(1)
+                    if not options_expr:
+                        raise ValueError(f"Invalid glob brace expression in {pattern!r}: empty braces are not allowed")
+
+                    prefix = p[: match.start()]
+                    suffix = p[match.end() :]
+                    options = options_expr.split(",")
+                    for option in options:
+                        new_patterns.append(f"{prefix}{option}{suffix}")
+                else:
+                    raise ValueError(f"Invalid glob brace expression in {pattern!r}: unmatched brace")
+            patterns = new_patterns
+        return patterns
+
+    @staticmethod
+    def _translate_glob_to_regex(pattern: str) -> str:
+        res = []
+        i = 0
+        n = len(pattern)
+        while i < n:
+            c = pattern[i]
+            i += 1
+            if c == "*":
+                if i < n and pattern[i] == "*":  # **
+                    i += 1
+                    if i < n and pattern[i] == "/":  # **/
+                        i += 1
+                        if res and res[-1] == "/":  # /**/
+                            res = res[:-1]
+                            res.append("(?:/|/.*/)")
+                        elif res:  # c**/ (with c != '/')
+                            res.append(".*/")
+                        else:  # **/ at the start of the pattern
+                            res.append("(?:.*/)?")
+                    else:  # c**d  (with c, d != '/')
+                        res.append(".*")
+                else:  # single *
+                    if not res or res[-1] != "[^/]*":
+                        res.append("[^/]*")
+            elif c == "?":
+                res.append("[^/]")
+            elif c == "[":
+                j = i
+                if j < n and pattern[j] == "!":
+                    j += 1
+                if j < n and pattern[j] == "]":
+                    j += 1
+                while j < n and pattern[j] != "]":
+                    j += 1
+                if j >= n:
+                    res.append(r"\[")
+                else:
+                    stuff = pattern[i:j]
+                    if stuff.startswith("!"):
+                        stuff = "^" + stuff[1:]
+                    elif stuff.startswith("^"):
+                        stuff = r"\^" + stuff
+                    res.append(f"[{stuff}]")
+                    i = j + 1
+            else:
+                res.append(re.escape(c))
+        inner = "".join(res)
+        return f"(?s:{inner})\\Z"
 
     def matches(self, path: str) -> bool:
         path = path.replace("\\", "/")  # normalise backslashes to forward slashes
