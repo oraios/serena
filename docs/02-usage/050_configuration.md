@@ -1118,8 +1118,9 @@ Supported settings:
 | `typescript_version` | `5.9.3` | Override the bundled `typescript` npm package version Serena installs when `ls_path` is not set. |
 | `typescript_language_server_version` | `5.1.3` | Override the bundled `typescript-language-server` npm package version Serena installs when `ls_path` is not set. |
 | `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
-| `indexing_timeout` | `30.0` | Timeout in seconds for waiting on tsserver's `$/progress` project-indexing signal (both at startup and before the first cross-file reference query). If indexing does not complete within this window, Serena logs a warning and proceeds anyway. Increase it for very large projects. |
+| `indexing_timeout` | `30.0` | Timeout in seconds for waiting on tsserver's `$/progress` project-indexing signal to *drain* once it has started (both at startup and before the first cross-file reference query). If indexing does not complete within this window, Serena logs a warning and proceeds anyway. Increase it for very large projects. |
 | `server_ready_timeout` | `10.0` | Timeout in seconds for waiting on the server-ready signal after initialization. If the signal does not arrive within this window, Serena logs a message and proceeds anyway. |
+| `indexing_start_grace` | `5.0` | Timeout in seconds to wait for tsserver to *start* reporting `$/progress` before the first cross-file reference query. tsserver must resolve the project graph before it can emit the first progress token, and that can take longer than the default on a very large project; if it takes longer than this window, Serena assumes no indexing was needed and may return incomplete cross-file references. Raising `indexing_timeout` alone does not help here, since this grace elapses first. Increase this for very large projects if `find_referencing_symbols`/`request_references` returns incomplete results shortly after project load. |
 
 #### Svelte
 

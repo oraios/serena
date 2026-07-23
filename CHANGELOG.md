@@ -16,6 +16,15 @@ Status of the `main` branch. Changes prior to the next official version change w
 * JetBrains:
   - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file
 
+* Language Servers:
+  - `typescript`: Fix: on large projects, the first `find_referencing_symbols`/`request_references` call
+    could silently race tsserver's project load and return incomplete results, because the fixed 2s
+    grace for tsserver to *start* reporting `$/progress` (distinct from the separate, already
+    configurable `indexing_timeout` used to wait for it to *drain*) was hardcoded and not large enough
+    for projects where the initial project-graph resolution itself takes longer than that. The grace
+    is now `indexing_start_grace` (default 5.0s), configurable the same way as `indexing_timeout` and
+    `server_ready_timeout` #1586
+
 * Hooks:
   - Add `serena-hooks --client=grok`, including Grok-native PreToolUse allow/deny output.
   - PreToolUse remind hook: coerce non-string shell command values instead of failing, and recognize
