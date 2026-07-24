@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import re
-import subprocess
 from collections.abc import Hashable
 from typing import Any
 
@@ -14,6 +13,7 @@ from solidlsp.ls import DocumentSymbols, LSPFileBuffer, RawDocumentSymbol, Solid
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ class Gopls(SolidLanguageServer):
     def _get_go_version() -> str | None:
         """Get the installed Go version or None if not found."""
         try:
-            result = subprocess.run(["go", "version"], capture_output=True, text=True, check=False)
+            result = subprocess_run(["go", "version"], capture_output=True, text=True, check=False)
             if result.returncode == 0:
                 return result.stdout.strip()
         except FileNotFoundError:
@@ -74,7 +74,7 @@ class Gopls(SolidLanguageServer):
     def _get_gopls_version() -> str | None:
         """Get the installed gopls version or None if not found."""
         try:
-            result = subprocess.run(["gopls", "version"], capture_output=True, text=True, check=False)
+            result = subprocess_run(["gopls", "version"], capture_output=True, text=True, check=False)
             if result.returncode == 0:
                 return result.stdout.strip()
         except FileNotFoundError:

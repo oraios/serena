@@ -5,12 +5,12 @@ SystemVerilog language server using verible-verilog-ls.
 import logging
 import os
 import shutil
-import subprocess
 from typing import Any
 
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
 
@@ -42,7 +42,7 @@ class SystemVerilogLanguageServer(SolidLanguageServer):
             if system_verible:
                 # Log version information
                 try:
-                    result = subprocess.run(
+                    result = subprocess_run(
                         [system_verible, "--version"],
                         capture_output=True,
                         text=True,

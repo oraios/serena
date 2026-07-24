@@ -5,7 +5,6 @@ Note: Windows is not supported as Nix itself doesn't support Windows natively.
 """
 
 import logging
-import subprocess
 import time
 from typing import Any
 
@@ -17,6 +16,7 @@ from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import DidChangeConfigurationParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class PerlLanguageServer(SolidLanguageServer):
     def _get_perl_version() -> str | None:
         """Get the installed Perl version or None if not found."""
         try:
-            result = subprocess.run(["perl", "-v"], capture_output=True, text=True, check=False)
+            result = subprocess_run(["perl", "-v"], capture_output=True, text=True, check=False)
             if result.returncode == 0:
                 return result.stdout.strip()
         except FileNotFoundError:
@@ -56,7 +56,7 @@ class PerlLanguageServer(SolidLanguageServer):
     def _get_perl_language_server_version() -> str | None:
         """Get the installed Perl::LanguageServer version or None if not found."""
         try:
-            result = subprocess.run(
+            result = subprocess_run(
                 ["perl", "-MPerl::LanguageServer", "-e", "print $Perl::LanguageServer::VERSION"],
                 capture_output=True,
                 text=True,

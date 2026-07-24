@@ -358,7 +358,10 @@ class TestRustAnalyzerDetection:
         def mock_access(path, mode):
             return path == scoop_path
 
-        with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=None):
+        with (
+            patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=None),
+            patch.object(RustAnalyzer.DependencyProvider, "_get_rustup_version", return_value=None),
+        ):
             with patch("platform.system", return_value="Windows"):
                 with patch("shutil.which", return_value=None):
                     with patch("os.path.isfile", side_effect=mock_isfile):
@@ -390,7 +393,10 @@ class TestRustAnalyzerDetection:
         def mock_access(path, mode):
             return path == cargo_path
 
-        with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=None):
+        with (
+            patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=None),
+            patch.object(RustAnalyzer.DependencyProvider, "_get_rustup_version", return_value=None),
+        ):
             with patch("platform.system", return_value="Windows"):
                 with patch("shutil.which", return_value=None):
                     with patch("os.path.isfile", side_effect=mock_isfile):

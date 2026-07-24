@@ -5,6 +5,7 @@ Provides F# specific instantiation of the LanguageServer class.
 import logging
 import os
 import shutil
+import subprocess
 import threading
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
 
@@ -104,9 +106,7 @@ class FSharpLanguageServer(SolidLanguageServer):
 
             # Install FsAutoComplete using dotnet tool install
             try:
-                import subprocess
-
-                result = subprocess.run(
+                result = subprocess_run(
                     [dotnet_exe, "tool", "install", "--tool-path", fsharp_ls_dir, "fsautocomplete", "--version", fsautocomplete_version],
                     cwd=fsharp_ls_dir,
                     capture_output=True,
@@ -271,9 +271,7 @@ class FSharpLanguageServer(SolidLanguageServer):
         if dotnet_exe:
             # Try to get the installation path
             try:
-                import subprocess
-
-                result = subprocess.run([dotnet_exe, "--info"], capture_output=True, text=True, check=True)
+                result = subprocess_run([dotnet_exe, "--info"], capture_output=True, text=True, check=True)
                 lines = result.stdout.split("\n")
                 for line in lines:
                     if "Base Path:" in line or "Base path:" in line:
