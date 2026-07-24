@@ -13,6 +13,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     project creation) 
   - Add `python_basedpyright` as an alternative Python language server
   - Nix/nixd: support custom `ls_path` launchers and external JSON settings through `config_path` #1737
+  - Fix: F#'s `module <Name>` declarations reported a `selectionRange` pointing at the `module`
+    keyword instead of at `<Name>`, so looking up hover/references from a module symbol's position
+    returned the keyword's own docs instead of the module's #925
 
 * JetBrains:
   - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file

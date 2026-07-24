@@ -4,6 +4,7 @@ Provides F# specific instantiation of the LanguageServer class.
 
 import logging
 import os
+import re
 import shutil
 import threading
 from pathlib import Path
@@ -11,8 +12,9 @@ from pathlib import Path
 from overrides import override
 
 from serena.util.dotnet import DotNETUtil
+from solidlsp import ls_types
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import DocumentSymbols, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
@@ -26,6 +28,10 @@ log = logging.getLogger(__name__)
 INITIAL_FSAUTOCOMPLETE_VERSION = "0.83.0"
 DEFAULT_FSAUTOCOMPLETE_VERSION = "0.83.0"
 FSAUTOCOMPLETE_VERSION = DEFAULT_FSAUTOCOMPLETE_VERSION
+
+# Matches an F# module declaration line ("module Foo", "module Foo =", "module rec Foo =",
+# dotted names), used to recover the module name's real column. See _fix_module_selection_range.
+_MODULE_DECLARATION_PATTERN = re.compile(r"^\s*module\s+(?:rec\s+)?([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)")
 
 
 class FSharpLanguageServer(SolidLanguageServer):
@@ -65,6 +71,60 @@ class FSharpLanguageServer(SolidLanguageServer):
             ".fake",
             ".ionide",
         ]
+
+    def _fix_module_selection_range(
+        self, symbol: ls_types.UnifiedSymbolInformation, file_content: str
+    ) -> ls_types.UnifiedSymbolInformation:
+        """
+        FsAutoComplete's selectionRange for a `module <Name>` declaration points at the `module`
+        keyword itself instead of at `<Name>` (confirmed by dsyme and MischaPanch in #925), so any
+        caller that hovers or searches references from selectionRange.start (e.g.
+        serena.symbol.LanguageServerSymbol.line/.column) gets the generic keyword's info instead of
+        the module's own. Other symbol kinds (functions, types, `open`) already select the
+        identifier correctly, so only Module symbols are touched here.
+        """
+        if symbol.get("kind") != ls_types.SymbolKind.Module or "selectionRange" not in symbol:
+            return symbol
+
+        sel_range = symbol["selectionRange"]
+        start_line = sel_range["start"]["line"]
+        lines = file_content.split("\n")
+        if start_line >= len(lines):
+            return symbol
+
+        match = _MODULE_DECLARATION_PATTERN.match(lines[start_line])
+        if not match:
+            return symbol
+
+        name_start, name_end = match.span(1)
+        if sel_range["start"]["character"] == name_start:
+            return symbol  # already correct (e.g. a future FsAutoComplete release)
+
+        corrected_symbol = symbol.copy()
+        corrected_symbol["selectionRange"] = {
+            "start": {"line": start_line, "character": name_start},
+            "end": {"line": start_line, "character": name_end},
+        }
+        return corrected_symbol
+
+    @override
+    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
+        # Override to fix FsAutoComplete's incorrect selectionRange for module declarations (#925):
+        # it points at the `module` keyword instead of the module name, so hover-by-selectionRange
+        # returns the keyword's docs instead of the module's own.
+        document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
+
+        with self.open_file(relative_file_path) as file_data:
+            file_content = file_data.contents
+
+        def fix_symbol_and_children(symbol: ls_types.UnifiedSymbolInformation) -> ls_types.UnifiedSymbolInformation:
+            fixed = self._fix_module_selection_range(symbol, file_content)
+            if fixed.get("children"):
+                fixed["children"] = [fix_symbol_and_children(child) for child in fixed["children"]]
+            return fixed
+
+        fixed_root_symbols = [fix_symbol_and_children(sym) for sym in document_symbols.root_symbols]
+        return DocumentSymbols(fixed_root_symbols)
 
     @classmethod
     def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> str:
