@@ -196,6 +196,11 @@ class LanguageServerId(str, Enum):
     it reports no symbols for them, so they are not treated as source files here).
     Automatically downloads the language server JAR; requires Java 17+ (JAVA_HOME or 'java' on PATH).
     """
+    WOLFRAM = "wolfram"
+    """Wolfram Language server using the official WolframResearch LSPServer paclet.
+    Requires Wolfram Mathematica 13.0+ or Wolfram Engine 12.1+.
+    Set WOLFRAM_PATH environment variable or configure ls_path in ls_specific_settings.
+    """
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -598,6 +603,8 @@ class LanguageServerId(str, Enum):
                 # only scripts: the language server does have a service for .config files, but it provides
                 # no symbols for them, so treating them as source files would only pollute the symbol index
                 return FilenameMatcher(".nf")
+            case self.WOLFRAM:
+                return FilenameMatcher(".wl", ".wls")
             case self.HTML:
                 return FilenameMatcher(".html", ".htm")
             case self.SCSS:
@@ -901,6 +908,10 @@ class LanguageServerId(str, Enum):
                 from solidlsp.language_servers.nextflow_language_server import NextflowLanguageServer
 
                 return NextflowLanguageServer
+            case self.WOLFRAM:
+                from solidlsp.language_servers.wolfram_language_server import WolframLanguageServer
+
+                return WolframLanguageServer
             case self.HTML:
                 from solidlsp.language_servers.vscode_html_language_server import VsCodeHtmlLanguageServer
 
