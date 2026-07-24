@@ -7,6 +7,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - The `languages` key in project configurations was changed to `language_servers` to better reflect
     the actual semantics (configurations are automatically migrated)
   - Fix: glob matching bare `*` and `?` in non-`**` patterns matched across `/`, contradicting documented behaviour #1732
+  - Fix: on Linux, a language server process spawned in its own session (the default) is no longer
+    orphaned when Serena is killed without a chance to shut down cleanly (e.g. SIGKILL, OOM) #1490
 
 * Language Servers: 
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
