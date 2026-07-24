@@ -29,17 +29,23 @@ class HookClient(Enum):
 
 
 class Hook(ABC):
-    def __init__(self, client: HookClient):
+    def __init__(self, client: HookClient, require_session_id: bool = True):
         raw = sys.stdin.read()
-        input_data = json.loads(raw)
+        # a hook may be invoked with no stdin (e.g. a session-end cleanup that
+        # is a no-op); treat that as an empty payload rather than crashing
+        input_data = json.loads(raw) if raw.strip() else {}
         self._input_data = input_data
         self._client = client
 
         session_id = input_data.get("session_id") or input_data.get("sessionId")
         if not session_id:
-            raise ValueError("Session ID is required in the hook input data")
-        self._session_id = str(session_id)
-        self.session_persistence_dir = os.path.join(serena_home_dir, "hook_data", self._session_id)
+            if require_session_id:
+                raise ValueError("Session ID is required in the hook input data")
+            self._session_id: str | None = None
+            self.session_persistence_dir: str | None = None
+        else:
+            self._session_id = str(session_id)
+            self.session_persistence_dir = os.path.join(serena_home_dir, "hook_data", self._session_id)
         # tool input has a timestamp but using now is enough
         self.triggered_at_timestamp = datetime.now()
 
@@ -195,6 +201,8 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
 
         @classmethod
         def _get_persistence_path(cls, hook: Hook) -> Path:
+            # only reached for PreToolUse hooks, which always require a session id
+            assert hook.session_persistence_dir is not None
             return Path(hook.session_persistence_dir) / cls._FILE_NAME
 
         @classmethod
@@ -538,8 +546,19 @@ class SessionStartActivateProjectHook(Hook):
 
 
 class SessionEndCleanupHook(Hook):
+    def __init__(self, client: HookClient):
+        # cleanup is safe to run as a no-op, so a missing session id must not
+        # abort it (see #1533): without one there is simply nothing to remove
+        super().__init__(client, require_session_id=False)
+
     def execute(self) -> None:
-        shutil.rmtree(self.session_persistence_dir, ignore_errors=True)
+        if self.session_persistence_dir is not None:
+            shutil.rmtree(self.session_persistence_dir, ignore_errors=True)
+        # Codex requires a Stop hook's stdout to be valid Stop-hook JSON, so
+        # always emit a "continue" response there; other clients treat empty
+        # stdout as "no action" and must stay silent to preserve behavior.
+        if self._client == HookClient.CODEX:
+            click.echo(json.dumps({"continue": True}))
 
 
 class PreToolUseAutoApproveSerenaHook(PreToolUseHook):
