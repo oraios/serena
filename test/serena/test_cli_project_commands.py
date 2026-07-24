@@ -365,6 +365,15 @@ class TestFindProjectRoot:
         finally:
             os.chdir(original_cwd)
 
+    def test_start_overrides_cwd_and_walks_up(self, temp_project_dir):
+        """``start`` searches upward from the given directory instead of CWD."""
+        os.makedirs(os.path.join(temp_project_dir, ".git"))
+        subdir = os.path.join(temp_project_dir, "a", "b")
+        os.makedirs(subdir)
+        # CWD is unrelated; searching from the subdir must still find the repo root.
+        result = find_project_root(start=subdir)
+        assert result is not None and os.path.samefile(result, temp_project_dir)
+
 
 class TestProjectFromCwd:
     """Tests for the --project-from-cwd flag (mutual exclusivity and project resolution)."""
@@ -378,25 +387,47 @@ class TestProjectFromCwd:
         assert result.exit_code != 0
         assert "cannot be used with" in result.output
 
-    def test_project_from_cwd_prefers_devin_project_dir(self, monkeypatch, temp_project_dir):
-        """--project-from-cwd honors DEVIN_PROJECT_DIR (Devin may spawn the server from another cwd)."""
-        monkeypatch.setenv("DEVIN_PROJECT_DIR", temp_project_dir)
+    @staticmethod
+    def _resolved_project() -> str:
+        """Invoke start_mcp_server --project-from-cwd with the MCP factory mocked; return the resolved project."""
         with patch("serena.mcp.SerenaMCPFactory") as factory_cls:
             factory_cls.return_value.create_mcp_server.return_value = MagicMock()
             result = CliRunner().invoke(TopLevelCommands.start_mcp_server, ["--project-from-cwd", "--transport", "stdio"])
         assert result.exit_code == 0, result.output
-        assert factory_cls.call_args.kwargs["project"] == temp_project_dir
+        return factory_cls.call_args.kwargs["project"]
 
-    def test_project_from_cwd_falls_back_to_cwd_detection(self, monkeypatch, temp_project_dir):
-        """Without DEVIN_PROJECT_DIR, --project-from-cwd detects the project by walking up from CWD."""
+    def test_uses_devin_project_dir_when_it_is_the_repo_root(self, monkeypatch, temp_project_dir):
+        """DEVIN_PROJECT_DIR pointing at a git root activates that root."""
+        os.makedirs(os.path.join(temp_project_dir, ".git"))
+        monkeypatch.setenv("DEVIN_PROJECT_DIR", temp_project_dir)
+        project = self._resolved_project()
+        assert project is not None and os.path.samefile(project, temp_project_dir)
+
+    def test_walks_up_from_devin_project_dir_subdirectory(self, monkeypatch, temp_project_dir):
+        """DEVIN_PROJECT_DIR pointing at a subdirectory still resolves to the real repo root."""
+        os.makedirs(os.path.join(temp_project_dir, ".git"))
+        subdir = os.path.join(temp_project_dir, "packages", "app")
+        os.makedirs(subdir)
+        monkeypatch.setenv("DEVIN_PROJECT_DIR", subdir)
+        project = self._resolved_project()
+        assert project is not None and os.path.samefile(project, temp_project_dir)
+
+    def test_honors_devin_project_dir_when_not_inside_a_repo(self, monkeypatch, tmp_path):
+        """When DEVIN_PROJECT_DIR is not inside any git/Serena project, it is honored directly."""
+        # stub detection to None so a stray ancestor .git cannot interfere with the assertion
+        plain = tmp_path / "workspace"
+        plain.mkdir()
+        monkeypatch.setenv("DEVIN_PROJECT_DIR", str(plain))
+        monkeypatch.setattr("serena.cli.find_project_root", lambda **kwargs: None)
+        project = self._resolved_project()
+        assert project == str(plain)
+
+    def test_falls_back_to_cwd_detection_without_devin_project_dir(self, monkeypatch, temp_project_dir):
+        """Without DEVIN_PROJECT_DIR, the project is detected by walking up from CWD."""
         monkeypatch.delenv("DEVIN_PROJECT_DIR", raising=False)
         os.makedirs(os.path.join(temp_project_dir, ".git"))
         monkeypatch.chdir(temp_project_dir)
-        with patch("serena.mcp.SerenaMCPFactory") as factory_cls:
-            factory_cls.return_value.create_mcp_server.return_value = MagicMock()
-            result = CliRunner().invoke(TopLevelCommands.start_mcp_server, ["--project-from-cwd", "--transport", "stdio"])
-        assert result.exit_code == 0, result.output
-        project = factory_cls.call_args.kwargs["project"]
+        project = self._resolved_project()
         assert project is not None and os.path.samefile(project, temp_project_dir)
 
 

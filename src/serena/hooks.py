@@ -100,12 +100,11 @@ class PreToolUseHook(Hook, ABC):
 
             if client == HookClient.DEVIN:
                 # A top-level "block"/deny decision *cancels the agent's turn* in Devin CLI (unlike
-                # Claude Code's deny, which just rejects the one call and lets the agent continue), so
-                # it is far too harsh for a nudge. Instead we soft-enforce: rewrite the wasteful
-                # read/grep/exec call to a harmless no-op that returns the reminder as its output
-                # (see _build_devin_noop_input), keeping the agent cycle alive. The reminder is also
-                # passed as additionalContext. When no no-op applies, we inject context only and let
-                # the tool run — we never emit a "decision", so a reminder can never end the turn.
+                # Claude Code's deny, which rejects only the one call and lets the agent continue),
+                # so it is far too harsh for a nudge. We therefore never emit a "decision": the
+                # reminder is delivered by rewriting the wasteful read/grep/exec call to a harmless
+                # no-op whose output is the reminder (updated_input, see _build_devin_noop_input),
+                # which keeps the turn alive. The reminder text is also passed as additionalContext.
                 hook_specific: dict = {
                     "hookEventName": "PreToolUse",
                     "additionalContext": self.additional_context or self.permission_decision_reason,
@@ -496,18 +495,23 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             output_data = self._build_non_symbolic_deny()
 
         if output_data is not None:
-            # reset burst counters so the next interval starts fresh, then record
-            # the deny timestamp and emit. The is_hook_active() guard at the top
-            # ensures we never reach this branch within the rate-limit window.
+            emit = True
             if self._client == HookClient.DEVIN:
                 # Soft-enforce for Devin: rewrite the offending call to a no-op that surfaces the
-                # reminder, rather than blocking (a block would cancel the agent's turn). See
-                # OutputData.to_json_string / _build_devin_noop_input.
+                # reminder (a block would cancel the whole turn). If the triggering tool has no safe
+                # no-op — only reachable from stale/mixed counter state, since the burst tools are
+                # always read/grep/exec — stay silent and keep the burst state, so the next
+                # read/grep/exec gets nudged instead of the turn being cancelled or the tool spoofed.
                 message = output_data.additional_context or output_data.permission_decision_reason
                 output_data.updated_input = self._build_devin_noop_input(message)
-            self._tool_call_counter.reset()
-            self._tool_call_counter.last_deny_timestamp = self.triggered_at_timestamp
-            click.echo(output_data.to_json_string(self._client))
+                emit = output_data.updated_input is not None
+            if emit:
+                # reset burst counters so the next interval starts fresh, then record the deny
+                # timestamp. The is_hook_active() guard at the top ensures we never reach this
+                # branch within the rate-limit window.
+                self._tool_call_counter.reset()
+                self._tool_call_counter.last_deny_timestamp = self.triggered_at_timestamp
+                click.echo(output_data.to_json_string(self._client))
         self._tool_call_counter.save(self)
 
     def _build_grep_deny(self) -> "PreToolUseHook.OutputData":
@@ -546,33 +550,23 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         )
 
     def _build_devin_noop_input(self, message: str) -> dict | None:
-        """Return a Devin tool_input that prevents the original action while keeping the cycle alive.
+        """Rewrite the offending call to a harmless no-op whose *output is the reminder*, so the
+        agent sees the nudge and its turn continues (a ``block`` would cancel the turn in Devin).
 
-        The tool still executes, but with harmless arguments, and its output is replaced by the
-        reminder message so the model sees what to do next. ``read`` and ``grep`` are pointed at a
-        dedicated nudge file, ``glob`` at a literal file path, and ``exec`` commands are replaced
-        with a ``printf`` of the warning. Returns ``None`` for tools without a safe no-op; the
-        caller then injects the reminder as context only (never a blocking decision).
+        ``exec`` becomes a ``printf`` of the message; ``read``/``grep`` are pointed at a small
+        nudge file that holds the message. Returns ``None`` for any other tool — the caller then
+        stays silent rather than blocking. Only the burst tools (``read``/``grep``/``exec``) ever
+        reach a deny, so ``None`` is a defensive fallback for stale counter state.
         """
-        nudge_file = Path(self.session_persistence_dir) / "devin_nudge.txt"
-        nudge_file.parent.mkdir(parents=True, exist_ok=True)
-        # Repeat the message so it survives either 0-indexed or 1-indexed offsets.
-        nudge_file.write_text(message + "\n" + message, encoding="utf-8")
-
-        if self._tool_name == "read":
-            return {"file_path": str(nudge_file), "offset": 1, "limit": 1000}
-        if self._tool_name == "grep":
-            return {
-                "pattern": ".*",
-                "path": str(nudge_file),
-                "output_mode": "content",
-                "max_results": 100,
-            }
-        if self._tool_name == "glob":
-            return {"pattern": str(nudge_file)}
         if self._tool_name == "exec" and self._is_shell_command_call():
-            quoted_message = oslex.quote(message)
-            return {"command": f"printf '%s\\n' {quoted_message}"}
+            return {"command": f"printf '%s\\n' {oslex.quote(message)}"}
+        if self._tool_name in ("read", "grep"):
+            nudge_file = Path(self.session_persistence_dir) / "devin_nudge.txt"
+            nudge_file.parent.mkdir(parents=True, exist_ok=True)
+            nudge_file.write_text(message + "\n", encoding="utf-8")
+            if self._tool_name == "read":
+                return {"file_path": str(nudge_file)}
+            return {"pattern": ".*", "path": str(nudge_file), "output_mode": "content"}
         return None
 
 

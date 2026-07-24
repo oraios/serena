@@ -62,8 +62,8 @@ For details on mode configuration, see
 """
 
 
-def find_project_root(root: str | Path | None = None) -> str | None:
-    """Find project root by walking up from CWD.
+def find_project_root(root: str | Path | None = None, start: str | Path | None = None) -> str | None:
+    """Find project root by walking up from ``start`` (the current working directory by default).
 
     Returns the nearest ancestor that is either an explicit Serena project
     (contains .serena/project.yml) or a git root (contains .git, which may be a
@@ -78,9 +78,12 @@ def find_project_root(root: str | Path | None = None) -> str | None:
 
     :param root: If provided, constrains the search to this directory and below
                  (acts as a virtual filesystem root). Search stops at this boundary.
+    :param start: Directory to start the (upward) search from; defaults to the current
+                  working directory. Useful when the process is launched from outside the
+                  project (e.g. Devin CLI exports the project root via ``DEVIN_PROJECT_DIR``).
     :return: absolute path to project root or None if not suitable root is found
     """
-    current = Path.cwd().resolve()
+    current = Path(start).resolve() if start is not None else Path.cwd().resolve()
     boundary = Path(root).resolve() if root is not None else None
 
     def ancestors() -> Iterator[Path]:
@@ -358,12 +361,13 @@ class TopLevelCommands(AutoRegisteringGroup):
         if project_from_cwd:
             if project is not None or project_file_arg is not None:
                 raise click.UsageError("--project-from-cwd cannot be used with --project or positional project argument")
-            # Devin CLI exports DEVIN_PROJECT_DIR as the project root for hook and MCP server
-            # processes; honor it directly (Serena creates its project config there if needed),
-            # since the MCP server may be spawned from a different working directory. Otherwise,
-            # detect the project root by walking up from the current working directory.
-            devin_project_dir = os.environ.get("DEVIN_PROJECT_DIR")
-            project = devin_project_dir or find_project_root()
+            # Devin CLI exports DEVIN_PROJECT_DIR to hook/MCP processes and may spawn the MCP
+            # server from a different working directory, so start the search there when it is set
+            # (falling back to CWD otherwise). Walking up still resolves the real repo root when
+            # DEVIN_PROJECT_DIR points at a subdirectory; if it is not inside any git/Serena
+            # project, honor it directly (Serena will create its project config there).
+            devin_project_dir = os.environ.get("DEVIN_PROJECT_DIR") or None
+            project = find_project_root(start=devin_project_dir) or devin_project_dir
             if project is not None:
                 log.info("Auto-detected project root: %s", project)
             else:

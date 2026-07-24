@@ -161,7 +161,8 @@ class ClientSetupHandlerDevin(ClientSetupHandler):
         cmd = f"devin mcp add -s user serena -- {self.get_mcp_server_command()}"
         is_success = self._run_shell_command(cmd)
         if is_success:
-            click.echo("\nIMPORTANT: We additionally recommend to set up hooks for Devin CLI to ensure the best experience.")
+            click.echo("\nIMPORTANT: For the best experience we additionally recommend auto-approving Serena's tools")
+            click.echo("   (Devin CLI's `permissions.allow`) and enabling Serena's hooks.")
             click.echo("   Please read the instructions here:")
             click.echo("   https://oraios.github.io/serena/02-usage/030_clients.html#devin-cli")
         return is_success

@@ -1190,7 +1190,7 @@ class TestDevinHookSupport:
         updated_input = result["hookSpecificOutput"]["updatedInput"]
         assert updated_input["pattern"] == ".*"
         assert "devin_nudge.txt" in updated_input["path"]
-        assert updated_input.get("max_results") == 100
+        assert updated_input["output_mode"] == "content"
         assert "Serena" in result["hookSpecificOutput"]["additionalContext"]
 
     def test_devin_remind_soft_enforces_code_read_burst(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
