@@ -1165,54 +1165,61 @@ class TestDevinHookSupport:
             assert hook.is_read_call() == expected_read, f"is_read_call wrong for {command} (devin)"
             assert hook.is_read_code_file_call() == expected_code_read, f"is_read_code_file_call wrong for {command} (devin)"
 
-    def test_devin_output_maps_decision_to_approve_or_block(self):
-        """OutputData renders the top-level ``decision`` (approve/block) + reason Devin CLI expects."""
-        allow = PreToolUseHook.OutputData(permission_decision="allow", permission_decision_reason="ok").to_json_string(HookClient.DEVIN)
-        assert json.loads(allow) == {"decision": "approve", "reason": "ok"}
-
-        # the reason prefers additional_context (the richer, agent-facing nudge) over the terse reason
-        deny = PreToolUseHook.OutputData(
+    def test_devin_remind_never_emits_a_blocking_decision(self):
+        """A remind never emits a top-level ``decision`` for Devin (that would cancel the turn)."""
+        # even with an unmapped tool (updated_input stays None) the output is context-only, no decision
+        out = PreToolUseHook.OutputData(
             permission_decision="deny", permission_decision_reason="terse", additional_context="use Serena"
         ).to_json_string(HookClient.DEVIN)
-        assert json.loads(deny) == {"decision": "block", "reason": "use Serena"}
+        result = json.loads(out)
+        assert "decision" not in result
+        assert result["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+        assert result["hookSpecificOutput"]["additionalContext"] == "use Serena"
+        assert "updatedInput" not in result["hookSpecificOutput"]
 
-    def test_devin_remind_blocks_grep_burst(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        """A grep burst is blocked with a reason shown to the agent (Claude Code deny parity)."""
+    def test_devin_remind_soft_enforces_grep_burst(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """A grep burst is rewritten to a no-op that reads the nudge file (not a blocking decision)."""
         with patch("serena.hooks.serena_home_dir", str(tmp_path)):
             for _ in range(3):
                 with patch("sys.stdin", _make_stdin(_base_input(tool_name="grep"))):
                     PreToolUseRemindAboutSymbolicToolsHook(HookClient.DEVIN).execute()
         result = json.loads(capsys.readouterr().out)
-        # top-level decision, not a hookSpecificOutput/updatedInput no-op
-        assert result["decision"] == "block"
-        assert "hookSpecificOutput" not in result
-        assert "updatedInput" not in json.dumps(result)
-        assert "Serena" in result["reason"]
-        assert "grep" in result["reason"].lower()
+        # soft-enforce (updatedInput), never a top-level block that would cancel the agent turn
+        assert "decision" not in result
+        assert result["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+        updated_input = result["hookSpecificOutput"]["updatedInput"]
+        assert updated_input["pattern"] == ".*"
+        assert "devin_nudge.txt" in updated_input["path"]
+        assert updated_input.get("max_results") == 100
+        assert "Serena" in result["hookSpecificOutput"]["additionalContext"]
 
-    def test_devin_remind_blocks_code_read_burst(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        """A code-file ``read`` burst is blocked with a reason mentioning Serena."""
+    def test_devin_remind_soft_enforces_code_read_burst(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """A code-file ``read`` burst is redirected to the nudge file, which contains the reminder."""
         with patch("serena.hooks.serena_home_dir", str(tmp_path)):
             for _ in range(3):
                 with patch("sys.stdin", _make_stdin(_base_input(tool_name="read", tool_input={"file_path": "src/foo.py"}))):
                     PreToolUseRemindAboutSymbolicToolsHook(HookClient.DEVIN).execute()
         result = json.loads(capsys.readouterr().out)
-        assert result["decision"] == "block"
-        assert "Serena" in result["reason"]
-        assert "read" in result["reason"].lower()
+        assert "decision" not in result
+        file_path = result["hookSpecificOutput"]["updatedInput"]["file_path"]
+        assert "devin_nudge.txt" in file_path
+        assert "Serena" in Path(file_path).read_text(encoding="utf-8")
+        assert "Serena" in result["hookSpecificOutput"]["additionalContext"]
 
-    def test_devin_remind_blocks_exec_code_read_burst(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        """An ``exec`` burst reading code files (``cat src/foo.py``) is blocked with a reason."""
+    def test_devin_remind_soft_enforces_exec_burst(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """An ``exec`` code-read burst is rewritten to a printf of the reminder (not blocked)."""
         with patch("serena.hooks.serena_home_dir", str(tmp_path)):
             for _ in range(3):
                 with patch("sys.stdin", _make_stdin(_base_input(tool_name="exec", tool_input={"command": "cat src/foo.py"}))):
                     PreToolUseRemindAboutSymbolicToolsHook(HookClient.DEVIN).execute()
         result = json.loads(capsys.readouterr().out)
-        assert result["decision"] == "block"
-        assert "Serena" in result["reason"]
+        assert "decision" not in result
+        command = result["hookSpecificOutput"]["updatedInput"]["command"]
+        assert command.startswith("printf")
+        assert "Serena" in command
 
     def test_devin_remind_silent_below_threshold(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        """Below the burst threshold the remind hook stays silent (does not block)."""
+        """Below the burst threshold the remind hook stays silent (tool runs unchanged)."""
         with patch("serena.hooks.serena_home_dir", str(tmp_path)):
             for _ in range(2):
                 with patch("sys.stdin", _make_stdin(_base_input(tool_name="grep"))):

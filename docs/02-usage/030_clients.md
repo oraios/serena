@@ -782,7 +782,7 @@ Devin CLI supports lifecycle hooks via `.devin/hooks.v1.json` (project) and the 
 The hooks will:
 
 - **`activate`**: Prompt the agent to activate the project at the start of the session and read Serena's instructions.
-- **`remind`**: Nudge the agent to use Serena's symbolic tools when it makes too many consecutive code-search or code-file-read calls without using Serena tools in between. When the threshold is reached, the triggering `read`/`grep` call is blocked with a reason (which is shown to the agent); the counter resets, so the agent can immediately continue if it still needs to.
+- **`remind`**: Nudge the agent to use Serena's symbolic tools when it makes too many consecutive code-search or code-file-read calls without using Serena tools in between. When the threshold is reached, the triggering `read`/`grep`/`exec` call is rewritten to a harmless no-op that returns the reminder as its output, so the agent sees the nudge and keeps going. A blocking decision is deliberately avoided here, because Devin CLI cancels the agent's turn on a `block`; the counter resets, so the agent can continue immediately.
 - **`cleanup`**: Clean up hook session data when the session ends.
 
 ## Other Clients
