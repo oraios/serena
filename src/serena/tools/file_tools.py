@@ -6,6 +6,7 @@ File and file system-related tools, specifically for
   * editing at the file level
 """
 
+import json
 import os
 from collections import defaultdict
 from fnmatch import fnmatch
@@ -17,6 +18,7 @@ from serena.util.file_system import scan_directory
 from serena.util.text_utils import (
     ContentReplacer,
     GlobMatcher,
+    MatchedConsecutiveLines,
     MultiFileContentReplacer,
     ReplacementOccurrence,
 )
@@ -609,18 +611,21 @@ class SearchForPatternTool(Tool):
             code_files_only=restrict_search_to_code_files,
         )
 
-        # rank matches by the first matching priority glob, retaining original order within each priority
+        # rank prioritized matches deterministically while leaving no-priority searches unchanged
         priority_matchers = [GlobMatcher(glob.strip()) for glob in paths_priority_globs or [] if glob.strip()]
         if priority_matchers:
 
-            def priority(match) -> int:
+            def priority(indexed_match: tuple[int, MatchedConsecutiveLines]) -> tuple[int, str, int, int]:
+                original_index, match = indexed_match
                 assert match.source_file_path is not None
-                return next(
+                priority_index = next(
                     (index for index, matcher in enumerate(priority_matchers) if matcher.matches(match.source_file_path)),
                     len(priority_matchers),
                 )
+                normalized_path = match.source_file_path.replace("\\", "/")
+                return priority_index, normalized_path, match.matched_lines[0].line_number, original_index
 
-            matches.sort(key=priority)
+            matches = [match for _, match in sorted(enumerate(matches), key=priority)]
 
         # group matches by file
         file_to_matches: dict[str, list[str]] = defaultdict(list)
@@ -640,26 +645,6 @@ class SearchForPatternTool(Tool):
         # shortened result closures, from least to most aggressive shortening
         _TEXT_TRUNCATE = 60
 
-        def render_ranked_excerpt(shown_match_count: int) -> str:
-            """Render a prefix of whole match entries with shown and omitted counts."""
-            shown_matches = matches[:shown_match_count]
-            omitted_matches = matches[shown_match_count:]
-
-            excerpt: dict[str, list[str]] = defaultdict(list)
-            for match in shown_matches:
-                assert match.source_file_path is not None
-                excerpt[match.source_file_path].append(match.to_display_string())
-
-            shown_file_count = len(excerpt)
-            omitted_file_count = len({match.source_file_path for match in omitted_matches})
-            footer = (
-                f"Showing {shown_match_count} of {len(matches)} matches across "
-                f"{shown_file_count} of {len(file_to_matches)} files; "
-                f"omitted {len(omitted_matches)} matches across {omitted_file_count} files; "
-                "refine the query for omitted results."
-            )
-            return f"Ranked match excerpt:\n{self._to_json(excerpt)}\n{footer}"
-
         def make_ranked_excerpt() -> str:
             """Largest ranked prefix of whole match entries that fits the configured answer budget."""
             effective_max_answer_chars = (
@@ -669,15 +654,64 @@ class SearchForPatternTool(Tool):
                 f"The answer is too long ({len(result)} characters). You can adjust your query or raise the max_answer_chars parameter."
             )
             excerpt_budget = effective_max_answer_chars - len(too_long_message) - 1
+            excerpt_header = "Ranked match excerpt:\n"
 
-            best_excerpt = ""
+            # precompute exact serialized prefix sizes and file counts in one pass
+            serialized_mapping_lengths = [2]  # opening and closing braces
+            shown_file_counts = [0]
+            shown_paths: set[str] = set()
+            for match in matches:
+                assert match.source_file_path is not None
+                path = match.source_file_path
+                serialized_match_length = len(json.dumps(match.to_display_string(), ensure_ascii=False))
+                serialized_mapping_length = serialized_mapping_lengths[-1]
+                if path in shown_paths:
+                    serialized_mapping_length += 2 + serialized_match_length
+                else:
+                    if shown_paths:
+                        serialized_mapping_length += 2
+                    serialized_mapping_length += len(json.dumps(path, ensure_ascii=False)) + 3 + serialized_match_length + 1
+                    shown_paths.add(path)
+                serialized_mapping_lengths.append(serialized_mapping_length)
+                shown_file_counts.append(len(shown_paths))
+
+            # precompute counts of files represented by each omitted suffix
+            omitted_file_counts = [0] * (len(matches) + 1)
+            omitted_paths: set[str] = set()
+            for index in range(len(matches) - 1, -1, -1):
+                path = matches[index].source_file_path
+                assert path is not None
+                omitted_paths.add(path)
+                omitted_file_counts[index] = len(omitted_paths)
+
+            def footer(shown_match_count: int) -> str:
+                return (
+                    f"Showing {shown_match_count} of {len(matches)} matches across "
+                    f"{shown_file_counts[shown_match_count]} of {len(file_to_matches)} files; "
+                    f"omitted {len(matches) - shown_match_count} matches across "
+                    f"{omitted_file_counts[shown_match_count]} files; refine the query for omitted results."
+                )
+
+            # select the largest fitting prefix without serializing candidate mappings
+            shown_match_count = 0
             for shown_match_count in range(1, len(matches) + 1):
-                candidate = render_ranked_excerpt(shown_match_count)
-                if len(candidate) > excerpt_budget:
-                    break
-                best_excerpt = candidate
+                excerpt_length = len(excerpt_header) + serialized_mapping_lengths[shown_match_count] + 1 + len(footer(shown_match_count))
+                if excerpt_length <= excerpt_budget:
+                    continue
+                shown_match_count -= 1
+                break
+            else:
+                shown_match_count = len(matches)
 
-            return best_excerpt or result
+            if shown_match_count == 0:
+                return result
+
+            # render the selected prefix once
+            excerpt: dict[str, list[str]] = defaultdict(list)
+            for match in matches[:shown_match_count]:
+                assert match.source_file_path is not None
+                excerpt[match.source_file_path].append(match.to_display_string())
+            return f"{excerpt_header}{self._to_json(excerpt)}\n{footer(shown_match_count)}"
 
         def render_first_lines(truncate: bool) -> str:
             """Render each match's first line, either in full or truncated to a fixed length."""
