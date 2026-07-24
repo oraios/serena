@@ -14,6 +14,7 @@ from serena.hooks import (
     PreToolUseHook,
     PreToolUseRemindAboutSymbolicToolsHook,
     SessionEndCleanupHook,
+    SessionStartActivateProjectHook,
     hook_commands,
 )
 
@@ -1225,3 +1226,15 @@ class TestDevinHookSupport:
         with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
             PreToolUseAutoApproveSerenaHook(HookClient.DEVIN).execute()
         assert capsys.readouterr().out == ""
+
+    def test_devin_session_start_includes_project_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ):
+        """Devin CLI SessionStart hook includes DEVIN_PROJECT_DIR in the activation prompt."""
+        monkeypatch.setenv("DEVIN_PROJECT_DIR", "/tmp/devin-project")
+        with patch("sys.stdin", _make_stdin({"session_id": "devin-session"})), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            SessionStartActivateProjectHook(HookClient.DEVIN).execute()
+        output = capsys.readouterr().out
+        result = json.loads(output)
+        assert result["hookSpecificOutput"]["hookEventName"] == "SessionStart"
+        assert "/tmp/devin-project" in result["hookSpecificOutput"]["additionalContext"]

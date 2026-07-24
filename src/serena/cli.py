@@ -62,8 +62,8 @@ For details on mode configuration, see
 """
 
 
-def find_project_root(root: str | Path | None = None) -> str | None:
-    """Find project root by walking up from CWD.
+def find_project_root(root: str | Path | None = None, start: str | Path | None = None) -> str | None:
+    """Find project root by walking up from ``start`` (or CWD if omitted).
 
     Returns the nearest ancestor that is either an explicit Serena project
     (contains .serena/project.yml) or a git root (contains .git, which may be a
@@ -78,9 +78,10 @@ def find_project_root(root: str | Path | None = None) -> str | None:
 
     :param root: If provided, constrains the search to this directory and below
                  (acts as a virtual filesystem root). Search stops at this boundary.
+    :param start: Directory to start the search from. Defaults to the current working directory.
     :return: absolute path to project root or None if not suitable root is found
     """
-    current = Path.cwd().resolve()
+    current = Path(start).resolve() if start is not None else Path.cwd().resolve()
     boundary = Path(root).resolve() if root is not None else None
 
     def ancestors() -> Iterator[Path]:
@@ -358,7 +359,15 @@ class TopLevelCommands(AutoRegisteringGroup):
         if project_from_cwd:
             if project is not None or project_file_arg is not None:
                 raise click.UsageError("--project-from-cwd cannot be used with --project or positional project argument")
-            project = find_project_root()
+            # Devin CLI sets DEVIN_PROJECT_DIR to the project root for hooks and MCP server processes.
+            # Prefer it when available, then fall back to detecting from the current working directory.
+            devin_project_dir = os.environ.get("DEVIN_PROJECT_DIR")
+            if devin_project_dir:
+                project = find_project_root(start=devin_project_dir, root=devin_project_dir)
+            else:
+                project = None
+            if project is None:
+                project = find_project_root()
             if project is not None:
                 log.info("Auto-detected project root: %s", project)
             else:

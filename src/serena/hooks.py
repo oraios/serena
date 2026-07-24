@@ -573,8 +573,12 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
 
 class SessionStartActivateProjectHook(Hook):
     def execute(self) -> None:
+        # Devin CLI exposes the project root via DEVIN_PROJECT_DIR; including it in the prompt
+        # lets the agent know exactly which project is active without guessing from CWD.
+        devin_project_dir = os.environ.get("DEVIN_PROJECT_DIR")
+        project_clause = f" The current project directory is {devin_project_dir}." if devin_project_dir else ""
         message = (
-            "**IMPORTANT**: If the current directory is a coding project you are working on:"
+            f"**IMPORTANT**: If the current directory is a coding project you are working on:{project_clause}"
             " 1. activate it using Serena's activate_project tool unless already done. "
             " 2. if you haven't read Serena Instructions Manual yet, do so. "
             "Follow this instruction before doing anything else."

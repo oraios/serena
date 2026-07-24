@@ -364,6 +364,27 @@ class TestFindProjectRoot:
         finally:
             os.chdir(original_cwd)
 
+    def test_start_directory_override(self, temp_project_dir):
+        """A custom start directory is used instead of CWD, respecting the root boundary."""
+        serena_dir = os.path.join(temp_project_dir, ".serena")
+        os.makedirs(serena_dir)
+        Path(os.path.join(serena_dir, "project.yml")).touch()
+        subdir = os.path.join(temp_project_dir, "src", "nested")
+        os.makedirs(subdir)
+        other_dir = os.path.join(temp_project_dir, "other")
+        os.makedirs(other_dir)
+
+        # Even though we are in an unrelated directory, starting the search from subdir
+        # and bounding it to temp_project_dir should find the project root.
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(other_dir)
+            result = find_project_root(start=subdir, root=temp_project_dir)
+            assert result is not None
+            assert os.path.samefile(result, temp_project_dir)
+        finally:
+            os.chdir(original_cwd)
+
 
 class TestProjectFromCwdMutualExclusivity:
     """Tests for --project-from-cwd mutual exclusivity."""
