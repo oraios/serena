@@ -1845,7 +1845,14 @@ class SolidLanguageServer(ABC):
 
             # no cached result, query language server
             log.debug(f"Requesting document symbols for {relative_file_path} from the Language Server")
-            response = self.server.send.document_symbol({"textDocument": {"uri": self._resolve_file_uri(relative_file_path)}})
+            try:
+                response = self.server.send.document_symbol({"textDocument": {"uri": self._resolve_file_uri(relative_file_path)}})
+            except SolidLSPException as ex:
+                # some servers (e.g. ansible-language-server, see
+                # https://github.com/ansible/vscode-ansible/issues/601) don't implement
+                # textDocument/documentSymbol at all; degrade to "no symbols" instead of crashing
+                log.debug("Failed to retrieve document symbols for %s: %s", relative_file_path, ex)
+                return None
 
             # Only cache non-empty results. An empty or None response can occur when the language server
             # has not yet finished indexing or building the project (e.g. Lean 4 before `lake build`),
