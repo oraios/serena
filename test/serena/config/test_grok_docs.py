@@ -5,7 +5,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
-from serena.config.client_setup import ClientSetupHandlerGrok
+from serena.config.client_setup import ClientSetupHandlerDevin, ClientSetupHandlerGrok
 from serena.hooks import HookClient, PreToolUseRemindAboutSymbolicToolsHook
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -43,7 +43,7 @@ def test_grok_docs_are_consistent():
     assert "serena-hooks cleanup --client=grok" in grok_section
 
     assert "* `grok`: Optimized for use with xAI's Grok Build CLI." in config_doc
-    assert "contexts `ide`, `claude-code`, and `grok` are **single-project contexts**" in config_doc
+    assert "contexts `ide`, `claude-code`, `devin`, and `grok` are **single-project contexts**" in config_doc
 
 
 def test_grok_hook_matcher_docs_match_code(tmp_path: Path):
@@ -65,3 +65,20 @@ def test_grok_hook_matcher_docs_match_code(tmp_path: Path):
             hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.GROK)
 
         assert hook.is_grep_call() or hook.is_read_call() or hook._is_shell_command_call()
+
+
+def test_devin_docs_are_consistent():
+    clients_doc = (PROJECT_ROOT / "docs/02-usage/030_clients.md").read_text()
+    config_doc = (PROJECT_ROOT / "docs/02-usage/050_configuration.md").read_text()
+    handler_source = inspect.getsource(ClientSetupHandlerDevin.apply)
+
+    assert "\n## Devin CLI\n" in clients_doc
+    devin_section = _extract_section(clients_doc, "Devin CLI")
+
+    assert "030_clients.html#devin-cli" in handler_source
+    assert "serena setup devin" in devin_section
+    assert "serena-hooks remind --client=devin" in devin_section
+    assert "serena-hooks cleanup --client=devin" in devin_section
+    assert "serena-hooks activate --client=devin" in devin_section
+
+    assert "* `devin`: Optimized for use with Devin CLI" in config_doc

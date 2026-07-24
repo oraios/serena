@@ -1130,3 +1130,65 @@ class TestHookCli:
         with patch("serena.hooks.serena_home_dir", str(tmp_path)):
             result = runner.invoke(hook_commands, ["activate", "--client", "claude-code"], input="not json")
         assert result.exit_code != 0
+
+
+class TestDevinHookSupport:
+    """Tests for Devin CLI hook integration."""
+
+    def test_devin_read_grep_tool_detection(self, tmp_path: Path):
+        """Devin CLI uses lowercase ``read`` and ``grep`` tool names."""
+        for tool_name, expected_grep, expected_read in [
+            ("read", False, True),
+            ("grep", True, False),
+            ("edit", False, False),
+            ("glob", False, False),
+            ("exec", False, False),
+        ]:
+            with patch("sys.stdin", _make_stdin(_base_input(tool_name=tool_name))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+                hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.DEVIN)
+            assert hook.is_grep_call() == expected_grep, f"is_grep_call wrong for {tool_name} (devin)"
+            assert hook.is_read_call() == expected_read, f"is_read_call wrong for {tool_name} (devin)"
+
+    def test_devin_exec_shell_read_and_grep(self, tmp_path: Path):
+        """Devin CLI ``exec`` tool embeds the shell command; classify by basename and code-file extension."""
+        for command, expected_grep, expected_read, expected_code_read in [
+            ("rg foo", True, False, False),
+            ("cat src/foo.py", False, True, True),
+            ("cat README.md", False, True, False),
+            ("git status", False, False, False),
+        ]:
+            stdin_data = _base_input(tool_name="exec", tool_input={"command": command})
+            with patch("sys.stdin", _make_stdin(stdin_data)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+                hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.DEVIN)
+            assert hook.is_grep_call() == expected_grep, f"is_grep_call wrong for {command} (devin)"
+            assert hook.is_read_call() == expected_read, f"is_read_call wrong for {command} (devin)"
+            assert hook.is_read_code_file_call() == expected_code_read, f"is_read_code_file_call wrong for {command} (devin)"
+
+    def test_devin_remind_output_json(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """Devin CLI remind hook emits a top-level decision block with the nudge reason."""
+        with patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            for _ in range(3):
+                with patch("sys.stdin", _make_stdin(_base_input(tool_name="grep"))):
+                    PreToolUseRemindAboutSymbolicToolsHook(HookClient.DEVIN).execute()
+        output = capsys.readouterr().out
+        result = json.loads(output)
+        assert result["decision"] == "block"
+        assert "reason" in result
+        assert "Serena" in result["reason"]
+
+    def test_devin_auto_approve_emits_approve_for_symbolic_serena_tool(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """Devin CLI auto-approve unconditionally approves Serena symbolic tools."""
+        payload = _base_input(tool_name="mcp__serena__find_symbol")
+        with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            PreToolUseAutoApproveSerenaHook(HookClient.DEVIN).execute()
+        output = capsys.readouterr().out
+        result = json.loads(output)
+        assert result["decision"] == "approve"
+        assert "Devin CLI" in result["reason"]
+
+    def test_devin_auto_approve_is_silent_for_non_symbolic_serena_tool(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """Devin CLI auto-approve stays silent for non-symbolic Serena tools (e.g. read_file)."""
+        payload = _base_input(tool_name="mcp__serena__read_file")
+        with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            PreToolUseAutoApproveSerenaHook(HookClient.DEVIN).execute()
+        assert capsys.readouterr().out == ""

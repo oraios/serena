@@ -138,9 +138,39 @@ class ClientSetupHandlerGrok(ClientSetupHandler):
         return is_success
 
 
+class ClientSetupHandlerDevin(ClientSetupHandler):
+    """
+    Setup for Devin CLI.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("devin")
+
+    def is_applicable(self) -> bool:
+        result = execute_shell_command("devin --version", capture_stderr=True)
+        if result.return_code != 0 or not result.stdout.lower().startswith("devin "):
+            return False
+
+        mcp_result = execute_shell_command("devin mcp add --help", capture_stderr=True)
+        return mcp_result.return_code == 0 and "Add a new MCP server" in mcp_result.stdout
+
+    def get_mcp_server_options(self) -> list[str]:
+        return ["--context=devin", "--project-from-cwd"]
+
+    def apply(self) -> bool:
+        cmd = f"devin mcp add -s user serena -- {self.get_mcp_server_command()}"
+        is_success = self._run_shell_command(cmd)
+        if is_success:
+            click.echo("\nIMPORTANT: We additionally recommend to set up hooks for Devin CLI to ensure the best experience.")
+            click.echo("   Please read the instructions here:")
+            click.echo("   https://oraios.github.io/serena/02-usage/030_clients.html#devin-cli")
+        return is_success
+
+
 client_setup_handlers = [
     ClientSetupHandlerClaudeCode(),
     ClientSetupHandlerCodeBuddy(),
     ClientSetupHandlerCodex(),
     ClientSetupHandlerGrok(),
+    ClientSetupHandlerDevin(),
 ]

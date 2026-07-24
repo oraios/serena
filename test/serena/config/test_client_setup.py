@@ -1,6 +1,6 @@
 import pytest
 
-from serena.config.client_setup import ClientSetupHandlerGrok, client_setup_handlers
+from serena.config.client_setup import ClientSetupHandlerDevin, ClientSetupHandlerGrok, client_setup_handlers
 from serena.config.context_mode import SerenaAgentContext
 from serena.util.shell import ShellCommandResult
 
@@ -129,3 +129,87 @@ def test_client_setup_handlers_use_resolvable_contexts():
         assert len(context_options) == 1
         context_name = context_options[0].removeprefix("--context=")
         assert SerenaAgentContext.from_name(context_name).name == context_name
+
+
+def test_devin_setup_handler_is_applicable_for_devin_cli(monkeypatch):
+    commands: list[str] = []
+
+    def fake_execute_shell_command(command: str, capture_stderr: bool = False) -> ShellCommandResult:
+        commands.append(command)
+        if command == "devin --version":
+            return _result(command, stdout="devin 3000.2.17 (2c489dfc)\n")
+        if command == "devin mcp add --help":
+            return _result(command, stdout="Add a new MCP server.\n")
+        return _result(command, return_code=1)
+
+    monkeypatch.setattr("serena.config.client_setup.execute_shell_command", fake_execute_shell_command)
+
+    assert ClientSetupHandlerDevin().is_applicable() is True
+    assert commands == ["devin --version", "devin mcp add --help"]
+
+
+def test_devin_setup_handler_rejects_binary_without_mcp_add(monkeypatch):
+    def fake_execute_shell_command(command: str, capture_stderr: bool = False) -> ShellCommandResult:
+        if command == "devin --version":
+            return _result(command, stdout="devin 3000.2.17 (2c489dfc)\n")
+        return _result(command, return_code=1, stdout="unknown command\n")
+
+    monkeypatch.setattr("serena.config.client_setup.execute_shell_command", fake_execute_shell_command)
+
+    assert ClientSetupHandlerDevin().is_applicable() is False
+
+
+def test_devin_setup_handler_apply_uses_devin_mcp_add(monkeypatch):
+    commands: list[str] = []
+
+    def fake_run_shell_command(self: ClientSetupHandlerDevin, command: str) -> bool:
+        commands.append(command)
+        return True
+
+    monkeypatch.setattr(ClientSetupHandlerDevin, "_run_shell_command", fake_run_shell_command)
+
+    assert ClientSetupHandlerDevin().apply() is True
+    assert commands == ["devin mcp add -s user serena -- serena start-mcp-server --context=devin --project-from-cwd"]
+
+
+@pytest.mark.parametrize(
+    ("return_code", "stdout"),
+    [
+        (1, ""),
+        (0, "0.0.34\n"),
+        (0, "my-devin wrapper 1.0\n"),
+        (0, "devin\n"),
+        (0, "  devin 3000.2.17"),
+    ],
+)
+def test_devin_setup_handler_short_circuits_when_version_probe_does_not_match(monkeypatch, return_code: int, stdout: str):
+    commands: list[str] = []
+
+    def fake_execute_shell_command(command: str, capture_stderr: bool = False) -> ShellCommandResult:
+        commands.append(command)
+        if command == "devin --version":
+            return _result(command, return_code=return_code, stdout=stdout)
+        return _result(command, stdout="Add a new MCP server.\n")
+
+    monkeypatch.setattr("serena.config.client_setup.execute_shell_command", fake_execute_shell_command)
+
+    assert ClientSetupHandlerDevin().is_applicable() is False
+    assert commands == ["devin --version"]
+
+
+@pytest.mark.parametrize("help_stdout", ["Usage: devin mcp add\n", "add a new mcp server\n"])
+def test_devin_setup_handler_rejects_mcp_add_help_without_expected_text(monkeypatch, help_stdout: str):
+    commands: list[str] = []
+
+    def fake_execute_shell_command(command: str, capture_stderr: bool = False) -> ShellCommandResult:
+        commands.append(command)
+        if command == "devin --version":
+            return _result(command, stdout="devin 3000.2.17 (2c489dfc)\n")
+        if command == "devin mcp add --help":
+            return _result(command, stdout=help_stdout)
+        return _result(command, return_code=1)
+
+    monkeypatch.setattr("serena.config.client_setup.execute_shell_command", fake_execute_shell_command)
+
+    assert ClientSetupHandlerDevin().is_applicable() is False
+    assert commands == ["devin --version", "devin mcp add --help"]

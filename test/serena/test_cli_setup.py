@@ -6,6 +6,7 @@ from serena.cli import TopLevelCommands
 from serena.util.shell import ShellCommandResult
 
 GROK_ADD_COMMAND = "grok mcp add --scope user serena -- serena start-mcp-server --context=grok --project-from-cwd"
+DEVIN_ADD_COMMAND = "devin mcp add -s user serena -- serena start-mcp-server --context=devin --project-from-cwd"
 
 
 def _result(command: str, return_code: int = 0, stdout: str = "", stderr: str = "") -> ShellCommandResult:
@@ -89,3 +90,81 @@ def test_init_suggests_grok_when_detected(monkeypatch):
     assert result.exit_code == 0, result.output
     assert "serena setup grok" in result.output
     assert "serena setup claude-code" not in result.output
+
+
+def test_setup_devin_success(monkeypatch):
+    commands: list[str] = []
+
+    def fake_execute_shell_command(command: str, capture_stderr: bool = False) -> ShellCommandResult:
+        commands.append(command)
+        if command == "devin --version":
+            return _result(command, stdout="devin 3000.2.17 (2c489dfc)\n")
+        if command == "devin mcp add --help":
+            return _result(command, stdout="Add a new MCP server.\n")
+        if command == DEVIN_ADD_COMMAND:
+            return _result(command)
+        return _result(command, return_code=1)
+
+    monkeypatch.setattr("serena.config.client_setup.execute_shell_command", fake_execute_shell_command)
+
+    result = CliRunner().invoke(TopLevelCommands.setup, ["devin"])
+
+    assert result.exit_code == 0, result.output
+    assert "successfully set up for devin" in result.output
+    assert "recommend" in result.output.lower()
+    assert "030_clients.html#devin-cli" in result.output
+    assert commands == ["devin --version", "devin mcp add --help", DEVIN_ADD_COMMAND]
+
+
+def test_setup_devin_not_applicable_exits_1(monkeypatch):
+    def fake_execute_shell_command(command: str, capture_stderr: bool = False) -> ShellCommandResult:
+        if command == "devin --version":
+            return _result(command, return_code=1)
+        return _result(command)
+
+    monkeypatch.setattr("serena.config.client_setup.execute_shell_command", fake_execute_shell_command)
+
+    result = CliRunner().invoke(TopLevelCommands.setup, ["devin"])
+
+    assert result.exit_code == 1
+    assert "Cannot apply setup for client 'devin'" in result.output
+
+
+def test_setup_devin_apply_failure_exits_1(monkeypatch):
+    def fake_execute_shell_command(command: str, capture_stderr: bool = False) -> ShellCommandResult:
+        if command == "devin --version":
+            return _result(command, stdout="devin 3000.2.17 (2c489dfc)\n")
+        if command == "devin mcp add --help":
+            return _result(command, stdout="Add a new MCP server.\n")
+        if command == DEVIN_ADD_COMMAND:
+            return _result(command, return_code=1, stderr="boom")
+        return _result(command, return_code=1)
+
+    monkeypatch.setattr("serena.config.client_setup.execute_shell_command", fake_execute_shell_command)
+
+    result = CliRunner().invoke(TopLevelCommands.setup, ["devin"])
+
+    assert result.exit_code == 1
+    assert "Failed to set up Serena for devin" in result.output
+    assert "recommend" not in result.output.lower()
+    assert "030_clients.html#devin-cli" not in result.output
+
+
+def test_init_suggests_devin_when_detected(monkeypatch):
+    def fake_execute_shell_command(command: str, capture_stderr: bool = False) -> ShellCommandResult:
+        if command == "devin --version":
+            return _result(command, stdout="devin 3000.2.17 (2c489dfc)\n")
+        if command == "devin mcp add --help":
+            return _result(command, stdout="Add a new MCP server.\n")
+        return _result(command, return_code=1)
+
+    def fake_init(**kwargs) -> SimpleNamespace:
+        return SimpleNamespace(config_file_path="/tmp/serena_config.yml")
+
+    monkeypatch.setattr("serena.config.client_setup.execute_shell_command", fake_execute_shell_command)
+    monkeypatch.setattr("serena.cli.SerenaConfig.init", fake_init)
+
+    result = CliRunner().invoke(TopLevelCommands.init, [])
+
+    assert result.exit_code == 0, result.output
+    assert "serena setup devin" in result.output

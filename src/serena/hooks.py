@@ -26,6 +26,7 @@ class HookClient(Enum):
     VSCODE = "vscode"
     CODEX = "codex"
     GROK = "grok"
+    DEVIN = "devin"
 
 
 class Hook(ABC):
@@ -94,6 +95,11 @@ class PreToolUseHook(Hook, ABC):
                 if self.permission_decision == "deny":
                     grok_output["reason"] = self.permission_decision_reason
                 return json.dumps(grok_output)
+
+            if client == HookClient.DEVIN:
+                # Devin CLI PreToolUse hooks use top-level "decision" (approve/block) with a reason.
+                decision = "approve" if self.permission_decision == "allow" else "block"
+                return json.dumps({"decision": decision, "reason": self.additional_context or self.permission_decision_reason})
 
             hook_output = {
                 "hookSpecificOutput": {
@@ -381,7 +387,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
     def is_grep_call(self) -> bool:
         if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
             return self._tool_name == "grep" or "search_for_pattern" in self._tool_name
-        if self._client == HookClient.GROK:
+        if self._client in (HookClient.GROK, HookClient.DEVIN):
             return self._tool_name == "grep" or (self._is_shell_command_call() and self._command_name in self._GREP_SHELL_COMMANDS)
         if self._client == HookClient.CODEX and self._is_shell_command_call():
             return self._command_name in self._GREP_SHELL_COMMANDS
@@ -391,8 +397,9 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
     def is_read_call(self) -> bool:
         if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
             return self._tool_name == "read" or "read_file" in self._tool_name
-        if self._client == HookClient.GROK:
-            return self._tool_name == "read_file" or (self._is_shell_command_call() and self._command_name in self._READ_SHELL_COMMANDS)
+        if self._client in (HookClient.GROK, HookClient.DEVIN):
+            read_tool = "read_file" if self._client == HookClient.GROK else "read"
+            return self._tool_name == read_tool or (self._is_shell_command_call() and self._command_name in self._READ_SHELL_COMMANDS)
         if self._client == HookClient.CODEX and self._is_shell_command_call():
             return self._command_name in self._READ_SHELL_COMMANDS
         # heuristic for other clients
@@ -417,7 +424,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         if self._file_path is not None:
             return self._is_code_file_path(self._file_path)
 
-        if self._client in (HookClient.CODEX, HookClient.GROK) and self._command_args_str is not None:
+        if self._client in (HookClient.CODEX, HookClient.GROK, HookClient.DEVIN) and self._command_args_str is not None:
             return any(self._is_code_file_path(argument) for argument in self._iter_shell_path_arguments())
 
         return True
@@ -565,8 +572,9 @@ class PreToolUseAutoApproveSerenaHook(PreToolUseHook):
     #: the canonical mode strings emitted by Claude Code's hook payload.
     _AUTO_APPROVE_MODES: frozenset[str] = frozenset({"acceptEdits", "auto"})
 
+    # Devin CLI does not expose a permission mode in PreToolUse payloads; auto-approve is unconditional for it.
     def is_auto_approve_mode(self) -> bool:
-        return self._permission_mode in self._AUTO_APPROVE_MODES
+        return self._client == HookClient.DEVIN or self._permission_mode in self._AUTO_APPROVE_MODES
 
     def execute(self) -> None:
         # only emit a decision when both the tool and the mode match; stay silent otherwise
@@ -577,7 +585,11 @@ class PreToolUseAutoApproveSerenaHook(PreToolUseHook):
         # (the same hook handles multiple modes now)
         output_data = self.OutputData(
             permission_decision="allow",
-            permission_decision_reason=f"Auto-approved: Serena tool call while client is in {self._permission_mode} mode.",
+            permission_decision_reason=(
+                "Auto-approved: Serena symbolic tool call in Devin CLI."
+                if self._client == HookClient.DEVIN
+                else f"Auto-approved: Serena tool call while client is in {self._permission_mode} mode."
+            ),
         )
         click.echo(output_data.to_json_string(self._client))
 

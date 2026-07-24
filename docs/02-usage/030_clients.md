@@ -694,6 +694,89 @@ CodeBuddy supports the same hook system as Claude Code. To set up hooks, add the
   permission mode (`acceptEdits` or `auto`), so blanket approvals cover Serena's destructive
   tools (e.g. `replace_symbol_body`, `rename_symbol`) instead of prompting on every call.
 
+## Devin CLI
+
+Serena can be used as an MCP server inside Devin CLI. To set up the Serena MCP server for Devin CLI, simply run:
+
+    serena setup devin
+
+### Manual Setup
+
+**Global Configuration**. To add the Serena MCP server for all your projects, use Devin CLI's user-level configuration and the `--project-from-cwd` flag:
+
+```bash
+devin mcp add -s user serena -- serena start-mcp-server --context=devin --project-from-cwd
+```
+
+**Project-Level Configuration**. To add the Serena MCP server for a single project only:
+
+```bash
+devin mcp add -s project serena -- serena start-mcp-server --context=devin --project "$(pwd)"
+```
+
+**Verification.**
+Run `devin mcp list` and verify that Serena is listed as an MCP server.
+
+### Hooks
+
+Devin CLI supports lifecycle hooks via `.devin/hooks.v1.json` (project) and the `hooks` key in `~/.config/devin/config.json` (global). To enable Serena's hooks globally, add the following under the `hooks` key in `~/.config/devin/config.json`:
+
+```json
+{
+  "SessionStart": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "serena-hooks activate --client=devin",
+          "timeout": 5
+        }
+      ]
+    }
+  ],
+  "PreToolUse": [
+    {
+      "matcher": "",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "serena-hooks remind --client=devin",
+          "timeout": 5
+        }
+      ]
+    },
+    {
+      "matcher": "mcp__serena__*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "serena-hooks auto-approve --client=devin",
+          "timeout": 5
+        }
+      ]
+    }
+  ],
+  "SessionEnd": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "serena-hooks cleanup --client=devin",
+          "timeout": 5
+        }
+      ]
+    }
+  ]
+}
+```
+
+The hooks will:
+
+- **`activate`**: Prompt the agent to activate the project at the start of the session and read Serena's instructions.
+- **`remind`**: Nudge (and temporarily block) the agent to use Serena's symbolic tools when it makes too many consecutive code-search or code-file-read calls without using Serena tools in between.
+- **`auto-approve`**: Auto-approve Serena symbolic tool calls so blanket approvals cover Serena's destructive tools (e.g. `replace_symbol_body`, `rename_symbol`) instead of prompting on every call.
+- **`cleanup`**: Clean up hook session data when the session ends.
+
 ## Other Clients
 
 For other clients, follow the [general instructions](#clients-general-instructions) above to set up Serena as an MCP server.
