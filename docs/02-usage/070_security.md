@@ -13,8 +13,18 @@ The current security model for Serena assumes:
 - package manager configuration (e.g. npm) for downloading additional dependencies (i.e. language servers when using Serena with the LSP backend) is trusted.
 
 Serena contains tools for executing shell commands and modifying files.
-As such tools are, however, an essential part of coding agent workflows, they typically need to be made available. 
+As such tools are, however, an essential part of coding agent workflows, they typically need to be made available – and need to be made available in a flexible, general form.
 Therefore, the only way to *fully* protect against unintended consequences is to use a [sandboxed environment](sandboxing) for running Serena.
+
+:::{admonition} Security Advisories
+:class: note
+Security advisories are welcome for issues that violate the security model described on this page.
+However, reports which amount to noting that Serena's tools can execute commands or modify files
+describe intended functionality rather than vulnerabilities, and we will reject advisories that fail to recognise this
+or otherwise ignore the above assumptions.  
+Sandboxing is the *only* way to fully protect against unintended consequences when using coding agents;
+constraints on the tools themselves cannot achieve this and are therefore not an approach we pursue.
+:::
 
 ## General Recommendations for Risk Reduction
 
@@ -23,7 +33,7 @@ To reduce the risk of unintended consequences, we recommend that you:
 - restrict the set of allowed tools via the [configuration](050_configuration),
 - do not expose [Serena's network services](network-security) to untrusted networks.
 
-If you do not fully the trust the client/the LLM, we additionally recommend to monitor tool executions carefully 
+If you do not fully trust the client/the LLM, we additionally recommend to monitor tool executions carefully 
 (provided that your MCP client supports this).
 
 (sandboxing)=
