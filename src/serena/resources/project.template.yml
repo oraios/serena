@@ -15,7 +15,7 @@ project_name: "project_name"
 #   qml                    r                      rego                   ruby                   ruby_solargraph
 #   rust                   scala                  scss                   solidity               svelte
 #   swift                  systemverilog          terraform              toml                   typescript
-#   typescript_vts         vue                    yaml                   zig
+#   typescript_vts         vue                    wolfram                yaml                   zig
 #   (This list may be outdated; generated with scripts/print_language_list.py;
 #   For the current list, see values of the LanguageServerId enum here:
 #   https://github.com/oraios/serena/blob/main/src/solidlsp/ls_config.py)

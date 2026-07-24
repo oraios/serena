@@ -163,8 +163,10 @@ Some languages require additional installations or setup steps, as noted.
 * **TOML**  
   (experimental; uses Taplo 0.10.0, taken from PATH if present, otherwise downloaded automatically)
 * **TypeScript**
-* **Vue**    
+* **Vue**
   (3.x with TypeScript; requires Node.js v18+ and npm; supports .vue Single File Components with monorepo detection)
+* **Wolfram Language**
+  (requires Wolfram Mathematica 13.0+ or Wolfram Engine 12.1+; uses the official [WolframResearch LSPServer](https://github.com/WolframResearch/LSPServer) paclet; supports .wl and .wls files; references are within-file only)
 * **YAML**
 * **JSON**  
   (experimental; must be explicitly added to the languages list; requires Node.js and npm)

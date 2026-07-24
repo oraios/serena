@@ -379,6 +379,7 @@ markers = [
   "angular: language server running for Angular (uses @angular/language-server + @angular/language-service tsserver plugin)",
   "ada: language server running for Ada / SPARK (uses AdaCore Ada Language Server)",
   "qml: language server running for QML (uses Qt's qmlls)",
+  "wolfram: language server running for Wolfram Language (requires Mathematica 13.0+ or Wolfram Engine 12.1+)",
 ]
 
 [tool.codespell]
