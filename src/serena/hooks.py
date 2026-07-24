@@ -542,18 +542,29 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         )
 
     def _build_devin_noop_input(self, message: str) -> dict | None:
-        """Return a Devin tool_input that performs a no-op while keeping the agent cycle alive.
+        """Return a Devin tool_input that prevents the original action while keeping the cycle alive.
 
-        Mirrors the ENFORCE_SOFT pattern: the original tool runs, but with harmless arguments,
-        and the warning message is emitted as additional context.``exec`` commands are replaced
-        with a ``printf`` that echoes the reminder so the model sees the nudge in the tool output.
+        The tool still executes, but with harmless arguments, and its output is replaced by the
+        reminder message so the model sees what to do next.``read`` and ``grep`` are pointed at a
+        dedicated nudge file, ``glob`` at a literal file path, and ``exec`` commands are replaced
+        with a ``printf`` of the warning.
         """
+        nudge_file = Path(self.session_persistence_dir) / "devin_nudge.txt"
+        nudge_file.parent.mkdir(parents=True, exist_ok=True)
+        # Repeat the message so it survives either 0-indexed or 1-indexed offsets.
+        nudge_file.write_text(message + "\n" + message, encoding="utf-8")
+
         if self._tool_name == "read":
-            return {"file_path": os.devnull}
+            return {"file_path": str(nudge_file), "offset": 1, "limit": 1000}
         if self._tool_name == "grep":
-            return {"pattern": "__SERENA_SUPPRESSED__", "output_mode": "content", "max_results": 0}
+            return {
+                "pattern": ".*",
+                "path": str(nudge_file),
+                "output_mode": "content",
+                "max_results": 100,
+            }
         if self._tool_name == "glob":
-            return {"pattern": "__SERENA_SUPPRESSED__"}
+            return {"pattern": str(nudge_file)}
         if self._tool_name == "exec" and self._is_shell_command_call():
             quoted_message = oslex.quote(message)
             return {"command": f"printf '%s\\n' {quoted_message}"}

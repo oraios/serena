@@ -1,5 +1,4 @@
 import json
-import os
 import pickle
 from datetime import datetime, timedelta
 from io import StringIO
@@ -1166,7 +1165,7 @@ class TestDevinHookSupport:
             assert hook.is_read_code_file_call() == expected_code_read, f"is_read_code_file_call wrong for {command} (devin)"
 
     def test_devin_remind_output_json_for_grep(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        """Devin CLI remind hook rewrites a grep call to a harmless no-op instead of blocking."""
+        """Devin CLI remind hook rewrites a grep call to read the nudge file instead of searching."""
         with patch("serena.hooks.serena_home_dir", str(tmp_path)):
             for _ in range(3):
                 with patch("sys.stdin", _make_stdin(_base_input(tool_name="grep"))):
@@ -1177,12 +1176,13 @@ class TestDevinHookSupport:
         assert result["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
         assert "decision" not in result
         updated_input = result["hookSpecificOutput"]["updatedInput"]
-        assert updated_input["pattern"] == "__SERENA_SUPPRESSED__"
-        assert updated_input.get("max_results") == 0
+        assert updated_input["pattern"] == ".*"
+        assert "devin_nudge.txt" in updated_input["path"]
+        assert updated_input.get("max_results") == 100
         assert "Serena" in result["hookSpecificOutput"]["additionalContext"]
 
     def test_devin_remind_output_json_for_read(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        """Devin CLI remind hook rewrites a read call to /dev/null instead of blocking."""
+        """Devin CLI remind hook rewrites a read call to the nudge file instead of the target."""
         with patch("serena.hooks.serena_home_dir", str(tmp_path)):
             for _ in range(3):
                 with patch("sys.stdin", _make_stdin(_base_input(tool_name="read", tool_input={"file_path": "src/foo.py"}))):
@@ -1190,7 +1190,10 @@ class TestDevinHookSupport:
         output = capsys.readouterr().out
         result = json.loads(output)
         assert "hookSpecificOutput" in result
-        assert result["hookSpecificOutput"]["updatedInput"]["file_path"] == os.devnull
+        file_path = result["hookSpecificOutput"]["updatedInput"]["file_path"]
+        assert "devin_nudge.txt" in file_path
+        nudge_content = Path(file_path).read_text(encoding="utf-8")
+        assert "Serena" in nudge_content
         assert "Serena" in result["hookSpecificOutput"]["additionalContext"]
 
     def test_devin_remind_output_json_for_exec(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
