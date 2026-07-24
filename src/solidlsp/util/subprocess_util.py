@@ -1,7 +1,10 @@
 import logging
 import platform
+import queue
 import signal
 import subprocess
+import threading
+from collections.abc import Callable
 
 import oslex
 import psutil
@@ -32,9 +35,83 @@ def set_pdeathsig_on_parent_exit() -> None:
     program the shell forks as a child; see convert_shell_cmd's `exec` prefix, which makes the
     shell replace itself with the program instead of forking it, so the same PID (and therefore
     the same PDEATHSIG registration, which execve preserves) carries through.
+
+    Warning this function's caller (popen_preserving_pdeathsig below) exists to guard against: per
+    `man 2 prctl`, PR_SET_PDEATHSIG's "parent" is specifically the OS THREAD that called fork() to
+    create this process, not the parent process as a whole -- if that thread terminates while the
+    rest of the parent process (e.g. its main thread) keeps running, the death signal fires anyway.
     """
     if _libc is not None:
         _libc.prctl(_PR_SET_PDEATHSIG, signal.SIGTERM)
+
+
+class _PDeathSigSpawner:
+    """
+    Runs subprocess.Popen() calls that register PR_SET_PDEATHSIG on one dedicated, permanently
+    running daemon thread, so the "parent thread" the kernel ties the registration to is never a
+    short-lived one.
+
+    Why this exists: StdioLanguageServer._start() (the sole caller of popen_preserving_pdeathsig)
+    is very often invoked from a thread that is *intentionally* short-lived. For example,
+    LanguageServerManager.from_languages spawns one StartLSThread per language server; each one
+    calls language_server.start() (-> ._start(), where Popen() happens) and then simply returns,
+    terminating moments after Popen() itself returns. Because PR_SET_PDEATHSIG's delivery is tied
+    to that specific calling thread (see the warning on set_pdeathsig_on_parent_exit above), the
+    language server would then receive the parent-death signal and exit almost immediately, even
+    though Serena's process is still fully alive -- the exact CI-only regression this class fixes.
+    Funneling the fork()/exec() itself through one thread that never voluntarily exits (it only
+    ever terminates alongside the whole process, which is exactly the case PR_SET_PDEATHSIG is
+    meant to detect) decouples "which caller thread happened to invoke _start()" from "does the
+    language server survive."
+    """
+
+    def __init__(self) -> None:
+        self._queue: queue.Queue[tuple[Callable[[], subprocess.Popen], "queue.Queue"]] = queue.Queue()
+        self._thread = threading.Thread(target=self._run, name="solidlsp-pdeathsig-spawner", daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        while True:
+            func, result_queue = self._queue.get()
+            try:
+                result_queue.put((None, func()))
+            except BaseException as e:
+                result_queue.put((e, None))
+
+    def spawn(self, func: Callable[[], subprocess.Popen]) -> subprocess.Popen:
+        result_queue: queue.Queue = queue.Queue(maxsize=1)
+        self._queue.put((func, result_queue))
+        error, process = result_queue.get()
+        if error is not None:
+            raise error
+        return process
+
+
+class _SpawnerHolder:
+    instance: "_PDeathSigSpawner | None" = None
+
+
+_pdeathsig_spawner_holder = _SpawnerHolder()
+_pdeathsig_spawner_lock = threading.Lock()
+
+
+def popen_preserving_pdeathsig(cmd: str | list[str], **kwargs) -> subprocess.Popen:
+    """
+    subprocess.Popen wrapper for spawns that pass preexec_fn=set_pdeathsig_on_parent_exit.
+
+    On Linux, delegates the actual Popen() call to a single dedicated daemon thread (see
+    _PDeathSigSpawner) instead of performing it on the calling thread directly, so that the
+    PR_SET_PDEATHSIG registration set up by the preexec_fn remains tied to a thread that lives as
+    long as the process does. On any other platform (or if no preexec_fn is passed), this is
+    exactly equivalent to calling subprocess.Popen(cmd, **kwargs) directly.
+    """
+    if platform.system() != "Linux" or kwargs.get("preexec_fn") is None:
+        return subprocess.Popen(cmd, **kwargs)
+    with _pdeathsig_spawner_lock:
+        if _pdeathsig_spawner_holder.instance is None:
+            _pdeathsig_spawner_holder.instance = _PDeathSigSpawner()
+        spawner = _pdeathsig_spawner_holder.instance
+    return spawner.spawn(lambda: subprocess.Popen(cmd, **kwargs))
 
 
 def subprocess_kwargs() -> dict:

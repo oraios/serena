@@ -532,9 +532,14 @@ class StdioLanguageServer(LanguageServerInterface):
             kwargs["preexec_fn"] = subprocess_util.set_pdeathsig_on_parent_exit
         # the language server is launched with binary (bytes) pipes; the cast is needed because the
         # presence of platform-specific **kwargs prevents ty from selecting the bytes Popen overload
+        # popen_preserving_pdeathsig (rather than a plain subprocess.Popen call) matters specifically
+        # when use_pdeathsig is set: the actual fork() has to happen on a thread that outlives the
+        # calling thread, which may itself be short-lived (e.g. LanguageServerManager's per-server
+        # StartLSThread) -- see its docstring for why a plain Popen call here would defeat the fix
+        # for #1490 in exactly that case.
         process = cast(
             "subprocess.Popen[bytes]",
-            subprocess.Popen(
+            subprocess_util.popen_preserving_pdeathsig(
                 cmd,
                 stdout=subprocess.PIPE,
                 stdin=subprocess.PIPE,
