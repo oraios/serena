@@ -571,15 +571,20 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
 
 
 class SessionStartActivateProjectHook(Hook):
+    #: cache files older than this many days are considered stale
+    _STALE_INDEX_DAYS = 7
+
     def execute(self) -> None:
         # Devin CLI exposes the project root via DEVIN_PROJECT_DIR; including it in the prompt
         # lets the agent know exactly which project is active without guessing from CWD.
         devin_project_dir = os.environ.get("DEVIN_PROJECT_DIR")
         project_clause = f" The current project directory is {devin_project_dir}." if devin_project_dir else ""
+        index_clause = self._index_clause(devin_project_dir)
         message = (
             f"**IMPORTANT**: If the current directory is a coding project you are working on:{project_clause}"
             " 1. activate it using Serena's activate_project tool unless already done. "
             " 2. if you haven't read Serena Instructions Manual yet, do so. "
+            f" 3. {index_clause}"
             "Follow this instruction before doing anything else."
         )
         result = {
@@ -589,6 +594,54 @@ class SessionStartActivateProjectHook(Hook):
             }
         }
         click.echo(json.dumps(result))
+
+    def _index_clause(self, project_dir: str | None) -> str:
+        """Return an index-status clause for the activation message.
+
+        If the project directory is known and the cache is missing or stale, the
+        clause explicitly tells the agent to remind the user to run
+        ``serena project index``. Otherwise it gives a generic reminder or
+        confirms the index looks up to date.
+        """
+        if project_dir is None:
+            return (
+                "if the project has not been indexed recently, remind the user to run "
+                "`serena project index` once to avoid delays when searching symbols."
+            )
+        status = self._check_index_status(project_dir)
+        if status == "missing":
+            return (
+                f"the project at {project_dir} does not appear to be indexed yet; "
+                "remind the user to run `serena project index` in that directory "
+                "before doing heavy symbol searches."
+            )
+        if status == "stale":
+            return (
+                f"the project index at {project_dir} appears to be stale "
+                f"({self._STALE_INDEX_DAYS}+ days old); remind the user to run "
+                "`serena project index` to refresh it."
+            )
+        return "the project appears to be indexed; no need to index again unless many files have changed since the last index run."
+
+    def _check_index_status(self, project_dir: str) -> str:
+        """Check whether the project has a recent Serena symbol cache.
+
+        :return: ``"missing"`` if no cache exists, ``"stale"`` if the newest cache
+            file is older than :attr:`_STALE_INDEX_DAYS`, or ``"ok"`` otherwise.
+        """
+        cache_dir = Path(project_dir) / ".serena" / "cache"
+        if not cache_dir.is_dir():
+            return "missing"
+        newest_mtime: float | None = None
+        for file in cache_dir.rglob("*"):
+            if file.is_file():
+                mtime = file.stat().st_mtime
+                if newest_mtime is None or mtime > newest_mtime:
+                    newest_mtime = mtime
+        if newest_mtime is None:
+            return "missing"
+        age_days = (datetime.now().timestamp() - newest_mtime) / 86400
+        return "stale" if age_days > self._STALE_INDEX_DAYS else "ok"
 
 
 class SessionEndCleanupHook(Hook):

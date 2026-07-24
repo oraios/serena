@@ -1,4 +1,5 @@
 import json
+import os
 import pickle
 from datetime import datetime, timedelta
 from io import StringIO
@@ -1237,3 +1238,69 @@ class TestDevinHookSupport:
         result = json.loads(output)
         assert result["hookSpecificOutput"]["hookEventName"] == "SessionStart"
         assert "/tmp/devin-project" in result["hookSpecificOutput"]["additionalContext"]
+
+    def test_devin_session_start_reminds_to_index_when_cache_missing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ):
+        """Devin CLI SessionStart hook reminds the user to index when no cache exists."""
+        project_dir = tmp_path / "devin-project"
+        project_dir.mkdir()
+        monkeypatch.setenv("DEVIN_PROJECT_DIR", str(project_dir))
+        with patch("sys.stdin", _make_stdin({"session_id": "devin-session"})), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            SessionStartActivateProjectHook(HookClient.DEVIN).execute()
+        output = capsys.readouterr().out
+        result = json.loads(output)
+        additional_context = result["hookSpecificOutput"]["additionalContext"]
+        assert "does not appear to be indexed" in additional_context
+        assert "serena project index" in additional_context
+
+    def test_devin_session_start_reminds_to_index_when_cache_stale(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ):
+        """Devin CLI SessionStart hook warns when the symbol cache is stale."""
+        project_dir = tmp_path / "devin-project"
+        cache_dir = project_dir / ".serena" / "cache" / "python"
+        cache_dir.mkdir(parents=True)
+        stale_file = cache_dir / "document_symbols_cache.pkl"
+        stale_file.write_text("stale", encoding="utf-8")
+        old_mtime = (datetime.now() - timedelta(days=10)).timestamp()
+        stale_file.touch(exist_ok=True)
+        os.utime(stale_file, (old_mtime, old_mtime))
+        monkeypatch.setenv("DEVIN_PROJECT_DIR", str(project_dir))
+        with patch("sys.stdin", _make_stdin({"session_id": "devin-session"})), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            SessionStartActivateProjectHook(HookClient.DEVIN).execute()
+        output = capsys.readouterr().out
+        result = json.loads(output)
+        additional_context = result["hookSpecificOutput"]["additionalContext"]
+        assert "stale" in additional_context
+        assert "serena project index" in additional_context
+
+    def test_devin_session_start_confirms_index_when_cache_fresh(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ):
+        """Devin CLI SessionStart hook confirms indexing when the cache is fresh."""
+        project_dir = tmp_path / "devin-project"
+        cache_dir = project_dir / ".serena" / "cache" / "python"
+        cache_dir.mkdir(parents=True)
+        fresh_file = cache_dir / "document_symbols_cache.pkl"
+        fresh_file.write_text("fresh", encoding="utf-8")
+        monkeypatch.setenv("DEVIN_PROJECT_DIR", str(project_dir))
+        with patch("sys.stdin", _make_stdin({"session_id": "devin-session"})), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            SessionStartActivateProjectHook(HookClient.DEVIN).execute()
+        output = capsys.readouterr().out
+        result = json.loads(output)
+        additional_context = result["hookSpecificOutput"]["additionalContext"]
+        assert "appears to be indexed" in additional_context
+
+    def test_claude_session_start_generic_index_reminder(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ):
+        """Claude Code SessionStart hook gives a generic index reminder when no project dir is known."""
+        monkeypatch.delenv("DEVIN_PROJECT_DIR", raising=False)
+        with patch("sys.stdin", _make_stdin({"session_id": "claude-session"})), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            SessionStartActivateProjectHook(HookClient.CLAUDE_CODE).execute()
+        output = capsys.readouterr().out
+        result = json.loads(output)
+        additional_context = result["hookSpecificOutput"]["additionalContext"]
+        assert "remind the user to run" in additional_context
+        assert "serena project index" in additional_context
