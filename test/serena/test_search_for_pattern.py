@@ -125,8 +125,13 @@ def test_search_for_pattern_prioritizes_live_results_in_ranked_overflow_excerpt(
     controlled_paths = {"plugins/feature-pipeline/z-last.md", "plugins/feature-pipeline/a-first.md"}
     other_matches = [match for match in discovered_matches if match.source_file_path not in controlled_paths]
     controlled_source_order = z_matches + list(reversed(a_matches)) + other_matches
+    for match in controlled_source_order:
+        assert match.source_file_path is not None
+        match.source_file_path = match.source_file_path.replace("/", "\\")
     tool.project.search_project_files_for_pattern = MagicMock(return_value=controlled_source_order)
-    expected_path_order = list(dict.fromkeys(match.source_file_path for match in controlled_source_order))
+    expected_path_order = list(
+        dict.fromkeys(match.source_file_path.replace("\\", "/") for match in controlled_source_order if match.source_file_path is not None)
+    )
 
     prioritized = tool.apply(
         substring_pattern="feature-pipeline|Warden",

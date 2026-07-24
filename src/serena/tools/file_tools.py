@@ -611,7 +611,12 @@ class SearchForPatternTool(Tool):
             code_files_only=restrict_search_to_code_files,
         )
 
-        # rank prioritized matches deterministically while leaving no-priority searches unchanged
+        # normalize the public path contract before ranking and serialization
+        for match in matches:
+            assert match.source_file_path is not None
+            match.source_file_path = GlobMatcher.normalize_path(match.source_file_path)
+
+        # rank prioritized matches deterministically while preserving source order when no priorities are supplied
         priority_matchers = [GlobMatcher(glob.strip()) for glob in paths_priority_globs or [] if glob.strip()]
         if priority_matchers:
 
@@ -622,8 +627,7 @@ class SearchForPatternTool(Tool):
                     (index for index, matcher in enumerate(priority_matchers) if matcher.matches(match.source_file_path)),
                     len(priority_matchers),
                 )
-                normalized_path = match.source_file_path.replace("\\", "/")
-                return priority_index, normalized_path, match.matched_lines[0].line_number, original_index
+                return priority_index, match.source_file_path, match.matched_lines[0].line_number, original_index
 
             matches = [match for _, match in sorted(enumerate(matches), key=priority)]
 

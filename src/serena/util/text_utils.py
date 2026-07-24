@@ -203,13 +203,18 @@ class GlobMatcher(ToStringMixin):
         """
         :param expr: a glob pattern which may make use of brace expansion (e.g., "src/**/*.{js,jsx,ts,tsx}")
         """
-        expr = expr.replace("\\", "/")  # normalise backslashes to forward slashes
+        expr = self.normalize_path(expr)
         self._glob_expr = expr
         self._glob_patterns = self._expand_braces(expr)
         self._regex_patterns = [re.compile(self._translate_glob_to_regex(p)) for p in self._glob_patterns]
 
     def _tostring_includes(self) -> list[str]:
         return ["_glob_expr"]
+
+    @staticmethod
+    def normalize_path(path: str) -> str:
+        """Normalize a project-relative path for glob matching and public search output."""
+        return path.replace("\\", "/")
 
     @staticmethod
     def _expand_braces(pattern: str) -> list[str]:
@@ -289,7 +294,7 @@ class GlobMatcher(ToStringMixin):
         return f"(?s:{inner})\\Z"
 
     def matches(self, path: str) -> bool:
-        path = path.replace("\\", "/")  # normalise backslashes to forward slashes
+        path = self.normalize_path(path)
         return any(regex.match(path) for regex in self._regex_patterns)
 
 
@@ -327,12 +332,13 @@ def search_files(
     def process_single_file(file_proxy: FileProxy) -> dict[str, Any]:
         """Process a single file - this function will be parallelized."""
         relative_path = file_proxy.get_relative_path()
+        normalized_relative_path = GlobMatcher.normalize_path(relative_path)
         try:
             file_content = file_proxy.get_contents()
             search_results = search_text(
                 pattern,
                 content=file_content,
-                source_file_path=relative_path,
+                source_file_path=normalized_relative_path,
                 context_lines_before=context_lines_before,
                 context_lines_after=context_lines_after,
                 multiline=multiline,

@@ -238,6 +238,26 @@ class TestSearchFiles:
 
         assert [result.source_file_path for result in results] == ["plugins/feature-pipeline/SKILL.md"]
 
+    def test_windows_paths_are_filtered_and_returned_with_forward_slashes(self):
+        results = search_files(
+            MockFileCollection(
+                [
+                    r"plugins\feature-pipeline\SKILL.md",
+                    r"docs\superpowers\plans\archive.md",
+                    r"docs\superpowers\specs\archive.md",
+                    r"src\generated\cache.py",
+                ]
+            ),
+            pattern="match",
+            paths_exclude_glob="**/generated/**",
+            paths_exclude_globs=[
+                "docs/superpowers/plans/**",
+                "docs/superpowers/specs/**",
+            ],
+        )
+
+        assert [result.source_file_path for result in results] == ["plugins/feature-pipeline/SKILL.md"]
+
     @pytest.mark.parametrize(
         "file_paths, pattern, paths_include_glob, paths_exclude_glob, expected_matched_files, description",
         [
