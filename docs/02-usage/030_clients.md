@@ -744,9 +744,11 @@ Devin CLI supports lifecycle hooks via `.devin/hooks.v1.json` (project) and the 
           "timeout": 5
         }
       ]
-    },
+    }
+  ],
+  "PermissionRequest": [
     {
-      "matcher": "mcp__serena__*",
+      "matcher": "mcp__serena__.*",
       "hooks": [
         {
           "type": "command",
@@ -773,7 +775,7 @@ Devin CLI supports lifecycle hooks via `.devin/hooks.v1.json` (project) and the 
 The hooks will:
 
 - **`activate`**: Prompt the agent to activate the project at the start of the session and read Serena's instructions.
-- **`remind`**: Nudge (and temporarily block) the agent to use Serena's symbolic tools when it makes too many consecutive code-search or code-file-read calls without using Serena tools in between.
+- **`remind`**: Nudge the agent to use Serena's symbolic tools when it makes too many consecutive code-search or code-file-read calls without using Serena tools in between. The original tool call is rewritten to a harmless no-op, so the agent cycle keeps running.
 - **`auto-approve`**: Auto-approve Serena symbolic tool calls so blanket approvals cover Serena's destructive tools (e.g. `replace_symbol_body`, `rename_symbol`) instead of prompting on every call.
 - **`cleanup`**: Clean up hook session data when the session ends.
 

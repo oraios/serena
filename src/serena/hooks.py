@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Literal, Self
 
 import click
+import oslex
 
 from serena.util.cli_util import AutoRegisteringGroup
 
@@ -88,6 +89,7 @@ class PreToolUseHook(Hook, ABC):
         permission_decision: Literal["deny", "allow"]
         permission_decision_reason: str
         additional_context: str = ""
+        updated_input: dict | None = None
 
         def to_json_string(self, client: HookClient) -> str:
             if client == HookClient.GROK:
@@ -97,7 +99,17 @@ class PreToolUseHook(Hook, ABC):
                 return json.dumps(grok_output)
 
             if client == HookClient.DEVIN:
-                # Devin CLI PreToolUse hooks use top-level "decision" (approve/block) with a reason.
+                # Devin CLI PreToolUse hooks use top-level "decision" (approve/block) with a reason,
+                # or rewrite the tool input to a no-op when updated_input is provided (soft-enforce).
+                if self.updated_input:
+                    devin_output = {
+                        "hookSpecificOutput": {
+                            "hookEventName": "PreToolUse",
+                            "updatedInput": self.updated_input,
+                            "additionalContext": self.additional_context or self.permission_decision_reason,
+                        }
+                    }
+                    return json.dumps(devin_output)
                 decision = "approve" if self.permission_decision == "allow" else "block"
                 return json.dumps({"decision": decision, "reason": self.additional_context or self.permission_decision_reason})
 
@@ -486,6 +498,9 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             # reset burst counters so the next interval starts fresh, then record
             # the deny timestamp and emit. The is_hook_active() guard at the top
             # ensures we never reach this branch within the rate-limit window.
+            if self._client == HookClient.DEVIN:
+                message = output_data.additional_context or output_data.permission_decision_reason
+                output_data.updated_input = self._build_devin_noop_input(message)
             self._tool_call_counter.reset()
             self._tool_call_counter.last_deny_timestamp = self.triggered_at_timestamp
             click.echo(output_data.to_json_string(self._client))
@@ -525,6 +540,24 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
                 "now if needed, the counter was reset."
             ),
         )
+
+    def _build_devin_noop_input(self, message: str) -> dict | None:
+        """Return a Devin tool_input that performs a no-op while keeping the agent cycle alive.
+
+        Mirrors the ENFORCE_SOFT pattern: the original tool runs, but with harmless arguments,
+        and the warning message is emitted as additional context.``exec`` commands are replaced
+        with a ``printf`` that echoes the reminder so the model sees the nudge in the tool output.
+        """
+        if self._tool_name == "read":
+            return {"file_path": os.devnull}
+        if self._tool_name == "grep":
+            return {"pattern": "__SERENA_SUPPRESSED__", "output_mode": "content", "max_results": 0}
+        if self._tool_name == "glob":
+            return {"pattern": "__SERENA_SUPPRESSED__"}
+        if self._tool_name == "exec" and self._is_shell_command_call():
+            quoted_message = oslex.quote(message)
+            return {"command": f"printf '%s\\n' {quoted_message}"}
+        return None
 
 
 class SessionStartActivateProjectHook(Hook):
