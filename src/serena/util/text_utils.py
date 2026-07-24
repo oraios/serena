@@ -300,6 +300,7 @@ def search_files(
     context_lines_after: int = 0,
     paths_include_glob: str | None = None,
     paths_exclude_glob: str | None = None,
+    paths_exclude_globs: list[str] | None = None,
     multiline: bool = True,
 ) -> list[MatchedConsecutiveLines]:
     """
@@ -311,11 +312,16 @@ def search_files(
     :param context_lines_after: number of context lines to include after matches
     :param paths_include_glob: optional glob pattern to include files from the list
     :param paths_exclude_glob: optional glob pattern to exclude files from the list
+    :param paths_exclude_globs: additional optional glob patterns to exclude; additive with paths_exclude_glob
     :param multiline: whether to apply multi-line matching, enabling the flags re.DOTALL and re.MULTILINE (default: True)
     :return: list of MatchedConsecutiveLines objects
     """
     # apply glob filter
-    file_collection = file_collection.filter_glob(paths_include_glob=paths_include_glob, paths_exclude_glob=paths_exclude_glob)
+    file_collection = file_collection.filter_glob(
+        paths_include_glob=paths_include_glob,
+        paths_exclude_glob=paths_exclude_glob,
+        paths_exclude_globs=paths_exclude_globs,
+    )
     log.info(f"Processing {len(file_collection)} files.")
 
     def process_single_file(file_proxy: FileProxy) -> dict[str, Any]:

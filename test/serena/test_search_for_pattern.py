@@ -11,6 +11,50 @@ from serena.project import Project
 from serena.tools.file_tools import SearchForPatternTool
 
 
+def make_search_tool(tmp_path) -> SearchForPatternTool:
+    serena_config = SerenaConfig(gui_log_window=False, web_dashboard=False)
+    project = Project.load(str(tmp_path), serena_config=serena_config)
+    agent = MagicMock()
+    agent.serena_config = serena_config
+    agent.get_active_project_or_raise.return_value = project
+    return SearchForPatternTool(agent)
+
+
+def test_search_for_pattern_multiple_exclusion_globs_are_additive(tmp_path):
+    paths = [
+        "plugins/feature-pipeline/SKILL.md",
+        "docs/superpowers/plans/archive.md",
+        "docs/superpowers/specs/archive.md",
+        "src/generated/cache.py",
+    ]
+    for path in paths:
+        file = tmp_path / path
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_text("feature-pipeline\n", encoding="utf-8")
+
+    tool = make_search_tool(tmp_path)
+
+    singular_result = tool.apply(
+        substring_pattern="feature-pipeline",
+        paths_exclude_glob="**/generated/**",
+    )
+    assert "plugins/feature-pipeline/SKILL.md" in singular_result
+    assert "docs/superpowers/plans/archive.md" in singular_result
+    assert "src/generated/cache.py" not in singular_result
+
+    additive_result = tool.apply(
+        substring_pattern="feature-pipeline",
+        paths_exclude_glob="**/generated/**",
+        paths_exclude_globs=[
+            "docs/superpowers/plans/**",
+            "docs/superpowers/specs/**",
+        ],
+    )
+    assert "plugins/feature-pipeline/SKILL.md" in additive_result
+    assert "docs/superpowers" not in additive_result
+    assert "src/generated/cache.py" not in additive_result
+
+
 def test_search_for_pattern_snippet_stage(tmp_path):
     lines: list[str] = []
     for i in range(60):
@@ -23,10 +67,7 @@ def test_search_for_pattern_snippet_stage(tmp_path):
         ]
     (tmp_path / "data.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    project = Project.load(str(tmp_path), serena_config=SerenaConfig(gui_log_window=False, web_dashboard=False))
-    agent = MagicMock()
-    agent.get_active_project_or_raise.return_value = project
-    tool = SearchForPatternTool(agent)
+    tool = make_search_tool(tmp_path)
 
     def run(cap: int) -> str:
         return tool.apply(

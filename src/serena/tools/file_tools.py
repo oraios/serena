@@ -566,6 +566,7 @@ class SearchForPatternTool(Tool):
         context_lines_after: int = 0,
         paths_include_glob: str = "",
         paths_exclude_glob: str = "",
+        paths_exclude_globs: list[str] | None = None,
         relative_path: str = "",
         restrict_search_to_code_files: bool = False,
         multiline: bool = True,
@@ -580,6 +581,7 @@ class SearchForPatternTool(Tool):
         :param context_lines_after: number of context lines to include after each match.
         :param paths_include_glob: optional glob (relative to project root, e.g. ``"src/**/*.ts"``) restricting which files are searched.
         :param paths_exclude_glob: optional glob to exclude files; takes precedence over `paths_include_glob`.
+        :param paths_exclude_globs: additional optional globs to exclude files; additive with `paths_exclude_glob`.
         :param relative_path: restricts the search to this file or subdirectory of the project root
         :param restrict_search_to_code_files: whether to search only files containing analyzable code symbols
             (useful when looking for class/method definitions); otherwise also search non-code files.
@@ -599,6 +601,7 @@ class SearchForPatternTool(Tool):
             context_lines_after=context_lines_after,
             paths_include_glob=paths_include_glob.strip(),
             paths_exclude_glob=paths_exclude_glob.strip(),
+            paths_exclude_globs=[glob.strip() for glob in paths_exclude_globs or [] if glob.strip()],
             multiline=multiline,
             code_files_only=restrict_search_to_code_files,
         )

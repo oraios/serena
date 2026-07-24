@@ -218,6 +218,26 @@ class MockFileCollection(FileCollection):
 
 
 class TestSearchFiles:
+    def test_multiple_exclusion_globs_are_additive(self):
+        results = search_files(
+            MockFileCollection(
+                [
+                    "plugins/feature-pipeline/SKILL.md",
+                    "docs/superpowers/plans/archive.md",
+                    "docs/superpowers/specs/archive.md",
+                    "src/generated/cache.py",
+                ]
+            ),
+            pattern="match",
+            paths_exclude_glob="**/generated/**",
+            paths_exclude_globs=[
+                "docs/superpowers/plans/**",
+                "docs/superpowers/specs/**",
+            ],
+        )
+
+        assert [result.source_file_path for result in results] == ["plugins/feature-pipeline/SKILL.md"]
+
     @pytest.mark.parametrize(
         "file_paths, pattern, paths_include_glob, paths_exclude_glob, expected_matched_files, description",
         [
