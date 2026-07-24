@@ -8,6 +8,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     the actual semantics (configurations are automatically migrated)
   - Fix: glob matching bare `*` and `?` in non-`**` patterns matched across `/`, contradicting documented behaviour #1732
 
+* Tools:
+  - `search_for_pattern`: support additive exclusion globs and ordered priority globs, and preserve
+    representative prioritized matches with omitted-result counts when responses exceed the output limit.
+
 * Language Servers: 
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
     project creation) 
