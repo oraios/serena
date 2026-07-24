@@ -5,6 +5,7 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 from click import Command, Option
@@ -364,30 +365,9 @@ class TestFindProjectRoot:
         finally:
             os.chdir(original_cwd)
 
-    def test_start_directory_override(self, temp_project_dir):
-        """A custom start directory is used instead of CWD, respecting the root boundary."""
-        serena_dir = os.path.join(temp_project_dir, ".serena")
-        os.makedirs(serena_dir)
-        Path(os.path.join(serena_dir, "project.yml")).touch()
-        subdir = os.path.join(temp_project_dir, "src", "nested")
-        os.makedirs(subdir)
-        other_dir = os.path.join(temp_project_dir, "other")
-        os.makedirs(other_dir)
 
-        # Even though we are in an unrelated directory, starting the search from subdir
-        # and bounding it to temp_project_dir should find the project root.
-        original_cwd = os.getcwd()
-        try:
-            os.chdir(other_dir)
-            result = find_project_root(start=subdir, root=temp_project_dir)
-            assert result is not None
-            assert os.path.samefile(result, temp_project_dir)
-        finally:
-            os.chdir(original_cwd)
-
-
-class TestProjectFromCwdMutualExclusivity:
-    """Tests for --project-from-cwd mutual exclusivity."""
+class TestProjectFromCwd:
+    """Tests for the --project-from-cwd flag (mutual exclusivity and project resolution)."""
 
     def test_project_from_cwd_with_project_flag_fails(self, cli_runner):
         """Test that --project-from-cwd with --project raises error."""
@@ -397,6 +377,27 @@ class TestProjectFromCwdMutualExclusivity:
         )
         assert result.exit_code != 0
         assert "cannot be used with" in result.output
+
+    def test_project_from_cwd_prefers_devin_project_dir(self, monkeypatch, temp_project_dir):
+        """--project-from-cwd honors DEVIN_PROJECT_DIR (Devin may spawn the server from another cwd)."""
+        monkeypatch.setenv("DEVIN_PROJECT_DIR", temp_project_dir)
+        with patch("serena.mcp.SerenaMCPFactory") as factory_cls:
+            factory_cls.return_value.create_mcp_server.return_value = MagicMock()
+            result = CliRunner().invoke(TopLevelCommands.start_mcp_server, ["--project-from-cwd", "--transport", "stdio"])
+        assert result.exit_code == 0, result.output
+        assert factory_cls.call_args.kwargs["project"] == temp_project_dir
+
+    def test_project_from_cwd_falls_back_to_cwd_detection(self, monkeypatch, temp_project_dir):
+        """Without DEVIN_PROJECT_DIR, --project-from-cwd detects the project by walking up from CWD."""
+        monkeypatch.delenv("DEVIN_PROJECT_DIR", raising=False)
+        os.makedirs(os.path.join(temp_project_dir, ".git"))
+        monkeypatch.chdir(temp_project_dir)
+        with patch("serena.mcp.SerenaMCPFactory") as factory_cls:
+            factory_cls.return_value.create_mcp_server.return_value = MagicMock()
+            result = CliRunner().invoke(TopLevelCommands.start_mcp_server, ["--project-from-cwd", "--transport", "stdio"])
+        assert result.exit_code == 0, result.output
+        project = factory_cls.call_args.kwargs["project"]
+        assert project is not None and os.path.samefile(project, temp_project_dir)
 
 
 if __name__ == "__main__":

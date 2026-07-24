@@ -80,8 +80,10 @@ def test_devin_docs_are_consistent():
     assert "serena-hooks remind --client=devin" in devin_section
     assert "serena-hooks cleanup --client=devin" in devin_section
     assert "serena-hooks activate --client=devin" in devin_section
-    assert "serena-hooks auto-approve --client=devin" in devin_section
-    assert "PermissionRequest" in devin_section
-    assert '"matcher": "mcp__serena__.*"' in devin_section
+
+    # Auto-approval uses Devin CLI's native permission allow-list, not a hook.
+    assert "mcp__serena__*" in devin_section
+    assert "serena-hooks auto-approve" not in devin_section
+    assert "PermissionRequest" not in devin_section
 
     assert "* `devin`: Optimized for use with Devin CLI" in config_doc

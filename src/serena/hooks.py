@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Literal, Self
 
 import click
-import oslex
 
 from serena.util.cli_util import AutoRegisteringGroup
 
@@ -89,7 +88,6 @@ class PreToolUseHook(Hook, ABC):
         permission_decision: Literal["deny", "allow"]
         permission_decision_reason: str
         additional_context: str = ""
-        updated_input: dict | None = None
 
         def to_json_string(self, client: HookClient) -> str:
             if client == HookClient.GROK:
@@ -99,17 +97,10 @@ class PreToolUseHook(Hook, ABC):
                 return json.dumps(grok_output)
 
             if client == HookClient.DEVIN:
-                # Devin CLI PreToolUse hooks use top-level "decision" (approve/block) with a reason,
-                # or rewrite the tool input to a no-op when updated_input is provided (soft-enforce).
-                if self.updated_input:
-                    devin_output = {
-                        "hookSpecificOutput": {
-                            "hookEventName": "PreToolUse",
-                            "updatedInput": self.updated_input,
-                            "additionalContext": self.additional_context or self.permission_decision_reason,
-                        }
-                    }
-                    return json.dumps(devin_output)
+                # Devin CLI hooks control the outcome with a top-level "decision" ("approve"/"block")
+                # plus a "reason" that is shown to the agent. This mirrors Claude Code's deny mechanic:
+                # a blocked read/grep tells the agent why and lets it continue with symbolic tools.
+                # https://docs.devin.ai/cli/extensibility/hooks/overview#output-format
                 decision = "approve" if self.permission_decision == "allow" else "block"
                 return json.dumps({"decision": decision, "reason": self.additional_context or self.permission_decision_reason})
 
@@ -498,9 +489,6 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             # reset burst counters so the next interval starts fresh, then record
             # the deny timestamp and emit. The is_hook_active() guard at the top
             # ensures we never reach this branch within the rate-limit window.
-            if self._client == HookClient.DEVIN:
-                message = output_data.additional_context or output_data.permission_decision_reason
-                output_data.updated_input = self._build_devin_noop_input(message)
             self._tool_call_counter.reset()
             self._tool_call_counter.last_deny_timestamp = self.triggered_at_timestamp
             click.echo(output_data.to_json_string(self._client))
@@ -540,35 +528,6 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
                 "now if needed, the counter was reset."
             ),
         )
-
-    def _build_devin_noop_input(self, message: str) -> dict | None:
-        """Return a Devin tool_input that prevents the original action while keeping the cycle alive.
-
-        The tool still executes, but with harmless arguments, and its output is replaced by the
-        reminder message so the model sees what to do next.``read`` and ``grep`` are pointed at a
-        dedicated nudge file, ``glob`` at a literal file path, and ``exec`` commands are replaced
-        with a ``printf`` of the warning.
-        """
-        nudge_file = Path(self.session_persistence_dir) / "devin_nudge.txt"
-        nudge_file.parent.mkdir(parents=True, exist_ok=True)
-        # Repeat the message so it survives either 0-indexed or 1-indexed offsets.
-        nudge_file.write_text(message + "\n" + message, encoding="utf-8")
-
-        if self._tool_name == "read":
-            return {"file_path": str(nudge_file), "offset": 1, "limit": 1000}
-        if self._tool_name == "grep":
-            return {
-                "pattern": ".*",
-                "path": str(nudge_file),
-                "output_mode": "content",
-                "max_results": 100,
-            }
-        if self._tool_name == "glob":
-            return {"pattern": str(nudge_file)}
-        if self._tool_name == "exec" and self._is_shell_command_call():
-            quoted_message = oslex.quote(message)
-            return {"command": f"printf '%s\\n' {quoted_message}"}
-        return None
 
 
 class SessionStartActivateProjectHook(Hook):
@@ -620,9 +579,8 @@ class PreToolUseAutoApproveSerenaHook(PreToolUseHook):
     #: the canonical mode strings emitted by Claude Code's hook payload.
     _AUTO_APPROVE_MODES: frozenset[str] = frozenset({"acceptEdits", "auto"})
 
-    # Devin CLI does not expose a permission mode in PreToolUse payloads; auto-approve is unconditional for it.
     def is_auto_approve_mode(self) -> bool:
-        return self._client == HookClient.DEVIN or self._permission_mode in self._AUTO_APPROVE_MODES
+        return self._permission_mode in self._AUTO_APPROVE_MODES
 
     def execute(self) -> None:
         # only emit a decision when both the tool and the mode match; stay silent otherwise
@@ -633,11 +591,7 @@ class PreToolUseAutoApproveSerenaHook(PreToolUseHook):
         # (the same hook handles multiple modes now)
         output_data = self.OutputData(
             permission_decision="allow",
-            permission_decision_reason=(
-                "Auto-approved: Serena symbolic tool call in Devin CLI."
-                if self._client == HookClient.DEVIN
-                else f"Auto-approved: Serena tool call while client is in {self._permission_mode} mode."
-            ),
+            permission_decision_reason=f"Auto-approved: Serena tool call while client is in {self._permission_mode} mode.",
         )
         click.echo(output_data.to_json_string(self._client))
 

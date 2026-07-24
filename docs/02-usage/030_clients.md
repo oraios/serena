@@ -717,6 +717,25 @@ devin mcp add -s project serena -- serena start-mcp-server --context=devin --pro
 **Verification.**
 Run `devin mcp list` and verify that Serena is listed as an MCP server.
 
+### Auto-Approving Serena's Tools
+
+MCP tools default to prompting for approval in Devin CLI. To auto-approve Serena's tools (so its
+destructive symbolic tools such as `replace_symbol_body` and `rename_symbol` don't prompt on every
+call), use Devin CLI's native permission allow-list rather than a hook. Add the following under the
+`permissions` key in `~/.config/devin/config.json` (or `.devin/config.json` for a single project):
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "mcp__serena__*"
+    ]
+  }
+}
+```
+
+See Devin CLI's [permissions documentation](https://docs.devin.ai/cli/reference/permissions#mcp-tool-permissions) for details.
+
 ### Hooks
 
 Devin CLI supports lifecycle hooks via `.devin/hooks.v1.json` (project) and the `hooks` key in `~/.config/devin/config.json` (global). To enable Serena's hooks globally, add the following under the `hooks` key in `~/.config/devin/config.json`:
@@ -746,18 +765,6 @@ Devin CLI supports lifecycle hooks via `.devin/hooks.v1.json` (project) and the 
       ]
     }
   ],
-  "PermissionRequest": [
-    {
-      "matcher": "mcp__serena__.*",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "serena-hooks auto-approve --client=devin",
-          "timeout": 5
-        }
-      ]
-    }
-  ],
   "SessionEnd": [
     {
       "hooks": [
@@ -775,8 +782,7 @@ Devin CLI supports lifecycle hooks via `.devin/hooks.v1.json` (project) and the 
 The hooks will:
 
 - **`activate`**: Prompt the agent to activate the project at the start of the session and read Serena's instructions.
-- **`remind`**: Nudge the agent to use Serena's symbolic tools when it makes too many consecutive code-search or code-file-read calls without using Serena tools in between. The original tool call is rewritten to a harmless no-op, so the agent cycle keeps running.
-- **`auto-approve`**: Auto-approve Serena symbolic tool calls so blanket approvals cover Serena's destructive tools (e.g. `replace_symbol_body`, `rename_symbol`) instead of prompting on every call.
+- **`remind`**: Nudge the agent to use Serena's symbolic tools when it makes too many consecutive code-search or code-file-read calls without using Serena tools in between. When the threshold is reached, the triggering `read`/`grep` call is blocked with a reason (which is shown to the agent); the counter resets, so the agent can immediately continue if it still needs to.
 - **`cleanup`**: Clean up hook session data when the session ends.
 
 ## Other Clients
