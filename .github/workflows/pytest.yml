@@ -27,9 +27,11 @@
 #
 # CACHING
 #   Per-batch language-server cache keyed by os+batch (language-servers-<os>-<batch>),
-#   plus dedicated caches for the uv venv (keyed on uv.lock), swiftly, ZLS, FPC and
-#   the Go build/bin. Most niche toolchains restore from cache, so that batch is fast
-#   despite its size.
+#   plus dedicated caches for the uv venv (keyed on uv.lock), swiftly, ZLS, FPC, the
+#   Go build/bin, and npm for the web fixtures (Angular node_modules keyed on its
+#   lockfile; the npm download cache via setup-node, which also warms the svelte
+#   fixture's test-time `npm ci`). Most niche toolchains restore from cache, so that
+#   batch is fast despite its size.
 #
 # TESTING / SKIPS
 #   All language skip logic is centralized in test/conftest.py
@@ -109,6 +111,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
+          # npm download cache, catch-all only (empty string disables caching in other
+          # batches -- they run no npm installs). Warms the svelte fixture's test-time
+          # `npm ci` and the global/LS npm installs; keyed on the committed lockfiles.
+          cache: ${{ matrix.batch == 'catch-all' && 'npm' || '' }}
+          cache-dependency-path: |
+            test/resources/repos/angular/test_repo/package-lock.json
+            test/resources/repos/svelte/test_repo/package-lock.json
       - name: Ensure cached directory exist before calling cache-related actions
         shell: bash
         run: |
@@ -693,8 +702,17 @@ jobs:
           echo "PERL_MB_OPT=--install_base \"$HOME/perl5\"" >> $GITHUB_ENV
           echo "PERL_MM_OPT=INSTALL_BASE=$HOME/perl5" >> $GITHUB_ENV
           echo "$HOME/perl5/bin" >> $GITHUB_PATH
-      - name: Install npm deps for Angular test repo
+      # The Angular fixture's node_modules is cached directly (exact lockfile match, like
+      # the uv venv cache) so the npm install below is skipped entirely on a hit.
+      - name: Cache Angular test repo node_modules
         if: matrix.batch == 'catch-all'
+        id: cache-angular-npm
+        uses: actions/cache@v3
+        with:
+          path: test/resources/repos/angular/test_repo/node_modules
+          key: angular-npm-${{ runner.os }}-lock-${{ hashFiles('test/resources/repos/angular/test_repo/package-lock.json') }}
+      - name: Install npm deps for Angular test repo
+        if: matrix.batch == 'catch-all' && steps.cache-angular-npm.outputs.cache-hit != 'true'
         shell: bash
         run: |
           if [ -d test/resources/repos/angular/test_repo ]; then
