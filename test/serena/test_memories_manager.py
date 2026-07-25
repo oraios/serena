@@ -269,6 +269,85 @@ def _write(manager: MemoryManager, name: str, content: str) -> None:
     manager.save_memory(name, content, is_tool_context=False)
 
 
+class TestMemoryFrontmatter:
+    def test_load_hides_frontmatter_and_preserves_body_whitespace(self, fs_manager: MemoryManager) -> None:
+        content = "---\nsummary: Notes\ncustom: value:with:colons\n---\n\n# Body\n\nTail\n"
+        _write(fs_manager, "notes", content)
+
+        assert fs_manager.get_memory_frontmatter("notes") == {
+            "summary": "Notes",
+            "custom": "value:with:colons",
+        }
+        assert fs_manager.load_memory("notes") == "\n# Body\n\nTail\n"
+
+    def test_add_and_update_frontmatter_without_changing_body(self, fs_manager: MemoryManager) -> None:
+        body = "# Body\n\nTail\n"
+        _write(fs_manager, "notes", body)
+
+        fs_manager.add_memory_frontmatter("notes", "summary", "First", is_tool_context=True)
+        fs_manager.add_memory_frontmatter("notes", "summary", "Updated", is_tool_context=True)
+        fs_manager.add_memory_frontmatter("notes", "owner", "team:core", is_tool_context=True)
+
+        assert fs_manager.get_memory_frontmatter("notes") == {
+            "summary": "Updated",
+            "owner": "team:core",
+        }
+        assert fs_manager.load_memory("notes") == body
+        assert fs_manager.get_memory_file_path("notes").read_text(encoding="utf-8") == (
+            "---\nsummary: Updated\nowner: team:core\n---\n# Body\n\nTail\n"
+        )
+
+    def test_save_memory_retains_existing_frontmatter(self, fs_manager: MemoryManager) -> None:
+        _write(fs_manager, "notes", "---\nsummary: Keep me\n---\nOriginal\n")
+
+        fs_manager.save_memory("notes", "Updated\n", is_tool_context=False)
+
+        assert fs_manager.get_memory_frontmatter("notes") == {"summary": "Keep me"}
+        assert fs_manager.load_memory("notes") == "Updated\n"
+
+    def test_missing_frontmatter_memory_raises(self, fs_manager: MemoryManager) -> None:
+        with pytest.raises(FileNotFoundError):
+            fs_manager.get_memory_frontmatter("missing")
+        with pytest.raises(FileNotFoundError):
+            fs_manager.add_memory_frontmatter("missing", "summary", "Missing", is_tool_context=True)
+
+    def test_ignored_memory_frontmatter_is_inaccessible(self, tmp_path) -> None:
+        manager = MemoryManager(serena_data_folder=tmp_path, ignored_memory_patterns=[r"secret"])
+        manager.get_memory_file_path("secret").write_text("---\nsummary: Hidden\n---\nBody\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="ignored_memory_patterns"):
+            manager.get_memory_frontmatter("secret")
+        with pytest.raises(ValueError, match="ignored_memory_patterns"):
+            manager.add_memory_frontmatter("secret", "owner", "private", is_tool_context=True)
+
+    def test_read_only_memory_rejects_frontmatter_writes(self, tmp_path) -> None:
+        manager = MemoryManager(serena_data_folder=tmp_path, read_only_memory_patterns=[r"frozen/.*"])
+        _write(manager, "frozen/notes", "Body\n")
+
+        with pytest.raises(PermissionError):
+            manager.add_memory_frontmatter("frozen/notes", "summary", "Frozen", is_tool_context=True)
+
+    def test_global_topic_frontmatter(self, fs_manager: MemoryManager, tmp_path, monkeypatch) -> None:
+        global_dir = tmp_path / "global"
+        monkeypatch.setattr(fs_manager, "_global_memory_dir", global_dir)
+        _write(fs_manager, "global/topic/notes", "Body\n")
+
+        fs_manager.add_memory_frontmatter("global/topic/notes", "summary", "Global", is_tool_context=True)
+
+        assert fs_manager.get_memory_frontmatter("global/topic/notes") == {"summary": "Global"}
+        assert fs_manager.load_memory("global/topic/notes") == "Body\n"
+
+    def test_reference_autofix_retains_frontmatter(self, fs_manager: MemoryManager) -> None:
+        _write(fs_manager, "auth/login", "# Login\n")
+        _write(fs_manager, "docs", "---\nsummary: Authentication docs\n---\nSee auth/login for details.\n")
+
+        report = fs_manager.auto_prefix_bare_references()
+
+        assert report.total_replacements == 1
+        assert fs_manager.get_memory_frontmatter("docs") == {"summary": "Authentication docs"}
+        assert fs_manager.load_memory("docs") == "See mem:auth/login for details.\n"
+
+
 class TestListMemoriesFollowsSymlinks:
     """Regression: memories reachable only through a directory symlink (e.g. a monorepo whose
     ``.serena/memories`` symlinks each submodule's memory folder, making them addressable as

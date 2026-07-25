@@ -19,6 +19,10 @@ Status of the `main` branch. Changes prior to the next official version change w
 * JetBrains:
   - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file
 
+* Memories:
+  - Add opt-in tools for reading and updating scalar frontmatter metadata while keeping `read_memory`
+    focused on memory body content
+
 * Language Servers:
   - `typescript`: Fix: on large projects, the first `find_referencing_symbols`/`request_references` call
     could silently race tsserver's project load and return incomplete results, because the fixed 2s

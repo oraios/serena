@@ -12,6 +12,7 @@ from serena.config.serena_config import (
 from serena.constants import SERENA_FILE_ENCODING
 from serena.util.text_utils import ContentReplacer
 
+from .frontmatter import FrontmatterParser
 from .memory_reference_analysis import (
     MEMORY_REF_PREFIX,
     AutofixReport,
@@ -201,16 +202,16 @@ class MemoryManager:
         if is_tool_context and self._is_read_only_memory(name):
             raise PermissionError(f"Attempted to write to read_only memory: '{name}')")
 
-    def load_memory(self, name: str) -> str:
+    def _load_memory_raw(self, name: str) -> tuple[str, str]:
         name = self._sanitize_name(name)
         self._check_not_ignored(name)
         memory_file_path = self.get_memory_file_path(name)
         if not memory_file_path.exists():
             raise FileNotFoundError(f"Memory named '{name}' not found")
         with open(memory_file_path, encoding=self._encoding) as f:
-            return f.read()
+            return name, f.read()
 
-    def save_memory(self, name: str, content: str, is_tool_context: bool) -> str:
+    def _save_memory_raw(self, name: str, content: str, is_tool_context: bool) -> str:
         name = self._sanitize_name(name)
         self._check_not_ignored(name)
         self._check_write_access(name, is_tool_context)
@@ -218,6 +219,42 @@ class MemoryManager:
         with open(memory_file_path, "w", encoding=self._encoding) as f:
             f.write(content)
         return f"Memory {name} written."
+
+    def load_memory(self, name: str) -> str:
+        _, raw = self._load_memory_raw(name)
+        return FrontmatterParser.parse(raw).body
+
+    def save_memory(self, name: str, content: str, is_tool_context: bool) -> str:
+        """
+        Saves memory body content while retaining any existing frontmatter.
+
+        New memories may still be created from raw content containing a frontmatter
+        block. Once frontmatter exists, callers that only know about the body cannot
+        accidentally discard it.
+        """
+        name = self._sanitize_name(name)
+        self._check_not_ignored(name)
+        self._check_write_access(name, is_tool_context)
+        memory_file_path = self.get_memory_file_path(name)
+        if memory_file_path.exists():
+            with open(memory_file_path, encoding=self._encoding) as f:
+                parsed = FrontmatterParser.parse(f.read())
+            if parsed.frontmatter:
+                content = FrontmatterParser.render(parsed.frontmatter, content)
+        return self._save_memory_raw(name, content, is_tool_context)
+
+    def get_memory_frontmatter(self, name: str) -> dict[str, str]:
+        _, raw = self._load_memory_raw(name)
+        return dict(FrontmatterParser.parse(raw).frontmatter)
+
+    def add_memory_frontmatter(self, name: str, key: str, value: str, is_tool_context: bool) -> str:
+        name, raw = self._load_memory_raw(name)
+        self._check_write_access(name, is_tool_context)
+        parsed = FrontmatterParser.parse(raw)
+        frontmatter = dict(parsed.frontmatter)
+        frontmatter[key] = value
+        content = FrontmatterParser.render(frontmatter, parsed.body)
+        return self._save_memory_raw(name, content, is_tool_context)
 
     class MemoriesList:
         def __init__(self) -> None:
@@ -237,8 +274,8 @@ class MemoryManager:
             self.memories.extend(other.memories)
             self.read_only_memories.extend(other.read_only_memories)
 
-        def to_dict(self) -> dict[str, list[str]]:
-            result = {}
+        def to_dict(self) -> dict[str, object]:
+            result: dict[str, object] = {}
             if self.memories:
                 result["memories"] = sorted(self.memories)
             if self.read_only_memories:
