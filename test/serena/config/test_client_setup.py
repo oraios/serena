@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import pytest
 
 from serena.config.client_setup import ClientSetupHandlerDevin, ClientSetupHandlerGrok, client_setup_handlers
@@ -167,9 +170,12 @@ def test_devin_setup_handler_apply_uses_devin_mcp_add(monkeypatch):
         return True
 
     monkeypatch.setattr(ClientSetupHandlerDevin, "_run_shell_command", fake_run_shell_command)
+    monkeypatch.setattr(ClientSetupHandlerDevin, "_configure_devin_config", lambda self, scope: True)
 
     assert ClientSetupHandlerDevin().apply() is True
-    assert commands == ["devin mcp add -s user serena -- serena start-mcp-server --context=devin --project-from-cwd"]
+    assert commands == [
+        "devin mcp add -s user serena -- serena start-mcp-server --context=devin --enable-web-dashboard false --open-web-dashboard false --add-mode query-projects --project-from-cwd"
+    ]
 
 
 @pytest.mark.parametrize(
@@ -213,3 +219,29 @@ def test_devin_setup_handler_rejects_mcp_add_help_without_expected_text(monkeypa
 
     assert ClientSetupHandlerDevin().is_applicable() is False
     assert commands == ["devin --version", "devin mcp add --help"]
+
+
+def test_devin_setup_handler_writes_full_config(monkeypatch, tmp_path: Path):
+    handler = ClientSetupHandlerDevin()
+    config_path = tmp_path / "config.json"
+    initial = {
+        "mcpServers": {
+            "serena": {
+                "command": "serena",
+                "args": ["start-mcp-server", "--context=devin", "--project-from-cwd"],
+            }
+        }
+    }
+    config_path.write_text(json.dumps(initial))
+    monkeypatch.setattr(handler, "_devin_config_path", lambda scope: config_path)
+
+    assert handler._configure_devin_config("user") is True
+
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert config["mcpServers"]["serena"]["command"] == "serena"
+    assert "mcp__serena__*" in config["permissions"]["allow"]
+    assert any(entry.get("hooks", [])[0].get("command") == "serena-hooks remind --client=devin" for entry in config["hooks"]["PreToolUse"])
+    assert any(
+        entry.get("hooks", [])[0].get("command") == "serena-hooks post-remind --client=devin" for entry in config["hooks"]["PostToolUse"]
+    )
+    assert any("--include-instructions" in entry.get("hooks", [])[0].get("command", "") for entry in config["hooks"]["PostCompaction"])

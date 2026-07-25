@@ -3,10 +3,11 @@ from types import SimpleNamespace
 from click.testing import CliRunner
 
 from serena.cli import TopLevelCommands
+from serena.config.client_setup import ClientSetupHandlerDevin
 from serena.util.shell import ShellCommandResult
 
 GROK_ADD_COMMAND = "grok mcp add --scope user serena -- serena start-mcp-server --context=grok --project-from-cwd"
-DEVIN_ADD_COMMAND = "devin mcp add -s user serena -- serena start-mcp-server --context=devin --project-from-cwd"
+DEVIN_ADD_COMMAND = "devin mcp add -s user serena -- serena start-mcp-server --context=devin --enable-web-dashboard false --open-web-dashboard false --add-mode query-projects --project-from-cwd"
 
 
 def _result(command: str, return_code: int = 0, stdout: str = "", stderr: str = "") -> ShellCommandResult:
@@ -106,13 +107,12 @@ def test_setup_devin_success(monkeypatch):
         return _result(command, return_code=1)
 
     monkeypatch.setattr("serena.config.client_setup.execute_shell_command", fake_execute_shell_command)
+    monkeypatch.setattr(ClientSetupHandlerDevin, "_configure_devin_config", lambda self, scope: True)
 
     result = CliRunner().invoke(TopLevelCommands.setup, ["devin"])
 
     assert result.exit_code == 0, result.output
     assert "successfully set up for devin" in result.output
-    assert "recommend" in result.output.lower()
-    assert "030_clients.html#devin-cli" in result.output
     assert commands == ["devin --version", "devin mcp add --help", DEVIN_ADD_COMMAND]
 
 

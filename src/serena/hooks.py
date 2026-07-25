@@ -2,6 +2,7 @@ import json
 import os
 import pickle
 import shutil
+import subprocess
 import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -570,9 +571,65 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         return None
 
 
+class PostToolUseRemindAboutSymbolicToolsHook(PreToolUseRemindAboutSymbolicToolsHook):
+    """Post-tool-use hook that nudges the agent after raw reads/greps.
+
+    Unlike :class:`PreToolUseRemindAboutSymbolicToolsHook`, this hook does not
+    block or rewrite the tool call; it only adds context after the tool has run.
+    A short cooldown prevents the reminder from becoming noisy.
+    """
+
+    _COOLDOWN_SECONDS = 90
+    _LAST_REMIND_FILE = "last_post_remind.txt"
+
+    def execute(self) -> None:
+        if not (self.is_grep_call() or self.is_read_code_file_call()):
+            return
+        if self._on_cooldown():
+            return
+
+        tool_label = self._tool_name or "this tool"
+        message = (
+            f"You just used `{tool_label}` on a code file. Consider using Serena's "
+            "symbolic tools (e.g. `find_symbol`, `get_symbols_overview`, `query_project`) "
+            "for faster, more targeted reads and edits."
+        )
+        result = {
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": message,
+            }
+        }
+        click.echo(json.dumps(result))
+        self._update_cooldown()
+
+    def _on_cooldown(self) -> bool:
+        path = Path(self.session_persistence_dir) / self._LAST_REMIND_FILE
+        if not path.exists():
+            return False
+        return (datetime.now().timestamp() - path.stat().st_mtime) < self._COOLDOWN_SECONDS
+
+    def _update_cooldown(self) -> None:
+        path = Path(self.session_persistence_dir) / self._LAST_REMIND_FILE
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(str(datetime.now().timestamp()))
+
+
 class SessionStartActivateProjectHook(Hook):
     #: cache files older than this many days are considered stale
     _STALE_INDEX_DAYS = 7
+
+    def __init__(
+        self,
+        client: HookClient,
+        include_instructions: bool = False,
+        event_name: str | None = None,
+    ) -> None:
+        super().__init__(client)
+        self._include_instructions = include_instructions
+        # Devin CLI sends the triggering event name in the payload; if it is absent
+        # (older clients or manual invocation), fall back to the provided default.
+        self._event_name = event_name or self._input_data.get("hook_event_name") or self._input_data.get("hookEventName") or "SessionStart"
 
     def execute(self) -> None:
         # Devin CLI exposes the project root via DEVIN_PROJECT_DIR; including it in the prompt
@@ -587,13 +644,35 @@ class SessionStartActivateProjectHook(Hook):
             f" 3. {index_clause}"
             "Follow this instruction before doing anything else."
         )
+        instructions = self._full_instructions() if self._include_instructions else ""
+        additional_context = f"{instructions}\n{message}" if instructions and message else instructions or message
         result = {
             "hookSpecificOutput": {
-                "hookEventName": "SessionStart",
-                "additionalContext": message,
+                "hookEventName": self._event_name,
+                "additionalContext": additional_context,
             }
         }
         click.echo(json.dumps(result))
+
+    def _full_instructions(self) -> str:
+        """Return Serena's system-prompt instructions for the devin context.
+
+        This is useful for Devin CLI's PostCompaction hook, where the model may have
+        lost the original system prompt and needs to be reminded of Serena's capabilities.
+        """
+        try:
+            result = subprocess.run(
+                ["serena", "print-system-prompt", "--only-instructions", "--context=devin"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+            if result.returncode == 0:
+                return result.stdout.strip()
+        except Exception:
+            pass
+        return ""
 
     def _index_clause(self, project_dir: str | None) -> str:
         """Return an index-status clause for the activation message.
@@ -708,8 +787,12 @@ class HookCommands(AutoRegisteringGroup):
         help="Set this as hook at session startup to prompt the agent to activate the project at the start of the session and read Serena's instructions",
     )
     @_client_option
-    def activate(client: str) -> None:
-        SessionStartActivateProjectHook(HookClient(client)).execute()
+    @click.option(
+        "--include-instructions", is_flag=True, default=False, help="Include the full Serena system prompt (useful for PostCompaction)."
+    )
+    @click.option("--event", default="SessionStart", help="The Devin hook event name to emit in the response.")
+    def activate(client: str, include_instructions: bool, event: str) -> None:
+        SessionStartActivateProjectHook(HookClient(client), include_instructions=include_instructions, event_name=event).execute()
 
     @staticmethod
     @click.command("cleanup", help="Set this as hook at session end all hook data for the current session")
@@ -725,6 +808,15 @@ class HookCommands(AutoRegisteringGroup):
     @_client_option
     def remind(client: str) -> None:
         PreToolUseRemindAboutSymbolicToolsHook(HookClient(client)).execute()
+
+    @staticmethod
+    @click.command(
+        "post-remind",
+        help="Set this as hook at PostToolUse to nudge the agent after raw read/grep calls",
+    )
+    @_client_option
+    def post_remind(client: str) -> None:
+        PostToolUseRemindAboutSymbolicToolsHook(HookClient(client)).execute()
 
     @staticmethod
     @click.command(

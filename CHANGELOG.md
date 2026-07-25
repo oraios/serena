@@ -6,7 +6,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: a tool call exceeding the timeout blocked the task executor indefinitely; the executor now
     recovers without user-induced cancellation
   - Add Grok Build support (context `grok`, setup CLI, hooks)
-  - Add Devin CLI support (context `devin`, setup CLI, hooks)
+  - Add Devin CLI support (context `devin`, setup CLI, hooks, one-command installer with permissions, hooks, query-projects mode and web-dashboard disable)
   - The `languages` key in project configurations was changed to `language_servers` to better reflect
     the actual semantics (configurations are automatically migrated)
   - Fix: glob matching bare `*` and `?` in non-`**` patterns matched across `/`, contradicting documented behaviour #1732

@@ -700,18 +700,32 @@ Serena can be used as an MCP server inside Devin CLI. To set up the Serena MCP s
 
     serena setup devin
 
+This single command configures everything:
+
+- Registers `serena` as an MCP server with the `devin` context (excluding Devin CLI's built-in `read`, `edit`, `grep`, `glob` and `exec` tools).
+- Enables cross-project querying via `--add-mode query-projects`.
+- Disables the web dashboard (`--enable-web-dashboard false --open-web-dashboard false`).
+- Auto-approves all Serena MCP tools via Devin CLI's `permissions.allow` list.
+- Installs Serena's lifecycle hooks for `SessionStart`, `PreToolUse`, `PostToolUse`, `PostCompaction` and `SessionEnd`.
+
+For a per-project setup instead of a global one, run:
+
+    serena setup devin --project
+
+This writes `.devin/config.json` in the current directory.
+
 ### Manual Setup
 
-**Global Configuration**. To add the Serena MCP server for all your projects, use Devin CLI's user-level configuration and the `--project-from-cwd` flag:
+If you prefer to configure Devin CLI manually, the equivalent global command is:
 
 ```bash
-devin mcp add -s user serena -- serena start-mcp-server --context=devin --project-from-cwd
+devin mcp add -s user serena -- serena start-mcp-server --context=devin --project-from-cwd --enable-web-dashboard false --open-web-dashboard false --add-mode query-projects
 ```
 
-**Project-Level Configuration**. To add the Serena MCP server for a single project only:
+And for a single project:
 
 ```bash
-devin mcp add -s project serena -- serena start-mcp-server --context=devin --project "$(pwd)"
+devin mcp add -s project serena -- serena start-mcp-server --context=devin --project "$(pwd)" --enable-web-dashboard false --open-web-dashboard false --add-mode query-projects
 ```
 
 **Verification.**
@@ -719,10 +733,7 @@ Run `devin mcp list` and verify that Serena is listed as an MCP server.
 
 ### Auto-Approving Serena's Tools
 
-MCP tools default to prompting for approval in Devin CLI. To auto-approve Serena's tools (so its
-destructive symbolic tools such as `replace_symbol_body` and `rename_symbol` don't prompt on every
-call), use Devin CLI's native permission allow-list rather than a hook. Add the following under the
-`permissions` key in `~/.config/devin/config.json` (or `.devin/config.json` for a single project):
+`serena setup devin` adds `mcp__serena__*` to Devin CLI's permission allow-list. If you configure things manually, add the following under the `permissions` key:
 
 ```json
 {
@@ -738,7 +749,7 @@ See Devin CLI's [permissions documentation](https://docs.devin.ai/cli/reference/
 
 ### Hooks
 
-Devin CLI supports lifecycle hooks via `.devin/hooks.v1.json` (project) and the `hooks` key in `~/.config/devin/config.json` (global). To enable Serena's hooks globally, add the following under the `hooks` key in `~/.config/devin/config.json`:
+`serena setup devin` writes the following hooks into Devin CLI's configuration:
 
 ```json
 {
@@ -748,7 +759,7 @@ Devin CLI supports lifecycle hooks via `.devin/hooks.v1.json` (project) and the 
         {
           "type": "command",
           "command": "serena-hooks activate --client=devin",
-          "timeout": 5
+          "timeout": 10
         }
       ]
     }
@@ -761,6 +772,29 @@ Devin CLI supports lifecycle hooks via `.devin/hooks.v1.json` (project) and the 
           "type": "command",
           "command": "serena-hooks remind --client=devin",
           "timeout": 5
+        }
+      ]
+    }
+  ],
+  "PostToolUse": [
+    {
+      "matcher": "",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "serena-hooks post-remind --client=devin",
+          "timeout": 5
+        }
+      ]
+    }
+  ],
+  "PostCompaction": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "serena-hooks activate --client=devin --include-instructions --event PostCompaction",
+          "timeout": 10
         }
       ]
     }
@@ -781,9 +815,11 @@ Devin CLI supports lifecycle hooks via `.devin/hooks.v1.json` (project) and the 
 
 The hooks will:
 
-- **`activate`**: Prompt the agent to activate the project at the start of the session and read Serena's instructions.
-- **`remind`**: Nudge the agent to use Serena's symbolic tools when it makes too many consecutive code-search or code-file-read calls without using Serena tools in between. When the threshold is reached, the triggering `read`/`grep`/`exec` call is rewritten to a harmless no-op that returns the reminder as its output, so the agent sees the nudge and keeps going. A blocking decision is deliberately avoided here, because Devin CLI cancels the agent's turn on a `block`; the counter resets, so the agent can continue immediately.
-- **`cleanup`**: Clean up hook session data when the session ends.
+- **`activate` (SessionStart)**: Prompt the agent to activate the project and read Serena's instructions.
+- **`remind` (PreToolUse)**: Nudge the agent to use Serena's symbolic tools when it makes too many consecutive code-search or code-file-read calls without using Serena tools in between. The triggering `read`/`grep`/`exec` call is rewritten to a harmless no-op that returns the reminder as its output, so the agent sees the nudge and keeps going. A blocking decision is deliberately avoided here, because Devin CLI cancels the agent's turn on a `block`; the counter resets, so the agent can continue immediately.
+- **`post-remind` (PostToolUse)**: After a raw read or grep, briefly remind the agent that Serena's symbolic tools are usually more efficient.
+- **`activate --include-instructions` (PostCompaction)**: Re-inject the full Serena system prompt after Devin CLI compacts context, so the model does not lose Serena's instructions.
+- **`cleanup` (SessionEnd)**: Clean up hook session data when the session ends.
 
 ## Other Clients
 

@@ -11,6 +11,7 @@ from click.testing import CliRunner
 
 from serena.hooks import (
     HookClient,
+    PostToolUseRemindAboutSymbolicToolsHook,
     PreToolUseAutoApproveSerenaHook,
     PreToolUseHook,
     PreToolUseRemindAboutSymbolicToolsHook,
@@ -1295,7 +1296,9 @@ class TestDevinHookSupport:
     def test_claude_session_start_generic_index_reminder(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ):
-        """Claude Code SessionStart hook gives a generic index reminder when no project dir is known."""
+        """Claude Code SessionStart hook gives a generic index reminder when no
+        project dir is known.
+        """
         monkeypatch.delenv("DEVIN_PROJECT_DIR", raising=False)
         with patch("sys.stdin", _make_stdin({"session_id": "claude-session"})), patch("serena.hooks.serena_home_dir", str(tmp_path)):
             SessionStartActivateProjectHook(HookClient.CLAUDE_CODE).execute()
@@ -1304,3 +1307,47 @@ class TestDevinHookSupport:
         additional_context = result["hookSpecificOutput"]["additionalContext"]
         assert "remind the user to run" in additional_context
         assert "serena project index" in additional_context
+
+    def test_devin_post_remind_after_grep(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """Devin CLI PostToolUse hook reminds after a raw grep call."""
+        with patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            with patch("sys.stdin", _make_stdin(_base_input(tool_name="grep"))):
+                PostToolUseRemindAboutSymbolicToolsHook(HookClient.DEVIN).execute()
+        output = capsys.readouterr().out
+        result = json.loads(output)
+        assert result["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+        assert "symbolic tools" in result["hookSpecificOutput"]["additionalContext"]
+
+    def test_devin_post_remind_respects_cooldown(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """Devin CLI PostToolUse hook only nudges once per cooldown window."""
+        with patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            with patch("sys.stdin", _make_stdin(_base_input(tool_name="read", tool_input={"file_path": "src/foo.py"}))):
+                PostToolUseRemindAboutSymbolicToolsHook(HookClient.DEVIN).execute()
+            assert capsys.readouterr().out != ""
+
+            # second call within the same session should be silent
+            with patch("sys.stdin", _make_stdin(_base_input(tool_name="read", tool_input={"file_path": "src/bar.py"}))):
+                PostToolUseRemindAboutSymbolicToolsHook(HookClient.DEVIN).execute()
+        assert capsys.readouterr().out == ""
+
+    def test_devin_post_compaction_includes_full_instructions(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ):
+        """Devin CLI PostCompaction hook re-injects the full Serena system prompt."""
+
+        def fake_subprocess_run(cmd, **kwargs):
+            class Result:
+                returncode = 0
+                stdout = "FULL SERENA INSTRUCTIONS\n"
+                stderr = ""
+
+            return Result()
+
+        monkeypatch.setattr("serena.hooks.subprocess.run", fake_subprocess_run)
+        with patch("sys.stdin", _make_stdin({"session_id": "devin-session"})), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            SessionStartActivateProjectHook(HookClient.DEVIN, include_instructions=True, event_name="PostCompaction").execute()
+        output = capsys.readouterr().out
+        result = json.loads(output)
+        assert result["hookSpecificOutput"]["hookEventName"] == "PostCompaction"
+        assert "FULL SERENA INSTRUCTIONS" in result["hookSpecificOutput"]["additionalContext"]
+        assert "activate it using Serena" in result["hookSpecificOutput"]["additionalContext"]

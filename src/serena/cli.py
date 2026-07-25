@@ -211,13 +211,23 @@ class TopLevelCommands(AutoRegisteringGroup):
         help="Set up Serena for use with a specific client by registering it as an MCP server.",
         context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
     )
+    @click.option(
+        "--project",
+        "project_scope",
+        is_flag=True,
+        default=False,
+        help="For Devin CLI, write project-level config (.devin/config.json) instead of user-level config.",
+    )
     @click.argument(
         "client",
         type=click.Choice([h.name for h in client_setup_handlers]),
     )
-    def setup(client: str) -> None:
+    def setup(client: str, project_scope: bool) -> None:
         # find the matching handler
         handler = next(h for h in client_setup_handlers if h.name == client)
+
+        # Devin CLI supports per-project setup via an optional --project flag
+        handler.set_project_scope(project_scope)
 
         # check applicability
         if not handler.is_applicable():
