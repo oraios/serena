@@ -242,9 +242,13 @@ def test_devin_setup_handler_writes_full_config(monkeypatch, tmp_path: Path):
     assert "mcp__serena__*" in config["permissions"]["allow"]
     assert any(entry.get("hooks", [])[0].get("command") == "serena-hooks remind --client=devin" for entry in config["hooks"]["PreToolUse"])
     assert any(
-        entry.get("hooks", [])[0].get("command") == "serena-hooks post-remind --client=devin" for entry in config["hooks"]["PostToolUse"]
+        entry.get("hooks", [])[0].get("command") == "serena-hooks activate --client=devin --include-instructions --event SessionStart"
+        for entry in config["hooks"]["SessionStart"]
     )
-    assert any("--include-instructions" in entry.get("hooks", [])[0].get("command", "") for entry in config["hooks"]["PostCompaction"])
+    assert any(
+        entry.get("hooks", [])[0].get("command") == "serena-hooks activate --client=devin --include-instructions --event PostCompaction"
+        for entry in config["hooks"]["PostCompaction"]
+    )
 
 
 def test_devin_setup_handler_removes_stale_node_hooks(monkeypatch, tmp_path: Path):
@@ -266,4 +270,7 @@ def test_devin_setup_handler_removes_stale_node_hooks(monkeypatch, tmp_path: Pat
     config = json.loads(config_path.read_text(encoding="utf-8"))
     session_start = config["hooks"]["SessionStart"]
     assert all("serena-devin.js" not in entry["hooks"][0]["command"] for entry in session_start)
-    assert any(entry["hooks"][0]["command"] == "serena-hooks activate --client=devin" for entry in session_start)
+    assert any(
+        entry["hooks"][0]["command"] == "serena-hooks activate --client=devin --include-instructions --event SessionStart"
+        for entry in session_start
+    )

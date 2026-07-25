@@ -706,7 +706,7 @@ This single command configures everything:
 - Enables cross-project querying via `--add-mode query-projects`.
 - Disables the web dashboard (`--enable-web-dashboard false --open-web-dashboard false`).
 - Auto-approves all Serena MCP tools via Devin CLI's `permissions.allow` list.
-- Installs Serena's lifecycle hooks for `SessionStart`, `PreToolUse`, `PostToolUse`, `PostCompaction` and `SessionEnd`.
+- Installs Serena's lifecycle hooks for `SessionStart`, `PreToolUse`, `PostCompaction` and `SessionEnd`.
 
 For a per-project setup instead of a global one, run:
 
@@ -758,7 +758,7 @@ See Devin CLI's [permissions documentation](https://docs.devin.ai/cli/reference/
       "hooks": [
         {
           "type": "command",
-          "command": "serena-hooks activate --client=devin",
+          "command": "serena-hooks activate --client=devin --include-instructions --event SessionStart",
           "timeout": 10
         }
       ]
@@ -771,18 +771,6 @@ See Devin CLI's [permissions documentation](https://docs.devin.ai/cli/reference/
         {
           "type": "command",
           "command": "serena-hooks remind --client=devin",
-          "timeout": 5
-        }
-      ]
-    }
-  ],
-  "PostToolUse": [
-    {
-      "matcher": "",
-      "hooks": [
-        {
-          "type": "command",
-          "command": "serena-hooks post-remind --client=devin",
           "timeout": 5
         }
       ]
@@ -815,12 +803,10 @@ See Devin CLI's [permissions documentation](https://docs.devin.ai/cli/reference/
 
 The hooks will:
 
-- **`activate` (SessionStart)**: Prompt the agent to activate the project and read Serena's instructions.
-- **`remind` (PreToolUse)**: Nudge the agent to use Serena's symbolic tools when it makes too many consecutive code-search or code-file-read calls without using Serena tools in between. The triggering `read`/`grep`/`exec` call is rewritten to a harmless no-op that returns the reminder as its output, so the agent sees the nudge and keeps going. A blocking decision is deliberately avoided here, because Devin CLI cancels the agent's turn on a `block`; the counter resets, so the agent can continue immediately.
-- **`post-remind` (PostToolUse)**: After a raw read or grep, briefly remind the agent that Serena's symbolic tools are usually more efficient.
+- **`activate --include-instructions` (SessionStart)**: Re-inject the full Serena system prompt at the start of the session so the model starts with Serena's capabilities in context.
+- **`remind` (PreToolUse)**: Add a short reminder in `additionalContext` when the agent makes several consecutive `read`/`grep`/`exec` calls without using Serena's symbolic tools. No tool call is rewritten or blocked; Devin CLI's `block`/`deny` semantics are too fragile and can cancel the turn, so the hook only nudges via context and resets the counter.
 - **`activate --include-instructions` (PostCompaction)**: Re-inject the full Serena system prompt after Devin CLI compacts context, so the model does not lose Serena's instructions.
 - **`cleanup` (SessionEnd)**: Clean up hook session data when the session ends.
-
 ## Other Clients
 
 For other clients, follow the [general instructions](#clients-general-instructions) above to set up Serena as an MCP server.

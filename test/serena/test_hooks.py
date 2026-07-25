@@ -11,7 +11,6 @@ from click.testing import CliRunner
 
 from serena.hooks import (
     HookClient,
-    PostToolUseRemindAboutSymbolicToolsHook,
     PreToolUseAutoApproveSerenaHook,
     PreToolUseHook,
     PreToolUseRemindAboutSymbolicToolsHook,
@@ -1179,46 +1178,39 @@ class TestDevinHookSupport:
         assert result["hookSpecificOutput"]["additionalContext"] == "use Serena"
         assert "updatedInput" not in result["hookSpecificOutput"]
 
-    def test_devin_remind_soft_enforces_grep_burst(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        """A grep burst is rewritten to a no-op that reads the nudge file (not a blocking decision)."""
+    def test_devin_remind_emits_context_on_grep_burst(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """A grep burst emits a short reminder via additionalContext (no rewrite, no decision)."""
         with patch("serena.hooks.serena_home_dir", str(tmp_path)):
             for _ in range(3):
                 with patch("sys.stdin", _make_stdin(_base_input(tool_name="grep"))):
                     PreToolUseRemindAboutSymbolicToolsHook(HookClient.DEVIN).execute()
         result = json.loads(capsys.readouterr().out)
-        # soft-enforce (updatedInput), never a top-level block that would cancel the agent turn
         assert "decision" not in result
         assert result["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-        updated_input = result["hookSpecificOutput"]["updatedInput"]
-        assert updated_input["pattern"] == ".*"
-        assert "devin_nudge.txt" in updated_input["path"]
-        assert updated_input["output_mode"] == "content"
+        assert "updatedInput" not in result["hookSpecificOutput"]
         assert "Serena" in result["hookSpecificOutput"]["additionalContext"]
 
-    def test_devin_remind_soft_enforces_code_read_burst(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        """A code-file ``read`` burst is redirected to the nudge file, which contains the reminder."""
+    def test_devin_remind_emits_context_on_code_read_burst(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """A code-file ``read`` burst emits a short reminder via additionalContext (no rewrite)."""
         with patch("serena.hooks.serena_home_dir", str(tmp_path)):
             for _ in range(3):
                 with patch("sys.stdin", _make_stdin(_base_input(tool_name="read", tool_input={"file_path": "src/foo.py"}))):
                     PreToolUseRemindAboutSymbolicToolsHook(HookClient.DEVIN).execute()
         result = json.loads(capsys.readouterr().out)
         assert "decision" not in result
-        file_path = result["hookSpecificOutput"]["updatedInput"]["file_path"]
-        assert "devin_nudge.txt" in file_path
-        assert "Serena" in Path(file_path).read_text(encoding="utf-8")
+        assert "updatedInput" not in result["hookSpecificOutput"]
         assert "Serena" in result["hookSpecificOutput"]["additionalContext"]
 
-    def test_devin_remind_soft_enforces_exec_burst(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        """An ``exec`` code-read burst is rewritten to a printf of the reminder (not blocked)."""
+    def test_devin_remind_emits_context_on_exec_burst(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """An ``exec`` code-read burst emits a short reminder via additionalContext (no rewrite)."""
         with patch("serena.hooks.serena_home_dir", str(tmp_path)):
             for _ in range(3):
                 with patch("sys.stdin", _make_stdin(_base_input(tool_name="exec", tool_input={"command": "cat src/foo.py"}))):
                     PreToolUseRemindAboutSymbolicToolsHook(HookClient.DEVIN).execute()
         result = json.loads(capsys.readouterr().out)
         assert "decision" not in result
-        command = result["hookSpecificOutput"]["updatedInput"]["command"]
-        assert command.startswith("printf")
-        assert "Serena" in command
+        assert "updatedInput" not in result["hookSpecificOutput"]
+        assert "Serena" in result["hookSpecificOutput"]["additionalContext"]
 
     def test_devin_remind_silent_below_threshold(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
         """Below the burst threshold the remind hook stays silent (tool runs unchanged)."""
@@ -1307,28 +1299,6 @@ class TestDevinHookSupport:
         additional_context = result["hookSpecificOutput"]["additionalContext"]
         assert "remind the user to run" in additional_context
         assert "serena project index" in additional_context
-
-    def test_devin_post_remind_after_grep(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        """Devin CLI PostToolUse hook reminds after a raw grep call."""
-        with patch("serena.hooks.serena_home_dir", str(tmp_path)):
-            with patch("sys.stdin", _make_stdin(_base_input(tool_name="grep"))):
-                PostToolUseRemindAboutSymbolicToolsHook(HookClient.DEVIN).execute()
-        output = capsys.readouterr().out
-        result = json.loads(output)
-        assert result["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
-        assert "symbolic tools" in result["hookSpecificOutput"]["additionalContext"]
-
-    def test_devin_post_remind_respects_cooldown(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        """Devin CLI PostToolUse hook only nudges once per cooldown window."""
-        with patch("serena.hooks.serena_home_dir", str(tmp_path)):
-            with patch("sys.stdin", _make_stdin(_base_input(tool_name="read", tool_input={"file_path": "src/foo.py"}))):
-                PostToolUseRemindAboutSymbolicToolsHook(HookClient.DEVIN).execute()
-            assert capsys.readouterr().out != ""
-
-            # second call within the same session should be silent
-            with patch("sys.stdin", _make_stdin(_base_input(tool_name="read", tool_input={"file_path": "src/bar.py"}))):
-                PostToolUseRemindAboutSymbolicToolsHook(HookClient.DEVIN).execute()
-        assert capsys.readouterr().out == ""
 
     def test_devin_post_compaction_includes_full_instructions(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Literal, Self
 
 import click
-import oslex
 
 from serena.util.cli_util import AutoRegisteringGroup
 
@@ -496,23 +495,12 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             output_data = self._build_non_symbolic_deny()
 
         if output_data is not None:
-            emit = True
-            if self._client == HookClient.DEVIN:
-                # Soft-enforce for Devin: rewrite the offending call to a no-op that surfaces the
-                # reminder (a block would cancel the whole turn). If the triggering tool has no safe
-                # no-op — only reachable from stale/mixed counter state, since the burst tools are
-                # always read/grep/exec — stay silent and keep the burst state, so the next
-                # read/grep/exec gets nudged instead of the turn being cancelled or the tool spoofed.
-                message = output_data.additional_context or output_data.permission_decision_reason
-                output_data.updated_input = self._build_devin_noop_input(message)
-                emit = output_data.updated_input is not None
-            if emit:
-                # reset burst counters so the next interval starts fresh, then record the deny
-                # timestamp. The is_hook_active() guard at the top ensures we never reach this
-                # branch within the rate-limit window.
-                self._tool_call_counter.reset()
-                self._tool_call_counter.last_deny_timestamp = self.triggered_at_timestamp
-                click.echo(output_data.to_json_string(self._client))
+            # reset burst counters so the next interval starts fresh, then record the deny
+            # timestamp. The is_hook_active() guard at the top ensures we never reach this
+            # branch within the rate-limit window.
+            self._tool_call_counter.reset()
+            self._tool_call_counter.last_deny_timestamp = self.triggered_at_timestamp
+            click.echo(output_data.to_json_string(self._client))
         self._tool_call_counter.save(self)
 
     def _build_grep_deny(self) -> "PreToolUseHook.OutputData":
@@ -549,70 +537,6 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
                 "now if needed, the counter was reset."
             ),
         )
-
-    def _build_devin_noop_input(self, message: str) -> dict | None:
-        """Rewrite the offending call to a harmless no-op whose *output is the reminder*, so the
-        agent sees the nudge and its turn continues (a ``block`` would cancel the turn in Devin).
-
-        ``exec`` becomes a ``printf`` of the message; ``read``/``grep`` are pointed at a small
-        nudge file that holds the message. Returns ``None`` for any other tool — the caller then
-        stays silent rather than blocking. Only the burst tools (``read``/``grep``/``exec``) ever
-        reach a deny, so ``None`` is a defensive fallback for stale counter state.
-        """
-        if self._tool_name == "exec" and self._is_shell_command_call():
-            return {"command": f"printf '%s\\n' {oslex.quote(message)}"}
-        if self._tool_name in ("read", "grep"):
-            nudge_file = Path(self.session_persistence_dir) / "devin_nudge.txt"
-            nudge_file.parent.mkdir(parents=True, exist_ok=True)
-            nudge_file.write_text(message + "\n", encoding="utf-8")
-            if self._tool_name == "read":
-                return {"file_path": str(nudge_file)}
-            return {"pattern": ".*", "path": str(nudge_file), "output_mode": "content"}
-        return None
-
-
-class PostToolUseRemindAboutSymbolicToolsHook(PreToolUseRemindAboutSymbolicToolsHook):
-    """Post-tool-use hook that nudges the agent after raw reads/greps.
-
-    Unlike :class:`PreToolUseRemindAboutSymbolicToolsHook`, this hook does not
-    block or rewrite the tool call; it only adds context after the tool has run.
-    A short cooldown prevents the reminder from becoming noisy.
-    """
-
-    _COOLDOWN_SECONDS = 90
-    _LAST_REMIND_FILE = "last_post_remind.txt"
-
-    def execute(self) -> None:
-        if not (self.is_grep_call() or self.is_read_code_file_call()):
-            return
-        if self._on_cooldown():
-            return
-
-        tool_label = self._tool_name or "this tool"
-        message = (
-            f"You just used `{tool_label}` on a code file. Consider using Serena's "
-            "symbolic tools (e.g. `find_symbol`, `get_symbols_overview`, `query_project`) "
-            "for faster, more targeted reads and edits."
-        )
-        result = {
-            "hookSpecificOutput": {
-                "hookEventName": "PostToolUse",
-                "additionalContext": message,
-            }
-        }
-        click.echo(json.dumps(result))
-        self._update_cooldown()
-
-    def _on_cooldown(self) -> bool:
-        path = Path(self.session_persistence_dir) / self._LAST_REMIND_FILE
-        if not path.exists():
-            return False
-        return (datetime.now().timestamp() - path.stat().st_mtime) < self._COOLDOWN_SECONDS
-
-    def _update_cooldown(self) -> None:
-        path = Path(self.session_persistence_dir) / self._LAST_REMIND_FILE
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(str(datetime.now().timestamp()))
 
 
 class SessionStartActivateProjectHook(Hook):
@@ -654,12 +578,39 @@ class SessionStartActivateProjectHook(Hook):
         }
         click.echo(json.dumps(result))
 
+    #: seconds for which the generated system prompt instructions remain fresh
+    _INSTRUCTIONS_CACHE_TTL = 3600
+
     def _full_instructions(self) -> str:
         """Return Serena's system-prompt instructions for the devin context.
 
-        This is useful for Devin CLI's PostCompaction hook, where the model may have
-        lost the original system prompt and needs to be reminded of Serena's capabilities.
+        The result is cached on disk for :attr:`_INSTRUCTIONS_CACHE_TTL` seconds
+        because generating it requires loading the full Serena agent and context.
         """
+        cache_path = Path(serena_home_dir) / "devin_instructions_cache.json"
+        try:
+            if cache_path.exists():
+                cache = json.loads(cache_path.read_text(encoding="utf-8"))
+                age = datetime.now().timestamp() - cache.get("timestamp", 0)
+                if age < self._INSTRUCTIONS_CACHE_TTL:
+                    return cache.get("text", "")
+        except Exception:
+            pass
+
+        text = self._generate_full_instructions()
+        if text:
+            try:
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                cache_path.write_text(
+                    json.dumps({"timestamp": datetime.now().timestamp(), "text": text}, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+            except Exception:
+                pass
+        return text
+
+    def _generate_full_instructions(self) -> str:
+        """Generate instructions by delegating to the CLI."""
         try:
             result = subprocess.run(
                 ["serena", "print-system-prompt", "--only-instructions", "--context=devin"],
@@ -784,11 +735,14 @@ class HookCommands(AutoRegisteringGroup):
     @staticmethod
     @click.command(
         "activate",
-        help="Set this as hook at session startup to prompt the agent to activate the project at the start of the session and read Serena's instructions",
+        help="Set this as hook at SessionStart to prompt the agent to activate the project and read Serena's instructions, or at PostCompaction to re-inject the full instructions.",
     )
     @_client_option
     @click.option(
-        "--include-instructions", is_flag=True, default=False, help="Include the full Serena system prompt (useful for PostCompaction)."
+        "--include-instructions",
+        is_flag=True,
+        default=False,
+        help="Include the full Serena system prompt (useful for SessionStart and PostCompaction).",
     )
     @click.option("--event", default="SessionStart", help="The Devin hook event name to emit in the response.")
     def activate(client: str, include_instructions: bool, event: str) -> None:
@@ -808,15 +762,6 @@ class HookCommands(AutoRegisteringGroup):
     @_client_option
     def remind(client: str) -> None:
         PreToolUseRemindAboutSymbolicToolsHook(HookClient(client)).execute()
-
-    @staticmethod
-    @click.command(
-        "post-remind",
-        help="Set this as hook at PostToolUse to nudge the agent after raw read/grep calls",
-    )
-    @_client_option
-    def post_remind(client: str) -> None:
-        PostToolUseRemindAboutSymbolicToolsHook(HookClient(client)).execute()
 
     @staticmethod
     @click.command(
