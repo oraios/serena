@@ -23,6 +23,7 @@ import requests
 
 from solidlsp.ls_exceptions import InvalidTextLocationError, SolidLSPException
 from solidlsp.ls_types import UnifiedSymbolInformation
+from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
 
@@ -740,9 +741,9 @@ class PlatformUtils:
         Returns the dotnet version for the current system
         """
         try:
-            result = subprocess.run(["dotnet", "--list-runtimes"], capture_output=True, check=True)
+            result = subprocess_run(["dotnet", "--list-runtimes"], capture_output=True, check=True)
             available_version_cmd_output = []
-            for line in result.stdout.decode("utf-8").split("\n"):
+            for line in result.stdout.split("\n"):
                 if line.startswith("Microsoft.NETCore.App"):
                     version_cmd_output = line.split(" ")[1]
                     available_version_cmd_output.append(version_cmd_output)
@@ -769,7 +770,7 @@ class PlatformUtils:
             )
         except (FileNotFoundError, subprocess.CalledProcessError):
             try:
-                result = subprocess.run(["mono", "--version"], capture_output=True, check=True)
+                result = subprocess_run(["mono", "--version"], capture_output=True, check=True)
                 return DotnetVersion.VMONO
             except (FileNotFoundError, subprocess.CalledProcessError):
                 raise SolidLSPException("dotnet or mono not found on the system")

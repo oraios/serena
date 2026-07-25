@@ -1,6 +1,5 @@
 import logging
 import os
-import subprocess
 import time
 from collections.abc import Hashable
 
@@ -12,6 +11,7 @@ from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_types import SymbolKind
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ class SourceKitLSP(SolidLanguageServer):
     def _get_sourcekit_lsp_version() -> str:
         """Get the installed sourcekit-lsp version or raise error if sourcekit was not found."""
         try:
-            result = subprocess.run(["sourcekit-lsp", "-h"], capture_output=True, text=True, check=False)
+            result = subprocess_run(["sourcekit-lsp", "-h"], capture_output=True, text=True, check=False)
             if result.returncode == 0:
                 return result.stdout.strip()
             else:

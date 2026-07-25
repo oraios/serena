@@ -7,7 +7,6 @@ import os
 import re
 import shutil
 import stat
-import subprocess
 
 from overrides import override
 
@@ -15,6 +14,7 @@ from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependen
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_utils import FileUtils
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ class PhpactorServer(SolidLanguageServer):
             )
 
             # Check PHP version (Phpactor requires PHP 8.1+)
-            result = subprocess.run(["php", "--version"], capture_output=True, text=True, check=False)
+            result = subprocess_run(["php", "--version"], capture_output=True, text=True, check=False)
             php_version_output = result.stdout.strip()
             log.info(f"PHP version: {php_version_output}")
             version_match = re.search(r"PHP (\d+)\.(\d+)", php_version_output)

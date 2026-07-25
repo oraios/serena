@@ -15,6 +15,7 @@ from overrides import override
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
 
@@ -57,8 +58,13 @@ CLOJURE_LSP_ALLOWED_HOSTS = (
 
 
 def run_command(cmd: list, capture_output: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        cmd, stdout=subprocess.PIPE if capture_output else None, stderr=subprocess.STDOUT if capture_output else None, text=True, check=True
+    return subprocess_run(
+        cmd,
+        capture_output=False,
+        stdout=subprocess.PIPE if capture_output else None,
+        stderr=subprocess.STDOUT if capture_output else None,
+        text=True,
+        check=True,
     )
 
 

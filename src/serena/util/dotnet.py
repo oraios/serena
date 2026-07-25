@@ -8,6 +8,7 @@ from pathlib import Path
 
 from serena.util.version import Version
 from solidlsp.ls_exceptions import SolidLSPException
+from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ class DotNETUtil:
     def _determine_installed_versions(self) -> list[Version]:
         if self._system_dotnet:
             try:
-                result = subprocess.run([self._system_dotnet, "--list-runtimes"], capture_output=True, text=True, check=True)
+                result = subprocess_run([self._system_dotnet, "--list-runtimes"], capture_output=True, text=True, check=True)
                 version_strings = re.findall(r"Microsoft.NETCore.App\s+([^\s]+)", result.stdout)
                 log.info("Installed .NET runtime versions: %s", version_strings)
                 return [Version(v) for v in version_strings]
@@ -138,7 +139,7 @@ class DotNETUtil:
 
             # Run the install script
             log.info("Running .NET install script: %s", cmd)
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            result = subprocess_run(cmd, capture_output=True, text=True, check=True)
             log.debug(f"Install script output: {result.stdout}")
 
             if not dotnet_exe.exists():
