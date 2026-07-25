@@ -743,7 +743,7 @@ class PlatformUtils:
         try:
             result = subprocess_run(["dotnet", "--list-runtimes"], capture_output=True, check=True)
             available_version_cmd_output = []
-            for line in result.stdout.decode("utf-8").split("\n"):
+            for line in result.stdout.split("\n"):
                 if line.startswith("Microsoft.NETCore.App"):
                     version_cmd_output = line.split(" ")[1]
                     available_version_cmd_output.append(version_cmd_output)
