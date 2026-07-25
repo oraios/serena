@@ -32,6 +32,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add `serena-hooks --client=grok`, including Grok-native PreToolUse allow/deny output.
   - PreToolUse remind hook: coerce non-string shell command values instead of failing, and recognize
     `target_file`/`targetFile` file-path keys (shared payload parsing, applies to all hook clients).
+  - Fix hook input parsing for clients that emit raw control characters in JSON string values #1743.
 
 
 # v1.6.1 (2026-07-21)

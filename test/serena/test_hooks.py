@@ -992,6 +992,20 @@ class TestHookCli:
         output = json.loads(result.output)
         assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
 
+    def test_remind_command_accepts_raw_control_characters_in_tool_input(self, tmp_path: Path):
+        """CodeBuddy freeform tool input may contain unescaped control characters."""
+        stdin_json = (
+            '{"hook_event_name":"PreToolUse","session_id":"cli-codebuddy-raw-input",'
+            '"tool_name":"Edit","tool_input":"*** Begin Patch\n*** Add File: /tmp/x.txt\n+hi\n",'
+            '"permission_mode":"default"}'
+        )
+        runner = CliRunner()
+        with patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            result = runner.invoke(hook_commands, ["remind", "--client", "codebuddy"], input=stdin_json)
+
+        assert result.exit_code == 0
+        assert result.output == ""
+
     def test_remind_command_grok_emits_native_deny(self, tmp_path: Path):
         """The documented Grok remind CLI emits Grok-native deny JSON."""
         runner = CliRunner()
