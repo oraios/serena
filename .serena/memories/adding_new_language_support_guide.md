@@ -10,6 +10,7 @@ Adding a new language involves:
 2. **Language Registration** - Adding the language to enums and configurations  
 3. **Test Repository** - Creating a minimal test project
 4. **Test Suite** - Writing comprehensive tests
+5. **Documentation** - Updating the user-facing language lists and the changelog
 
 ## Step 1: Language Server Implementation
 
@@ -59,9 +60,9 @@ To implement a new language server using the DependencyProvider pattern:
   - Implement `create_launch_command()` directly (note: no automatic support for user-level launch command overrides in this case)
   - Reference implementations: `EclipseJDTLS`, `CSharpLanguageServer`, `MatlabLanguageServer`
 
-**Implementation Pointers::**
+**Implementation Pointers:**
   - Override `create_launch_command_env` if the launch command needs environment variables to be set (defaults to `{}` in the base implementation)
-  - When calling subprocesses, e.g. to install dependencies, do not use `subprocess.run` directly; instead, use the `subprocess_run` helper method from `solidlsp.utils.subprocess_utils`
+  - When calling subprocesses, e.g. to install dependencies, do not use `subprocess.run` directly; instead, use the `subprocess_run` helper function from `solidlsp.util.subprocess_util`
 
 You should look at at least one existing implementation of each base class to understand how they work.
 
@@ -208,13 +209,14 @@ You should at least test:
 3. Finding cross-file references
 
 Have a look at `test/solidlsp/php/test_php_basic.py` as an example for what should be tested.
-Don't forget to add a new language marker to `pytest.ini`.
+Declare the new language marker under `[tool.pytest.ini_options].markers` in `pyproject.toml`.
 
 
-### 5 Documentation
+## Step 5: Documentation
 
 Update:
 
 - **README.md** - Add language to the list of languages
 - **docs/01-about/020_programming-languages.md** - Add language to the list and mention any special notes, compatibility or requirements (e.g. installations the user is required to do)
+- **src/serena/resources/project.template.yml** - Refresh the commented language-server list: run `uv run python scripts/print_language_list.py` and paste its output over the existing list, stripping the trailing spaces the script pads each line with
 - **CHANGELOG.md** - Document the new language support
