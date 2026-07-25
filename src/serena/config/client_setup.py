@@ -261,11 +261,24 @@ class ClientSetupHandlerDevin(ClientSetupHandler):
         post_compaction_command = "serena-hooks activate --client=devin --include-instructions --event PostCompaction"
         session_end_command = "serena-hooks cleanup --client=devin"
 
+        # Remove stale experimental serena-devin.js hooks that this installer
+        # may have created in earlier iterations; they duplicate the native
+        # serena-hooks commands we register below.
+        for event, event_list in hooks.items():
+            hooks[event] = [entry for entry in event_list if not self._is_stale_serena_hook(entry)]
+
         self._add_hook_event(hooks, "SessionStart", session_start_command)
         self._add_hook_event(hooks, "PreToolUse", pre_tool_use_command, matcher="")
         self._add_hook_event(hooks, "PostToolUse", post_tool_use_command, matcher="")
         self._add_hook_event(hooks, "PostCompaction", post_compaction_command)
         self._add_hook_event(hooks, "SessionEnd", session_end_command)
+
+    def _is_stale_serena_hook(self, entry: Any) -> bool:
+        for hook in entry.get("hooks", []):
+            command = hook.get("command", "")
+            if "serena-devin.js" in command:
+                return True
+        return False
 
     def _add_hook_event(
         self,

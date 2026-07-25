@@ -245,3 +245,25 @@ def test_devin_setup_handler_writes_full_config(monkeypatch, tmp_path: Path):
         entry.get("hooks", [])[0].get("command") == "serena-hooks post-remind --client=devin" for entry in config["hooks"]["PostToolUse"]
     )
     assert any("--include-instructions" in entry.get("hooks", [])[0].get("command", "") for entry in config["hooks"]["PostCompaction"])
+
+
+def test_devin_setup_handler_removes_stale_node_hooks(monkeypatch, tmp_path: Path):
+    handler = ClientSetupHandlerDevin()
+    config_path = tmp_path / "config.json"
+    initial = {
+        "mcpServers": {"serena": {"command": "serena", "args": ["start-mcp-server"]}},
+        "hooks": {
+            "SessionStart": [
+                {"hooks": [{"type": "command", "command": 'node "$HOME/.config/devin/hooks/serena/serena-devin.js" SessionStart'}]},
+                {"hooks": [{"type": "command", "command": "serena-hooks activate --client=devin"}]},
+            ]
+        },
+    }
+    config_path.write_text(json.dumps(initial))
+    monkeypatch.setattr(handler, "_devin_config_path", lambda scope: config_path)
+
+    assert handler._configure_devin_config("user") is True
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    session_start = config["hooks"]["SessionStart"]
+    assert all("serena-devin.js" not in entry["hooks"][0]["command"] for entry in session_start)
+    assert any(entry["hooks"][0]["command"] == "serena-hooks activate --client=devin" for entry in session_start)
