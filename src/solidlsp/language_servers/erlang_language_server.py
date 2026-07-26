@@ -14,6 +14,7 @@ from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ class ErlangLanguageServer(SolidLanguageServer):
     def _check_erlang_installation(self) -> bool:
         """Check if Erlang/OTP is available."""
         try:
-            result = subprocess.run(["erl", "-version"], check=False, capture_output=True, text=True, timeout=10)
+            result = subprocess_run(["erl", "-version"], check=False, capture_output=True, text=True, timeout=10)
             return result.returncode == 0
         except (subprocess.SubprocessError, FileNotFoundError):
             return False
@@ -59,7 +60,7 @@ class ErlangLanguageServer(SolidLanguageServer):
     def _get_erlang_version(cls) -> str | None:
         """Get the installed Erlang/OTP version or None if not found."""
         try:
-            result = subprocess.run(["erl", "-version"], check=False, capture_output=True, text=True, timeout=10)
+            result = subprocess_run(["erl", "-version"], check=False, capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
                 return result.stderr.strip()  # erl -version outputs to stderr
         except (subprocess.SubprocessError, FileNotFoundError):
@@ -70,7 +71,7 @@ class ErlangLanguageServer(SolidLanguageServer):
     def _check_rebar3_available(cls) -> bool:
         """Check if rebar3 build tool is available."""
         try:
-            result = subprocess.run(["rebar3", "version"], check=False, capture_output=True, text=True, timeout=10)
+            result = subprocess_run(["rebar3", "version"], check=False, capture_output=True, text=True, timeout=10)
             return result.returncode == 0
         except (subprocess.SubprocessError, FileNotFoundError):
             return False

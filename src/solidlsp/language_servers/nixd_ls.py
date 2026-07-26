@@ -5,19 +5,23 @@ Provides Nix specific instantiation of the LanguageServer class using nixd (Nix 
 Note: Windows is not supported as Nix itself doesn't support Windows natively.
 """
 
+import json
 import logging
 import platform
 import shutil
 import subprocess
+from copy import deepcopy
 from pathlib import Path
+from typing import Any
 
 from overrides import override
 
 from solidlsp import ls_types
+from solidlsp.dependency_provider import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath
 from solidlsp.ls import DocumentSymbols, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +30,118 @@ class NixLanguageServer(SolidLanguageServer):
     """
     Provides Nix specific instantiation of the LanguageServer class using nixd.
     """
+
+    class DependencyProvider(LanguageServerDependencyProviderSinglePath):
+        """Provides the nixd launch command and managed dependency fallback."""
+
+        @staticmethod
+        def _get_nixd_path() -> str | None:
+            """Return an existing nixd executable path, if one can be found."""
+            nixd_path = shutil.which("nixd")
+            if nixd_path:
+                return nixd_path
+
+            home = Path.home()
+            possible_paths = [
+                home / ".local" / "bin" / "nixd",
+                home / ".serena" / "language_servers" / "nixd" / "nixd",
+                home / ".nix-profile" / "bin" / "nixd",
+                Path("/usr/local/bin/nixd"),
+                Path("/run/current-system/sw/bin/nixd"),
+                Path("/opt/homebrew/bin/nixd"),
+                Path("/usr/local/opt/nixd/bin/nixd"),
+            ]
+
+            if platform.system() == "Windows":
+                possible_paths.extend(
+                    [
+                        home / "AppData" / "Local" / "nixd" / "nixd.exe",
+                        home / ".serena" / "language_servers" / "nixd" / "nixd.exe",
+                    ]
+                )
+
+            for path in possible_paths:
+                if path.exists():
+                    return str(path)
+
+            return None
+
+        @staticmethod
+        def _install_nixd_with_nix() -> str | None:
+            """Install nixd through Nix and return the resulting executable path."""
+            if not shutil.which("nix"):
+                return None
+
+            log.info("Installing nixd using nix... This may take a few minutes.")
+            try:
+                result = subprocess_run(
+                    ["nix", "profile", "install", "github:nix-community/nixd"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=600,
+                )
+
+                if result.returncode == 0:
+                    nixd_path = shutil.which("nixd")
+                    if nixd_path:
+                        log.info("Successfully installed nixd at: %s", nixd_path)
+                        return nixd_path
+                else:
+                    result = subprocess_run(
+                        ["nix-env", "-iA", "nixpkgs.nixd"],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        timeout=600,
+                    )
+                    if result.returncode == 0:
+                        nixd_path = shutil.which("nixd")
+                        if nixd_path:
+                            log.info("Successfully installed nixd at: %s", nixd_path)
+                            return nixd_path
+                    log.error("Failed to install nixd: %s", result.stderr)
+
+            except subprocess.TimeoutExpired:
+                log.error("Nix install timed out after 10 minutes")
+            except Exception:
+                log.exception("Error installing nixd with nix")
+
+            return None
+
+        def _get_or_install_core_dependency(self) -> str:
+            """Return a working nixd path, installing nixd when necessary."""
+            if not shutil.which("nix"):
+                log.error("Nix is not installed. nixd requires Nix to function properly.")
+                raise RuntimeError("Nix is required for nixd. Please install Nix from https://nixos.org/download.html")
+
+            nixd_path = self._get_nixd_path()
+            if not nixd_path:
+                log.info("nixd not found. Attempting to install...")
+                nixd_path = self._install_nixd_with_nix()
+
+            if not nixd_path:
+                raise RuntimeError(
+                    "nixd (Nix Language Server) is not installed.\n"
+                    "Please install nixd using one of the following methods:\n"
+                    "  - Using Nix flakes: nix profile install github:nix-community/nixd\n"
+                    "  - From nixpkgs: nix-env -iA nixpkgs.nixd\n"
+                    "  - On macOS with Homebrew: brew install nixd\n\n"
+                    "After installation, make sure 'nixd' is in your PATH."
+                )
+
+            try:
+                result = subprocess_run([nixd_path, "--version"], capture_output=True, text=True, check=False, timeout=5)
+                if result.returncode != 0:
+                    raise RuntimeError(f"nixd failed to run: {result.stderr}")
+            except Exception as exc:
+                raise RuntimeError(f"Failed to verify nixd installation: {exc}") from exc
+
+            return nixd_path
+
+        def _create_launch_command(self, core_path: str) -> list[str]:
+            """Return the nixd stdio launch command."""
+            return [core_path]
 
     def _extend_nix_symbol_range_to_include_semicolon(
         self, symbol: ls_types.UnifiedSymbolInformation, file_content: str
@@ -104,148 +220,93 @@ class NixLanguageServer(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in ["result", ".direnv"] or dirname.startswith("result-")
 
     @staticmethod
-    def _get_nixd_version():
-        """Get the installed nixd version or None if not found."""
+    def _create_default_nixd_settings() -> dict[str, Any]:
+        """Return the default settings sent to nixd."""
+        return {
+            "nixpkgs": {"expr": "import <nixpkgs> { }"},
+            "formatting": {"command": ["nixpkgs-fmt"]},
+            "options": {
+                "enable": True,
+                "target": {
+                    "installable": "",
+                },
+            },
+        }
+
+    @classmethod
+    def _load_nixd_settings(cls, custom_settings: SolidLSPSettings.CustomLSSettings) -> dict[str, Any]:
+        """Load nixd settings from ``config_path`` or return the built-in defaults.
+
+        :param custom_settings: Nix-specific language-server settings.
+        :return: The value of the nixd configuration section.
+        :raises ValueError: If ``config_path`` or its JSON document has an invalid shape.
+        :raises RuntimeError: If the configuration file cannot be read.
+        """
+        config_path_value = custom_settings.get("config_path")
+        if config_path_value is None:
+            return cls._create_default_nixd_settings()
+        if not isinstance(config_path_value, str) or not config_path_value.strip():
+            raise ValueError("ls_specific_settings.nix.config_path must be a non-empty absolute path")
+
+        config_path = Path(config_path_value).expanduser()
+        if not config_path.is_absolute():
+            raise ValueError(f"ls_specific_settings.nix.config_path must be absolute: {config_path_value!r}")
+
         try:
-            result = subprocess.run(["nixd", "--version"], capture_output=True, text=True, check=False)
-            if result.returncode == 0:
-                # nixd outputs version like: nixd 2.0.0
-                return result.stdout.strip()
-        except FileNotFoundError:
-            return None
-        return None
+            with config_path.open(encoding="utf-8") as config_file:
+                settings = json.load(config_file)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"Invalid JSON in nixd configuration file '{config_path}': {exc.msg} (line {exc.lineno}, column {exc.colno})"
+            ) from exc
+        except OSError as exc:
+            raise RuntimeError(f"Failed to read nixd configuration file '{config_path}': {exc}") from exc
+
+        if not isinstance(settings, dict):
+            raise ValueError(
+                f"Invalid nixd configuration file '{config_path}': expected a JSON object containing the value of the 'nixd' section"
+            )
+        return settings
 
     @staticmethod
-    def _check_nixd_installed():
-        """Check if nixd is installed in the system."""
-        return shutil.which("nixd") is not None
+    def _resolve_nixd_configuration_section(settings: dict[str, Any], section: object) -> Any:
+        """Resolve a ``nixd`` configuration section from the effective settings."""
+        if section == "nixd":
+            return deepcopy(settings)
+        if not isinstance(section, str) or not section.startswith("nixd."):
+            return {}
 
-    @staticmethod
-    def _get_nixd_path():
-        """Get the path to nixd executable."""
-        # First check if it's in PATH
-        nixd_path = shutil.which("nixd")
-        if nixd_path:
-            return nixd_path
+        value: Any = settings
+        for key in section.removeprefix("nixd.").split("."):
+            if not key or not isinstance(value, dict) or key not in value:
+                return {}
+            value = value[key]
+        return deepcopy(value)
 
-        # Check common installation locations
-        home = Path.home()
-        possible_paths = [
-            home / ".local" / "bin" / "nixd",
-            home / ".serena" / "language_servers" / "nixd" / "nixd",
-            home / ".nix-profile" / "bin" / "nixd",
-            Path("/usr/local/bin/nixd"),
-            Path("/run/current-system/sw/bin/nixd"),  # NixOS system profile
-            Path("/opt/homebrew/bin/nixd"),  # Homebrew on Apple Silicon
-            Path("/usr/local/opt/nixd/bin/nixd"),  # Homebrew on Intel Mac
+    @classmethod
+    def _get_workspace_configuration(cls, params: object, settings: dict[str, Any]) -> list[Any]:
+        """Return configuration values matching each requested item in order."""
+        if not isinstance(params, dict):
+            return []
+
+        items = params.get("items", [])
+        if not isinstance(items, list):
+            return []
+
+        return [
+            cls._resolve_nixd_configuration_section(settings, item.get("section") if isinstance(item, dict) else None) for item in items
         ]
 
-        # Add Windows-specific paths
-        if platform.system() == "Windows":
-            possible_paths.extend(
-                [
-                    home / "AppData" / "Local" / "nixd" / "nixd.exe",
-                    home / ".serena" / "language_servers" / "nixd" / "nixd.exe",
-                ]
-            )
-
-        for path in possible_paths:
-            if path.exists():
-                return str(path)
-
-        return None
-
-    @staticmethod
-    def _install_nixd_with_nix():
-        """Install nixd using nix if available."""
-        # Check if nix is available
-        if not shutil.which("nix"):
-            return None
-
-        print("Installing nixd using nix... This may take a few minutes.")
-        try:
-            # Try to install nixd using nix profile
-            result = subprocess.run(
-                ["nix", "profile", "install", "github:nix-community/nixd"],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=600,  # 10 minute timeout for building
-            )
-
-            if result.returncode == 0:
-                # Check if nixd is now in PATH
-                nixd_path = shutil.which("nixd")
-                if nixd_path:
-                    print(f"Successfully installed nixd at: {nixd_path}")
-                    return nixd_path
-            else:
-                # Try nix-env as fallback
-                result = subprocess.run(
-                    ["nix-env", "-iA", "nixpkgs.nixd"],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                    timeout=600,
-                )
-                if result.returncode == 0:
-                    nixd_path = shutil.which("nixd")
-                    if nixd_path:
-                        print(f"Successfully installed nixd at: {nixd_path}")
-                        return nixd_path
-                print(f"Failed to install nixd: {result.stderr}")
-
-        except subprocess.TimeoutExpired:
-            print("Nix install timed out after 10 minutes")
-        except Exception as e:
-            print(f"Error installing nixd with nix: {e}")
-
-        return None
-
-    @staticmethod
-    def _setup_runtime_dependency():
-        """
-        Check if required Nix runtime dependencies are available.
-        Attempts to install nixd if not present.
-        """
-        # First check if Nix is available (nixd needs it at runtime)
-        if not shutil.which("nix"):
-            print("WARNING: Nix is not installed. nixd requires Nix to function properly.")
-            raise RuntimeError("Nix is required for nixd. Please install Nix from https://nixos.org/download.html")
-
-        nixd_path = NixLanguageServer._get_nixd_path()
-
-        if not nixd_path:
-            print("nixd not found. Attempting to install...")
-
-            # Try to install with nix if available
-            nixd_path = NixLanguageServer._install_nixd_with_nix()
-
-            if not nixd_path:
-                raise RuntimeError(
-                    "nixd (Nix Language Server) is not installed.\n"
-                    "Please install nixd using one of the following methods:\n"
-                    "  - Using Nix flakes: nix profile install github:nix-community/nixd\n"
-                    "  - From nixpkgs: nix-env -iA nixpkgs.nixd\n"
-                    "  - On macOS with Homebrew: brew install nixd\n\n"
-                    "After installation, make sure 'nixd' is in your PATH."
-                )
-
-        # Verify nixd works
-        try:
-            result = subprocess.run([nixd_path, "--version"], capture_output=True, text=True, check=False, timeout=5)
-            if result.returncode != 0:
-                raise RuntimeError(f"nixd failed to run: {result.stderr}")
-        except Exception as e:
-            raise RuntimeError(f"Failed to verify nixd installation: {e}")
-
-        return nixd_path
-
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        nixd_path = self._setup_runtime_dependency()
+        custom_settings = solidlsp_settings.get_ls_specific_settings(config.ls_id)
+        self._nixd_settings = self._load_nixd_settings(custom_settings)
 
-        super().__init__(config, repository_root_path, ProcessLaunchInfo(cmd=nixd_path, cwd=repository_root_path), "nix", solidlsp_settings)
+        super().__init__(config, repository_root_path, None, "nix", solidlsp_settings)
         self.request_id = 0
+
+    def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
+        """Create the provider that resolves the nixd launch command."""
+        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
     def _create_base_initialize_params(self) -> dict:
         """
@@ -313,25 +374,22 @@ class NixLanguageServer(SolidLanguageServer):
                     },
                 },
             },
-            "initializationOptions": {
-                # nixd specific options
-                "nixpkgs": {"expr": "import <nixpkgs> { }"},
-                "formatting": {"command": ["nixpkgs-fmt"]},  # or ["alejandra"] or ["nixfmt"]
-                "options": {
-                    "enable": True,
-                    "target": {
-                        "installable": "",  # Will be auto-detected from flake.nix if present
-                    },
-                },
-            },
+            "initializationOptions": deepcopy(self._nixd_settings),
         }
         return initialize_params
 
     def _start_server(self):
         """Start nixd server process"""
+        initialize_params = self._create_initialize_params()
+        nixd_settings = initialize_params.get("initializationOptions", {})
+        if not isinstance(nixd_settings, dict):
+            nixd_settings = {}
 
         def register_capability_handler(params):
             return
+
+        def workspace_configuration_handler(params):
+            return self._get_workspace_configuration(params, nixd_settings)
 
         def window_log_message(msg):
             log.info(f"LSP: window/logMessage: {msg}")
@@ -340,13 +398,13 @@ class NixLanguageServer(SolidLanguageServer):
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)
+        self.server.on_request("workspace/configuration", workspace_configuration_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
         log.info("Starting nixd server process")
         self.server.start()
-        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)

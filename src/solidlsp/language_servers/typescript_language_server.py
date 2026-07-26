@@ -74,6 +74,8 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         - typescript_language_server_version: Version of typescript-language-server to install (default: "5.1.3")
         - indexing_timeout: float, timeout in seconds for project indexing (default: 30.0)
         - server_ready_timeout: float, timeout in seconds for the server-ready signal (default: 10.0)
+        - indexing_start_grace: float, timeout in seconds to wait for tsserver to *start*
+          reporting indexing progress before the first cross-file reference query (default: 5.0)
     """
 
     @classmethod
@@ -84,6 +86,11 @@ class TypeScriptLanguageServer(SolidLanguageServer):
     # well within this window; the timeout is only hit if the server never sends progress.
     INDEXING_PROGRESS_TIMEOUT = 30.0
     SERVER_READY_TIMEOUT = 10.0
+    # How long to wait for tsserver to *start* emitting $/progress after opening files, before
+    # assuming no indexing is needed. tsserver has to resolve the project graph before it can even
+    # create the first progress token, and that resolution is proportional to project size, so a
+    # large project can genuinely take longer than a small one just to begin reporting.
+    INDEXING_START_GRACE = 5.0
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
@@ -123,7 +130,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         :param start_grace: Maximum seconds to wait for progress to begin after opening files.
         :return: True if indexing completed or no progress began within the grace period, False on timeout.
         """
-        grace = self._INDEXING_START_GRACE_S if start_grace is None else start_grace
+        grace = self.INDEXING_START_GRACE if start_grace is None else start_grace
 
         # wait for progress to begin
         progress_deadline = time.monotonic() + grace
@@ -170,6 +177,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
     def _get_indexing_timeout(self) -> float:
         """:return: maximum seconds to wait for TypeScript project indexing."""
         return float(self._custom_settings.get("indexing_timeout", self.INDEXING_PROGRESS_TIMEOUT))
+
+    def _get_indexing_start_grace(self) -> float:
+        """:return: maximum seconds to wait for tsserver to start reporting indexing progress."""
+        return float(self._custom_settings.get("indexing_start_grace", self.INDEXING_START_GRACE))
 
     def _handle_server_ready_timeout(self, timeout: float) -> None:
         """Handle a TypeScript server-ready timeout.
@@ -531,17 +542,14 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         if not self._has_waited_for_cross_file_references:
             self.expect_indexing()
 
-    #: how long to wait for tsserver to *start* reporting indexing progress after didOpen;
-    #: matches the fixed wait the base implementation previously used
-    _INDEXING_START_GRACE_S = 2.0
-
     @override
     def _wait_for_cross_file_references_if_needed(self) -> None:
         if self._has_waited_for_cross_file_references:
             return
 
         timeout = self._get_indexing_timeout()
-        if self._wait_for_indexing_start_or_completion(timeout=timeout):
+        start_grace = self._get_indexing_start_grace()
+        if self._wait_for_indexing_start_or_completion(timeout=timeout, start_grace=start_grace):
             log.info("TypeScript cross-file indexing complete")
         else:
             log.warning(

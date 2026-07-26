@@ -13,7 +13,6 @@ import logging
 import os
 import platform
 import shutil
-import subprocess
 import tempfile
 import threading
 from collections.abc import Hashable
@@ -28,6 +27,7 @@ from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import FileUtils
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
 
@@ -190,7 +190,7 @@ class PowerShellLanguageServer(SolidLanguageServer):
         psscriptanalyzer_path = Path(bundled_modules_path) / "PSScriptAnalyzer" / psscriptanalyzer_version
         if not psscriptanalyzer_path.exists():
             log.info(f"PSScriptAnalyzer {psscriptanalyzer_version} not found. Installing...")
-            subprocess.run(
+            subprocess_run(
                 [
                     pwsh_path,
                     "-NoLogo",
@@ -206,6 +206,7 @@ class PowerShellLanguageServer(SolidLanguageServer):
                     ),
                 ],
                 check=True,
+                capture_output=False,
             )
 
         return pwsh_path, pses_path, bundled_modules_path

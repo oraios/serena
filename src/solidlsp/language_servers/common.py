@@ -110,12 +110,13 @@ class RuntimeDependencyCollection:
         command = subprocess_util.convert_shell_cmd(command)
         log.info("Running command %s in '%s'", f"'{command}'" if isinstance(command, str) else command, cwd)
 
-        completed_process = subprocess.run(
+        completed_process = subprocess_util.subprocess_run(
             command,
             shell=True,
             check=False,
             cwd=cwd,
-            stdin=subprocess.DEVNULL,
+            capture_output=False,
+            text=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             **kwargs,

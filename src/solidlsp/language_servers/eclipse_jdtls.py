@@ -27,6 +27,7 @@ from solidlsp.ls_types import UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, SymbolInformation
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
 
@@ -730,7 +731,7 @@ class EclipseJDTLS(SolidLanguageServer):
             """
             try:
                 # both -XshowSettings:properties and -version write to stderr by convention
-                result = subprocess.run(
+                result = subprocess_run(
                     [java_exe, "-XshowSettings:properties", "-version"],
                     capture_output=True,
                     text=True,

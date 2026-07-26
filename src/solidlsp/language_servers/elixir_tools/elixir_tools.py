@@ -2,7 +2,6 @@ import logging
 import os
 import pathlib
 import stat
-import subprocess
 import threading
 from collections.abc import Hashable
 from typing import Any
@@ -14,6 +13,7 @@ from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.ls_utils import FileUtils, PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 from ..common import RuntimeDependency
 
@@ -64,7 +64,7 @@ class ElixirTools(SolidLanguageServer):
     def _get_elixir_version(cls) -> str | None:
         """Get the installed Elixir version or None if not found."""
         try:
-            result = subprocess.run(["elixir", "--version"], capture_output=True, text=True, check=False)
+            result = subprocess_run(["elixir", "--version"], capture_output=True, text=True, check=False)
             if result.returncode == 0:
                 return result.stdout.strip()
         except FileNotFoundError:

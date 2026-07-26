@@ -3,20 +3,35 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - Fix: a tool call exceeding the timeout blocked the task executor indefinitely; the executor now
+    recovers without user-induced cancellation
   - Add Grok Build support (context `grok`, setup CLI, hooks)
   - The `languages` key in project configurations was changed to `language_servers` to better reflect
     the actual semantics (configurations are automatically migrated)
   - Fix: glob matching bare `*` and `?` in non-`**` patterns matched across `/`, contradicting documented behaviour #1732
   - Fix: on Linux, a language server process spawned in its own session (the default) is no longer
     orphaned when Serena is killed without a chance to shut down cleanly (e.g. SIGKILL, OOM) #1490
+  - Language servers and their dependency providers now go through the `subprocess_run` helper instead of
+    calling `subprocess.run` directly, so all such subprocesses get `stdin=DEVNULL` and can no longer
+    interfere with the stdio MCP connection (as happened for Julia, #1577) #1748
 
 * Language Servers: 
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
     project creation) 
   - Add `python_basedpyright` as an alternative Python language server
+  - Nix/nixd: support custom `ls_path` launchers and external JSON settings through `config_path` #1737
 
 * JetBrains:
   - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file
+
+* Language Servers:
+  - `typescript`: Fix: on large projects, the first `find_referencing_symbols`/`request_references` call
+    could silently race tsserver's project load and return incomplete results, because the fixed 2s
+    grace for tsserver to *start* reporting `$/progress` (distinct from the separate, already
+    configurable `indexing_timeout` used to wait for it to *drain*) was hardcoded and not large enough
+    for projects where the initial project-graph resolution itself takes longer than that. The grace
+    is now `indexing_start_grace` (default 5.0s), configurable the same way as `indexing_timeout` and
+    `server_ready_timeout` #1586
 
 * Hooks:
   - Add `serena-hooks --client=grok`, including Grok-native PreToolUse allow/deny output.

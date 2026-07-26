@@ -63,6 +63,14 @@ class TestBaseTypeScriptTimeoutPolicy:
         assert server._get_server_ready_timeout() == 1.5
         assert server._get_indexing_timeout() == 2.5
 
+    def test_indexing_start_grace_default(self) -> None:
+        server = _bare_ts_server(TypeScriptLanguageServer)
+        assert server._get_indexing_start_grace() == 5.0
+
+    def test_indexing_start_grace_configurable_via_ls_specific_settings(self) -> None:
+        server = _bare_ts_server(TypeScriptLanguageServer, {"indexing_start_grace": 12.0})
+        assert server._get_indexing_start_grace() == 12.0
+
 
 class TestSvelteCompanionTimeoutPolicy:
     """The Svelte companion must be strict: raise instead of serving from a cold/partial program."""
@@ -139,6 +147,36 @@ class TestWaitForIndexingStartOrCompletion:
             assert server._wait_for_indexing_start_or_completion(timeout=30.0, start_grace=0.0) is True
         finally:
             timer.cancel()
+
+
+class TestWaitForCrossFileReferencesUsesConfiguredGrace:
+    """The actual find-references call path (not just the helper in isolation) must honor
+    indexing_start_grace: this is the mechanism behind oraios/serena#1586, where a large
+    project's tsserver takes longer than the (previously hardcoded, unconfigurable) grace to
+    even start reporting progress, so the first cross-file reference query silently races a
+    still-loading project and returns incomplete results.
+    """
+
+    def test_configured_grace_bounds_the_real_call_path(self) -> None:
+        server = _bare_ts_server(TypeScriptLanguageServer, {"indexing_start_grace": 0.05})
+        server._has_waited_for_cross_file_references = False
+        server.expect_indexing()  # mirrors _pre_open_for_cross_file_references having already run
+
+        start = time.monotonic()
+        server._wait_for_cross_file_references_if_needed()
+        elapsed = time.monotonic() - start
+
+        assert server._has_waited_for_cross_file_references is True
+        # bounded by the configured 0.05s grace, not the 5.0s default (let alone the old 2.0s one)
+        assert elapsed < 1.0
+
+    def test_second_call_is_a_noop_regardless_of_grace(self) -> None:
+        server = _bare_ts_server(TypeScriptLanguageServer, {"indexing_start_grace": 0.05})
+        server._has_waited_for_cross_file_references = True
+
+        start = time.monotonic()
+        server._wait_for_cross_file_references_if_needed()
+        assert time.monotonic() - start < 0.1
 
 
 class _FakeSolidLSPSettings:
