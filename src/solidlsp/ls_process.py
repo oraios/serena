@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import os
 import socket
 import subprocess
 import threading
@@ -10,7 +9,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from queue import Empty, Queue
-from typing import IO, Any, AnyStr, cast
+from typing import IO, Any, AnyStr
 
 from sensai.util.string import ToStringMixin
 
@@ -512,27 +511,10 @@ class StdioLanguageServer(LanguageServerInterface):
         return self.process is not None and self.process.returncode is None
 
     def _start(self) -> None:
-        child_proc_env = os.environ.copy()
-        child_proc_env.update(self.process_launch_info.env)
-
-        cmd = subprocess_util.convert_shell_cmd(self.process_launch_info.cmd)
         log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
-        kwargs = subprocess_util.subprocess_kwargs()
-        kwargs["start_new_session"] = self.start_independent_lsp_process
-        # the language server is launched with binary (bytes) pipes; the cast is needed because the
-        # presence of platform-specific **kwargs prevents ty from selecting the bytes Popen overload
-        process = cast(
-            "subprocess.Popen[bytes]",
-            subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stdin=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=child_proc_env,
-                cwd=self.process_launch_info.cwd,
-                shell=True,
-                **kwargs,
-            ),
+
+        process = subprocess_util.LanguageServerSubprocessLauncher.get_instance().launch(
+            self.process_launch_info, start_new_session=self.start_independent_lsp_process
         )
         self.process = process
 

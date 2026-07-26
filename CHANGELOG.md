@@ -9,9 +9,6 @@ Status of the `main` branch. Changes prior to the next official version change w
   - The `languages` key in project configurations was changed to `language_servers` to better reflect
     the actual semantics (configurations are automatically migrated)
   - Fix: glob matching bare `*` and `?` in non-`**` patterns matched across `/`, contradicting documented behaviour #1732
-  - Language servers and their dependency providers now go through the `subprocess_run` helper instead of
-    calling `subprocess.run` directly, so all such subprocesses get `stdin=DEVNULL` and can no longer
-    interfere with the stdio MCP connection (as happened for Julia, #1577) #1748
 
 * Language Servers: 
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
@@ -30,6 +27,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     for projects where the initial project-graph resolution itself takes longer than that. The grace
     is now `indexing_start_grace` (default 5.0s), configurable the same way as `indexing_timeout` and
     `server_ready_timeout` #1586
+  - Fix: On Linux, a language server process spawned in its own session (the default) is no longer
+    orphaned when Serena is killed without a chance to shut down cleanly (e.g. SIGKILL, OOM) #1490
+  - Language servers and their dependency providers now go through the `subprocess_run` helper instead of
+    calling `subprocess.run` directly (e.g. for installation processes), so all such subprocesses get 
+    `stdin=DEVNULL` and can no longer interfere with the stdio MCP connection #1748
 
 * Hooks:
   - Add `serena-hooks --client=grok`, including Grok-native PreToolUse allow/deny output.
