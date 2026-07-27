@@ -33,6 +33,12 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Language servers and their dependency providers now go through the `subprocess_run` helper instead of
     calling `subprocess.run` directly (e.g. for installation processes), so all such subprocesses get 
     `stdin=DEVNULL` and can no longer interfere with the stdio MCP connection #1748
+  - `scala`: Fix: Metals asks via `window/showMessageRequest` whether to import a workspace it has not
+    seen before, and Serena had no handler, so the request failed with `MethodNotFound` and Metals
+    aborted its initialization ("Unexpected error initializing server"). No build was ever imported and
+    every cross-file query fell back to the presentation compiler, unless the project happened to have
+    been imported beforehand by another editor. The prompts that lead to a build server are now answered;
+    anything else is dismissed. `ls_specific_settings.scala.auto_import_build: false` opts out
 
 * Hooks:
   - Add `serena-hooks --client=grok`, including Grok-native PreToolUse allow/deny output.

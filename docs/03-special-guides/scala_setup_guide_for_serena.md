@@ -15,7 +15,16 @@ Install the following on your system and ensure they are available on `PATH`:
   - Serena uses `cs` if available; if only `coursier` exists, it will attempt to install `cs`. If neither is present, install Coursier first.
 
 ---
-## Quick Start (Recommended: VS Code + Metals auto‑import)
+## Quick Start
+
+Start Serena in your project root. Metals asks whether to import a workspace it has not seen before, and Serena answers that prompt for it — the build is imported (for sbt, by running `sbt bloopInstall`), `.bloop/` and `.metals/` are created, and cross-file navigation works from there. The first run therefore takes as long as your build takes to load.
+
+Set `auto_import_build: false` under `ls_specific_settings.scala` to decline instead; you then need to import the build yourself by one of the routes below, or cross-file queries will be served by the fallback presentation compiler and see only one file at a time.
+
+Serena answers only the prompts that lead to a build server (“Import build”, “Import changes”, “Connect”). Anything else Metals asks is dismissed and logged.
+
+---
+## Importing the build yourself (VS Code)
 
 1. Open your Scala project in VS Code.
 2. When prompted by Metals, accept “Import build”. Wait until the import and initial compile/indexing finish.
@@ -25,7 +34,7 @@ Install the following on your system and ensure they are available on `PATH`:
 This flow ensures the `.bloop/` and (if applicable) `.metals/` directories are created and your build is known to the build server that Metals uses.
 
 ---
-## Manual Setup (No VS Code)
+## Importing the build yourself (No VS Code)
 
 Follow these steps if you prefer a manual setup or you are not using VS Code:
 
