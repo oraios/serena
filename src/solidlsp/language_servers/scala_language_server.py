@@ -10,6 +10,7 @@ from enum import Enum
 
 from overrides import override
 
+from solidlsp.initialize_params import DefaultInitializeParamsBuilder, InitializeParamsBuilder
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_utils import PlatformUtils
@@ -28,6 +29,30 @@ DEFAULT_METALS_VERSION = "1.6.4"
 DEFAULT_CLIENT_NAME = "Serena"
 DEFAULT_ON_STALE_LOCK = "auto-clean"
 DEFAULT_LOG_MULTI_INSTANCE_NOTICE = True
+DEFAULT_PROJECT_ROOT_SCAN_DEPTH = 3
+
+# Files whose presence marks a directory as the root of a build Metals can import.
+# Mirrors the per-build-tool probes in Metals' `BuildTools` (scala/meta/internal/builds/BuildTools.scala).
+BUILD_ROOT_MARKER_FILES = (
+    "build.gradle",
+    "build.gradle.kts",
+    "build.mill",
+    "build.mill.scala",
+    "build.mill.yaml",
+    "build.sbt",
+    "build.sc",
+    "pom.xml",
+    "project.scala",
+    "settings.gradle",
+    "settings.gradle.kts",
+)
+
+# Directories whose presence marks a directory as an already-configured Metals project.
+BUILD_ROOT_MARKER_DIRS = (".bloop", ".bsp")
+
+# Directories never worth descending into when scanning for build roots: build output, dependencies,
+# and the two directories (`project`, `src`) that belong to a build we would already have recognised.
+BUILD_ROOT_SCAN_SKIP_DIRS = frozenset({"node_modules", "out", "project", "src", "target", "venv"})
 
 
 class StaleLockMode(Enum):
@@ -43,6 +68,79 @@ class StaleLockMode(Enum):
     """Raise an error and refuse to start."""
 
 
+def _is_build_root(path: str) -> bool:
+    """
+    Whether `path` is the root of a build that Metals can import.
+    """
+    if any(os.path.isfile(os.path.join(path, name)) for name in BUILD_ROOT_MARKER_FILES):
+        return True
+    if any(os.path.isdir(os.path.join(path, name)) for name in BUILD_ROOT_MARKER_DIRS):
+        return True
+    # sbt allows the build to be defined entirely under project/, with no build.sbt
+    build_properties = os.path.join(path, "project", "build.properties")
+    if os.path.isfile(build_properties):
+        try:
+            with open(build_properties, encoding="utf-8", errors="replace") as f:
+                return any(line.lstrip().startswith("sbt.version") for line in f)
+        except OSError:
+            return False
+    return False
+
+
+def find_build_roots(repository_root_path: str, max_depth: int = DEFAULT_PROJECT_ROOT_SCAN_DEPTH) -> list[str]:
+    """
+    Find the roots of the builds contained in the given repository.
+
+    Metals serves one build per workspace folder, so a repository holding several builds
+    (or a single build below its root) must name those directories rather than the repository root.
+
+    :param repository_root_path: the repository root
+    :param max_depth: how many directory levels below the repository root to search;
+        the search does not descend into a directory that is itself a build root
+    :return: the absolute paths of the build roots found, or `[repository_root_path]` if there are none
+        (which leaves Metals' own behaviour unchanged)
+    """
+    if _is_build_root(repository_root_path):
+        return [repository_root_path]
+
+    roots: list[str] = []
+
+    def scan(directory: str, depth: int) -> None:
+        if depth > max_depth:
+            return
+        try:
+            entries = sorted(os.scandir(directory), key=lambda e: e.name)
+        except OSError:
+            return
+        for entry in entries:
+            if not entry.is_dir(follow_symlinks=False) or entry.name.startswith(".") or entry.name in BUILD_ROOT_SCAN_SKIP_DIRS:
+                continue
+            if _is_build_root(entry.path):
+                roots.append(entry.path)
+            else:
+                scan(entry.path, depth + 1)
+
+    scan(repository_root_path, 1)
+    return roots or [repository_root_path]
+
+
+class ScalaInitializeParamsBuilder(DefaultInitializeParamsBuilder):
+    """
+    Sends the repository's build roots as the workspace folders, so that Metals creates one
+    service per build (see `MetalsLanguageServer.initialize`), rather than the configured
+    workspace folders, which are about what SolidLSP indexes and are shared across languages.
+    """
+
+    def __init__(self, ls: SolidLanguageServer, build_roots: list[str]):
+        super().__init__(ls)
+        self._build_roots = build_roots
+
+    @override
+    def _apply_updates(self) -> None:
+        super()._apply_updates()
+        self._set("workspaceFolders", [self._create_workspace_folder_entry(path) for path in self._build_roots])
+
+
 def _get_scala_settings(solidlsp_settings: SolidLSPSettings) -> dict[str, object]:
     """
     Extract Scala-specific settings with defaults applied.
@@ -52,6 +150,8 @@ def _get_scala_settings(solidlsp_settings: SolidLSPSettings) -> dict[str, object
         - client_name: str
         - on_stale_lock: StaleLockMode
         - log_multi_instance_notice: bool
+        - project_roots: list[str] | None
+        - project_root_scan_depth: int
     """
     from solidlsp.ls_config import LanguageServerId
 
@@ -60,6 +160,8 @@ def _get_scala_settings(solidlsp_settings: SolidLSPSettings) -> dict[str, object
         "client_name": DEFAULT_CLIENT_NAME,
         "on_stale_lock": StaleLockMode.AUTO_CLEAN,
         "log_multi_instance_notice": DEFAULT_LOG_MULTI_INSTANCE_NOTICE,
+        "project_roots": None,
+        "project_root_scan_depth": DEFAULT_PROJECT_ROOT_SCAN_DEPTH,
     }
 
     if not solidlsp_settings.ls_specific_settings:
@@ -80,6 +182,8 @@ def _get_scala_settings(solidlsp_settings: SolidLSPSettings) -> dict[str, object
         "client_name": scala_settings.get("client_name", DEFAULT_CLIENT_NAME),
         "on_stale_lock": on_stale_lock,
         "log_multi_instance_notice": scala_settings.get("log_multi_instance_notice", DEFAULT_LOG_MULTI_INSTANCE_NOTICE),
+        "project_roots": scala_settings.get("project_roots"),
+        "project_root_scan_depth": scala_settings.get("project_root_scan_depth", DEFAULT_PROJECT_ROOT_SCAN_DEPTH),
     }
 
 
@@ -100,6 +204,16 @@ class ScalaLanguageServer(SolidLanguageServer):
             metals_version: '1.6.4'
             # Client identifier sent to Metals (default: DEFAULT_CLIENT_NAME)
             client_name: 'Serena'
+            # Build roots to serve, relative to the repository root; when unset, they are
+            # auto-detected (see find_build_roots)
+            project_roots: ['backend', 'tooling/plugin']
+            # How many levels below the repository root auto-detection searches
+            project_root_scan_depth: 3
+
+    Monorepo support:
+        Metals serves one build per workspace folder, so the build roots — not the repository
+        root — are what it must be given. They are detected automatically; `project_roots`
+        overrides the detection where it guesses wrong.
 
     Multi-instance support:
         Metals uses H2 AUTO_SERVER mode (enabled by default) to support multiple
@@ -113,8 +227,12 @@ class ScalaLanguageServer(SolidLanguageServer):
         Creates a ScalaLanguageServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
         """
+        self._build_roots = self._resolve_build_roots(repository_root_path, solidlsp_settings)
+        log.info(f"Metals will be given these build roots as workspace folders: {self._build_roots}")
+
         # Check for stale locks before setting up dependencies (fail-fast)
-        self._check_metals_db_status(repository_root_path, solidlsp_settings)
+        for build_root in self._build_roots:
+            self._check_metals_db_status(build_root, solidlsp_settings)
 
         scala_lsp_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
         super().__init__(
@@ -125,9 +243,34 @@ class ScalaLanguageServer(SolidLanguageServer):
             solidlsp_settings,
         )
 
-    def _check_metals_db_status(self, repository_root_path: str, solidlsp_settings: SolidLSPSettings) -> None:
+    @staticmethod
+    def _resolve_build_roots(repository_root_path: str, solidlsp_settings: SolidLSPSettings) -> list[str]:
         """
-        Check the Metals H2 database status and handle stale locks.
+        Determine the build roots to serve, from the `project_roots` setting if given and by
+        detection otherwise.
+        """
+        settings = _get_scala_settings(solidlsp_settings)
+        configured_roots: list[str] | None = settings["project_roots"]  # type: ignore[assignment]
+        if configured_roots is None:
+            scan_depth: int = settings["project_root_scan_depth"]  # type: ignore[assignment]
+            return find_build_roots(repository_root_path, scan_depth)
+
+        roots = []
+        for root in configured_roots:
+            abs_root = os.path.abspath(os.path.join(repository_root_path, root))
+            if os.path.isdir(abs_root):
+                roots.append(abs_root)
+            else:
+                log.warning(f"Configured Scala project root does not exist, skipping: {abs_root}")
+        return roots or [repository_root_path]
+
+    @override
+    def _create_initialize_params_builder(self) -> InitializeParamsBuilder:
+        return ScalaInitializeParamsBuilder(self, self._build_roots)
+
+    def _check_metals_db_status(self, build_root_path: str, solidlsp_settings: SolidLSPSettings) -> None:
+        """
+        Check the Metals H2 database status of one build root and handle stale locks.
 
         This method is called before setting up runtime dependencies to fail-fast
         if there's a stale lock that the user has configured to fail on.
@@ -141,7 +284,7 @@ class ScalaLanguageServer(SolidLanguageServer):
             cleanup_stale_lock,
         )
 
-        project_path = Path(repository_root_path)
+        project_path = Path(build_root_path)
         status, lock_info = check_metals_db_status(project_path)
 
         # Get settings using the shared helper function

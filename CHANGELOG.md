@@ -33,6 +33,11 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Language servers and their dependency providers now go through the `subprocess_run` helper instead of
     calling `subprocess.run` directly (e.g. for installation processes), so all such subprocesses get 
     `stdin=DEVNULL` and can no longer interfere with the stdio MCP connection #1748
+  - `scala`: Fix: in a repository whose builds live below its root, Metals was given only the repository
+    root as a workspace folder, and its own one-level search takes just the first build it finds — so in
+    a monorepo all but one build were served with no build target, silently returning no cross-file
+    references. The build roots are now detected and passed as workspace folders, one Metals service per
+    build; `ls_specific_settings.scala.project_roots` and `project_root_scan_depth` override the detection
 
 * Hooks:
   - Add `serena-hooks --client=grok`, including Grok-native PreToolUse allow/deny output.

@@ -64,6 +64,21 @@ Notes:
 - Ensure you completed the manual or auto‑import steps so that the build is compiled and indexed; otherwise, code navigation and references may be incomplete until the first successful compile.
 
 ---
+## Monorepos: builds below the repository root
+
+Metals serves one build per workspace folder, so what it needs is the build roots, not the repository root. Serena detects them: if the repository root is not itself a build root (no `build.sbt`, `build.mill`, `pom.xml`, `.bsp/`, …), it searches up to three levels below for directories that are, and passes those to Metals — one Metals service per build.
+
+Override the detection where it guesses wrong:
+
+```yaml
+# ~/.serena/serena_config.yml or .serena/project.yml
+ls_specific_settings:
+  scala:
+    project_roots: ["backend", "tooling/plugin"]  # relative to the repository root
+    project_root_scan_depth: 3                    # only applies when project_roots is unset
+```
+
+---
 ## Running Multiple Metals Instances
 
 Serena can run alongside other Metals instances (e.g., VS Code with Metals extension) on the same project. This is **fully supported** by Metals via H2 AUTO_SERVER mode.
