@@ -37,6 +37,12 @@ DEFAULT_AUTO_IMPORT_BUILD = True
 # never chosen: Metals persists that dismissal in the project's own state.
 # (scala/meta/internal/metals/Messages.scala, at `ImportBuild`, `ImportBuildChanges`,
 # `GenerateBspAndConnect`.)
+#
+# Not answered, deliberately: `Messages.ChooseBuildTool` ("Multiple build definitions found. Which
+# would you like to use?"), whose actions are the build tools' own executable names. It precedes
+# the import prompt in a workspace holding more than one kind of build, so such a workspace is
+# still not imported — but choosing a build tool for the user is a guess of a different order, and
+# Metals offers no way to say "whichever you would have picked".
 BUILD_IMPORT_PROMPT_ACTIONS = ("Import build", "Import changes", "Connect")
 
 

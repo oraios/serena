@@ -4,25 +4,39 @@ Unit tests for Serena's answer to Metals' `window/showMessageRequest` prompts.
 
 import pytest
 
-from solidlsp.language_servers.scala_language_server import choose_show_message_request_action
+from solidlsp.language_servers.scala_language_server import (
+    _get_scala_settings,
+    choose_show_message_request_action,
+)
+from solidlsp.ls_config import LanguageServerId
+from solidlsp.settings import SolidLSPSettings
 
-# Metals' own prompts, verbatim from scala/meta/internal/metals/Messages.scala
+# Metals' own prompts, with the message and action titles as its `Messages` object builds them
+# (scala/meta/internal/metals/Messages.scala) and `type` as lsp4j serialises `MessageType.Info`.
 IMPORT_BUILD = {
     "message": "New sbt workspace detected, would you like to import the build?",
     "type": 3,
     "actions": [{"title": "Import build"}, {"title": "Not now"}, {"title": "Don't show again"}],
 }
 IMPORT_CHANGES = {
-    "message": "sbt build needs to be re-imported.",
+    "message": "sbt build needs to be re-imported",
+    "type": 3,
     "actions": [{"title": "Import changes"}, {"title": "Not now"}, {"title": "Don't show again"}],
 }
 GENERATE_BSP_AND_CONNECT = {
     "message": "New sbt workspace detected, would you like connect to the Bloop build server?",
+    "type": 3,
     "actions": [{"title": "Connect"}, {"title": "Not now"}, {"title": "Don't show again"}],
 }
 OLD_BLOOP_VERSION_RUNNING = {
     "message": "Deprecated Bloop server is still running and is taking up resources, do you want to kill the process?",
+    "type": 3,
     "actions": [{"title": "Yes"}, {"title": "Not now"}],
+}
+CHOOSE_BUILD_TOOL = {
+    "message": "Multiple build definitions found. Which would you like to use?",
+    "type": 3,
+    "actions": [{"title": "sbt"}, {"title": "mill"}],
 }
 
 
@@ -54,3 +68,27 @@ class TestChooseShowMessageRequestAction:
     def test_malformed_actions_do_not_raise(self) -> None:
         params = {"message": "…", "actions": ["Import build", None, {"title": "Import build"}]}
         assert choose_show_message_request_action(params) == {"title": "Import build"}
+
+    def test_choosing_between_build_tools_is_left_alone(self) -> None:
+        """Naming the build tool for the user is a guess of a different order; see the comment
+        on BUILD_IMPORT_PROMPT_ACTIONS. A workspace with several build definitions is therefore
+        still not imported.
+        """
+        assert choose_show_message_request_action(CHOOSE_BUILD_TOOL) is None
+
+
+@pytest.mark.scala
+class TestAutoImportBuildSetting:
+    """`auto_import_build` has to reach the handler from the project configuration."""
+
+    @staticmethod
+    def setting(**scala_settings) -> object:
+        settings = SolidLSPSettings(ls_specific_settings={LanguageServerId.SCALA: scala_settings})
+        return _get_scala_settings(settings)["auto_import_build"]
+
+    def test_defaults_to_true(self) -> None:
+        assert self.setting() is True
+        assert _get_scala_settings(SolidLSPSettings())["auto_import_build"] is True
+
+    def test_can_be_disabled(self) -> None:
+        assert self.setting(auto_import_build=False) is False

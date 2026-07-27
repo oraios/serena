@@ -21,7 +21,7 @@ Start Serena in your project root. Metals asks whether to import a workspace it 
 
 Set `auto_import_build: false` under `ls_specific_settings.scala` to decline instead; you then need to import the build yourself by one of the routes below, or cross-file queries will be served by the fallback presentation compiler and see only one file at a time.
 
-Serena answers only the prompts that lead to a build server (“Import build”, “Import changes”, “Connect”). Anything else Metals asks is dismissed and logged.
+Serena answers three of Metals' prompts — “Import build”, “Import changes”, “Connect”. Anything else Metals asks is dismissed and logged, including “Multiple build definitions found. Which would you like to use?”, so a workspace holding more than one kind of build (say both an sbt and a Maven definition) still needs importing by one of the routes below.
 
 ---
 ## Importing the build yourself (VS Code)
