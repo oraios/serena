@@ -12,6 +12,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: glob matching bare `*` and `?` in non-`**` patterns matched across `/`, contradicting documented behaviour #1732
 
 * Language Servers: 
+  - Add Gleam language server support (via the `gleam lsp` server bundled with the Gleam compiler)
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
     project creation) 
   - Add `python_basedpyright` as an alternative Python language server

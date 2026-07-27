@@ -71,7 +71,7 @@ jobs:
       # other-langs: grab-bag + scripting languages + haskell + qml. Haskell (GHC/HLS) and qml (qmlls) are
       # installed only on Linux -- too slow/expensive to build on the macOS runner (Haskell), or not worth
       # the cost of a cross-OS Qt pull (qmlls) -- and skip on Windows+macOS via the central conftest guard.
-      MARKERS_OTHER_LANGS: "ruby or php or lua or luau or bash or powershell or elixir or erlang or dart or haxe or haskell or terraform or rego or ansible or yaml or toml or markdown or latex or crystal or cue or fortran or ada or matlab or systemverilog or hlsl or msl or al or qml"
+      MARKERS_OTHER_LANGS: "ruby or php or lua or luau or bash or powershell or elixir or erlang or dart or haxe or haskell or terraform or rego or ansible or yaml or toml or markdown or latex or crystal or cue or fortran or ada or matlab or systemverilog or hlsl or msl or al or qml or gleam"
       # niche: slow, mostly-cached toolchains. ocaml + haskell are the two slowest -- kept in separate
       # batches (ocaml here, haskell in other-langs). nix + perl skip on Windows via the guard.
       MARKERS_NICHE: "julia or r or perl or lean4 or nix or ocaml"
@@ -445,6 +445,24 @@ jobs:
           missing="$(ldd "$QMLLS_DIR/qmlls" | grep 'not found' || true)"
           [ -z "$missing" ] || { echo "ERROR: qmlls has unresolved runtime libs:"; echo "$missing"; exit 1; }
           echo "$QMLLS_DIR" >> "$GITHUB_PATH"
+      - name: Install Gleam compiler
+        # Gleam's LSP is bundled with the compiler (started via `gleam lsp`). Restricted to Linux like
+        # qmlls; Gleam skips on Windows/macOS CI via the conftest guard. The compiler is a self-contained
+        # Rust binary (x86_64-unknown-linux-musl static build) with no runtime deps.
+        if: matrix.batch == 'other-langs' && runner.os == 'Linux'
+        shell: bash
+        run: |
+          GLEAM_VERSION="1.17.0"
+          GLEAM_DIR="$HOME/.gleam"
+          mkdir -p "$GLEAM_DIR"
+          curl -fsSL -o /tmp/gleam.tar.gz "https://github.com/gleam-lang/gleam/releases/download/v${GLEAM_VERSION}/gleam-v${GLEAM_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          tar xzf /tmp/gleam.tar.gz -C "$GLEAM_DIR"
+          rm /tmp/gleam.tar.gz
+          chmod +x "$GLEAM_DIR/gleam"
+          # Fail loudly if any shared lib is unresolved (the musl build should be fully static).
+          missing="$(ldd "$GLEAM_DIR/gleam" | grep 'not found' || true)"
+          [ -z "$missing" ] || { echo "ERROR: gleam has unresolved runtime libs:"; echo "$missing"; exit 1; }
+          echo "$GLEAM_DIR" >> "$GITHUB_PATH"
       - name: Cache Free Pascal Compiler
         if: matrix.batch == 'native'
         id: cache-fpc

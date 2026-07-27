@@ -185,6 +185,11 @@ class LanguageServerId(str, Enum):
     Supports .qml files. Requires Qt 6 installation providing qmlls on PATH.
     See https://doc.qt.io/qt-6/qtqml-tool-qmlls.html
     """
+    GLEAM = "gleam"
+    """Gleam language server bundled with the Gleam compiler (`gleam lsp`).
+    Supports .gleam files. Requires the `gleam` binary on PATH.
+    See https://gleam.run/getting-started/installing/ for installation.
+    """
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -572,6 +577,8 @@ class LanguageServerId(str, Enum):
                 return FilenameMatcher(".gd", ".gdscript")
             case self.QML:
                 return FilenameMatcher(".qml")
+            case self.GLEAM:
+                return FilenameMatcher(".gleam")
             case self.HTML:
                 return FilenameMatcher(".html", ".htm")
             case self.SCSS:
@@ -859,6 +866,10 @@ class LanguageServerId(str, Enum):
                 from solidlsp.language_servers.qml_language_server import QmlLanguageServer
 
                 return QmlLanguageServer
+            case self.GLEAM:
+                from solidlsp.language_servers.gleam_language_server import GleamLanguageServer
+
+                return GleamLanguageServer
             case self.HTML:
                 from solidlsp.language_servers.vscode_html_language_server import VsCodeHtmlLanguageServer
 

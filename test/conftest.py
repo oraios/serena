@@ -430,6 +430,11 @@ def _determine_disabled_language_servers() -> list[LanguageServerId]:
     # catching a CI setup regression. On Windows/macOS CI (never installed) and off-CI without the binary it skips.
     if (_sh.which("qmlls6") is None and _sh.which("qmlls") is None) and not (is_ci and is_linux):
         result.append(LanguageServerId.QML)
+    # gleam is installed (see pytest.yml) on the Ubuntu other-langs CI batch. Same rationale as
+    # qmlls: a missing binary on Linux CI is NOT skipped (fails loudly on a CI setup regression);
+    # Windows/macOS CI and off-CI without the binary skip.
+    if _sh.which("gleam") is None and not (is_ci and is_linux):
+        result.append(LanguageServerId.GLEAM)
 
     # === 3. Disabled wherever the precondition is missing (including on CI) ===
     # 3a. Platform precondition: these language servers have no native Windows support.
