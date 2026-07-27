@@ -31,9 +31,14 @@ DEFAULT_ON_STALE_LOCK = "auto-clean"
 DEFAULT_LOG_MULTI_INSTANCE_NOTICE = True
 DEFAULT_PROJECT_ROOT_SCAN_DEPTH = 3
 
-# Files whose presence marks a directory as the root of a build Metals can import.
-# Mirrors the per-build-tool probes in Metals' `BuildTools` (scala/meta/internal/builds/BuildTools.scala).
+# Files whose presence marks a directory as the root of a build Metals can import, following the
+# per-build-tool probes in Metals' `BuildTools` (scala/meta/internal/builds/BuildTools.scala) and
+# `BazelBuildTool.workspaceSupportsBsp`. Deliberately partial: the probes that need to read a file's
+# contents (scala-cli's BSP scope) are left out, since missing a build root only returns us to the
+# previous behaviour, whereas a false positive would hide the real builds beneath it.
 BUILD_ROOT_MARKER_FILES = (
+    "MODULE.bazel",
+    "WORKSPACE",
     "build.gradle",
     "build.gradle.kts",
     "build.mill",
@@ -41,17 +46,22 @@ BUILD_ROOT_MARKER_FILES = (
     "build.mill.yaml",
     "build.sbt",
     "build.sc",
+    "deder.pkl",
+    "mill",
+    "mill.bat",
     "pom.xml",
     "project.scala",
     "settings.gradle",
     "settings.gradle.kts",
 )
 
-# Directories whose presence marks a directory as an already-configured Metals project.
-BUILD_ROOT_MARKER_DIRS = (".bloop", ".bsp")
+# Directories which, when they hold a JSON file, mark an already-configured Metals project
+# (`BuildTools.hasJsonFile`). An empty one is a leftover, not a build.
+BUILD_ROOT_MARKER_JSON_DIRS = (".bloop", ".bsp")
 
-# Directories never worth descending into when scanning for build roots: build output, dependencies,
-# and the two directories (`project`, `src`) that belong to a build we would already have recognised.
+# Directories not worth descending into when scanning for build roots: build output, dependencies,
+# and the directories belonging to a build we would have recognised at their parent. They are still
+# probed themselves — only the descent below them is skipped.
 BUILD_ROOT_SCAN_SKIP_DIRS = frozenset({"node_modules", "out", "project", "src", "target", "venv"})
 
 
@@ -68,13 +78,20 @@ class StaleLockMode(Enum):
     """Raise an error and refuse to start."""
 
 
+def _contains_json_file(path: str) -> bool:
+    try:
+        return any(entry.name.endswith(".json") for entry in os.scandir(path))
+    except OSError:
+        return False
+
+
 def _is_build_root(path: str) -> bool:
     """
     Whether `path` is the root of a build that Metals can import.
     """
     if any(os.path.isfile(os.path.join(path, name)) for name in BUILD_ROOT_MARKER_FILES):
         return True
-    if any(os.path.isdir(os.path.join(path, name)) for name in BUILD_ROOT_MARKER_DIRS):
+    if any(_contains_json_file(os.path.join(path, name)) for name in BUILD_ROOT_MARKER_JSON_DIRS):
         return True
     # sbt allows the build to be defined entirely under project/, with no build.sbt
     build_properties = os.path.join(path, "project", "build.properties")
@@ -104,20 +121,24 @@ def find_build_roots(repository_root_path: str, max_depth: int = DEFAULT_PROJECT
         return [repository_root_path]
 
     roots: list[str] = []
+    visited: set[str] = set()
 
     def scan(directory: str, depth: int) -> None:
-        if depth > max_depth:
+        # symlinks are followed, as Metals' own search does, so guard against cycles
+        real_path = os.path.realpath(directory)
+        if depth > max_depth or real_path in visited:
             return
+        visited.add(real_path)
         try:
             entries = sorted(os.scandir(directory), key=lambda e: e.name)
         except OSError:
             return
         for entry in entries:
-            if not entry.is_dir(follow_symlinks=False) or entry.name.startswith(".") or entry.name in BUILD_ROOT_SCAN_SKIP_DIRS:
+            if entry.name.startswith(".") or not entry.is_dir():
                 continue
             if _is_build_root(entry.path):
                 roots.append(entry.path)
-            else:
+            elif entry.name not in BUILD_ROOT_SCAN_SKIP_DIRS:
                 scan(entry.path, depth + 1)
 
     scan(repository_root_path, 1)
@@ -127,18 +148,56 @@ def find_build_roots(repository_root_path: str, max_depth: int = DEFAULT_PROJECT
 class ScalaInitializeParamsBuilder(DefaultInitializeParamsBuilder):
     """
     Sends the repository's build roots as the workspace folders, so that Metals creates one
-    service per build (see `MetalsLanguageServer.initialize`), rather than the configured
-    workspace folders, which are about what SolidLSP indexes and are shared across languages.
+    service per build (see `MetalsLanguageServer.initialize`), in place of `ls_workspace_folders`,
+    which is about what SolidLSP indexes and is shared across a project's language servers.
+
+    `ls_additional_workspace_folders` is still honoured: those folders can lie outside the
+    repository and so could never be detected, which is the whole point of the setting.
     """
 
     def __init__(self, ls: SolidLanguageServer, build_roots: list[str]):
-        super().__init__(ls)
+        super().__init__(ls, set_workspace_folders=False)
         self._build_roots = build_roots
 
     @override
     def _apply_updates(self) -> None:
         super()._apply_updates()
-        self._set("workspaceFolders", [self._create_workspace_folder_entry(path) for path in self._build_roots])
+        folders = list(self._build_roots)
+        for path in self._ls.config.get_absolute_additional_workspace_folders(self._ls.repository_root_path):
+            if path not in folders:
+                folders.append(path)
+        log.info("Workspace folders sent to Metals: %s", folders)
+        self._set("workspaceFolders", [self._create_workspace_folder_entry(path) for path in folders])
+
+
+def _parse_project_roots(value: object) -> list[str] | None:
+    """
+    Validate the `project_roots` setting, returning None (i.e. detect them) if it is unusable.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str) or not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        log.warning(f"Invalid project_roots value {value!r}, expected a list of paths; detecting the build roots instead")
+        return None
+    roots: list[str] = [item for item in value if isinstance(item, str)]
+    if not roots:
+        log.warning("Empty project_roots; detecting the build roots instead")
+        return None
+    return roots
+
+
+def _parse_project_root_scan_depth(value: object) -> int:
+    """
+    Validate the `project_root_scan_depth` setting, falling back to the default if it is unusable.
+    """
+    if value is None:
+        return DEFAULT_PROJECT_ROOT_SCAN_DEPTH
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        log.warning(
+            f"Invalid project_root_scan_depth value {value!r}, expected a positive integer; using {DEFAULT_PROJECT_ROOT_SCAN_DEPTH}"
+        )
+        return DEFAULT_PROJECT_ROOT_SCAN_DEPTH
+    return value
 
 
 def _get_scala_settings(solidlsp_settings: SolidLSPSettings) -> dict[str, object]:
@@ -182,8 +241,8 @@ def _get_scala_settings(solidlsp_settings: SolidLSPSettings) -> dict[str, object
         "client_name": scala_settings.get("client_name", DEFAULT_CLIENT_NAME),
         "on_stale_lock": on_stale_lock,
         "log_multi_instance_notice": scala_settings.get("log_multi_instance_notice", DEFAULT_LOG_MULTI_INSTANCE_NOTICE),
-        "project_roots": scala_settings.get("project_roots"),
-        "project_root_scan_depth": scala_settings.get("project_root_scan_depth", DEFAULT_PROJECT_ROOT_SCAN_DEPTH),
+        "project_roots": _parse_project_roots(scala_settings.get("project_roots")),
+        "project_root_scan_depth": _parse_project_root_scan_depth(scala_settings.get("project_root_scan_depth")),
     }
 
 
@@ -262,7 +321,10 @@ class ScalaLanguageServer(SolidLanguageServer):
                 roots.append(abs_root)
             else:
                 log.warning(f"Configured Scala project root does not exist, skipping: {abs_root}")
-        return roots or [repository_root_path]
+        if not roots:
+            log.error("No configured Scala project root exists; detecting the build roots instead")
+            return find_build_roots(repository_root_path, settings["project_root_scan_depth"])  # type: ignore[arg-type]
+        return roots
 
     @override
     def _create_initialize_params_builder(self) -> InitializeParamsBuilder:

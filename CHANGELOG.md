@@ -37,7 +37,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     root as a workspace folder, and its own one-level search takes just the first build it finds — so in
     a monorepo all but one build were served with no build target, silently returning no cross-file
     references. The build roots are now detected and passed as workspace folders, one Metals service per
-    build; `ls_specific_settings.scala.project_roots` and `project_root_scan_depth` override the detection
+    build; `ls_specific_settings.scala.project_roots` and `project_root_scan_depth` override the
+    detection #1766
 
 * Hooks:
   - Add `serena-hooks --client=grok`, including Grok-native PreToolUse allow/deny output.
