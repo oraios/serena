@@ -12,8 +12,9 @@ from typing import Any, ClassVar
 from overrides import override
 
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
-from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
+from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, SymbolInformation
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -124,6 +125,15 @@ class AnsibleLanguageServer(SolidLanguageServer):
                 return True
 
         return False
+
+    @override
+    def _request_document_symbols(
+        self, relative_file_path: str, file_data: LSPFileBuffer | None
+    ) -> list[SymbolInformation] | list[DocumentSymbol] | None:
+        # ansible-language-server does not implement textDocument/documentSymbol and the
+        # maintainers have declined to add it (see ansible/vscode-ansible#601, closed NOT_PLANNED).
+        # Skip the request entirely rather than sending a request we know will fail.
+        return None
 
     @staticmethod
     def _determine_log_level(line: str) -> int:
