@@ -29,6 +29,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file
 
 * Language Servers:
+  - Rust: reduce rust-analyzer memory usage and reload churn by disabling cache priming and Cargo autoreload while preserving diagnostics.
   - `typescript`: Fix: on large projects, the first `find_referencing_symbols`/`request_references` call
     could silently race tsserver's project load and return incomplete results, because the fixed 2s
     grace for tsserver to *start* reporting `$/progress` (distinct from the separate, already
