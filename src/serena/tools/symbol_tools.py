@@ -155,7 +155,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         max_answer_chars: int = -1,
     ) -> str:
         """
-        Retrieves information on all symbols/code entities (classes, methods, etc.) based on the given name path pattern.
+        Finds symbols or other code entities (classes, methods, etc.) based on the given name path pattern.
         The returned symbol information can be used for edits or further queries.
         Specify `depth > 0` to also retrieve children/descendants (e.g., methods of a class).
 

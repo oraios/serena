@@ -11,6 +11,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     the actual semantics (configurations are automatically migrated)
   - Fix: glob matching bare `*` and `?` in non-`**` patterns matched across `/`, contradicting documented behaviour #1732
 
+* Tools:
+  - `find_symbol`: Change tool description to improve tool search results in clients that load tools dynamically
+
 * Language Servers: 
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
     project creation) 
