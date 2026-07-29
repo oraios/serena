@@ -44,6 +44,59 @@ Sandboxing is the most effective way to mitigate risks when using coding agents.
 
 While setting up a sandboxed environment may require some initial effort, we highly recommend it for all security-conscious users.
 
+(trusted-projects)=
+## Trusted Projects
+
+Sandboxing limits what Serena can affect while doing what it was asked to do.
+The notion of *trusted projects* (introduced in Serena v1.6.0) addresses a different question: 
+to what extent may the repository being worked on influence Serena's behaviour in the first place?
+
+A project is an input authored by whoever produced the repository, and it comprises more than source code:
+it also carries configuration (`.serena/project.yml`) as well as file system structure.
+Trust determines whether such repository-supplied input may influence Serena beyond having the code read and
+analysed as code — for example, by executing commands, by changing how dependencies are acquired, or by causing
+Serena to access locations outside the project root.
+Trust is decided by the project's root path, which is matched against `trusted_project_path_patterns` in Serena's
+[global configuration](global-config).
+
+We gate a feature on project trust whenever honouring repository-supplied input could have an effect beyond the
+scope of what the user visibly requested: activating a project is not a request to run a command, and searching a
+project's files is not a request to read files outside of it.
+
+### A Functionality Boundary, Not a Containment Boundary
+
+Untrusted projects are not sandboxed, restricted or otherwise contained.
+They are read, analysed and edited just like any other project; the only difference is that a small set of
+capabilities is unavailable to them.
+As soon as the agent is asked to do anything at all, the full tool surface applies to an untrusted project as well:
+commands can be executed, files can be modified, and the repository's contents can influence the LLM.
+
+Consequently, our assumption that the repository being worked on is trusted (see above) remains fully in force.
+Trust patterns eliminate a class of particularly straightforward attacks, namely those requiring no user
+interaction beyond opening a project, but exploits can generally not be prevented by such means.
+The question to ask is therefore not "is this project safe to work on because it is untrusted?" but rather
+"do I trust this repository enough to grant it the additional capabilities?".
+If a repository is not trustworthy, [sandboxing](sandboxing) is the answer, not the trust configuration.
+
+### Trust-Gated Features
+
+The set of trust-gated features is subject to change and can be expected to grow.
+The settings that require trust are annotated accordingly in the project configuration (see
+[configuration](050_configuration)); the two following current examples illustrate the principle:
+
+- `activation_command` is a shell command that a project can request to be run whenever it is activated.
+  Without trust gating, merely opening a repository in Serena would execute code chosen by its author,
+  before the user has issued a single request.
+- `ls_specific_settings` can, among other things, override the package version and the package registry from
+  which a language server is acquired.
+  Without trust gating, a repository could thereby silently circumvent the supply chain protections described
+  below (version pinning, host restrictions) and cause attacker-controlled code to be downloaded and executed.
+
+Note that the effective set of trusted paths depends on the age of your configuration: installations predating
+the introduction of this setting retain a pattern that trusts all projects, ensuring that existing workflows are
+not broken, whereas newly created configurations trust no project by default.
+The applicable value can be inspected in the dashboard.
+
 (network-security)=
 ## Network Security
 
