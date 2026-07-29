@@ -327,6 +327,7 @@ class SerenaMCPFactory:
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
         trace_lsp_communication: bool | None = None,
         tool_timeout: float | None = None,
+        headless: bool = False,
     ) -> FastMCP:
         """
         Create an MCP server with process-isolated SerenaAgent to prevent asyncio contamination.
@@ -344,9 +345,16 @@ class SerenaMCPFactory:
         :param trace_lsp_communication: Whether to trace the communication between Serena and the language servers.
             This is useful for debugging language server issues.
         :param tool_timeout: Timeout in seconds for tool execution. If not specified, will take the value from the serena configuration.
+        :param headless: if True, apply the config's headless-mode overrides (disable the web dashboard and
+            GUI log window, and disable JetBrains IDE auto-launch) — for an externally managed environment
+            such as the dpaia_runner, which starts and owns the IDE itself.
         """
         try:
             config = self._create_default_serena_config()
+            if headless:
+                # externally-managed environment (e.g. dpaia_runner): no web dashboard / GUI log window,
+                # and (JetBrains backend) no auto-IDE-launch — the IDE is started and owned externally.
+                config.with_headless_mode_overrides()
 
             # update configuration with the provided parameters
             if enable_web_dashboard is not None:
