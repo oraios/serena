@@ -164,6 +164,12 @@ Some languages require additional installations or setup steps, as noted.
 * **TOML**  
   (experimental; uses Taplo 0.10.0, taken from PATH if present, otherwise downloaded automatically)
 * **TypeScript**
+* **Deno**  
+  (experimental; requires the `deno` CLI on PATH — it bundles the language server used here;
+  serves Deno TypeScript/JavaScript and understands `npm:` / `jsr:` / `https:` imports and the `Deno.*`
+  globals, which the plain TypeScript language server does not; overlaps `typescript` on file extensions,
+  so it is not auto-detected and must be set as the language explicitly — do not also enable `typescript`
+  for the same files)
 * **Vue**    
   (3.x with TypeScript; requires Node.js v18+ and npm; supports .vue Single File Components with monorepo detection)
 * **YAML**

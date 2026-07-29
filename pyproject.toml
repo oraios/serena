@@ -328,6 +328,7 @@ markers = [
   "groovy: language server running for Groovy",
   "rust: language server running for Rust",
   "typescript: language server running for TypeScript",
+  "deno: language server running for Deno (uses the built-in deno lsp)",
   "svelte: language server running for Svelte (uses svelte-language-server)",
   "vue: language server running for Vue (uses TypeScript LSP)",
   "php: language server running for PHP",

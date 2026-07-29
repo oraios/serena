@@ -286,6 +286,7 @@ _LANGUAGE_PYTEST_MARKERS: dict[LanguageServerId, list[MarkDecorator | Mark]] = {
     LanguageServerId.CPP_CCLS: [pytest.mark.cpp],
     LanguageServerId.CUE: [pytest.mark.cue],
     LanguageServerId.CSHARP: [pytest.mark.csharp],
+    LanguageServerId.DENO: [pytest.mark.deno],
     LanguageServerId.FSHARP: [pytest.mark.fsharp],
     LanguageServerId.GO: [pytest.mark.go],
     LanguageServerId.HAXE: [pytest.mark.haxe],
@@ -477,6 +478,8 @@ def _determine_disabled_language_servers() -> list[LanguageServerId]:
         result.append(LanguageServerId.OCAML)
     if not _is_perl_language_server_available():  # perl ships with the OS; the LS module is the real signal
         result.append(LanguageServerId.PERL)
+    if _sh.which("deno") is None:  # deno bundles the language server (`deno lsp`); skip where the CLI is absent
+        result.append(LanguageServerId.DENO)
 
     # === 4. Enabled everywhere: every language NOT listed in this function (python, go, java, ...) ===
 
