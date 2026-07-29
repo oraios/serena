@@ -516,7 +516,7 @@ class RustAnalyzer(SolidLanguageServer):
                 # because Rust diagnostics rely on flycheck.
                 "cachePriming": {"enable": False, "numThreads": 0},
                 "cargo": {
-                    "autoreload": False,
+                    "autoreload": True,
                     "buildScripts": {
                         "enable": True,
                         "invocationLocation": "workspace",

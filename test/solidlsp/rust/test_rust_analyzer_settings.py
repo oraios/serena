@@ -18,7 +18,6 @@ def test_initialization_uses_lightweight_indexing_settings() -> None:
     initialization_options = _make_server()._create_base_initialize_params()["initializationOptions"]
 
     assert initialization_options["cachePriming"]["enable"] is False
-    assert initialization_options["cargo"]["autoreload"] is False
     assert initialization_options["checkOnSave"] is True
 
 
