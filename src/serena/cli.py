@@ -966,7 +966,7 @@ class ProjectCommands(AutoRegisteringGroup):
                 for file_path in files:
                     try:
                         full_path = os.path.join(project_path, file_path)
-                        if os.path.getsize(full_path) > 0:
+                        if os.path.getsize(full_path) > 1000:
                             target_file = file_path
                             log.info("Found analyzable file: %s", target_file)
                             break
