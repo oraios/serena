@@ -42,6 +42,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     calling `subprocess.run` directly (e.g. for installation processes), so all such subprocesses get 
     `stdin=DEVNULL` and can no longer interfere with the stdio MCP connection #1748
 
+* Dashboard:
+  - Fix: Serena PyPI version check triggered by callback on main thread could delay agent startup #1774
+
 * Hooks:
   - Add `serena-hooks --client=grok`, including Grok-native PreToolUse allow/deny output.
   - PreToolUse remind hook: coerce non-string shell command values instead of failing, and recognize
