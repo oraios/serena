@@ -17,6 +17,9 @@ Status of the `main` branch. Changes prior to the next official version change w
 * CLI:
   - Fix: `start-mcp-server` help text for `--project-from-cwd` falsely promised a fallback to the CWD, which was 
     removed in v1.0.0 #1773
+  - Fix: `project health-check` always exited with code 0, even when the check failed, so callers 
+    (CI, scripts) could not act on its verdict; it now exits with code 1 on failure. A `find_symbol` 
+    result without any matches is now reported as a failure rather than as a warning.
 
 * Tools:
   - `find_symbol`: Change tool description to improve tool search results in clients that load tools dynamically
