@@ -10,14 +10,13 @@ from dataclasses import dataclass
 from typing import Any, Literal, cast
 
 import docstring_parser
-from mcp.server.fastmcp import server
-from mcp.server.fastmcp.exceptions import ToolError
-from mcp.server.fastmcp.server import Context, FastMCP, Settings
-from mcp.server.fastmcp.tools.base import Tool as FastMCPTool
-from mcp.server.session import ServerSessionT
-from mcp.shared.context import LifespanContextT, RequestT
+from mcp.server.mcpserver import server
+from mcp.server.mcpserver.context import LifespanContextT, RequestT
+from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.mcpserver.server import Context
+from mcp.server.mcpserver.server import MCPServer as FastMCP
+from mcp.server.mcpserver.tools.base import Tool as FastMCPTool
 from mcp.types import ToolAnnotations
-from pydantic_settings import SettingsConfigDict
 from sensai.util import logging
 
 from serena.agent import (
@@ -108,8 +107,8 @@ class SerenaFastMCPTool(FastMCPTool):
         can_edit = tool.can_edit()
         annotations = ToolAnnotations(
             title=tool_title,
-            readOnlyHint=not can_edit,
-            destructiveHint=can_edit,
+            read_only_hint=not can_edit,
+            destructive_hint=can_edit,
         )
 
         super().__init__(
@@ -131,7 +130,7 @@ class SerenaFastMCPTool(FastMCPTool):
     async def run(
         self,
         arguments: dict[str, Any],
-        context: Context[ServerSessionT, LifespanContextT, RequestT] | None = None,
+        context: Context[LifespanContextT, RequestT],
         convert_result: bool = False,
     ) -> Any:
         # apply parameter aliases
@@ -317,8 +316,6 @@ class SerenaMCPFactory:
 
     def create_mcp_server(
         self,
-        host: str = "127.0.0.1",
-        port: int = 8000,
         mode_selection_def: ModeSelectionDefinition | None = None,
         language_backend: LanguageBackend | None = None,
         enable_web_dashboard: bool | None = None,
@@ -331,8 +328,9 @@ class SerenaMCPFactory:
         """
         Create an MCP server with process-isolated SerenaAgent to prevent asyncio contamination.
 
-        :param host: The host to bind to
-        :param port: The port to bind to
+        Note: host/port are no longer accepted here; the underlying SDK (mcp>=2.0) moved them
+        from server construction to the transport-specific `run()` call (see FastMCP.run_*_async).
+
         :param mode_selection_def: the mode selection definition to apply
         :param language_backend: the language backend to use, overriding the configuration setting.
         :param enable_web_dashboard: Whether to enable the web dashboard. If not specified, will take the value from the serena configuration.
@@ -371,18 +369,18 @@ class SerenaMCPFactory:
             show_fatal_exception_safe(e)
             raise
 
-        # Override model_config to disable the use of `.env` files for reading settings, because user projects are likely to contain
-        # `.env` files (e.g. containing LOG_LEVEL) that are not supposed to override the MCP settings;
-        # retain only FASTMCP_ prefix for already set environment variables.
-        Settings.model_config = SettingsConfigDict(env_prefix="FASTMCP_")
+        # NOTE: mcp<2.0 read MCP settings from the environment and from `.env` files (`Settings` was a
+        # pydantic-settings `BaseSettings`), so we had to override its `model_config` here to stop `.env`
+        # files in user projects (e.g. containing LOG_LEVEL) from overriding MCP settings. As of mcp>=2.0,
+        # `Settings` is a plain pydantic `BaseModel` that is only populated from the `MCPServer`
+        # constructor, so it reads neither the environment nor `.env` files and the override is obsolete.
+        # Behavioural consequence: FASTMCP_* environment variables no longer configure the server.
         instructions = self._get_initial_instructions()
         log.info("MCP server initial instructions:\n%s", instructions)
         mcp = FastMCP(
             name="Serena",
             lifespan=self.server_lifespan,
             website_url="https://oraios.github.io/serena",
-            host=host,
-            port=port,
             instructions=instructions,
         )
         return mcp

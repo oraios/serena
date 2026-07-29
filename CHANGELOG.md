@@ -3,6 +3,10 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - Upgrade the `mcp` SDK from 1.28.1 to 2.0.0 (MCP protocol revision 2026-07-28). Two behavioural
+    consequences: `FASTMCP_*` environment variables no longer configure the MCP server (the SDK's
+    `Settings` is no longer environment-backed), and `SerenaMCPFactory.create_mcp_server()` no longer
+    takes `host`/`port`, which the SDK moved to the transport-specific `run()` call
   - Fix: the README, the Language Support docs page and the project template omitted several already-supported language servers
   - Fix: a tool call exceeding the timeout blocked the task executor indefinitely; the executor now
     recovers without user-induced cancellation
