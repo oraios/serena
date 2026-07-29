@@ -37,6 +37,7 @@ from serena.constants import (
     SERENAS_OWN_MODE_YAMLS_DIR,
 )
 from serena.prompt_factory import SerenaPromptFactory
+from serena.tools import ActivateProjectTool
 from serena.util.cli_util import AutoRegisteringGroup
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import LanguageServerId
@@ -312,7 +313,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         "--project-from-cwd",
         is_flag=True,
         default=False,
-        help="Auto-detect project from current working directory (searches for .serena/project.yml or .git, falls back to CWD). Intended for CLI-based agents like Claude Code, Gemini and Codex.",
+        help="Auto-detect project from current working directory (nearest ancestor containing .serena/project.yml or .git). If none is found, no project is activated. Intended for CLI-based agents like Claude Code, Gemini and Codex.",
     )
     def start_mcp_server(
         project: str | None,
@@ -355,6 +356,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         log.info("Storing logs in %s", log_path)
 
         # Handle --project-from-cwd flag
+        project_activation_error: str | None = None
         if project_from_cwd:
             if project is not None or project_file_arg is not None:
                 raise click.UsageError("--project-from-cwd cannot be used with --project or positional project argument")
@@ -362,7 +364,12 @@ class TopLevelCommands(AutoRegisteringGroup):
             if project is not None:
                 log.info("Auto-detected project root: %s", project)
             else:
-                log.warning("No project root found from %s; not activating any project", os.getcwd())
+                project_activation_error = (
+                    f"No project root found from cwd={os.getcwd()} (no .serena/project.yml or .git found); "
+                    "no project activated. If the folder is a coding project folder to be worked on, "
+                    f"activate the folder explicitly using the {ActivateProjectTool.get_name_from_cls()} tool."
+                )
+                log.warning(project_activation_error)
 
         project_file = project_file_arg or project
 
@@ -382,6 +389,7 @@ class TopLevelCommands(AutoRegisteringGroup):
             log_level=log_level,
             trace_lsp_communication=trace_lsp_communication,
             tool_timeout=tool_timeout,
+            project_activation_error=project_activation_error,
         )
         if project_file_arg:
             log.warning(

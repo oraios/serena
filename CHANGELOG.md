@@ -10,6 +10,13 @@ Status of the `main` branch. Changes prior to the next official version change w
   - The `languages` key in project configurations was changed to `language_servers` to better reflect
     the actual semantics (configurations are automatically migrated)
   - Fix: glob matching bare `*` and `?` in non-`**` patterns matched across `/`, contradicting documented behaviour #1732
+  - Project activation errors are now reported to the client in Serena's system prompt, instead of failures 
+    being visible only in the log. This applies both to a failed activation of an explicitly given project and to a 
+    failed `--project-from-cwd` auto-detection (#1773).
+
+* CLI:
+  - Fix: `start-mcp-server` help text for `--project-from-cwd` falsely promised a fallback to the CWD, which was 
+    removed in v1.0.0 #1773
 
 * Tools:
   - `find_symbol`: Change tool description to improve tool search results in clients that load tools dynamically

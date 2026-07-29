@@ -540,7 +540,9 @@ class SerenaAgent:
     def __init__(
         self,
         project: str | None = None,
+        *,
         project_activation_callback: Callable[[], None] | None = None,
+        project_activation_error: str | None = None,
         serena_config: SerenaConfig | None = None,
         context: SerenaAgentContext | None = None,
         modes: ModeSelectionDefinition | None = None,
@@ -550,6 +552,8 @@ class SerenaAgent:
         :param project: the project to load immediately or None to not load any project; may be a path to the project or a name of
             an already registered project;
         :param project_activation_callback: a callback function to be called when a project is activated.
+        :param project_activation_error: an initial error to report back to the client/LLM pertaining to project determination/activation
+            in Serena's initial prompts. This is only applicable if `project` is None.
         :param serena_config: the Serena configuration or None to read the configuration from the default location.
         :param context: the context in which the agent is operating, None for default context.
             The context may adjust prompts, tool availability, and tool descriptions.
@@ -559,6 +563,7 @@ class SerenaAgent:
         """
         self._active_project: Project | None = None
         self._project_activation_callback = project_activation_callback
+        self._project_activation_error: str | None = project_activation_error
         self._gui_log_viewer: Optional["GuiLogViewer"] = None
         self._dashboard_manager: DashboardManager | None = None
         self._project_prompt_status = ProjectPromptProvisionStatus()
@@ -668,6 +673,7 @@ class SerenaAgent:
                 self.activate_project_from_path_or_name(project, update_active_modes=False, update_active_tools=False)
             except Exception as e:
                 log.error(f"Error activating project '{project}' at startup: {e}", exc_info=e)
+                self._project_activation_error = str(e)
         self._update_active_modes()
 
         # determine the base toolset defining the set of exposed tools (which e.g. the MCP shall see),
@@ -1003,6 +1009,8 @@ class SerenaAgent:
         # provide the project activation message if it hasn't yet been provided
         if self._active_project is not None and not self._project_prompt_status.is_project_activation_message_already_provided(session_id):
             system_prompt += "\n\n" + self.get_project_activation_message(session_id)
+        elif self._project_activation_error:
+            system_prompt += f"\n\nNo project is active ({self._project_activation_error})."
 
         return system_prompt
 
@@ -1169,6 +1177,8 @@ class SerenaAgent:
             return False
 
         log.info(f"Activating {project.project_name} at {project.project_root}")
+
+        self._project_activation_error = None
 
         # check if the project requires a different language backend than the one initialized at startup
         project_backend = project.project_config.language_backend
