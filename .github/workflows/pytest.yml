@@ -81,7 +81,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.11"]
         # 5 batches, each installs ONLY the toolchains its languages need (steps gated by matrix.batch).
-        # Node/Python/uv stay in every batch (cheap, needed for the venv + auto-installed LSes).
+        # Python/uv stay in every batch; Node is limited to other-langs and catch-all.
         # catch-all = web + python + the core framework.
         batch: [jvm, native, other-langs, niche, catch-all]
         # --- OS gating: which batch runs on which OS -----------------------------------------
@@ -106,9 +106,10 @@ jobs:
         with:
           go-version: ">=1.17.0"
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        if: matrix.batch == 'other-langs' || matrix.batch == 'catch-all'
+        uses: actions/setup-node@v7
         with:
-          node-version: '20.x'
+          node-version: '24.x'
       - name: Ensure cached directory exist before calling cache-related actions
         shell: bash
         run: |
