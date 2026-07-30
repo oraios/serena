@@ -730,6 +730,7 @@ jobs:
         run: |
           extra_pytest_args=()
           test_runs=1
+          test_command=(uv run poe test)
           if [[ "${{ runner.os }}" == "Windows" && "${{ matrix.batch }}" == "jvm" ]]; then
             diagnostics_dir="${RUNNER_TEMP}/serena-ci-diagnostics"
             mkdir -p "$diagnostics_dir"
@@ -742,14 +743,19 @@ jobs:
               "--log-file=$diagnostics_dir/pytest.log"
               --log-file-level=INFO
             )
-            # Exercise the flaky path repeatedly on this diagnostic PR without multiplying the full matrix.
+            # Repeatedly exercise the cross-language teardown/JDTLS-startup sequence that previously hung.
             if [[ "$DIAGNOSTIC_HEAD_REF" == "agent/jdtls-hang-diagnostics" ]]; then
-              test_runs=5
+              test_runs=50
+              test_command=(
+                uv run pytest
+                "test/serena/test_serena_agent.py::TestSerenaAgent::test_find_symbol"
+                "test/serena/test_serena_agent.py::TestSerenaAgent::test_find_symbol_references"
+              )
             fi
           fi
           for ((attempt = 1; attempt <= test_runs; attempt++)); do
             echo "pytest attempt $attempt/$test_runs"
-            uv run poe test -m "${{ steps.markers.outputs.expr }}" -q --tb=short "${extra_pytest_args[@]}"
+            "${test_command[@]}" -m "${{ steps.markers.outputs.expr }}" -q --tb=short "${extra_pytest_args[@]}"
           done
       - name: Upload Windows JVM hang diagnostics
         if: failure() && runner.os == 'Windows' && matrix.batch == 'jvm'
