@@ -725,8 +725,11 @@ jobs:
           echo "expr=$expr" >> "$GITHUB_OUTPUT"
       - name: Test with pytest
         shell: bash
+        env:
+          DIAGNOSTIC_HEAD_REF: ${{ github.head_ref }}
         run: |
           extra_pytest_args=()
+          test_runs=1
           if [[ "${{ runner.os }}" == "Windows" && "${{ matrix.batch }}" == "jvm" ]]; then
             diagnostics_dir="${RUNNER_TEMP}/serena-ci-diagnostics"
             mkdir -p "$diagnostics_dir"
@@ -739,8 +742,15 @@ jobs:
               "--log-file=$diagnostics_dir/pytest.log"
               --log-file-level=INFO
             )
+            # Exercise the flaky path repeatedly on this diagnostic PR without multiplying the full matrix.
+            if [[ "$DIAGNOSTIC_HEAD_REF" == "agent/jdtls-hang-diagnostics" ]]; then
+              test_runs=5
+            fi
           fi
-          uv run poe test -m "${{ steps.markers.outputs.expr }}" -q --tb=short "${extra_pytest_args[@]}"
+          for ((attempt = 1; attempt <= test_runs; attempt++)); do
+            echo "pytest attempt $attempt/$test_runs"
+            uv run poe test -m "${{ steps.markers.outputs.expr }}" -q --tb=short "${extra_pytest_args[@]}"
+          done
       - name: Upload Windows JVM hang diagnostics
         if: failure() && runner.os == 'Windows' && matrix.batch == 'jvm'
         uses: actions/upload-artifact@v4
