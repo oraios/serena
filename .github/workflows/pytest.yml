@@ -725,7 +725,30 @@ jobs:
           echo "expr=$expr" >> "$GITHUB_OUTPUT"
       - name: Test with pytest
         shell: bash
-        run: uv run poe test -m "${{ steps.markers.outputs.expr }}" -q --tb=short
+        run: |
+          extra_pytest_args=()
+          if [[ "${{ runner.os }}" == "Windows" && "${{ matrix.batch }}" == "jvm" ]]; then
+            diagnostics_dir="${RUNNER_TEMP}/serena-ci-diagnostics"
+            mkdir -p "$diagnostics_dir"
+            export SERENA_CI_HANG_DIAGNOSTICS_DIR="$diagnostics_dir"
+            # Capture live state first, then leave two minutes for jcmd/jstack before pytest-timeout exits.
+            export SERENA_CI_HANG_DIAGNOSTICS_SECONDS=600
+            extra_pytest_args+=(
+              --timeout=720
+              --timeout-method=thread
+              "--log-file=$diagnostics_dir/pytest.log"
+              --log-file-level=INFO
+            )
+          fi
+          uv run poe test -m "${{ steps.markers.outputs.expr }}" -q --tb=short "${extra_pytest_args[@]}"
+      - name: Upload Windows JVM hang diagnostics
+        if: failure() && runner.os == 'Windows' && matrix.batch == 'jvm'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-jvm-hang-diagnostics-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/serena-ci-diagnostics
+          if-no-files-found: warn
+          retention-days: 14
       - name: Type-checking with ty
         # Type-checking is batch-independent; run it only once per OS instead of in every batch.
         if: matrix.batch == 'catch-all'

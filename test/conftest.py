@@ -21,6 +21,7 @@ from serena.util.file_system import GitignoreParser
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.settings import SolidLSPSettings
+from test.ci_hang_diagnostics import HangDiagnosticsWatchdog
 
 from .solidlsp.clojure import is_clojure_cli_available
 from .solidlsp.elixir import EXPERT_UNAVAILABLE
@@ -29,6 +30,21 @@ from .solidlsp.erlang import ERLANG_LS_UNAVAILABLE
 configure(level=logging.INFO)
 
 log = logging.getLogger(__name__)
+
+
+@pytest.hookimpl(hookwrapper=True, tryfirst=True)
+def pytest_runtest_protocol(item: pytest.Item) -> Iterator[None]:
+    """Run a CI diagnostics watchdog across each test's setup, call, and teardown phases."""
+    watchdog = HangDiagnosticsWatchdog.from_environment(item.nodeid)
+    if watchdog is not None:
+        watchdog.start()
+
+    # run the complete test protocol...
+    try:
+        yield
+    finally:
+        if watchdog is not None:
+            watchdog.cancel()
 
 
 @pytest.fixture(scope="session")
