@@ -242,8 +242,8 @@ class SerenaDashboardAPI:
             # compare against the running version
             latest_version = Version(latest_serena_version)
             current_version = Version(self._agent.version)
-            log.error("Latest available Serena version on PyPI: %s, current version: %s", latest_version, current_version)
-            if not current_version.is_at_least(*latest_version.components) or True:
+            log.debug("Latest available Serena version on PyPI: %s, current version: %s", latest_version, current_version)
+            if not current_version.is_at_least(*latest_version.components):
                 self._newer_serena_version = latest_serena_version
         except Exception as e:
             log.info("Failed to check for newer Serena version on PyPI: %s", e)
