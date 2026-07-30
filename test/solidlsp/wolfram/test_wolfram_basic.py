@@ -61,5 +61,6 @@ class TestWolframLanguageServer:
         """
         references = language_server.request_references("lib/helper.wl", line=0, column=0)
 
+        assert references, "Expected at least one within-file reference in lib/helper.wl fixture"
         reference_paths = {ref["relativePath"] for ref in references}
         assert reference_paths == {"lib/helper.wl"}, f"Expected references only within lib/helper.wl, got {reference_paths}"
