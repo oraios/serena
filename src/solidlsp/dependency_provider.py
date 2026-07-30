@@ -1,10 +1,12 @@
 import logging
 import os
+import platform
 import shutil
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +45,22 @@ class LanguageServerDependencyProvider(ABC):
         """
         return {}
 
+    def install_dependencies(self) -> None:
+        """
+        Downloads and installs all dependencies that are managed by this provider, such that
+        a subsequent launch of the language server requires no further downloads.
+
+        This is used to prepare environments in which the language server is to be run without
+        (unrestricted) network access later on.
+
+        The default implementation covers the regular case, where the dependencies are installed
+        as part of the launch command's construction; providers which defer the installation
+        beyond that point must override this method.
+
+        :raises Exception: if the dependencies could not be installed
+        """
+        self.create_launch_command()
+
 
 class LanguageServerDependencyProviderBaseCommand(LanguageServerDependencyProvider, ABC):
     """
@@ -77,8 +95,13 @@ class LanguageServerDependencyProviderBaseCommand(LanguageServerDependencyProvid
         :return: the extended command
         """
 
-    def create_launch_command(self) -> list[str]:
-        # obtain base command
+    def _get_custom_base_command(self) -> list[str] | None:
+        """
+        Obtains the base command from the user-provided settings, which bypasses the managed installation
+        of the language server's dependencies.
+
+        :return: the user-provided base command or None if the managed installation applies
+        """
         base_command = self._custom_settings.get("ls_base_cmd", None)
         if base_command is not None and not isinstance(base_command, list):
             log.warning("The 'ls_base_cmd' setting should be a list of strings. Ignoring the provided value: %s", base_command)
@@ -87,9 +110,14 @@ class LanguageServerDependencyProviderBaseCommand(LanguageServerDependencyProvid
             ls_path = self._custom_settings.get("ls_path", None)
             if ls_path is not None:
                 base_command = [ls_path]
-            else:
-                # default case: base command is constructed by the provider implementation
-                base_command = self._create_default_base_command()
+        return base_command
+
+    def create_launch_command(self) -> list[str]:
+        # obtain base command
+        base_command = self._get_custom_base_command()
+        if base_command is None:
+            # default case: base command is constructed by the provider implementation
+            base_command = self._create_default_base_command()
 
         # create launch command from base command
         ls_args = self._custom_settings.get("ls_args")
@@ -233,9 +261,63 @@ class LanguageServerDependencyProviderUvx(LanguageServerDependencyProviderBaseCo
 
         raise RuntimeError("Could not find 'uvx' or 'uv' in PATH. Install uv (https://docs.astral.sh/uv/).")
 
+    @staticmethod
+    def _find_uv_executable() -> str:
+        """
+        :return: the path to the ``uv`` executable
+        :raises RuntimeError: if uv is not installed
+        """
+        uv_path = shutil.which("uv")
+        if uv_path is not None:
+            return uv_path
+
+        # fall back to the 'uv' executable residing alongside 'uvx' (the two are shipped together),
+        # resolving the configured uvx command against the PATH, as it need not be a path
+        uvx_path = os.environ.get("UVX") or "uvx"
+        uvx_path = shutil.which(uvx_path)
+        if uvx_path is not None:
+            candidate = os.path.join(os.path.dirname(uvx_path), "uv.exe" if platform.system() == "Windows" else "uv")
+            if os.path.isfile(candidate):
+                return candidate
+
+        raise RuntimeError("Could not find 'uv' in PATH. Install uv (https://docs.astral.sh/uv/).")
+
+    @classmethod
+    def _build_uv_tool_install_command(cls, package: str, version: str, python_version: str = DEFAULT_UVX_PYTHON_VERSION) -> list[str]:
+        """
+        Builds a command which persistently installs a pinned PyPI package's console script as a uv tool.
+
+        :param package: PyPI package name (e.g. ``"pyright"``).
+        :param version: Pinned package version.
+        :param python_version: Python interpreter version passed via ``-p`` (uv will fetch it if missing).
+        :return: the installation command
+        """
+        return [cls._find_uv_executable(), "tool", "install", "-p", python_version, f"{package}=={version}"]
+
     def _create_default_base_command(self):
         version = self._custom_settings.get(self._version_setting_key, self._default_version)
         return self._build_uvx_base_command(self._package, version, self._entrypoint)
 
     def _create_launch_command_from_base_command(self, base_command: list[str]) -> list[str]:
         return base_command + list(self._extra_args)
+
+    def install_dependencies(self) -> None:
+        # Note that the base class implementation would be insufficient here: constructing the launch command
+        # downloads nothing, because uvx materialises the package's environment only when the command is
+        # actually executed. We therefore install the pinned package as a uv tool, which downloads the package
+        # (and, if necessary, the Python interpreter), such that the subsequent `uvx` invocation can reuse
+        # the existing installation instead of retrieving it from the network.
+
+        # skip if the user bypasses the uv-managed installation via a custom launch command/path
+        # (applying the very same criterion as the launch command construction, such that the two cannot diverge)
+        if self._get_custom_base_command() is not None:
+            log.info("A custom launch command is configured for package '%s'; no dependencies to install", self._package)
+            return
+
+        # perform the installation
+        version = self._custom_settings.get(self._version_setting_key, self._default_version)
+        cmd = self._build_uv_tool_install_command(self._package, version)
+        log.info("Installing %s==%s via %s", self._package, version, cmd)
+        result = subprocess_run(cmd)
+        if result.returncode != 0:
+            raise RuntimeError(f"Installation of {self._package}=={version} failed: {result.stderr or result.stdout}")

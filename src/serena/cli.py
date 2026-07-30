@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Iterator, Sequence
 from logging import Logger
@@ -123,6 +124,36 @@ def _open_in_editor(path: str) -> None:
         print(f"Failed to open {path}: {e}")
 
 
+def _download_ls_dependencies(ls_id: LanguageServerId, ls_specific_settings: dict, repository_root_path: str) -> None:
+    """
+    Downloads the runtime dependencies of the given language server.
+
+    :param ls_id: the language server whose dependencies to download
+    :param ls_specific_settings: the user-provided language server-specific settings, which can affect which
+        dependencies are required (or whether Serena manages them at all)
+    :param repository_root_path: path of the directory to use as the language server's repository root;
+        since the language server is instantiated but never started, the directory's contents are irrelevant.
+        It also receives the (empty) project-specific data, which is thus discarded along with the directory.
+    :raises Exception: if the dependencies could not be downloaded
+    """
+    from solidlsp import SolidLanguageServer
+    from solidlsp.ls_config import LanguageServerConfig
+    from solidlsp.settings import SolidLSPSettings
+
+    # instantiating the language server already downloads most dependencies (because the launch command
+    # must be constructed), and install_dependencies covers the remaining ones
+    ls = SolidLanguageServer.create(
+        LanguageServerConfig(ls_id=ls_id),
+        repository_root_path,
+        solidlsp_settings=SolidLSPSettings(
+            solidlsp_dir=SerenaPaths().serena_user_home_dir,
+            project_data_path=os.path.join(repository_root_path, ".solidlsp"),
+            ls_specific_settings=ls_specific_settings,
+        ),
+    )
+    ls.install_dependencies()
+
+
 class ProjectType(click.ParamType):
     """ParamType allowing either a project name or a path to a project directory."""
 
@@ -228,6 +259,77 @@ class TopLevelCommands(AutoRegisteringGroup):
         else:
             click.echo(f"\nFailed to set up Serena for {client}.\n")
             raise SystemExit(1)
+
+    @staticmethod
+    @click.command(
+        "download-ls-dependencies",
+        help="Download the dependencies (e.g. binaries) which the given language servers require at runtime, such that "
+        "they need not be downloaded on demand at a later point in time. "
+        "This is intended for environments with restricted network access, allowing the download to be carried out "
+        "ahead of time, e.g. when building a container image.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument("language_servers", type=str, nargs=-1)
+    @click.option(
+        "--all",
+        "-a",
+        "all_language_servers",
+        is_flag=True,
+        help="Download the dependencies of all language servers instead of the ones given as arguments.",
+    )
+    @click.option(
+        "--include-experimental",
+        is_flag=True,
+        help="Whether to also consider experimental language servers when `--all` is given.",
+    )
+    def download_ls_dependencies(
+        language_servers: tuple[str, ...], all_language_servers: bool = False, include_experimental: bool = False
+    ) -> None:
+        logging.configure(level=logging.INFO)
+
+        # determine the language servers whose dependencies are to be downloaded
+        if all_language_servers:
+            if language_servers:
+                raise click.UsageError("Cannot combine explicitly named language servers with `--all`.")
+            ls_ids = list(LanguageServerId.iter_all(include_experimental=include_experimental))
+        else:
+            if not language_servers:
+                raise click.UsageError("Pass at least one language server name or use `--all`.")
+            if include_experimental:
+                raise click.UsageError("`--include-experimental` is applicable only in conjunction with `--all`.")
+            ls_ids = []
+            for name in language_servers:
+                try:
+                    ls_ids.append(LanguageServerId(name.lower()))
+                except ValueError:
+                    supported = ", ".join(ls_id.value for ls_id in LanguageServerId)
+                    raise click.UsageError(f"Unknown language server '{name}'. Supported: {supported}")
+
+        # take the user's global LS-specific settings into account, as they can affect which dependencies are required
+        try:
+            ls_specific_settings = dict(SerenaConfig.from_config_file(generate_if_missing=False).ls_specific_settings)
+        except FileNotFoundError:
+            ls_specific_settings = {}
+
+        # perform the downloads, collecting failures such that a single unsupported environment
+        # (e.g. a missing toolchain) does not prevent the remaining downloads
+        failures: list[tuple[LanguageServerId, Exception]] = []
+        with tempfile.TemporaryDirectory() as temp_dir:
+            for i, ls_id in enumerate(ls_ids, start=1):
+                click.echo(f"\n[{i}/{len(ls_ids)}] Downloading dependencies for language server '{ls_id.value}' ...")
+                try:
+                    _download_ls_dependencies(ls_id, ls_specific_settings, temp_dir)
+                except Exception as e:
+                    log.exception(f"Failed to download dependencies for '{ls_id.value}'")
+                    failures.append((ls_id, e))
+
+        # report the result, indicating failure via the exit code (such that container builds fail early)
+        if failures:
+            click.echo(f"\nFailed to download the dependencies of {len(failures)} of {len(ls_ids)} language server(s):", err=True)
+            for ls_id, e in failures:
+                click.echo(f"  {ls_id.value}: {e}", err=True)
+            raise SystemExit(1)
+        click.echo(f"\nSuccessfully downloaded the dependencies of {len(ls_ids)} language server(s).")
 
     @staticmethod
     @click.command("start-mcp-server", help="Starts the Serena MCP server.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})

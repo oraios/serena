@@ -174,6 +174,25 @@ Some languages require additional installations or setup steps, as noted.
 Support for further languages can easily be added by providing a shallow adapter for a new language server implementation,
 see Serena's [memory on that](https://github.com/oraios/serena/blob/main/.serena/memories/adding_new_language_support_guide.md).
 
+### Downloading Language Server Dependencies Ahead of Time
+
+Language server dependencies are downloaded on demand, i.e. when a project using the respective language
+is first activated. In environments with restricted network access (e.g. containers which may reach only
+a small set of hosts), the download can instead be carried out ahead of time, e.g. when building the
+container image:
+
+```shell
+serena download-ls-dependencies python typescript
+```
+
+Use `--all` to download the dependencies of all (non-experimental) language servers.
+Note that language servers which require an external toolchain to be present (e.g. Go or Java) can only be
+prepared if that toolchain is installed; the command reports the language servers it could not prepare and
+exits with a non-zero status in that case.
+
+Since the dependencies are specific to the Serena version that downloaded them, the download must be
+repeated whenever Serena is updated.
+
 ## The Serena JetBrains Plugin
 
 The [Serena JetBrains Plugin](https://plugins.jetbrains.com/plugin/28946-serena/) leverages the powerful code analysis capabilities of JetBrains IDEs. 

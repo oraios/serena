@@ -583,6 +583,24 @@ class SolidLanguageServer(ABC):
             self._dependency_provider = self._create_dependency_provider()
         return self._dependency_provider
 
+    def install_dependencies(self) -> None:
+        """
+        Downloads and installs all runtime dependencies (e.g. language server binaries) that this language
+        server requires, such that it can subsequently be started without any further downloads being
+        necessary.
+
+        Note that instantiating a language server already installs most dependencies, because the launch
+        command must be constructed; this method additionally covers dependencies whose retrieval is
+        deferred until the language server is actually launched.
+
+        :raises Exception: if the dependencies could not be installed
+        """
+        if self._dependency_provider is None:
+            # the launch command was provided externally (deprecated code path), so there are no
+            # dependencies under our control
+            return
+        self._dependency_provider.install_dependencies()
+
     def _create_process_launch_info(self) -> ProcessLaunchInfo:
         dependency_provider = self._get_dependency_provider()
         cmd = dependency_provider.create_launch_command()

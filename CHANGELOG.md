@@ -15,6 +15,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     failed `--project-from-cwd` auto-detection (#1773).
 
 * CLI:
+  - Add `download-ls-dependencies`, which downloads the runtime dependencies of the given language servers
+    (or of all language servers via `--all`) ahead of time, for use in environments with restricted network
+    access #664
   - Fix: `start-mcp-server` help text for `--project-from-cwd` falsely promised a fallback to the CWD, which was 
     removed in v1.0.0 #1773
 
