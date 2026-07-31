@@ -179,8 +179,8 @@ def test_canary_stall_arms_diagnostics_worker(
     monkeypatch.setenv(runtime_diagnostics.DIAGNOSTICS_DIR_ENV, str(tmp_path))
     monkeypatch.setenv(runtime_diagnostics.JDTLS_CANARY_PHASE_ENV, "before_service_ready_wait")
     monkeypatch.setenv(runtime_diagnostics.JDTLS_CANARY_STALL_SECONDS_ENV, "1")
-    monkeypatch.setattr(runtime_diagnostics.time, "sleep", lambda seconds: None)
     runtime_diagnostics._reset_runtime_diagnostics_for_tests()
+    runtime_diagnostics.notify_jdtls_canary_diagnostics_captured()
 
     runtime_diagnostics.maybe_stall_jdtls_canary("before_service_ready_wait")
 
@@ -199,7 +199,6 @@ def test_watchdog_collects_after_canary_stall_signal(
     monkeypatch.setenv(runtime_diagnostics.DIAGNOSTICS_DIR_ENV, str(tmp_path))
     monkeypatch.setenv(runtime_diagnostics.JDTLS_CANARY_PHASE_ENV, "before_service_ready_wait")
     monkeypatch.setenv(runtime_diagnostics.JDTLS_CANARY_STALL_SECONDS_ENV, "1")
-    monkeypatch.setattr(runtime_diagnostics.time, "sleep", lambda seconds: None)
     runtime_diagnostics._reset_runtime_diagnostics_for_tests()
     collected = threading.Event()
 

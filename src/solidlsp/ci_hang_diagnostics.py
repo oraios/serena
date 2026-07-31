@@ -23,6 +23,7 @@ _PHASE_TAIL_SIZE = 200
 _LSP_TAIL_SIZE = 400
 _STATE_LOCK = threading.RLock()
 _CANARY_STALL_STARTED = threading.Event()
+_CANARY_DIAGNOSTICS_CAPTURED = threading.Event()
 
 LSPTraceLogger = Callable[[str, str, dict[str, Any] | str], None]
 
@@ -228,6 +229,11 @@ def wait_for_jdtls_canary_stall(cancel_event: threading.Event) -> bool:
     return False
 
 
+def notify_jdtls_canary_diagnostics_captured() -> None:
+    """Release a deliberate JDTLS stall after its live diagnostics are complete."""
+    _CANARY_DIAGNOSTICS_CAPTURED.set()
+
+
 def maybe_stall_jdtls_canary(phase: str) -> None:
     """Deliberately stall at a named phase when the branch-only CI canary requests it."""
     configured_phase = os.environ.get(JDTLS_CANARY_PHASE_ENV)
@@ -245,11 +251,16 @@ def maybe_stall_jdtls_canary(phase: str) -> None:
         duration_seconds=duration_seconds,
     )
     _CANARY_STALL_STARTED.set()
-    time.sleep(duration_seconds)
-    record_jdtls_phase("canary_stall_completed", target_phase=phase)
+    diagnostics_captured = _CANARY_DIAGNOSTICS_CAPTURED.wait(timeout=duration_seconds)
+    record_jdtls_phase(
+        "canary_stall_completed",
+        target_phase=phase,
+        diagnostics_captured=diagnostics_captured,
+    )
 
 
 def _reset_runtime_diagnostics_for_tests() -> None:
     with _STATE_LOCK:
         _STATE_BY_ROOT.clear()
         _CANARY_STALL_STARTED.clear()
+        _CANARY_DIAGNOSTICS_CAPTURED.clear()

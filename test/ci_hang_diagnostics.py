@@ -478,7 +478,10 @@ class HangDiagnosticsWatchdog:
             return
         if self._cancel_event.wait(timeout=self.delay_seconds):
             return
-        self._collect()
+        try:
+            self._collect()
+        finally:
+            runtime_diagnostics.notify_jdtls_canary_diagnostics_captured()
 
     def _collect(self) -> None:
         self.collector.collect(self.nodeid)

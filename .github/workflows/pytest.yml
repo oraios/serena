@@ -732,6 +732,7 @@ jobs:
           diagnostics_dir=""
           jdtls_workspaces_dir=""
           reset_jdtls_workspace=false
+          jdtls_canary=false
           stress_jdtls=false
           stress_failure_status=0
           test_runs=1
@@ -756,6 +757,7 @@ jobs:
                 *) echo "Refusing to clear unexpected JDTLS workspace path: $jdtls_workspaces_dir" >&2; exit 1 ;;
               esac
               rm -rf -- "$jdtls_workspaces_dir"
+              jdtls_canary=true
               stress_jdtls=true
               export SERENA_CI_JDTLS_CANARY_PHASE="before_service_ready_wait"
               export SERENA_CI_JDTLS_CANARY_STALL_SECONDS=150
@@ -788,6 +790,11 @@ jobs:
               pytest_status=0
             else
               pytest_status=$?
+            fi
+            # A canary run must upload its result even when the deliberate stall
+            # finishes and pytest itself passes.
+            if [[ "$jdtls_canary" == true ]]; then
+              exit 1
             fi
             hang_captured=false
             if [[ "$stress_jdtls" == true ]] && compgen -G "$diagnostics_dir/hang-*" > /dev/null; then
