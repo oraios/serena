@@ -19,7 +19,7 @@ from typing import Any, cast
 
 from overrides import override
 
-from solidlsp import ls_types
+from solidlsp import ci_hang_diagnostics, ls_types
 from solidlsp.ls import LanguageServerDependencyProvider, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
@@ -826,6 +826,11 @@ class EclipseJDTLS(SolidLanguageServer):
                     project_hash,
                 )
             )
+            ci_hang_diagnostics.record_jdtls_phase(
+                "workspace_selected",
+                workspace=ws_dir,
+                repository_root=self._repository_root_path,
+            )
 
             # shared_cache_location is the global cache used by Eclipse JDTLS across all workspaces
             shared_cache_location = str(PurePath(self._solidlsp_settings.ls_resources_dir, "lsp", "EclipseJDTLS", "sharedIndex"))
@@ -1398,6 +1403,7 @@ class EclipseJDTLS(SolidLanguageServer):
         """
         Starts the Eclipse JDTLS Language Server
         """
+        ci_hang_diagnostics.record_jdtls_phase("jdtls_start_server_entered")
 
         def register_capability_handler(params: dict) -> None:
             assert "registrations" in params
@@ -1413,11 +1419,17 @@ class EclipseJDTLS(SolidLanguageServer):
                     ]
                 if registration["method"] == "workspace/executeCommand":
                     if "java.intellicode.enable" in registration["registerOptions"]["commands"]:
+                        ci_hang_diagnostics.record_jdtls_phase("intellicode_command_registered")
                         self._intellicode_enable_command_available.set()
             return
 
         def lang_status_handler(params: dict) -> None:
             log.info("Language status update: %s", params)
+            ci_hang_diagnostics.record_jdtls_phase(
+                "language_status_received",
+                status_type=params.get("type"),
+                status_message=params.get("message"),
+            )
             if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
                 self._service_ready_event.set()
             if params["type"] == "ProjectStatus":
@@ -1442,54 +1454,82 @@ class EclipseJDTLS(SolidLanguageServer):
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("language/actionableNotification", do_nothing)
+        ci_hang_diagnostics.record_jdtls_phase("jdtls_handlers_registered")
 
         log.info("Starting EclipseJDTLS server process")
+        ci_hang_diagnostics.record_jdtls_phase("jdtls_process_starting")
         self.server.start()
+        ci_hang_diagnostics.record_jdtls_phase("jdtls_process_started")
         initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
+        ci_hang_diagnostics.record_jdtls_phase("initialize_request_sending")
         init_response = self.server.send.initialize(initialize_params)
+        ci_hang_diagnostics.record_jdtls_phase("initialize_response_received")
         assert init_response["capabilities"]["textDocumentSync"]["change"] == 2  # type: ignore
         assert "completionProvider" not in init_response["capabilities"]
         assert "executeCommandProvider" not in init_response["capabilities"]
 
         self.server.notify.initialized({})
+        ci_hang_diagnostics.record_jdtls_phase("initialized_notification_sent")
 
         self.server.notify.workspace_did_change_configuration({"settings": initialize_params["initializationOptions"]["settings"]})  # type: ignore
+        ci_hang_diagnostics.record_jdtls_phase("configuration_notification_sent")
 
         # IntelliCode enablement is only relevant in the default vscode-java VSIX mode where the
         # IntelliCode bundle is shipped. In upstream-jdtls mode it's absent and the
         # 'java.intellicode.enable' command will never be registered, so we skip the wait/call.
         if self.runtime_dependency_paths.intellicode_jar_path is not None:
+            ci_hang_diagnostics.record_jdtls_phase("intellicode_registration_wait_started")
             self._intellicode_enable_command_available.wait()
+            ci_hang_diagnostics.record_jdtls_phase("intellicode_registration_wait_completed")
 
             java_intellisense_members_path = self.runtime_dependency_paths.intellisense_members_path
             assert java_intellisense_members_path is not None
             assert os.path.exists(java_intellisense_members_path)
+            ci_hang_diagnostics.record_jdtls_phase("intellicode_enable_request_sending")
             intellicode_enable_result = self.server.send.execute_command(
                 {
                     "command": "java.intellicode.enable",
                     "arguments": [True, java_intellisense_members_path],
                 }
             )
+            ci_hang_diagnostics.record_jdtls_phase("intellicode_enable_response_received")
             assert intellicode_enable_result
 
+        ci_hang_diagnostics.record_jdtls_phase(
+            "service_ready_checkpoint",
+            event_is_set=self._service_ready_event.is_set(),
+        )
+        ci_hang_diagnostics.maybe_stall_jdtls_canary("before_service_ready_wait")
         if not self._service_ready_event.is_set():
             log.info("Waiting for service to be ready ...")
+            ci_hang_diagnostics.record_jdtls_phase("service_ready_wait_started")
             self._service_ready_event.wait()
+            ci_hang_diagnostics.record_jdtls_phase("service_ready_wait_completed")
+        else:
+            ci_hang_diagnostics.record_jdtls_phase("service_ready_already_set")
         log.info("Service is ready")
 
         if not self._project_ready_event.is_set():
             log.info("Waiting for project to be ready ...")
             project_ready_timeout = 20  # Hotfix: Using timeout until we figure out why sometimes we don't get the project ready event
+            ci_hang_diagnostics.record_jdtls_phase(
+                "project_ready_wait_started",
+                timeout_seconds=project_ready_timeout,
+            )
             if self._project_ready_event.wait(timeout=project_ready_timeout):
                 log.info("Project is ready")
+                ci_hang_diagnostics.record_jdtls_phase("project_ready_wait_completed")
             else:
                 log.warning("Did not receive project ready status within %d seconds; proceeding anyway", project_ready_timeout)
+                ci_hang_diagnostics.record_jdtls_phase("project_ready_wait_timed_out")
         else:
             log.info("Project is ready")
+            ci_hang_diagnostics.record_jdtls_phase("project_ready_already_set")
 
         log.info("Startup complete")
+        ci_hang_diagnostics.record_jdtls_phase("jdtls_startup_complete")
 
     @override
     def _request_hover(self, file_buffer: LSPFileBuffer, line: int, column: int) -> ls_types.Hover | None:

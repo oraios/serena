@@ -16,7 +16,9 @@ from typing import Any
 
 import psutil
 
-DIAGNOSTICS_DIR_ENV = "SERENA_CI_HANG_DIAGNOSTICS_DIR"
+from solidlsp import ci_hang_diagnostics as runtime_diagnostics
+
+DIAGNOSTICS_DIR_ENV = runtime_diagnostics.DIAGNOSTICS_DIR_ENV
 DIAGNOSTICS_DELAY_ENV = "SERENA_CI_HANG_DIAGNOSTICS_SECONDS"
 
 _COMMAND_TIMEOUT_SECONDS = 30.0
@@ -30,6 +32,8 @@ _METADATA_ENVIRONMENT_VARIABLES = (
     "RUNNER_ARCH",
     "RUNNER_NAME",
     "RUNNER_OS",
+    runtime_diagnostics.JDTLS_CANARY_PHASE_ENV,
+    runtime_diagnostics.JDTLS_CANARY_STALL_SECONDS_ENV,
 )
 
 
@@ -205,6 +209,12 @@ class HangDiagnosticsCollector:
         except Exception as exception:
             errors.append(self._format_error("metadata", exception))
 
+        # snapshot phase markers and the bounded LSP trace...
+        try:
+            self._capture_runtime_diagnostics(capture_dir)
+        except Exception as exception:
+            errors.append(self._format_error("runtime diagnostics", exception))
+
         # dump all Python threads...
         try:
             self._capture_python_threads(capture_dir)
@@ -253,6 +263,22 @@ class HangDiagnosticsCollector:
             "environment": environment,
         }
         self._write_json(capture_dir / "metadata.json", metadata)
+
+    def _capture_runtime_diagnostics(self, capture_dir: Path) -> None:
+        output_dir = capture_dir / "jdtls-runtime-diagnostics"
+        output_dir.mkdir()
+        manifest: list[dict[str, str | int]] = []
+
+        for destination_path in runtime_diagnostics.snapshot_runtime_diagnostics(output_dir):
+            manifest.append(
+                {
+                    "source": "in-memory-runtime-snapshot",
+                    "destination": destination_path.name,
+                    "size_bytes": destination_path.stat().st_size,
+                }
+            )
+
+        self._write_json(output_dir / "manifest.json", manifest)
 
     @staticmethod
     def _capture_python_threads(capture_dir: Path) -> None:
@@ -388,6 +414,8 @@ class HangDiagnosticsWatchdog:
     delay_seconds: float
     collector: HangDiagnosticsCollector
     _timer: threading.Timer | None = field(default=None, init=False, repr=False)
+    _worker: threading.Thread | None = field(default=None, init=False, repr=False)
+    _cancel_event: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
 
     @classmethod
     def from_environment(cls, nodeid: str) -> HangDiagnosticsWatchdog | None:
@@ -418,8 +446,20 @@ class HangDiagnosticsWatchdog:
         return cls(nodeid=nodeid, delay_seconds=delay_seconds, collector=collector)
 
     def start(self) -> None:
-        if self._timer is not None:
+        if self._timer is not None or self._worker is not None:
             raise RuntimeError("hang diagnostics watchdog has already been started")
+
+        # The deliberate Windows canary arms collection only after JDTLS reaches the
+        # requested stall. Normal CI continues to use a fixed per-test deadline.
+        if runtime_diagnostics.jdtls_canary_is_enabled():
+            worker = threading.Thread(
+                target=self._collect_after_canary_stall,
+                name="serena-ci-jdtls-canary-diagnostics",
+                daemon=True,
+            )
+            self._worker = worker
+            worker.start()
+            return
 
         # schedule capture...
         timer = threading.Timer(self.delay_seconds, self._collect)
@@ -429,8 +469,16 @@ class HangDiagnosticsWatchdog:
         timer.start()
 
     def cancel(self) -> None:
+        self._cancel_event.set()
         if self._timer is not None:
             self._timer.cancel()
+
+    def _collect_after_canary_stall(self) -> None:
+        if not runtime_diagnostics.wait_for_jdtls_canary_stall(self._cancel_event):
+            return
+        if self._cancel_event.wait(timeout=self.delay_seconds):
+            return
+        self._collect()
 
     def _collect(self) -> None:
         self.collector.collect(self.nodeid)

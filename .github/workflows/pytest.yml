@@ -742,7 +742,7 @@ jobs:
             export SERENA_CI_HANG_DIAGNOSTICS_DIR="$diagnostics_dir"
             hang_diagnostics_seconds=600
             pytest_timeout_seconds=720
-            # Repeatedly exercise the cross-language teardown/JDTLS-startup sequence that previously hung.
+            # Prove the watchdog against a deliberate, branch-only stall in a live JDTLS process.
             if [[ "$DIAGNOSTIC_HEAD_REF" == "agent/jdtls-hang-diagnostics" ]]; then
               diagnostic_serena_home="${RUNNER_TEMP}/serena-jdtls-stress-home"
               mkdir -p "$diagnostic_serena_home/language_servers/static"
@@ -756,18 +756,18 @@ jobs:
                 *) echo "Refusing to clear unexpected JDTLS workspace path: $jdtls_workspaces_dir" >&2; exit 1 ;;
               esac
               rm -rf -- "$jdtls_workspaces_dir"
-              reset_jdtls_workspace=true
               stress_jdtls=true
-              test_runs=20
-              hang_diagnostics_seconds=300
-              pytest_timeout_seconds=420
+              export SERENA_CI_JDTLS_CANARY_PHASE="before_service_ready_wait"
+              export SERENA_CI_JDTLS_CANARY_STALL_SECONDS=150
+              hang_diagnostics_seconds=2
+              pytest_timeout_seconds=360
               test_command=(
                 uv run pytest
-                "test/serena/test_serena_agent.py::TestSerenaAgent::test_find_symbol"
-                "test/serena/test_serena_agent.py::TestSerenaAgent::test_find_symbol_references"
+                "test/serena/test_serena_agent.py::TestSerenaAgent::test_find_symbol[java_model_class]"
               )
             fi
-            # Capture live state first, then leave two minutes for jcmd/jstack before pytest-timeout exits.
+            # In normal CI this is a per-test deadline. The canary interprets it as a
+            # short settling delay after the deliberate stall begins.
             export SERENA_CI_HANG_DIAGNOSTICS_SECONDS="$hang_diagnostics_seconds"
             extra_pytest_args+=(
               "--timeout=$pytest_timeout_seconds"

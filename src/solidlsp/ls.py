@@ -23,7 +23,7 @@ from sensai.util.string import ToStringMixin
 
 from serena.util.file_system import match_path
 from serena.util.text_utils import MatchedConsecutiveLines
-from solidlsp import ls_types
+from solidlsp import ci_hang_diagnostics, ls_types
 from solidlsp.dependency_provider import (
     LanguageServerDependencyProvider,
     LanguageServerDependencyProviderBaseCommand,
@@ -530,13 +530,16 @@ class SolidLanguageServer(ABC):
         self._load_document_symbols_cache()
 
         self.server_started = False
+        logging_fn: Callable[[str, str, StringDict | str], None] | None
         if config.trace_lsp_communication:
 
-            def logging_fn(source: str, target: str, msg: StringDict | str) -> None:
+            def default_logging_fn(source: str, target: str, msg: StringDict | str) -> None:
                 log.debug(f"LSP: {source} -> {target}: {msg!s}")
 
+            logging_fn = default_logging_fn
         else:
             logging_fn = None
+        logging_fn = ci_hang_diagnostics.wrap_jdtls_lsp_trace_logger(self.ls_id, logging_fn)
 
         # create the low-level server interface, potentially installing dependencies and launching a subprocess
         self._process_launch_info: ProcessLaunchInfo | None = process_launch_info
@@ -3132,8 +3135,22 @@ class SolidLanguageServer(ABC):
         :return: self for method chaining
         """
         log.info(f"Starting language server {self.language_server.ls_id} for {self.language_server.repository_root_path}")
+        ci_hang_diagnostics.record_jdtls_lifecycle(
+            self.ls_id,
+            "language_server_start_entered",
+            repository_root=self.repository_root_path,
+        )
         self.server_started = True
-        self._start_server()
+        try:
+            self._start_server()
+        except BaseException as exception:
+            ci_hang_diagnostics.record_jdtls_lifecycle(
+                self.ls_id,
+                "language_server_start_failed",
+                exception_type=type(exception).__name__,
+            )
+            raise
+        ci_hang_diagnostics.record_jdtls_lifecycle(self.ls_id, "language_server_start_completed")
         return self
 
     def stop(self, shutdown_timeout: float = 2.0) -> None:
@@ -3143,12 +3160,23 @@ class SolidLanguageServer(ABC):
 
         :param shutdown_timeout: time, in seconds, to wait for the server to shutdown gracefully before killing it
         """
+        ci_hang_diagnostics.record_jdtls_lifecycle(
+            self.ls_id,
+            "language_server_stop_entered",
+            shutdown_timeout=shutdown_timeout,
+        )
         try:
             self.server.stop(timeout=shutdown_timeout)
         except Exception as e:
             log.warning(f"Exception while shutting down language server: {e}")
+            ci_hang_diagnostics.record_jdtls_lifecycle(
+                self.ls_id,
+                "language_server_stop_failed",
+                exception_type=type(e).__name__,
+            )
         finally:
             self.server_started = False
+            ci_hang_diagnostics.record_jdtls_lifecycle(self.ls_id, "language_server_stop_completed")
 
     @property
     def language_server(self) -> Self:
