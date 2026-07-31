@@ -55,6 +55,8 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Dashboard:
   - Fix: Serena PyPI version check triggered by callback on main thread could delay agent startup #1774
+  - Fix: on macOS, the `tray_manager` interface put an icon in the Dock and in the app switcher
+    (should only use menu bar icon)
 
 * Hooks:
   - Add `serena-hooks --client=grok`, including Grok-native PreToolUse allow/deny output.

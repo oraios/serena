@@ -1195,9 +1195,12 @@ class SerenaDashboardTrayManager:
         # set up tray icon with a dynamic menu (callable returns items on each open)
         kwargs: dict[str, Any] = {}
         if sys.platform == "darwin":
-            from AppKit import NSApplication
+            from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
 
-            kwargs["darwin_nsapplication"] = NSApplication.sharedApplication()
+            nsapp = NSApplication.sharedApplication()
+            # run as an accessory app so that only the menu bar icon is shown (no Dock icon)
+            nsapp.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+            kwargs["darwin_nsapplication"] = nsapp
 
         self._tray_icon = pystray.Icon(
             "serena_tray_manager",
