@@ -729,34 +729,60 @@ jobs:
           DIAGNOSTIC_HEAD_REF: ${{ github.head_ref }}
         run: |
           extra_pytest_args=()
+          diagnostics_dir=""
+          stress_jdtls=false
+          stress_failure_status=0
           test_runs=1
           test_command=(uv run poe test)
           if [[ "${{ runner.os }}" == "Windows" && "${{ matrix.batch }}" == "jvm" ]]; then
             diagnostics_dir="${RUNNER_TEMP}/serena-ci-diagnostics"
             mkdir -p "$diagnostics_dir"
             export SERENA_CI_HANG_DIAGNOSTICS_DIR="$diagnostics_dir"
-            # Capture live state first, then leave two minutes for jcmd/jstack before pytest-timeout exits.
-            export SERENA_CI_HANG_DIAGNOSTICS_SECONDS=600
-            extra_pytest_args+=(
-              --timeout=720
-              --timeout-method=thread
-              "--log-file=$diagnostics_dir/pytest.log"
-              --log-file-level=INFO
-            )
+            hang_diagnostics_seconds=600
+            pytest_timeout_seconds=720
             # Repeatedly exercise the cross-language teardown/JDTLS-startup sequence that previously hung.
             if [[ "$DIAGNOSTIC_HEAD_REF" == "agent/jdtls-hang-diagnostics" ]]; then
+              stress_jdtls=true
               test_runs=50
+              hang_diagnostics_seconds=300
+              pytest_timeout_seconds=420
               test_command=(
                 uv run pytest
                 "test/serena/test_serena_agent.py::TestSerenaAgent::test_find_symbol"
                 "test/serena/test_serena_agent.py::TestSerenaAgent::test_find_symbol_references"
               )
             fi
+            # Capture live state first, then leave two minutes for jcmd/jstack before pytest-timeout exits.
+            export SERENA_CI_HANG_DIAGNOSTICS_SECONDS="$hang_diagnostics_seconds"
+            extra_pytest_args+=(
+              "--timeout=$pytest_timeout_seconds"
+              --timeout-method=thread
+            )
           fi
           for ((attempt = 1; attempt <= test_runs; attempt++)); do
             echo "pytest attempt $attempt/$test_runs"
-            "${test_command[@]}" -m "${{ steps.markers.outputs.expr }}" -q --tb=short "${extra_pytest_args[@]}"
+            attempt_pytest_args=("${extra_pytest_args[@]}")
+            if [[ -n "$diagnostics_dir" ]]; then
+              attempt_pytest_args+=(
+                "--log-file=$diagnostics_dir/pytest-attempt-$attempt.log"
+                --log-file-level=INFO
+              )
+            fi
+            if "${test_command[@]}" -m "${{ steps.markers.outputs.expr }}" -q --tb=short "${attempt_pytest_args[@]}"; then
+              continue
+            else
+              pytest_status=$?
+            fi
+            if [[ "$stress_jdtls" == true ]] && ! compgen -G "$diagnostics_dir/hang-*" > /dev/null; then
+              echo "::warning::pytest attempt $attempt failed without hang evidence (exit $pytest_status); continuing stress loop"
+              stress_failure_status="$pytest_status"
+              continue
+            fi
+            exit "$pytest_status"
           done
+          if [[ "$stress_failure_status" -ne 0 ]]; then
+            exit "$stress_failure_status"
+          fi
       - name: Upload Windows JVM hang diagnostics
         if: failure() && runner.os == 'Windows' && matrix.batch == 'jvm'
         uses: actions/upload-artifact@v4
