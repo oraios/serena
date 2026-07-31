@@ -748,7 +748,7 @@ jobs:
             hang_diagnostics_seconds=600
             pytest_timeout_seconds=720
             # Repeatedly start the exact Java test that stalled in the original
-            # run, deleting its JDTLS workspace after every attempt.
+            # run while reusing the same JDTLS workspace between attempts.
             if [[ "$DIAGNOSTIC_HEAD_REF" == "agent/jdtls-hang-diagnostics" ]]; then
               diagnostic_serena_home="${runner_temp_path}/serena-jdtls-stress-home"
               mkdir -p "$diagnostic_serena_home/language_servers/static"
@@ -762,9 +762,8 @@ jobs:
                 *) echo "Refusing to clear unexpected JDTLS workspace path: $jdtls_workspaces_dir" >&2; exit 1 ;;
               esac
               rm -rf -- "$jdtls_workspaces_dir"
-              reset_jdtls_workspace=true
               stress_jdtls=true
-              export SERENA_CI_JDTLS_REPRO_MODE="exact-java-reference-fresh-workspace"
+              export SERENA_CI_JDTLS_REPRO_MODE="exact-java-reference-reused-workspace"
               test_runs=25
               hang_diagnostics_seconds=300
               pytest_timeout_seconds=420
