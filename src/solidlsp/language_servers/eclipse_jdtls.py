@@ -6,6 +6,7 @@ import dataclasses
 import hashlib
 import json
 import logging
+import math
 import os
 import pathlib
 import platform
@@ -145,6 +146,8 @@ class EclipseJDTLS(SolidLanguageServer):
         - jdtls_xms: Initial heap size for the JDTLS server JVM (default: "100m")
         - intellicode_xmx: Maximum heap size for the IntelliCode embedded JVM (default: "1G")
         - intellicode_xms: Initial heap size for the IntelliCode embedded JVM (default: "100m")
+        - startup_timeout: Maximum seconds to wait for each required JDTLS startup signal
+              (IntelliCode command registration and ServiceReady; default: 600)
         - lombok_show_generated: Show Lombok-generated methods (getX/setX/builder()/...) in document
               symbols by sending java.symbols.includeGeneratedCode=true to JDTLS (default: true).
               Set to false for @Data-heavy projects where the extra getters/setters are noise.
@@ -192,6 +195,7 @@ class EclipseJDTLS(SolidLanguageServer):
         jdtls_xms: "100m"  # initial heap size for the JDTLS server JVM
         intellicode_xmx: "1G"  # maximum heap size for the IntelliCode embedded JVM
         intellicode_xms: "100m"  # initial heap size for the IntelliCode embedded JVM
+        startup_timeout: 600  # maximum wait for each required startup signal
         lombok_show_generated: true  # show Lombok-generated methods in document symbols (default true)
         gradle_version: "8.14.2"
         vscode_java_version: "1.54.0-923"  # also accepts pinned legacy "1.42.0-561"
@@ -202,6 +206,9 @@ class EclipseJDTLS(SolidLanguageServer):
             default: true
     ```
     """
+
+    STARTUP_TIMEOUT = 600.0
+    STARTUP_SHUTDOWN_TIMEOUT = 5.0
 
     @classmethod
     def supports_implementation_request(cls) -> bool:
@@ -221,6 +228,60 @@ class EclipseJDTLS(SolidLanguageServer):
         self._service_ready_event = threading.Event()
         self._project_ready_event = threading.Event()
         self._intellicode_enable_command_available = threading.Event()
+        self._startup_phase = "not_started"
+        self._last_language_status: tuple[str | None, str | None] | None = None
+        self._get_startup_timeout()  # validate before a server process can be started
+
+    def _get_startup_timeout(self) -> float:
+        """Return the maximum seconds to wait for each required JDTLS startup signal."""
+        configured_timeout = self._custom_settings.get("startup_timeout", self.STARTUP_TIMEOUT)
+        try:
+            timeout = float(configured_timeout)
+        except (TypeError, ValueError) as exc:
+            raise SolidLSPException("java.startup_timeout must be a positive finite number") from exc
+
+        if not math.isfinite(timeout) or timeout <= 0:
+            raise SolidLSPException("java.startup_timeout must be a positive finite number")
+        return timeout
+
+    def _set_startup_phase(self, phase: str) -> None:
+        self._startup_phase = phase
+        log.info("JDTLS startup phase: %s", phase)
+
+    def _handle_language_status(self, params: dict) -> None:
+        log.info("Language status update: %s", params)
+        status_type = params.get("type")
+        status_message = params.get("message")
+        self._last_language_status = (status_type, status_message)
+
+        if status_type == "ServiceReady" and status_message == "ServiceReady":
+            self._service_ready_event.set()
+        if status_type == "ProjectStatus" and status_message == "OK":
+            self._project_ready_event.set()
+
+    def _describe_last_language_status(self) -> str:
+        if self._last_language_status is None:
+            return "none received"
+        status_type, status_message = self._last_language_status
+        return f"type={status_type!r}, message={status_message!r}"
+
+    def _wait_for_startup_signal(self, event: threading.Event, signal_name: str) -> None:
+        timeout = self._get_startup_timeout()
+        phase = f"waiting_for_{signal_name}"
+        self._set_startup_phase(phase)
+        log.info("Waiting up to %g seconds for JDTLS %s", timeout, signal_name)
+
+        if event.wait(timeout=timeout):
+            self._set_startup_phase(f"{signal_name}_received")
+            return
+
+        message = (
+            f"JDTLS startup timed out after {timeout:g} seconds while waiting for {signal_name} "
+            f"(phase={phase}, last_language_status={self._describe_last_language_status()})"
+        )
+        log.error(message)
+        self.stop(shutdown_timeout=self.STARTUP_SHUTDOWN_TIMEOUT)
+        raise SolidLSPException(message)
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         ls_resources_dir = self.ls_resources_dir(self._solidlsp_settings)
@@ -1383,14 +1444,6 @@ class EclipseJDTLS(SolidLanguageServer):
                         self._intellicode_enable_command_available.set()
             return
 
-        def lang_status_handler(params: dict) -> None:
-            log.info("Language status update: %s", params)
-            if params["type"] == "ServiceReady" and params["message"] == "ServiceReady":
-                self._service_ready_event.set()
-            if params["type"] == "ProjectStatus":
-                if params["message"] == "OK":
-                    self._project_ready_event.set()
-
         def execute_client_command_handler(params: dict) -> list:
             assert params["command"] == "_java.reloadBundles.command"
             assert params["arguments"] == []
@@ -1403,18 +1456,18 @@ class EclipseJDTLS(SolidLanguageServer):
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)
-        self.server.on_notification("language/status", lang_status_handler)
+        self.server.on_notification("language/status", self._handle_language_status)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
         self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("language/actionableNotification", do_nothing)
 
-        log.info("Starting EclipseJDTLS server process")
+        self._set_startup_phase("starting_process")
         self.server.start()
         initialize_params = self._create_initialize_params()
 
-        log.info("Sending initialize request from LSP client to LSP server and awaiting response")
+        self._set_startup_phase("waiting_for_initialize_response")
         init_response = self.server.send.initialize(initialize_params)
         assert init_response["capabilities"]["textDocumentSync"]["change"] == 2  # type: ignore
         assert "completionProvider" not in init_response["capabilities"]
@@ -1428,7 +1481,10 @@ class EclipseJDTLS(SolidLanguageServer):
         # IntelliCode bundle is shipped. In upstream-jdtls mode it's absent and the
         # 'java.intellicode.enable' command will never be registered, so we skip the wait/call.
         if self.runtime_dependency_paths.intellicode_jar_path is not None:
-            self._intellicode_enable_command_available.wait()
+            self._wait_for_startup_signal(
+                self._intellicode_enable_command_available,
+                "intellicode_command_registration",
+            )
 
             java_intellisense_members_path = self.runtime_dependency_paths.intellisense_members_path
             assert java_intellisense_members_path is not None
@@ -1440,13 +1496,12 @@ class EclipseJDTLS(SolidLanguageServer):
                 }
             )
             assert intellicode_enable_result
+            self._set_startup_phase("intellicode_enabled")
 
-        if not self._service_ready_event.is_set():
-            log.info("Waiting for service to be ready ...")
-            self._service_ready_event.wait()
-        log.info("Service is ready")
+        self._wait_for_startup_signal(self._service_ready_event, "service_ready")
 
         if not self._project_ready_event.is_set():
+            self._set_startup_phase("waiting_for_project_status")
             log.info("Waiting for project to be ready ...")
             project_ready_timeout = 20  # Hotfix: Using timeout until we figure out why sometimes we don't get the project ready event
             if self._project_ready_event.wait(timeout=project_ready_timeout):
@@ -1456,7 +1511,7 @@ class EclipseJDTLS(SolidLanguageServer):
         else:
             log.info("Project is ready")
 
-        log.info("Startup complete")
+        self._set_startup_phase("complete")
 
     @override
     def _request_hover(self, file_buffer: LSPFileBuffer, line: int, column: int) -> ls_types.Hover | None:
