@@ -19,7 +19,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     removed in v1.0.0 #1773
 
 * Tools:
-  - `find_symbol`: Change tool description to improve tool search results in clients that load tools dynamically
+  - `find_symbol`, `jet_brains_find_symbol`: Change tool description to improve tool search results in clients that load tools dynamically
   - `get_current_config`: Result now includes language server status #1782
 
 * Language Servers: 
