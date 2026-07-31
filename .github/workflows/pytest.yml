@@ -738,14 +738,19 @@ jobs:
           test_runs=1
           test_command=(uv run poe test)
           if [[ "${{ runner.os }}" == "Windows" && "${{ matrix.batch }}" == "jvm" ]]; then
-            diagnostics_dir="${RUNNER_TEMP}/serena-ci-diagnostics"
+            runner_temp_path="$RUNNER_TEMP"
+            if command -v cygpath > /dev/null 2>&1; then
+              runner_temp_path="$(cygpath -m "$RUNNER_TEMP")"
+            fi
+            diagnostics_dir="${runner_temp_path}/serena-ci-diagnostics"
             mkdir -p "$diagnostics_dir"
             export SERENA_CI_HANG_DIAGNOSTICS_DIR="$diagnostics_dir"
             hang_diagnostics_seconds=600
             pytest_timeout_seconds=720
-            # Prove the watchdog against a deliberate, branch-only stall in a live JDTLS process.
+            # Repeat the complete JVM batch from a clean JDTLS workspace, then
+            # reuse that workspace just as a normal CI job would.
             if [[ "$DIAGNOSTIC_HEAD_REF" == "agent/jdtls-hang-diagnostics" ]]; then
-              diagnostic_serena_home="${RUNNER_TEMP}/serena-jdtls-stress-home"
+              diagnostic_serena_home="${runner_temp_path}/serena-jdtls-stress-home"
               mkdir -p "$diagnostic_serena_home/language_servers/static"
               if [[ -d "$HOME/.serena/language_servers/static" ]]; then
                 cp -R "$HOME/.serena/language_servers/static/." "$diagnostic_serena_home/language_servers/static/"
@@ -753,23 +758,16 @@ jobs:
               export SERENA_HOME="$diagnostic_serena_home"
               jdtls_workspaces_dir="$diagnostic_serena_home/language_servers/static/EclipseJDTLS/workspaces"
               case "$jdtls_workspaces_dir" in
-                "$RUNNER_TEMP"/serena-jdtls-stress-home/*) ;;
+                "$runner_temp_path"/serena-jdtls-stress-home/*) ;;
                 *) echo "Refusing to clear unexpected JDTLS workspace path: $jdtls_workspaces_dir" >&2; exit 1 ;;
               esac
               rm -rf -- "$jdtls_workspaces_dir"
-              jdtls_canary=true
               stress_jdtls=true
-              export SERENA_CI_JDTLS_CANARY_PHASE="before_service_ready_wait"
-              export SERENA_CI_JDTLS_CANARY_STALL_SECONDS=150
-              hang_diagnostics_seconds=2
-              pytest_timeout_seconds=360
-              test_command=(
-                uv run pytest
-                "test/serena/test_serena_agent.py::TestSerenaAgent::test_find_symbol[java_model_class]"
-              )
+              export SERENA_CI_JDTLS_REPRO_MODE="full-jvm-batch-reused-workspace"
+              test_runs=3
+              hang_diagnostics_seconds=300
+              pytest_timeout_seconds=420
             fi
-            # In normal CI this is a per-test deadline. The canary interprets it as a
-            # short settling delay after the deliberate stall begins.
             export SERENA_CI_HANG_DIAGNOSTICS_SECONDS="$hang_diagnostics_seconds"
             extra_pytest_args+=(
               "--timeout=$pytest_timeout_seconds"
@@ -826,14 +824,18 @@ jobs:
         if: failure() && runner.os == 'Windows' && matrix.batch == 'jvm'
         shell: bash
         run: |
+          runner_temp_path="$RUNNER_TEMP"
+          if command -v cygpath > /dev/null 2>&1; then
+            runner_temp_path="$(cygpath -m "$RUNNER_TEMP")"
+          fi
           found_hang_capture=false
-          for capture_dir in "${RUNNER_TEMP}"/serena-ci-diagnostics/hang-*; do
+          for capture_dir in "${runner_temp_path}"/serena-ci-diagnostics/hang-*; do
             if [[ ! -d "$capture_dir" ]]; then
               continue
             fi
             found_hang_capture=true
             while IFS= read -r -d '' file; do
-              echo "::group::${file#"${RUNNER_TEMP}/"}"
+              echo "::group::${file#"${runner_temp_path}/"}"
               cat "$file"
               echo
               echo "::endgroup::"

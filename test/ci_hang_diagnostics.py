@@ -34,6 +34,7 @@ _METADATA_ENVIRONMENT_VARIABLES = (
     "RUNNER_OS",
     runtime_diagnostics.JDTLS_CANARY_PHASE_ENV,
     runtime_diagnostics.JDTLS_CANARY_STALL_SECONDS_ENV,
+    "SERENA_CI_JDTLS_REPRO_MODE",
 )
 
 
