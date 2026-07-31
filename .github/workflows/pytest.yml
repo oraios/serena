@@ -747,8 +747,8 @@ jobs:
             export SERENA_CI_HANG_DIAGNOSTICS_DIR="$diagnostics_dir"
             hang_diagnostics_seconds=600
             pytest_timeout_seconds=720
-            # Repeat the complete JVM batch from a clean JDTLS workspace, then
-            # reuse that workspace just as a normal CI job would.
+            # Repeatedly start the exact Java test that stalled in the original
+            # run, deleting its JDTLS workspace after every attempt.
             if [[ "$DIAGNOSTIC_HEAD_REF" == "agent/jdtls-hang-diagnostics" ]]; then
               diagnostic_serena_home="${runner_temp_path}/serena-jdtls-stress-home"
               mkdir -p "$diagnostic_serena_home/language_servers/static"
@@ -762,11 +762,16 @@ jobs:
                 *) echo "Refusing to clear unexpected JDTLS workspace path: $jdtls_workspaces_dir" >&2; exit 1 ;;
               esac
               rm -rf -- "$jdtls_workspaces_dir"
+              reset_jdtls_workspace=true
               stress_jdtls=true
-              export SERENA_CI_JDTLS_REPRO_MODE="full-jvm-batch-reused-workspace"
-              test_runs=3
+              export SERENA_CI_JDTLS_REPRO_MODE="exact-java-reference-fresh-workspace"
+              test_runs=25
               hang_diagnostics_seconds=300
               pytest_timeout_seconds=420
+              test_command=(
+                uv run pytest
+                "test/serena/test_serena_agent.py::TestSerenaAgent::test_find_symbol_references[java_model_refs]"
+              )
             fi
             export SERENA_CI_HANG_DIAGNOSTICS_SECONDS="$hang_diagnostics_seconds"
             extra_pytest_args+=(
