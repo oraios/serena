@@ -504,6 +504,19 @@ class Project(ToStringMixin):
             self._language_server_manager_init_error = e
             raise
 
+    def get_language_server_manager_status(self) -> str:
+        """
+        :return: a status string describing the state of the language server manager; if its initialisation resulted in an
+            error, the error message is included in the status string
+        """
+        if self.language_server_manager is None:
+            if self._language_server_manager_init_error is not None:
+                return f"error ({self._language_server_manager_init_error})"
+            else:
+                return "not initialized"
+        else:
+            return "ready"
+
     def get_language_server_manager_or_raise(self) -> LanguageServerManager:
         if self.language_server_manager is None:
             msg = TextBuilder("The language server manager is not initialized, indicating a problem during project initialisation.")
