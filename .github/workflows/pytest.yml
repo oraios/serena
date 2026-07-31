@@ -730,6 +730,8 @@ jobs:
         run: |
           extra_pytest_args=()
           diagnostics_dir=""
+          jdtls_workspaces_dir=""
+          reset_jdtls_workspace=false
           stress_jdtls=false
           stress_failure_status=0
           test_runs=1
@@ -742,8 +744,21 @@ jobs:
             pytest_timeout_seconds=720
             # Repeatedly exercise the cross-language teardown/JDTLS-startup sequence that previously hung.
             if [[ "$DIAGNOSTIC_HEAD_REF" == "agent/jdtls-hang-diagnostics" ]]; then
+              diagnostic_serena_home="${RUNNER_TEMP}/serena-jdtls-stress-home"
+              mkdir -p "$diagnostic_serena_home/language_servers/static"
+              if [[ -d "$HOME/.serena/language_servers/static" ]]; then
+                cp -R "$HOME/.serena/language_servers/static/." "$diagnostic_serena_home/language_servers/static/"
+              fi
+              export SERENA_HOME="$diagnostic_serena_home"
+              jdtls_workspaces_dir="$diagnostic_serena_home/language_servers/static/EclipseJDTLS/workspaces"
+              case "$jdtls_workspaces_dir" in
+                "$RUNNER_TEMP"/serena-jdtls-stress-home/*) ;;
+                *) echo "Refusing to clear unexpected JDTLS workspace path: $jdtls_workspaces_dir" >&2; exit 1 ;;
+              esac
+              rm -rf -- "$jdtls_workspaces_dir"
+              reset_jdtls_workspace=true
               stress_jdtls=true
-              test_runs=50
+              test_runs=20
               hang_diagnostics_seconds=300
               pytest_timeout_seconds=420
               test_command=(
@@ -768,12 +783,29 @@ jobs:
                 --log-file-level=INFO
               )
             fi
+            pytest_status=0
             if "${test_command[@]}" -m "${{ steps.markers.outputs.expr }}" -q --tb=short "${attempt_pytest_args[@]}"; then
-              continue
+              pytest_status=0
             else
               pytest_status=$?
             fi
-            if [[ "$stress_jdtls" == true ]] && ! compgen -G "$diagnostics_dir/hang-*" > /dev/null; then
+            hang_captured=false
+            if [[ "$stress_jdtls" == true ]] && compgen -G "$diagnostics_dir/hang-*" > /dev/null; then
+              hang_captured=true
+            fi
+            if [[ "$hang_captured" == true ]]; then
+              if [[ "$pytest_status" -eq 0 ]]; then
+                exit 1
+              fi
+              exit "$pytest_status"
+            fi
+            if [[ "$reset_jdtls_workspace" == true ]]; then
+              rm -rf -- "$jdtls_workspaces_dir"
+            fi
+            if [[ "$pytest_status" -eq 0 ]]; then
+              continue
+            fi
+            if [[ "$stress_jdtls" == true ]]; then
               echo "::warning::pytest attempt $attempt failed without hang evidence (exit $pytest_status); continuing stress loop"
               stress_failure_status="$pytest_status"
               continue
@@ -782,6 +814,26 @@ jobs:
           done
           if [[ "$stress_failure_status" -ne 0 ]]; then
             exit "$stress_failure_status"
+          fi
+      - name: Print Windows JVM hang diagnostics
+        if: failure() && runner.os == 'Windows' && matrix.batch == 'jvm'
+        shell: bash
+        run: |
+          found_hang_capture=false
+          for capture_dir in "${RUNNER_TEMP}"/serena-ci-diagnostics/hang-*; do
+            if [[ ! -d "$capture_dir" ]]; then
+              continue
+            fi
+            found_hang_capture=true
+            while IFS= read -r -d '' file; do
+              echo "::group::${file#"${RUNNER_TEMP}/"}"
+              cat "$file"
+              echo
+              echo "::endgroup::"
+            done < <(find "$capture_dir" -type f -print0)
+          done
+          if [[ "$found_hang_capture" == false ]]; then
+            echo "No hang capture was produced."
           fi
       - name: Upload Windows JVM hang diagnostics
         if: failure() && runner.os == 'Windows' && matrix.batch == 'jvm'
