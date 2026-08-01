@@ -561,7 +561,7 @@ class SerenaAgent:
         :param memory_log_handler: a MemoryLogHandler instance from which to read log messages; if None, a new one will be created
             if necessary.
         """
-        self._active_project: Project | None = None
+        self._active_project: Project | None = None  # NOTE: field name used in __del__
         self._project_activation_callback = project_activation_callback
         self._project_activation_error: str | None = project_activation_error
         self._gui_log_viewer: Optional["GuiLogViewer"] = None
@@ -1423,7 +1423,9 @@ class SerenaAgent:
         ToolRegistry().print_tool_overview(self._active_tools.tools)
 
     def __del__(self) -> None:
-        self.on_shutdown()
+        is_object_initialised = "_active_project" in self.__dict__
+        if is_object_initialised:
+            self.on_shutdown()
 
     def on_shutdown(self, timeout: float = 2.0) -> None:
         """
