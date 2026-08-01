@@ -32,6 +32,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     and the request used to map diagnostics onto owning symbols just threw. `AnsibleLanguageServer` now
     overrides that request to return `None` directly, so diagnostics fall back to being grouped under
     the file-level path as already documented #1758
+  - Fix: pull-diagnostics fallback in `request_text_document_diagnostics` no longer swallows
+    `LanguageServerTerminatedException`, so a crash during a diagnostics pull triggers the existing
+    language-server restart path instead of silently returning no diagnostics #1770
   - Fix: F#'s `module <Name>` declarations reported a `selectionRange` pointing at the `module`
     keyword instead of at `<Name>`, so looking up hover/references from a module symbol's position
     returned the keyword's own docs instead of the module's #925
