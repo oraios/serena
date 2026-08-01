@@ -33,7 +33,7 @@ from solidlsp.dependency_provider import (
 from solidlsp.initialize_params import DefaultInitializeParamsBuilder, InitializeParamsBuilder
 from solidlsp.ls_config import FilenameMatcher, LanguageServerConfig, LanguageServerId
 from solidlsp.ls_exceptions import InvalidTextLocationError, SolidLSPException
-from solidlsp.ls_process import LanguageServerInterface, StdioLanguageServer
+from solidlsp.ls_process import DEFAULT_LS_REQUEST_TIMEOUT, LanguageServerInterface, StdioLanguageServer
 from solidlsp.ls_types import UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils, PathUtils, TextUtils
 from solidlsp.lsp_protocol_handler import lsp_types
@@ -419,7 +419,7 @@ class SolidLanguageServer(ABC):
         cls,
         config: LanguageServerConfig,
         repository_root_path: str,
-        timeout: float | None = None,
+        timeout: float | None = DEFAULT_LS_REQUEST_TIMEOUT,
         solidlsp_settings: SolidLSPSettings | None = None,
     ) -> "SolidLanguageServer":
         """
@@ -431,7 +431,7 @@ class SolidLanguageServer(ABC):
         :param repository_root_path: The root path of the repository.
         :param config: language server configuration.
         :param logger: The logger to use.
-        :param timeout: the timeout for requests to the language server. If None, no timeout will be used.
+        :param timeout: the timeout, in seconds, for requests to the language server; if None, use no timeout
         :param solidlsp_settings: additional settings
         :return LanguageServer: A language specific LanguageServer instance.
         """
