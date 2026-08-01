@@ -202,7 +202,13 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
 
         @classmethod
         def _get_persistence_path(cls, hook: Hook) -> Path:
-            return Path(hook.session_persistence_dir) / cls._FILE_NAME
+            # session_persistence_dir is None only when require_session_id=False
+            # (SessionEndCleanupHook); this State is used by PreToolUse hooks that
+            # always have a session id.
+            persistence_dir = hook.session_persistence_dir
+            if persistence_dir is None:
+                raise ValueError("session_persistence_dir is required for hook state persistence")
+            return Path(persistence_dir) / cls._FILE_NAME
 
         @classmethod
         def load(cls, hook: Hook) -> Self:
