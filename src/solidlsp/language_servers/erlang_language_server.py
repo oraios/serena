@@ -2,7 +2,6 @@
 
 import logging
 import os
-import pathlib
 import shutil
 import subprocess
 import threading
@@ -76,6 +75,25 @@ class ErlangLanguageServer(SolidLanguageServer):
         except (subprocess.SubprocessError, FileNotFoundError):
             return False
 
+    def _create_base_initialize_params(self) -> dict:
+        """
+        Returns the base initialize params for Erlang LS.
+
+        processId, rootPath, rootUri, clientInfo and workspaceFolders are added by the builder.
+        """
+        return {
+            "capabilities": {
+                "textDocument": {
+                    "synchronization": {"didSave": True},
+                    "completion": {"dynamicRegistration": True},
+                    "definition": {"dynamicRegistration": True},
+                    "references": {"dynamicRegistration": True},
+                    "documentSymbol": {"dynamicRegistration": True},
+                    "hover": {"dynamicRegistration": True},
+                }
+            },
+        }
+
     def _start_server(self) -> None:
         """Start Erlang LS server process with proper initialization waiting."""
 
@@ -132,25 +150,8 @@ class ErlangLanguageServer(SolidLanguageServer):
         log.info("Starting Erlang LS server process")
         self.server.start()
 
-        # Send initialize request
-        initialize_params = {
-            "processId": None,
-            "rootPath": self.repository_root_path,
-            "rootUri": pathlib.Path(self.repository_root_path).as_uri(),
-            "capabilities": {
-                "textDocument": {
-                    "synchronization": {"didSave": True},
-                    "completion": {"dynamicRegistration": True},
-                    "definition": {"dynamicRegistration": True},
-                    "references": {"dynamicRegistration": True},
-                    "documentSymbol": {"dynamicRegistration": True},
-                    "hover": {"dynamicRegistration": True},
-                }
-            },
-        }
-
         log.info("Sending initialize request to Erlang LS")
-        init_response = self.server.send.initialize(initialize_params)  # type: ignore[arg-type]
+        init_response = self.server.send.initialize(self._create_initialize_params())
 
         # Verify server capabilities
         if "capabilities" in init_response:

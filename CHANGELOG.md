@@ -105,6 +105,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     coverage-report output, but matched by bare dirname and so also hid legitimate source directories named
     `coverage` (e.g. `src/routes/coverage/`) from symbol tools. Generated report dirs are already covered by
     gitignore. Fixes #1523.
+  - Fix: Restore `erlang` support (broken since v1.6.0 due to an implementation error) 
 
 * Tools:
   - Fix: `search_for_pattern` marked one line too many as matched whenever a match ended with a line
