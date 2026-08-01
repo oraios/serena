@@ -545,9 +545,7 @@ class TestComputeWorkspaceHash:
     UPSTREAM_LAUNCHER = "/opt/homebrew/Cellar/jdtls/1.50.0/libexec/plugins/org.eclipse.equinox.launcher_1.7.0.jar"
 
     def _initial_settings(self) -> "SolidLSPSettings.CustomLSSettings":
-        from solidlsp.language_servers.eclipse_jdtls import INITIAL_VSCODE_JAVA_VERSION
-
-        return SolidLSPSettings.CustomLSSettings({"vscode_java_version": INITIAL_VSCODE_JAVA_VERSION})
+        return SolidLSPSettings.CustomLSSettings({"vscode_java_version": EclipseJDTLS.DependencyProvider.INITIAL_VSCODE_JAVA_VERSION})
 
     def test_initial_default_mode_matches_pre_upstream_format(self) -> None:
         """Legacy carve-out: INITIAL default-mode hash MUST equal md5(repository_root_path)."""

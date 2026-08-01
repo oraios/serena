@@ -11,6 +11,7 @@ from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_utils import is_running_in_ci
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 from solidlsp.util.subprocess_util import subprocess_run
@@ -160,7 +161,7 @@ class ErlangLanguageServer(SolidLanguageServer):
         self.server.notify.initialized({})
 
         # Wait for Erlang LS to be ready - adjust timeout based on environment
-        is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
+        is_ci = is_running_in_ci()
         is_macos = os.uname().sysname == "Darwin" if hasattr(os, "uname") else False
 
         # macOS in CI can be particularly slow for language server startup
