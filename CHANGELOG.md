@@ -38,6 +38,11 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: F#'s `module <Name>` declarations reported a `selectionRange` pointing at the `module`
     keyword instead of at `<Name>`, so looking up hover/references from a module symbol's position
     returned the keyword's own docs instead of the module's #925
+  - Fix: Erlang functions could not be addressed by any tool taking an exact name path, because
+    Erlang LS identifies them as `name/arity` and `/` separates name path components. The arity is
+    now separated by `#` instead (e.g. `create_user#4`), so the reported name path round-trips and
+    `find_referencing_symbols`/`replace_symbol_body`/`insert_after_symbol` work on Erlang
+    functions #1797
 
 * JetBrains:
   - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file
