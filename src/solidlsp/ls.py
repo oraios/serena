@@ -966,6 +966,11 @@ class SolidLanguageServer(ABC):
                         }
                     )
                 except SolidLSPException as ex:
+                    # Termination must propagate so tools_base can restart the LS and retry.
+                    # Other pull-diagnostics failures (e.g. unsupported method without crash)
+                    # still fall back to published diagnostics.
+                    if ex.is_language_server_terminated():
+                        raise
                     log.debug("Falling back to published diagnostics for %s due to pull-diagnostics error: %s", relative_file_path, ex)
                     response = None
                     pull_diagnostics_failed = True
