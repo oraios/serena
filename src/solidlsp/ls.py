@@ -1395,6 +1395,37 @@ class SolidLanguageServer(ABC):
         )
         return deleted_text
 
+    def resync_open_buffer(self, relative_file_path: str) -> bool:
+        """
+        If the given file currently has an open buffer in this language server, re-reads its
+        contents from disk and pushes a full-content textDocument/didChange notification, so
+        that an edit made outside of this buffer's own insert_text_at_position/
+        delete_text_between_positions calls becomes visible to the server.
+
+        This is necessary in addition to workspace/didChangeWatchedFiles: once a document is
+        open, a server may treat the client (not the filesystem) as authoritative for its
+        content, so watched-file-change notifications alone can be silently ignored for an
+        already-open document.
+
+        :param relative_file_path: the relative path of the file to resync.
+        :return: True if a buffer was open and resynced, False if the file has no open buffer.
+        """
+        uri = self._resolve_file_uri(relative_file_path)
+        file_buffer = self.open_file_buffers.get(uri)
+        if file_buffer is None:
+            return False
+        file_buffer.version += 1
+        self.server.notify.did_change_text_document(
+            {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                LSPConstants.TEXT_DOCUMENT: {
+                    LSPConstants.VERSION: file_buffer.version,
+                    LSPConstants.URI: file_buffer.uri,
+                },
+                LSPConstants.CONTENT_CHANGES: [{"text": file_buffer.contents}],
+            }
+        )
+        return True
+
     def _send_definition_request(self, definition_params: DefinitionParams) -> Definition | list[LocationLink] | None:
         return self.server.send.definition(definition_params)
 

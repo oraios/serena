@@ -21,6 +21,11 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Tools:
   - `find_symbol`, `jet_brains_find_symbol`: Change tool description to improve tool search results in clients that load tools dynamically
   - `get_current_config`: Result now includes language server status #1782
+  - Fix: `find_symbol` and `get_symbols_overview` could report a stale symbol position or miss a
+    new/deleted file when an already-open file was edited outside of Serena's own edit tools; both
+    tools are now included in the file system sync check every other symbolic tool already runs.
+    That check itself did not refresh an already-open buffer, only the file's watch registration,
+    so an open document could stay stale even where the check did run #1593
 
 * Language Servers: 
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 

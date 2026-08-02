@@ -347,6 +347,7 @@ class LanguageServerFileChangeNotifier:
         ]
         params: DidChangeWatchedFilesParams = {"changes": changes}
         created_paths = [rel_path for rel_path, change_type in events if change_type == FileChangeType.Created]
+        changed_paths = [rel_path for rel_path, change_type in events if change_type == FileChangeType.Changed]
 
         for ls in self._language_server_manager.iter_language_servers():
             # send the didChangeWatchedFiles notification to the language server
@@ -367,5 +368,13 @@ class LanguageServerFileChangeNotifier:
                         pass
                 except Exception as e:
                     log.error(f"Failed to refresh newly created file {rel_path!r} in language server", exc_info=e)
+
+            # A server may ignore didChangeWatchedFiles for a document it already has open
+            # (observed with pyright), so push fresh content directly to any open buffer too.
+            for rel_path in changed_paths:
+                try:
+                    ls.resync_open_buffer(rel_path)
+                except Exception as e:
+                    log.error(f"Failed to resync open buffer for changed file {rel_path!r}", exc_info=e)
 
         return len(events)

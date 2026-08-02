@@ -54,7 +54,7 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
             Don't adjust unless there is really no other way to get the content required for the task.
         :return: a JSON object containing symbols grouped by kind in a compact format.
         """
-        # Note: file system sync not required (relevant file is opened in the language server explicitly)
+        self.project.ls_sync_file_system_changes()
 
         if depth == -1:
             if relative_path.endswith((".java", ".kt")):
@@ -191,7 +191,7 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         :param max_answer_chars: max result length; -1 for default
         :return: symbols (with locations) matching the name.
         """
-        # Note: file system sync not required; the symbol finder opens all relevant source files explicitly in the case of changes
+        self.project.ls_sync_file_system_changes()
 
         if include_body:
             depth = 0  # ignore user-specified depth if include_body is True
