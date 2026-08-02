@@ -107,6 +107,7 @@ class LSPFileBuffer:
         self.language_server = language_server
         self.uri = uri
         self._read_file_modified_date: float | None = None
+        self._read_file_modified_date_passed_to_ls: float | None = None
         self._contents: str | None = None
         self.version = version
         self.language_id = language_id
@@ -120,20 +121,40 @@ class LSPFileBuffer:
     def _open_in_ls(self) -> None:
         """
         Open the file in the language server if it is not already open.
+        If it is already open, make sure the language server has the latest contents of the file.
         """
-        if self._is_open_in_ls:
-            return
-        self._is_open_in_ls = True
-        self.language_server.server.notify.did_open_text_document(
-            {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
-                LSPConstants.TEXT_DOCUMENT: {
-                    LSPConstants.URI: self.uri,
-                    LSPConstants.LANGUAGE_ID: self.language_id,
-                    LSPConstants.VERSION: 0,
-                    LSPConstants.TEXT: self.contents,
+        if not self._is_open_in_ls:
+            self._is_open_in_ls = True
+            current_contents = self.contents
+            self._read_file_modified_date_passed_to_ls = self._read_file_modified_date
+            self.language_server.server.notify.did_open_text_document(
+                {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                    LSPConstants.TEXT_DOCUMENT: {
+                        LSPConstants.URI: self.uri,
+                        LSPConstants.LANGUAGE_ID: self.language_id,
+                        LSPConstants.VERSION: self.version,
+                        LSPConstants.TEXT: current_contents,
+                    }
                 }
-            }
-        )
+            )
+        else:
+            # file already open: check if contents have changed and notify if so
+            current_contents = self.contents
+            if self._read_file_modified_date != self._read_file_modified_date_passed_to_ls:
+                self._read_file_modified_date_passed_to_ls = self._read_file_modified_date
+                self.language_server.server.notify.did_change_text_document(
+                    {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                        LSPConstants.TEXT_DOCUMENT: {
+                            LSPConstants.URI: self.uri,
+                            LSPConstants.VERSION: self.version,
+                        },
+                        LSPConstants.CONTENT_CHANGES: [
+                            {
+                                LSPConstants.TEXT: current_contents,
+                            }
+                        ],
+                    }
+                )
 
     def close(self) -> None:
         if self._is_open_in_ls:
@@ -146,7 +167,11 @@ class LSPFileBuffer:
             )
 
     def ensure_open_in_ls(self) -> None:
-        """Ensure that the file is opened in the language server."""
+        """
+        Ensure that the file is opened in the language server (or, if it is already open,
+        that the language server is made aware of the file's updated contents in case it
+        has changed on disk).
+        """
         self._open_in_ls()
 
     def _invalidate_cached_data(self, mtime: float | None = None) -> float | None:
@@ -1254,10 +1279,15 @@ class SolidLanguageServer(ABC):
     @contextmanager
     def open_file(self, relative_file_path: str, open_in_ls: bool = True) -> Iterator[LSPFileBuffer]:
         """
-        Open a file in the Language Server. This is required before making any requests to the Language Server.
+        Opens a file.
+
+        Note: Opening a file in the language server is typically a precondition for further requests
+        pertaining to the respective file.
 
         :param relative_file_path: The relative path of the file to open.
         :param open_in_ls: whether to open the file in the language server, sending the didOpen notification.
+            If the file is already open but file contents has changed since the original notification,
+            an update notification is sent instead.
             Set this to False to read the local file buffer without notifying the LS; the file can
             be opened in the LS later by calling the `ensure_open_in_ls` method on the returned LSPFileBuffer.
         """

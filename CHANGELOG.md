@@ -40,6 +40,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     returned the keyword's own docs instead of the module's #925
   - Fix: `LSPFileBuffer`: a stale content hash could be returned if files are kept open 
     and file contents were not read before trying to retrieve the hash value  
+  - Fix: Change semantics of file opening (`open_file`) in the language server from "open file (if not already open)"
+    to "ensure that the language server has the (current) contents of the file" (by sending `textDocument/didOpen`
+    or `textDocument/didChange`), as this is always the intention of calling the method.
+    If files were kept open in the language server (which the Svelte and Vue language servers did),
+    the language server was not necessarily informed about updated contents.
 
 * JetBrains:
   - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file
