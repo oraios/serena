@@ -1911,16 +1911,13 @@ class SolidLanguageServer(ABC):
             file_hash_and_result = self._document_symbols_cache.get(cache_key)
             if file_hash_and_result is None:
                 log.debug("No cache hit for document symbols in %s", relative_file_path)
-                log.debug("perf: document_symbols_cache MISS path=%s", relative_file_path)
             else:
                 file_hash, document_symbols = file_hash_and_result
                 if file_hash == file_data.content_hash:
-                    log.debug("Returning cached document symbols for %s", relative_file_path)
-                    log.debug("perf: document_symbols_cache HIT path=%s", relative_file_path)
+                    log.debug("Returning cached document symbols for %s (hash=%s)", relative_file_path, file_hash)
                     return document_symbols
 
-                log.debug("Cached document symbol content for %s has changed", relative_file_path)
-                log.debug("perf: document_symbols_cache STALE path=%s", relative_file_path)
+                log.debug("Cached document symbol content for %s has changed (old hash=%s)", relative_file_path, file_hash)
 
             # no cached result: request the root symbols from the language server
             root_symbols = self._request_document_symbols(relative_file_path, file_data)
@@ -2015,8 +2012,9 @@ class SolidLanguageServer(ABC):
             document_symbols = DocumentSymbols(unified_root_symbols)
 
             # update cache
-            log.debug("Updating cached document symbols for %s", relative_file_path)
-            self._document_symbols_cache[cache_key] = (file_data.content_hash, document_symbols)
+            content_hash = file_data.content_hash
+            log.debug("Updating cached document symbols for %s (hash=%s)", relative_file_path, content_hash)
+            self._document_symbols_cache[cache_key] = (content_hash, document_symbols)
             self._document_symbols_cache_is_modified = True
 
             return document_symbols
