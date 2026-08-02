@@ -149,21 +149,27 @@ class LSPFileBuffer:
         """Ensure that the file is opened in the language server."""
         self._open_in_ls()
 
+    def _invalidate_cached_data(self, mtime: float | None = None) -> float | None:
+        """
+        Invalidates cached data (file contents, hash) if the file was modified since it was read
+
+        :param: the current modification time if it was already read
+        """
+        if self._read_file_modified_date is not None:
+            if mtime is None:
+                mtime = self.abs_path.stat().st_mtime
+            if mtime > self._read_file_modified_date:
+                self._contents = None
+                self._content_hash = None
+
     @property
     def contents(self) -> str:
         file_modified_date = self.abs_path.stat().st_mtime
-
-        # if contents are cached, check if they are stale (file modification since last read) and invalidate if so
-        if self._contents is not None:
-            assert self._read_file_modified_date is not None
-            if file_modified_date > self._read_file_modified_date:
-                self._contents = None
-
+        self._invalidate_cached_data(file_modified_date)
         if self._contents is None:
             self._read_file_modified_date = file_modified_date
             self._contents = FileUtils.read_file(str(self.abs_path), self.encoding)
             self._content_hash = None
-
         return self._contents
 
     @contents.setter
@@ -179,6 +185,7 @@ class LSPFileBuffer:
 
     @property
     def content_hash(self) -> str:
+        self._invalidate_cached_data()
         if self._content_hash is None:
             self._content_hash = hashlib.md5(self.contents.encode(self.encoding)).hexdigest()
         return self._content_hash

@@ -38,6 +38,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: F#'s `module <Name>` declarations reported a `selectionRange` pointing at the `module`
     keyword instead of at `<Name>`, so looking up hover/references from a module symbol's position
     returned the keyword's own docs instead of the module's #925
+  - Fix: `LSPFileBuffer`: a stale content hash could be returned if files are kept open 
+    and file contents were not read before trying to retrieve the hash value  
 
 * JetBrains:
   - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file
