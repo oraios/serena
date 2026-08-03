@@ -5,8 +5,8 @@ You can configure the following options in ls_specific_settings (in serena_confi
 
     ls_specific_settings:
       kotlin:
-        ls_path: '/path/to/kotlin-lsp.sh'  # Custom path to Kotlin Language Server executable
-        kotlin_lsp_version: '261.13587.0'  # Kotlin Language Server version (default: current bundled version)
+        ls_path: '/path/to/bin/intellij-server'  # Custom path to Kotlin Language Server executable
+        kotlin_lsp_version: '262.9593.0'  # Kotlin Language Server version (default: current bundled version)
         jvm_options: '-Xmx2G'  # JVM options for Kotlin Language Server (default: -Xmx2G)
 
 Example configuration for large projects:
@@ -21,6 +21,7 @@ import os
 import pathlib
 import stat
 import threading
+from dataclasses import dataclass
 
 from overrides import override
 
@@ -30,7 +31,7 @@ from solidlsp.ls import (
     SolidLanguageServer,
 )
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_utils import FileUtils, PlatformUtils
+from solidlsp.ls_utils import FileUtils, PlatformId, PlatformUtils
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -52,32 +53,94 @@ INITIAL_KOTLIN_LSP_SHA256_BY_SUFFIX = {
     "mac-x64": "a3972f27229eba2c226060e54baea1c958c82c326dfc971bf53f72a74d0564a3",
     "mac-aarch64": "d4ea28b22b29cf906fe16d23698a8468f11646a6a66dcb15584f306aaefbee6c",
 }
-DEFAULT_KOTLIN_LSP_VERSION = "261.13587.0"
-DEFAULT_KOTLIN_LSP_SHA256_BY_SUFFIX = {
-    "win-x64": "2806c2bd4810bd8e7ccc27d8c0ca4a5232a1c4f26ea1f4ba40e578b60860ccad",
-    "linux-x64": "dc0ed2e70cb0d61fdabb26aefce8299b7a75c0dcfffb9413715e92caec6e83ec",
-    "linux-aarch64": "d1dceb000fe06c5e2c30b95e7f4ab01d05101bd03ed448167feeb544a9f1d651",
-    "mac-x64": "a3972f27229eba2c226060e54baea1c958c82c326dfc971bf53f72a74d0564a3",
-    "mac-aarch64": "d4ea28b22b29cf906fe16d23698a8468f11646a6a66dcb15584f306aaefbee6c",
+DEFAULT_KOTLIN_LSP_VERSION = "262.9593.0"
+DEFAULT_KOTLIN_LSP_SHA256_BY_PLATFORM = {
+    "win-x64": "f2daaa476f26d99301b406f76de6d87c437d04dc72f06845154619d8f991c51f",
+    "win-arm64": "73a552a6a420158622e5ad8d96b53da8aa8ced3f88a24fded01575927a2fd8e7",
+    "linux-x64": "2d99d8e198fbe4aa8f4481e37799724ce94803b4ea12a60b416040e3fcd7cc5e",
+    "linux-arm64": "2317831c6e5607d05b7ebc1da655330125ce0e3d66fbf24517dfce442debc14e",
+    "osx-x64": "17369fda97c85418ac24ab38a9df56b21522a3468dfe193832fe455c13920745",
+    "osx-arm64": "6ba6021a706b21e64cef33f7e2b79f187c0910320722bb2d3ed05ad1115ec43f",
 }
 
+# Versions before this one use kotlin-lsp-{version}-{platform}.zip and a kotlin-lsp script.
+# Starting with 262.4739.0, JetBrains publishes kotlin-server archives with platform-specific
+# formats, a bundled JBR, and bin/intellij-server as the launcher.
+KOTLIN_SERVER_PACKAGING_MIN_VERSION = (262, 4739, 0)
 
-def _kotlin_lsp_sha(version: str, kotlin_suffix: str) -> str | None:
-    if version == INITIAL_KOTLIN_LSP_VERSION:
-        return INITIAL_KOTLIN_LSP_SHA256_BY_SUFFIX.get(kotlin_suffix)
-    if version == DEFAULT_KOTLIN_LSP_VERSION:
-        return DEFAULT_KOTLIN_LSP_SHA256_BY_SUFFIX.get(kotlin_suffix)
-    return None
+# The first modern archives remained under the legacy /kotlin-lsp CDN path.
+# Starting with 262.8190.0, JetBrains moved them to /language-server/kotlin-server.
+KOTLIN_SERVER_CDN_PATH_MIN_VERSION = (262, 8190, 0)
 
-
-# Platform-specific Kotlin LSP download suffixes
-PLATFORM_KOTLIN_SUFFIX = {
+# Platform-specific suffixes used by legacy Kotlin LSP ZIP archives.
+LEGACY_PLATFORM_KOTLIN_SUFFIX = {
     "win-x64": "win-x64",
     "linux-x64": "linux-x64",
     "linux-arm64": "linux-aarch64",
     "osx-x64": "mac-x64",
     "osx-arm64": "mac-aarch64",
 }
+
+# Modern archive filename suffix, FileUtils archive type, and launcher path within the archive.
+KOTLIN_SERVER_ARTIFACT_BY_PLATFORM: dict[str, tuple[str, FileUtils.ArchiveType, tuple[str, ...]]] = {
+    "win-x64": (".win.zip", "zip", ("bin", "intellij-server.exe")),
+    "win-arm64": ("-aarch64.win.zip", "zip", ("bin", "intellij-server.exe")),
+    "linux-x64": (".tar.gz", "gztar", ("kotlin-server-{version}", "bin", "intellij-server")),
+    "linux-arm64": ("-aarch64.tar.gz", "gztar", ("kotlin-server-{version}", "bin", "intellij-server")),
+    "osx-x64": (".sit", "zip", ("kotlin-server-{version}", "bin", "intellij-server")),
+    "osx-arm64": ("-aarch64.sit", "zip", ("kotlin-server-{version}", "bin", "intellij-server")),
+}
+
+
+@dataclass(frozen=True)
+class KotlinLSPArtifact:
+    url: str
+    archive_type: FileUtils.ArchiveType
+    launcher_parts: tuple[str, ...]
+    sha256: str | None
+
+
+def _parse_kotlin_lsp_version(version: str) -> tuple[int, ...]:
+    try:
+        return tuple(int(part) for part in version.split("."))
+    except ValueError as exc:
+        raise ValueError(f"Kotlin LSP version must contain only dot-separated integers: {version!r}") from exc
+
+
+def _uses_kotlin_server_packaging(version: str) -> bool:
+    return _parse_kotlin_lsp_version(version) >= KOTLIN_SERVER_PACKAGING_MIN_VERSION
+
+
+def _uses_kotlin_server_cdn_path(version: str) -> bool:
+    return _parse_kotlin_lsp_version(version) >= KOTLIN_SERVER_CDN_PATH_MIN_VERSION
+
+
+def _resolve_kotlin_lsp_artifact(version: str, platform_id: PlatformId) -> KotlinLSPArtifact:
+    if _uses_kotlin_server_packaging(version):
+        artifact_config = KOTLIN_SERVER_ARTIFACT_BY_PLATFORM.get(platform_id.value)
+        if artifact_config is None:
+            raise ValueError(f"Unsupported platform for Kotlin LSP {version}: {platform_id.value}")
+
+        asset_suffix, archive_type, launcher_parts = artifact_config
+        asset_name = f"kotlin-server-{version}{asset_suffix}"
+        cdn_path = "language-server/kotlin-server" if _uses_kotlin_server_cdn_path(version) else "kotlin-lsp"
+        return KotlinLSPArtifact(
+            url=f"https://download-cdn.jetbrains.com/{cdn_path}/{version}/{asset_name}",
+            archive_type=archive_type,
+            launcher_parts=tuple(part.format(version=version) for part in launcher_parts),
+            sha256=DEFAULT_KOTLIN_LSP_SHA256_BY_PLATFORM.get(platform_id.value) if version == DEFAULT_KOTLIN_LSP_VERSION else None,
+        )
+
+    kotlin_suffix = LEGACY_PLATFORM_KOTLIN_SUFFIX.get(platform_id.value)
+    if kotlin_suffix is None:
+        raise ValueError(f"Unsupported platform for Kotlin LSP {version}: {platform_id.value}")
+
+    return KotlinLSPArtifact(
+        url=f"https://download-cdn.jetbrains.com/kotlin-lsp/{version}/kotlin-lsp-{version}-{kotlin_suffix}.zip",
+        archive_type="zip",
+        launcher_parts=("kotlin-lsp.cmd",) if platform_id.is_windows() else ("kotlin-lsp.sh",),
+        sha256=INITIAL_KOTLIN_LSP_SHA256_BY_SUFFIX.get(kotlin_suffix) if version == INITIAL_KOTLIN_LSP_VERSION else None,
+    )
 
 
 class KotlinLanguageServer(SolidLanguageServer):
@@ -102,15 +165,17 @@ class KotlinLanguageServer(SolidLanguageServer):
         # set again once all progress tokens have ended.
         self._indexing_complete = threading.Event()
         self._indexing_complete.set()
+        self._intellij_server_ready = threading.Event()
         self._active_progress_tokens: set[str] = set()
         self._progress_lock = threading.Lock()
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
-        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
+        return self.DependencyProvider(self._custom_settings, self._ls_resources_dir, str(self.cache_dir))
 
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
-        def __init__(self, custom_settings: SolidLSPSettings.CustomLSSettings, ls_resources_dir: str):
+        def __init__(self, custom_settings: SolidLSPSettings.CustomLSSettings, ls_resources_dir: str, project_cache_dir: str):
             super().__init__(custom_settings, ls_resources_dir)
+            self._project_cache_dir = project_cache_dir
 
         def _get_or_install_core_dependency(self) -> str:
             """
@@ -118,16 +183,9 @@ class KotlinLanguageServer(SolidLanguageServer):
             """
             platform_id = PlatformUtils.get_platform_id()
 
-            # Verify platform support
-            assert platform_id.value.startswith("win-") or platform_id.value.startswith("linux-") or platform_id.value.startswith("osx-"), (
-                "Only Windows, Linux and macOS platforms are supported for Kotlin in multilspy at the moment"
-            )
-
-            kotlin_suffix = PLATFORM_KOTLIN_SUFFIX.get(platform_id.value)
-            assert kotlin_suffix, f"Unsupported platform for Kotlin LSP: {platform_id.value}"
-
             # Setup paths for dependencies; legacy unversioned dir reserved for INITIAL only
             kotlin_lsp_version = self._custom_settings.get("kotlin_lsp_version", DEFAULT_KOTLIN_LSP_VERSION)
+            artifact = _resolve_kotlin_lsp_artifact(kotlin_lsp_version, platform_id)
             ls_dirname = (
                 "kotlin_language_server"
                 if kotlin_lsp_version == INITIAL_KOTLIN_LSP_VERSION
@@ -137,22 +195,19 @@ class KotlinLanguageServer(SolidLanguageServer):
             os.makedirs(static_dir, exist_ok=True)
 
             # Setup Kotlin Language Server
-            kotlin_script_name = "kotlin-lsp.cmd" if platform_id.value.startswith("win-") else "kotlin-lsp.sh"
-            kotlin_script = os.path.join(static_dir, kotlin_script_name)
+            kotlin_script = os.path.join(static_dir, *artifact.launcher_parts)
 
             if not os.path.exists(kotlin_script):
-                kotlin_url = f"https://download-cdn.jetbrains.com/kotlin-lsp/{kotlin_lsp_version}/kotlin-lsp-{kotlin_lsp_version}-{kotlin_suffix}.zip"
-                expected_sha256 = _kotlin_lsp_sha(kotlin_lsp_version, kotlin_suffix)
                 log.info("Downloading Kotlin Language Server...")
                 FileUtils.download_and_extract_archive_verified(
-                    kotlin_url,
+                    artifact.url,
                     static_dir,
-                    "zip",
-                    expected_sha256=expected_sha256,
+                    artifact.archive_type,
+                    expected_sha256=artifact.sha256,
                     allowed_hosts=KOTLIN_LSP_ALLOWED_HOSTS,
                 )
 
-                if os.path.exists(kotlin_script) and not platform_id.value.startswith("win-"):
+                if os.path.exists(kotlin_script) and not platform_id.is_windows():
                     os.chmod(
                         kotlin_script,
                         stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH,
@@ -165,10 +220,14 @@ class KotlinLanguageServer(SolidLanguageServer):
             return kotlin_script
 
         def _create_launch_command(self, core_path: str) -> list[str]:
-            return [core_path, "--stdio"]
+            kotlin_lsp_version = self._custom_settings.get("kotlin_lsp_version", DEFAULT_KOTLIN_LSP_VERSION)
+            command = [core_path, "--stdio"]
+            if _uses_kotlin_server_packaging(kotlin_lsp_version):
+                command.extend(["--system-path", os.path.join(self._project_cache_dir, "kotlin-lsp-system")])
+            return command
 
         def create_launch_command_env(self) -> dict[str, str]:
-            """Provides JAVA_HOME and JVM options for the Kotlin Language Server process."""
+            """Provides JVM options for the Kotlin Language Server process."""
             env: dict[str, str] = {}
 
             # Get JVM options from settings or use default
@@ -427,6 +486,7 @@ class KotlinLanguageServer(SolidLanguageServer):
         """
         Starts the Kotlin Language Server
         """
+        self._intellij_server_ready.clear()
 
         def execute_client_command_handler(params: dict) -> list:
             return []
@@ -436,6 +496,11 @@ class KotlinLanguageServer(SolidLanguageServer):
 
         def window_log_message(msg: dict) -> None:
             log.info(f"LSP: window/logMessage: {msg}")
+
+        def intellij_server_ready(_params: dict | None) -> None:
+            """Mark the modern IntelliJ-based server ready after its startup/import phase."""
+            log.info("Kotlin IntelliJ language server reported that it is ready")
+            self._intellij_server_ready.set()
 
         def work_done_progress_create(params: dict) -> dict:
             """Handle window/workDoneProgress/create: the server is about to report async progress.
@@ -487,9 +552,12 @@ class KotlinLanguageServer(SolidLanguageServer):
         self.server.on_request("workspace/codeLens/refresh", do_nothing)
         self.server.on_notification("language/status", do_nothing)
         self.server.on_notification("window/logMessage", window_log_message)
+        self.server.on_notification("window/showMessage", window_log_message)
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
+        self.server.on_request("workspace/diagnostic/refresh", do_nothing)
         self.server.on_request("window/workDoneProgress/create", work_done_progress_create)
         self.server.on_notification("$/progress", progress_handler)
+        self.server.on_notification("intellij/ready-for-test", intellij_server_ready)
         self.server.on_notification("$/logTrace", do_nothing)
         self.server.on_notification("$/cancelRequest", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
@@ -503,6 +571,8 @@ class KotlinLanguageServer(SolidLanguageServer):
         init_response = self.server.send.initialize(initialize_params)
 
         capabilities = init_response["capabilities"]
+        server_info = init_response.get("serverInfo", {})
+        wait_for_intellij_ready = isinstance(server_info, dict) and server_info.get("name") == "IntelliJ Language Server by JetBrains"
         assert "textDocumentSync" in capabilities, "Server must support textDocumentSync"
         assert "hoverProvider" in capabilities, "Server must support hover"
         assert "completionProvider" in capabilities, "Server must support code completion"
@@ -515,14 +585,17 @@ class KotlinLanguageServer(SolidLanguageServer):
 
         self.server.notify.initialized({})
 
-        # Wait for any async indexing to complete.
+        # Wait for workspace import and async indexing to complete.
         # - Older KLS (0.253.x): indexing is synchronous inside `initialize`, no $/progress is sent,
         #   _indexing_complete stays SET -> wait() returns immediately.
         # - Newer KLS (261+): server sends window/workDoneProgress/create after initialized,
         #   which clears the event; wait() blocks until all progress tokens end.
+        # - IntelliJ-based KLS (262.4739+): server sends intellij/ready-for-test after
+        #   its workspace import and indexing phase completes.
         _INDEXING_TIMEOUT = 120.0
         log.info("Waiting for Kotlin LSP indexing to complete (if async)...")
-        if self._indexing_complete.wait(timeout=_INDEXING_TIMEOUT):
+        ready_event = self._intellij_server_ready if wait_for_intellij_ready else self._indexing_complete
+        if ready_event.wait(timeout=_INDEXING_TIMEOUT):
             log.info("Kotlin LSP ready")
         else:
             log.warning("Kotlin LSP did not signal indexing completion within %.0fs; proceeding anyway", _INDEXING_TIMEOUT)

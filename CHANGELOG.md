@@ -39,6 +39,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
     project creation) 
   - Add `python_basedpyright` as an alternative Python language server
+  - Kotlin: update the managed Kotlin LSP from `261.13587.0` to `262.9593.0`, including support for the
+    new platform-specific archive layout and Windows ARM64 builds
   - Nix/nixd: support custom `ls_path` launchers and external JSON settings through `config_path` #1737
   - Fix: Nix/nixd diagnostics now use published diagnostics instead of the unsupported
     `textDocument/diagnostic` request, which terminated nixd #1802
