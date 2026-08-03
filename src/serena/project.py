@@ -1,6 +1,7 @@
 import logging
 import os
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -277,6 +278,19 @@ class Project(ToStringMixin):
 
         return self._is_ignored_relative_path(str(relative_path), ignore_non_source_files=ignore_non_source_files)
 
+    def get_is_ignored_path_fn(self, base_path: str, skip_ignored_paths: bool) -> Callable[[str], bool]:
+        """
+        Returns a function for checking whether a path should be ignored during a traversal of the given base path.
+
+        :param base_path: the relative base path representing the starting point of the traversal.
+            If the path is itself ignored, then the returned function will not consider ignored paths.
+        :param skip_ignored_paths: whether to skip ignored (sub-)paths
+        :return: a function that takes a path and returns True if the path should be ignored, False otherwise.
+        """
+        if not skip_ignored_paths or self.is_ignored_path(base_path):
+            return lambda _: False
+        return self.is_ignored_path
+
     def is_path_in_project(self, path: str | Path) -> bool:
         """
         Checks if the given (absolute or relative) path is inside the project directory.
@@ -328,7 +342,7 @@ class Project(ToStringMixin):
 
         if require_not_ignored:
             if self.is_ignored_path(relative_path):
-                raise ValueError(f"Path {relative_path} is ignored; cannot access for safety reasons")
+                raise ValueError(f"Path {relative_path} is ignored")
 
     def gather_source_files(self, relative_path: str = "") -> list[str]:
         """Retrieves relative paths of all source files, optionally limited to the given path
@@ -367,7 +381,15 @@ class Project(ToStringMixin):
                         )
             return rel_file_paths
 
-    def _create_file_collection(self, relative_path: str, code_files_only: bool) -> FileCollection:
+    def _create_file_collection(self, relative_path: str, *, code_files_only: bool, skip_ignored_files: bool) -> FileCollection:
+        """
+        Creates the file collection for the given relative path.
+
+        :param relative_path: the relative path to create the file collection for, relative to the project root
+        :param code_files_only: whether to include only (non-ignored) code files
+        :param skip_ignored_files: whether to skip ignored files; has no effect if `code_files_only` is True
+        :return:
+        """
         if FileProxy.is_external_path(relative_path):
             # single external path: create appropriate proxy
             file_collection = FileCollection([FileProxy.from_project_relative_path(self, relative_path)])
@@ -385,11 +407,12 @@ class Project(ToStringMixin):
                 if os.path.isfile(abs_path):
                     rel_paths_to_search = [relative_path]
                 else:
+                    is_ignored_path_fn = self.get_is_ignored_path_fn(base_path=relative_path, skip_ignored_paths=skip_ignored_files)
                     _dirs, rel_paths_to_search = scan_directory(
                         path=abs_path,
                         recursive=True,
-                        is_ignored_dir=self.is_ignored_path,
-                        is_ignored_file=self.is_ignored_path,
+                        is_ignored_dir=is_ignored_path_fn,
+                        is_ignored_file=is_ignored_path_fn,
                         relative_to=self.project_root,
                     )
                 file_collection = FileCollection.from_local_project_paths(rel_paths_to_search, self)
@@ -405,20 +428,34 @@ class Project(ToStringMixin):
         paths_exclude_glob: str | None = None,
         multiline: bool = True,
         code_files_only: bool = True,
+        skip_ignored_files: bool = True,
     ) -> list[MatchedConsecutiveLines]:
         """
         Search for a pattern across all (non-ignored) source files
 
-        :param pattern: Regular expression pattern to search for, either as a compiled Pattern or string
-        :param relative_path:
-        :param context_lines_before: Number of lines of context to include before each match
-        :param context_lines_after: Number of lines of context to include after each match
-        :param paths_include_glob: Glob pattern to filter which files to include in the search
-        :param paths_exclude_glob: Glob pattern to filter which files to exclude from the search. Takes precedence over paths_include_glob.
-        :param multiline: Whether to compile the regex with the DOTALL flag (``.`` matches newlines).
-        :return: List of matched consecutive lines with context
+        :param pattern: regular expression pattern to search for, either as a compiled Pattern or string
+        :param relative_path: the relative path to search in, relative to the project root; if empty, search in the entire project
+        :param context_lines_before: number of lines of context to include before each match
+        :param context_lines_after: number of lines of context to include after each match
+        :param paths_include_glob: glob pattern to filter which files to include in the search
+        :param paths_exclude_glob: glob pattern to filter which files to exclude from the search. Takes precedence over paths_include_glob.
+        :param multiline: whether to compile the regex with the DOTALL flag (`.` matches newlines).
+        :param code_files_only: whether to include only (non-ignored) code files
+        :param skip_ignored_files: whether to skip ignored files; has no effect if `code_files_only` is True
+        :return: list of matches
         """
-        file_collection = self._create_file_collection(relative_path, code_files_only)
+        file_collection = self._create_file_collection(
+            relative_path, code_files_only=code_files_only, skip_ignored_files=skip_ignored_files
+        )
+        return search_files(
+            file_collection,
+            pattern,
+            context_lines_before=context_lines_before,
+            context_lines_after=context_lines_after,
+            paths_include_glob=paths_include_glob,
+            paths_exclude_glob=paths_exclude_glob,
+            multiline=multiline,
+        )
         return search_files(
             file_collection,
             pattern,
