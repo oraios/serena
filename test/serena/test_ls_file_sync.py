@@ -13,7 +13,7 @@ import pytest
 
 from serena.agent import SerenaAgent
 from serena.project import Project
-from serena.tools import FindReferencingSymbolsTool
+from serena.tools import FindReferencingSymbolsTool, FindSymbolTool
 from solidlsp.ls_config import LanguageServerId
 from test.conftest import agent_for_project_context, get_repo_path
 
@@ -132,3 +132,60 @@ def test_ls_low_level_find_references_with_explicit_sync(tmp_path):
     Tests that requesting references directly from the LS works if synchronisation is explicitly requested after external file changes.
     """
     FileSystemSyncTestCase(use_serena_tool=False).run(tmp_path)
+
+
+class SymbolPositionStaleAfterExternalEditTestCase:
+    """
+    Tests that a Changed (not Created/Deleted) external edit to a file that already has an open
+    buffer in the language server session is reflected in symbol positions returned by
+    FindSymbolTool. This exercises SolidLanguageServer.resync_open_buffer, which is needed in
+    addition to workspace/didChangeWatchedFiles: once a document is open, a server may treat the
+    client (not the filesystem) as authoritative for its content and silently ignore watched-file
+    notifications for it (observed with pyright).
+    """
+
+    _TARGET_FILE = os.path.join("test_repo", "services.py")
+    _TARGET_SYMBOL = "create_user"
+    _PAD_LINES = 5
+
+    def _find(self, tool: FindSymbolTool) -> dict:
+        with tool.symbol_dict_grouper.disabled_context():
+            response = tool.apply(name_path_pattern=self._TARGET_SYMBOL, relative_path=self._TARGET_FILE)
+        symbols = json.loads(response)
+        assert len(symbols) == 1, f"expected exactly one match for {self._TARGET_SYMBOL}, got {symbols}"
+        return symbols[0]
+
+    def run(self, tmp_path):
+        repo_root = tmp_path / "repo"
+        shutil.copytree(get_repo_path(LanguageServerId.PYTHON), repo_root)
+        target_abs = repo_root / self._TARGET_FILE
+
+        with agent_for_project_context(LanguageServerId.PYTHON, str(repo_root)) as agent:
+            project = agent.get_active_project_or_raise()
+            ls = next(iter(project.language_server_manager.iter_language_servers()))
+            tool = agent.get_tool(FindSymbolTool)
+
+            # Hold the file's buffer open across the external edit, mirroring the state left
+            # behind by a multi-step editing sequence that keeps a buffer open between calls.
+            with ls.open_file(self._TARGET_FILE):
+                baseline_start_line = self._find(tool)["body_location"]["start_line"]
+
+                original = target_abs.read_text(encoding="utf-8")
+                target_abs.write_text(("# pad\n" * self._PAD_LINES) + original, encoding="utf-8")
+
+                after_start_line = self._find(tool)["body_location"]["start_line"]
+
+        assert after_start_line == baseline_start_line + self._PAD_LINES, (
+            f"expected {self._TARGET_SYMBOL} to have shifted by {self._PAD_LINES} lines after the "
+            f"external edit ({baseline_start_line} -> {baseline_start_line + self._PAD_LINES}), "
+            f"but FindSymbolTool reported {after_start_line}"
+        )
+
+
+def test_find_symbol_tool_reflects_external_change_to_open_buffer(tmp_path):
+    """
+    Regression test for oraios/serena#1593: find_symbol returned a stale position for a symbol
+    in a file that was already open in the language server session and was then edited outside
+    of Serena's own edit tools.
+    """
+    SymbolPositionStaleAfterExternalEditTestCase().run(tmp_path)

@@ -107,6 +107,7 @@ class LSPFileBuffer:
         self.language_server = language_server
         self.uri = uri
         self._read_file_modified_date: float | None = None
+        self._read_file_modified_date_passed_to_ls: float | None = None
         self._contents: str | None = None
         self.version = version
         self.language_id = language_id
@@ -120,20 +121,40 @@ class LSPFileBuffer:
     def _open_in_ls(self) -> None:
         """
         Open the file in the language server if it is not already open.
+        If it is already open, make sure the language server has the latest contents of the file.
         """
-        if self._is_open_in_ls:
-            return
-        self._is_open_in_ls = True
-        self.language_server.server.notify.did_open_text_document(
-            {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
-                LSPConstants.TEXT_DOCUMENT: {
-                    LSPConstants.URI: self.uri,
-                    LSPConstants.LANGUAGE_ID: self.language_id,
-                    LSPConstants.VERSION: 0,
-                    LSPConstants.TEXT: self.contents,
+        if not self._is_open_in_ls:
+            self._is_open_in_ls = True
+            current_contents = self.contents
+            self._read_file_modified_date_passed_to_ls = self._read_file_modified_date
+            self.language_server.server.notify.did_open_text_document(
+                {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                    LSPConstants.TEXT_DOCUMENT: {
+                        LSPConstants.URI: self.uri,
+                        LSPConstants.LANGUAGE_ID: self.language_id,
+                        LSPConstants.VERSION: self.version,
+                        LSPConstants.TEXT: current_contents,
+                    }
                 }
-            }
-        )
+            )
+        else:
+            # file already open: check if contents have changed and notify if so
+            current_contents = self.contents
+            if self._read_file_modified_date != self._read_file_modified_date_passed_to_ls:
+                self._read_file_modified_date_passed_to_ls = self._read_file_modified_date
+                self.language_server.server.notify.did_change_text_document(
+                    {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                        LSPConstants.TEXT_DOCUMENT: {
+                            LSPConstants.URI: self.uri,
+                            LSPConstants.VERSION: self.version,
+                        },
+                        LSPConstants.CONTENT_CHANGES: [
+                            {
+                                LSPConstants.TEXT: current_contents,
+                            }
+                        ],
+                    }
+                )
 
     def close(self) -> None:
         if self._is_open_in_ls:
@@ -146,24 +167,34 @@ class LSPFileBuffer:
             )
 
     def ensure_open_in_ls(self) -> None:
-        """Ensure that the file is opened in the language server."""
+        """
+        Ensure that the file is opened in the language server (or, if it is already open,
+        that the language server is made aware of the file's updated contents in case it
+        has changed on disk).
+        """
         self._open_in_ls()
+
+    def _invalidate_cached_data(self, mtime: float | None = None) -> float | None:
+        """
+        Invalidates cached data (file contents, hash) if the file was modified since it was read
+
+        :param: the current modification time if it was already read
+        """
+        if self._read_file_modified_date is not None:
+            if mtime is None:
+                mtime = self.abs_path.stat().st_mtime
+            if mtime > self._read_file_modified_date:
+                self._contents = None
+                self._content_hash = None
 
     @property
     def contents(self) -> str:
         file_modified_date = self.abs_path.stat().st_mtime
-
-        # if contents are cached, check if they are stale (file modification since last read) and invalidate if so
-        if self._contents is not None:
-            assert self._read_file_modified_date is not None
-            if file_modified_date > self._read_file_modified_date:
-                self._contents = None
-
+        self._invalidate_cached_data(file_modified_date)
         if self._contents is None:
             self._read_file_modified_date = file_modified_date
             self._contents = FileUtils.read_file(str(self.abs_path), self.encoding)
             self._content_hash = None
-
         return self._contents
 
     @contents.setter
@@ -179,6 +210,7 @@ class LSPFileBuffer:
 
     @property
     def content_hash(self) -> str:
+        self._invalidate_cached_data()
         if self._content_hash is None:
             self._content_hash = hashlib.md5(self.contents.encode(self.encoding)).hexdigest()
         return self._content_hash
@@ -1247,10 +1279,15 @@ class SolidLanguageServer(ABC):
     @contextmanager
     def open_file(self, relative_file_path: str, open_in_ls: bool = True) -> Iterator[LSPFileBuffer]:
         """
-        Open a file in the Language Server. This is required before making any requests to the Language Server.
+        Opens a file.
+
+        Note: Opening a file in the language server is typically a precondition for further requests
+        pertaining to the respective file.
 
         :param relative_file_path: The relative path of the file to open.
         :param open_in_ls: whether to open the file in the language server, sending the didOpen notification.
+            If the file is already open but file contents has changed since the original notification,
+            an update notification is sent instead.
             Set this to False to read the local file buffer without notifying the LS; the file can
             be opened in the LS later by calling the `ensure_open_in_ls` method on the returned LSPFileBuffer.
         """
@@ -1910,16 +1947,13 @@ class SolidLanguageServer(ABC):
             file_hash_and_result = self._document_symbols_cache.get(cache_key)
             if file_hash_and_result is None:
                 log.debug("No cache hit for document symbols in %s", relative_file_path)
-                log.debug("perf: document_symbols_cache MISS path=%s", relative_file_path)
             else:
                 file_hash, document_symbols = file_hash_and_result
                 if file_hash == file_data.content_hash:
-                    log.debug("Returning cached document symbols for %s", relative_file_path)
-                    log.debug("perf: document_symbols_cache HIT path=%s", relative_file_path)
+                    log.debug("Returning cached document symbols for %s (hash=%s)", relative_file_path, file_hash)
                     return document_symbols
 
-                log.debug("Cached document symbol content for %s has changed", relative_file_path)
-                log.debug("perf: document_symbols_cache STALE path=%s", relative_file_path)
+                log.debug("Cached document symbol content for %s has changed (old hash=%s)", relative_file_path, file_hash)
 
             # no cached result: request the root symbols from the language server
             root_symbols = self._request_document_symbols(relative_file_path, file_data)
@@ -2014,8 +2048,9 @@ class SolidLanguageServer(ABC):
             document_symbols = DocumentSymbols(unified_root_symbols)
 
             # update cache
-            log.debug("Updating cached document symbols for %s", relative_file_path)
-            self._document_symbols_cache[cache_key] = (file_data.content_hash, document_symbols)
+            content_hash = file_data.content_hash
+            log.debug("Updating cached document symbols for %s (hash=%s)", relative_file_path, content_hash)
+            self._document_symbols_cache[cache_key] = (content_hash, document_symbols)
             self._document_symbols_cache_is_modified = True
 
             return document_symbols
