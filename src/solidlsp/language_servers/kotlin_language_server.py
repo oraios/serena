@@ -475,6 +475,16 @@ class KotlinLanguageServer(SolidLanguageServer):
                         self._indexing_complete.set()
 
         self.server.on_request("client/registerCapability", do_nothing)
+        # We advertise `refreshSupport` for these features in the client
+        # capabilities above, so the server is entitled to send the matching
+        # refresh requests. Without a handler the client answers
+        # `MethodNotFound`, which the Kotlin LSP treats as fatal and shuts
+        # itself down, taking any in-flight request with it.
+        self.server.on_request("workspace/diagnostic/refresh", do_nothing)
+        self.server.on_request("workspace/inlayHint/refresh", do_nothing)
+        self.server.on_request("workspace/inlineValue/refresh", do_nothing)
+        self.server.on_request("workspace/semanticTokens/refresh", do_nothing)
+        self.server.on_request("workspace/codeLens/refresh", do_nothing)
         self.server.on_notification("language/status", do_nothing)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
