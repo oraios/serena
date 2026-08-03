@@ -715,6 +715,69 @@ src/*.o
         # foo.txt in other/ should NOT be ignored (outside foo/ subtree)
         assert not parser.should_ignore("other/foo.txt"), "other/foo.txt should NOT be ignored by foo/.gitignore"
 
+    def test_gitignore_dir_name_with_glob_metachars_is_not_a_wildcard(self):
+        """A directory named with glob metacharacters (e.g. a stray '***' venv) must be
+        matched literally, not interpreted as a pattern (issue #1806).
+        """
+        test_dir = self.repo_path / "test_metachar_dirname"
+        test_dir.mkdir()
+        (test_dir / "pkg").mkdir()
+        (test_dir / "***").mkdir()
+
+        (test_dir / "pkg" / "mod.py").touch()
+        (test_dir / "***" / "junk.txt").touch()
+
+        gitignore = test_dir / "***" / ".gitignore"
+        gitignore.write_text("*\n")
+
+        parser = GitignoreParser(str(test_dir))
+
+        # pkg/mod.py is outside the "***" directory and must not be affected by its gitignore
+        assert not parser.should_ignore("pkg/mod.py"), "pkg/mod.py should not be ignored by ***/.gitignore"
+
+        # junk.txt inside "***" is still ignored by its own gitignore's "*" pattern
+        assert parser.should_ignore("***/junk.txt"), "***/junk.txt should be ignored by its own gitignore"
+
+    def test_gitignore_dir_name_with_metachars_anchored_pattern(self):
+        """Same as above, for the anchored-pattern join site."""
+        test_dir = self.repo_path / "test_metachar_dirname_anchored"
+        test_dir.mkdir()
+        (test_dir / "pkg").mkdir()
+        (test_dir / "a[1]").mkdir()
+
+        (test_dir / "pkg" / "mod.py").touch()
+        (test_dir / "a[1]" / "mod.py").touch()
+
+        gitignore = test_dir / "a[1]" / ".gitignore"
+        gitignore.write_text("/mod.py\n")
+
+        parser = GitignoreParser(str(test_dir))
+
+        assert not parser.should_ignore("pkg/mod.py"), "pkg/mod.py should not be ignored by a[1]/.gitignore"
+        assert parser.should_ignore("a[1]/mod.py"), "a[1]/mod.py should be ignored by its own /mod.py pattern"
+
+    def test_gitignore_dir_name_with_metachars_implicit_double_star_pattern(self):
+        """A non-anchored pattern with no leading '**/' is joined as (rel_dir, "**", line):
+        the third join site. An unescaped '?' in the directory name would leak the pattern
+        into a sibling directory whose name merely matches the wildcard (issue #1806).
+        """
+        test_dir = self.repo_path / "test_metachar_dirname_implicit_doublestar"
+        test_dir.mkdir()
+        (test_dir / "q?").mkdir()
+        (test_dir / "qA").mkdir()
+        (test_dir / "qA" / "sub").mkdir()
+
+        (test_dir / "qA" / "sub" / "mod.py").touch()
+
+        gitignore = test_dir / "q?" / ".gitignore"
+        gitignore.write_text("mod.py\n")
+
+        parser = GitignoreParser(str(test_dir))
+
+        # "q?/.gitignore" must not reach into the sibling "qA/" directory just because "?"
+        # would match the "A" in "qA" if left as a wildcard.
+        assert not parser.should_ignore("qA/sub/mod.py"), "qA/sub/mod.py should not be ignored by q?/.gitignore"
+
 
 class TestGitignoreParserPermissionError:
     """Test PermissionError handling in GitignoreParser."""
