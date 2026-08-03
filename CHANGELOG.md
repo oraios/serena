@@ -21,6 +21,14 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Tools:
   - `find_symbol`, `jet_brains_find_symbol`: Change tool description to improve tool search results in clients that load tools dynamically
   - `get_current_config`: Result now includes language server status #1782
+  - More liberal handling of ignored paths in file access tools:
+    - Tools that explicitly target a single file (`create_text_file`, `read_file`, `replace_content`) no longer 
+      consider ignored paths in general, i.e. all files can be accessed. 
+      When a path is explicitly accessed, we should not try to prevent it; the agent is assumed to have a good reason 
+      for doing so.
+    - Tools that traverse a subtree of the project (`list_dir`, `find_file`, `search_for_pattern`) now all have an 
+      option `skip_ignored_files` (whether to skip ignored sub-paths).
+      Note that if the base path is itself ignored, ignored paths cannot be considered.
 
 * Language Servers: 
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
