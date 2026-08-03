@@ -22,6 +22,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - `find_symbol`, `jet_brains_find_symbol`: Change tool description to improve tool search results in clients that load tools dynamically
   - `get_current_config`: Result now includes language server status #1782
 
+* Tools:
+  - `search_for_pattern`: support additive exclusion globs and ordered priority globs, and preserve
+    representative prioritized matches with omitted-result counts when responses exceed the output limit.
+
 * Language Servers: 
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
     project creation) 

@@ -403,6 +403,7 @@ class Project(ToStringMixin):
         context_lines_after: int = 0,
         paths_include_glob: str | None = None,
         paths_exclude_glob: str | None = None,
+        paths_exclude_globs: list[str] | None = None,
         multiline: bool = True,
         code_files_only: bool = True,
     ) -> list[MatchedConsecutiveLines]:
@@ -415,6 +416,7 @@ class Project(ToStringMixin):
         :param context_lines_after: Number of lines of context to include after each match
         :param paths_include_glob: Glob pattern to filter which files to include in the search
         :param paths_exclude_glob: Glob pattern to filter which files to exclude from the search. Takes precedence over paths_include_glob.
+        :param paths_exclude_globs: Additional glob patterns to exclude. Additive with paths_exclude_glob.
         :param multiline: Whether to compile the regex with the DOTALL flag (``.`` matches newlines).
         :return: List of matched consecutive lines with context
         """
@@ -426,6 +428,7 @@ class Project(ToStringMixin):
             context_lines_after=context_lines_after,
             paths_include_glob=paths_include_glob,
             paths_exclude_glob=paths_exclude_glob,
+            paths_exclude_globs=paths_exclude_globs,
             multiline=multiline,
         )
 

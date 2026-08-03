@@ -97,22 +97,29 @@ class FileCollection:
     def from_local_project_paths(cls, relative_paths: list[str], project: "Project") -> Self:
         return cls([LocalProjectFileProxy(path, project) for path in relative_paths])
 
-    def filter_glob(self, paths_include_glob: str | None = None, paths_exclude_glob: str | None = None) -> "FileCollection":
+    def filter_glob(
+        self,
+        paths_include_glob: str | None = None,
+        paths_exclude_glob: str | None = None,
+        paths_exclude_globs: list[str] | None = None,
+    ) -> "FileCollection":
         """
         Filters the collection based on the given patterns.
         Note: Filtering is applied only to local project files. Other files are always retained.
 
         :param paths_include_glob: optional glob pattern to include files from the list
         :param paths_exclude_glob: optional glob pattern to exclude files from the list
+        :param paths_exclude_globs: additional optional glob patterns to exclude; additive with paths_exclude_glob
         :return: the filtered collection
         """
         from serena.util.text_utils import GlobMatcher
 
-        if paths_include_glob is None and paths_exclude_glob is None:
+        if paths_include_glob is None and paths_exclude_glob is None and not paths_exclude_globs:
             return self
 
         include_glob_matcher = GlobMatcher(paths_include_glob) if paths_include_glob else None
-        exclude_glob_matcher = GlobMatcher(paths_exclude_glob) if paths_exclude_glob else None
+        exclude_globs = [glob for glob in [paths_exclude_glob, *(paths_exclude_globs or [])] if glob]
+        exclude_glob_matchers = [(glob, GlobMatcher(glob)) for glob in exclude_globs]
 
         filtered_files = []
         for f in self._file_proxies:
@@ -122,10 +129,10 @@ class FileCollection:
                     if not include_glob_matcher.matches(path):
                         log.debug(f"Skipping {path}: does not match include pattern {paths_include_glob}")
                         continue
-                if exclude_glob_matcher:
-                    if exclude_glob_matcher.matches(path):
-                        log.debug(f"Skipping {path}: matches exclude pattern {paths_exclude_glob}")
-                        continue
+                matching_exclude_glob = next((glob for glob, matcher in exclude_glob_matchers if matcher.matches(path)), None)
+                if matching_exclude_glob:
+                    log.debug(f"Skipping {path}: matches exclude pattern {matching_exclude_glob}")
+                    continue
             filtered_files.append(f)
 
         return FileCollection(filtered_files)

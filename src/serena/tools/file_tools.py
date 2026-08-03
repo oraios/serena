@@ -6,6 +6,7 @@ File and file system-related tools, specifically for
   * editing at the file level
 """
 
+import json
 import os
 from collections import defaultdict
 from fnmatch import fnmatch
@@ -17,6 +18,7 @@ from serena.util.file_system import scan_directory
 from serena.util.text_utils import (
     ContentReplacer,
     GlobMatcher,
+    MatchedConsecutiveLines,
     MultiFileContentReplacer,
     ReplacementOccurrence,
 )
@@ -566,6 +568,8 @@ class SearchForPatternTool(Tool):
         context_lines_after: int = 0,
         paths_include_glob: str = "",
         paths_exclude_glob: str = "",
+        paths_exclude_globs: list[str] | None = None,
+        paths_priority_globs: list[str] | None = None,
         relative_path: str = "",
         restrict_search_to_code_files: bool = False,
         multiline: bool = True,
@@ -580,6 +584,9 @@ class SearchForPatternTool(Tool):
         :param context_lines_after: number of context lines to include after each match.
         :param paths_include_glob: optional glob (relative to project root, e.g. ``"src/**/*.ts"``) restricting which files are searched.
         :param paths_exclude_glob: optional glob to exclude files; takes precedence over `paths_include_glob`.
+        :param paths_exclude_globs: additional optional globs to exclude files; additive with `paths_exclude_glob`.
+        :param paths_priority_globs: optional ordered globs that rank matching paths before unmatched paths.
+            The first matching glob determines a path's priority.
         :param relative_path: restricts the search to this file or subdirectory of the project root
         :param restrict_search_to_code_files: whether to search only files containing analyzable code symbols
             (useful when looking for class/method definitions); otherwise also search non-code files.
@@ -599,9 +606,30 @@ class SearchForPatternTool(Tool):
             context_lines_after=context_lines_after,
             paths_include_glob=paths_include_glob.strip(),
             paths_exclude_glob=paths_exclude_glob.strip(),
+            paths_exclude_globs=[glob.strip() for glob in paths_exclude_globs or [] if glob.strip()],
             multiline=multiline,
             code_files_only=restrict_search_to_code_files,
         )
+
+        # normalize the public path contract before ranking and serialization
+        for match in matches:
+            assert match.source_file_path is not None
+            match.source_file_path = GlobMatcher.normalize_path(match.source_file_path)
+
+        # rank prioritized matches deterministically while preserving source order when no priorities are supplied
+        priority_matchers = [GlobMatcher(glob.strip()) for glob in paths_priority_globs or [] if glob.strip()]
+        if priority_matchers:
+
+            def priority(indexed_match: tuple[int, MatchedConsecutiveLines]) -> tuple[int, str, int, int]:
+                original_index, match = indexed_match
+                assert match.source_file_path is not None
+                priority_index = next(
+                    (index for index, matcher in enumerate(priority_matchers) if matcher.matches(match.source_file_path)),
+                    len(priority_matchers),
+                )
+                return priority_index, match.source_file_path, match.matched_lines[0].line_number, original_index
+
+            matches = [match for _, match in sorted(enumerate(matches), key=priority)]
 
         # group matches by file
         file_to_matches: dict[str, list[str]] = defaultdict(list)
@@ -616,8 +644,78 @@ class SearchForPatternTool(Tool):
             first = match.matched_lines[0]
             match_lines_by_file[match.source_file_path].append({"line": first.line_number, "text": first.line_content.strip()})
 
+        result = self._to_json(file_to_matches)
+
         # shortened result closures, from least to most aggressive shortening
         _TEXT_TRUNCATE = 60
+
+        def make_ranked_excerpt() -> str:
+            """Largest ranked prefix of whole match entries that fits the configured answer budget."""
+            effective_max_answer_chars = (
+                self.agent.serena_config.default_max_tool_answer_chars if max_answer_chars == -1 else max_answer_chars
+            )
+            too_long_message = (
+                f"The answer is too long ({len(result)} characters). You can adjust your query or raise the max_answer_chars parameter."
+            )
+            excerpt_budget = effective_max_answer_chars - len(too_long_message) - 1
+            excerpt_header = "Ranked match excerpt:\n"
+
+            # precompute exact serialized prefix sizes and file counts in one pass
+            serialized_mapping_lengths = [2]  # opening and closing braces
+            shown_file_counts = [0]
+            shown_paths: set[str] = set()
+            for match in matches:
+                assert match.source_file_path is not None
+                path = match.source_file_path
+                serialized_match_length = len(json.dumps(match.to_display_string(), ensure_ascii=False))
+                serialized_mapping_length = serialized_mapping_lengths[-1]
+                if path in shown_paths:
+                    serialized_mapping_length += 2 + serialized_match_length
+                else:
+                    if shown_paths:
+                        serialized_mapping_length += 2
+                    serialized_mapping_length += len(json.dumps(path, ensure_ascii=False)) + 3 + serialized_match_length + 1
+                    shown_paths.add(path)
+                serialized_mapping_lengths.append(serialized_mapping_length)
+                shown_file_counts.append(len(shown_paths))
+
+            # precompute counts of files represented by each omitted suffix
+            omitted_file_counts = [0] * (len(matches) + 1)
+            omitted_paths: set[str] = set()
+            for index in range(len(matches) - 1, -1, -1):
+                path = matches[index].source_file_path
+                assert path is not None
+                omitted_paths.add(path)
+                omitted_file_counts[index] = len(omitted_paths)
+
+            def footer(shown_match_count: int) -> str:
+                return (
+                    f"Showing {shown_match_count} of {len(matches)} matches across "
+                    f"{shown_file_counts[shown_match_count]} of {len(file_to_matches)} files; "
+                    f"omitted {len(matches) - shown_match_count} matches across "
+                    f"{omitted_file_counts[shown_match_count]} files; refine the query for omitted results."
+                )
+
+            # select the largest fitting prefix without serializing candidate mappings
+            shown_match_count = 0
+            for shown_match_count in range(1, len(matches) + 1):
+                excerpt_length = len(excerpt_header) + serialized_mapping_lengths[shown_match_count] + 1 + len(footer(shown_match_count))
+                if excerpt_length <= excerpt_budget:
+                    continue
+                shown_match_count -= 1
+                break
+            else:
+                shown_match_count = len(matches)
+
+            if shown_match_count == 0:
+                return result
+
+            # render the selected prefix once
+            excerpt: dict[str, list[str]] = defaultdict(list)
+            for match in matches[:shown_match_count]:
+                assert match.source_file_path is not None
+                excerpt[match.source_file_path].append(match.to_display_string())
+            return f"{excerpt_header}{self._to_json(excerpt)}\n{footer(shown_match_count)}"
 
         def render_first_lines(truncate: bool) -> str:
             """Render each match's first line, either in full or truncated to a fixed length."""
@@ -660,11 +758,11 @@ class SearchForPatternTool(Tool):
         def make_summary() -> str:
             return f"Found {len(matches)} matches in {len(match_lines_by_file)} files."
 
-        result = self._to_json(file_to_matches)
         return self._limit_length(
             result,
             max_answer_chars,
             shortened_result_factories=[
+                make_ranked_excerpt,
                 make_first_lines_full,
                 make_first_lines_truncated,
                 make_line_numbers_only,
