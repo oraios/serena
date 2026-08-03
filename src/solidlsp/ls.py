@@ -1909,6 +1909,12 @@ class SolidLanguageServer(ABC):
         NOTE: When changing the override of this method after the initial LS implementation,
               be sure to also override `_document_symbols_cache_fingerprint` in order to ensure that
               the caches are invalidated appropriately.
+        NOTE: The returned name must not contain '/', which separates the components of a name path
+              (see :class:`serena.symbol.NamePathMatcher`). A symbol whose name contains it cannot be
+              addressed by any tool taking an exact name path, not even via the name path that is
+              reported for the symbol itself. Language servers that identify symbols in such a way
+              (e.g. Erlang LS, which reports functions as `name/arity`) must substitute another
+              character here.
 
         :param symbol: the symbol
         :param relative_file_path: the relative path of the file the symbol is located in

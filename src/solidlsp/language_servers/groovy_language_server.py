@@ -6,6 +6,7 @@ import dataclasses
 import logging
 import os
 import shlex
+from typing import cast
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
@@ -184,7 +185,7 @@ class GroovyLanguageServer(SolidLanguageServer):
             java_home_relative_path = java_dependency["java_home_path"]
             java_relative_path = java_dependency["java_path"]
             java_download_url = java_dependency["url"]
-            java_archive_type = java_dependency["archiveType"]
+            java_archive_type = cast(FileUtils.ArchiveType, java_dependency["archiveType"])
             assert java_home_relative_path is not None
             assert java_relative_path is not None
             assert java_download_url is not None

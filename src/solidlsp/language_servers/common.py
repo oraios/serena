@@ -24,7 +24,7 @@ class RuntimeDependency:
     url: str | None = None
     sha256: str | None = None
     allowed_hosts: tuple[str, ...] | list[str] | None = None
-    archive_type: str | None = None
+    archive_type: FileUtils.ArchiveType | None = None
     binary_name: str | None = None
     command: str | list[str] | None = None
     package_name: str | None = None

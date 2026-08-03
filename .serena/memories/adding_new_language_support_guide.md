@@ -66,6 +66,50 @@ To implement a new language server using the DependencyProvider pattern:
 
 You should look at at least one existing implementation of each base class to understand how they work.
 
+#### Downloading Runtime Dependencies
+
+Use `DownloadedDependency` (in `solidlsp.dependency_provider`), which bundles the URL, 
+archive type, allowed hosts and checksum verification behind a single `download_to()` call:
+
+```python
+dep = DownloadedDependency(
+    url=f"https://example.org/foo-{version}-{platform}.zip",
+    archive_type="zip",              # optional FileUtils.ArchiveType for extraction
+    allowed_hosts=FOO_ALLOWED_HOSTS, # optional list of allowed hosts 
+)
+dep.download_to(target_dir)
+```
+
+Checksums for downloads live in a URL-keyed database, `src/solidlsp/resources/downloaded_dependency_hashes.json`,
+managed by `DownloadedDependencyHashDatabase`. 
+
+Consequences for your implementation:
+
+  * Build each dependency in a factory classmethod (`_create_dep_*`) that takes an
+    optional version and falls back to the pinned `DEFAULT_*` constant. 
+  * Add an `update_dep_hashes()` classmethod that constructs every dependency
+    and updates the hashes:
+    ```python
+    @classmethod
+    def update_dep_hashes(cls) -> None:
+        deps = [cls._create_dep_foo(), cls_._create_dep_bar(), ...]
+        with DownloadedDependencyHashDatabase.get_instance().update_context() as db:
+            for dep in deps:
+                db.update(dep)
+    ```
+    Hook a call to this method into `scripts/update_downloaded_dependency_hashes.py`, run that script,
+    and commit the resulting JSON changes.
+  * After bumping any pinned version, re-run the script. Add a NOTE comment next to
+    the version constants saying so; a stale database means unverified downloads
+    locally and a CI failure.
+  * Pass `verified=False` only for dependencies whose hash cannot be pinned by design
+    (e.g. a user-supplied version override).
+
+Reference implementation: `EclipseJDTLS.DependencyProvider` 
+
+Note that several older language servers still define hashes locally in constants and 
+call `FileUtils.download_and_extract_archive_verified`directly. Do not apply this legacy approach.
+
 ### 1.2 LSP Initialization
 
 Override `_create_base_initialize_params` to provide server-specific initialization
