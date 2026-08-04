@@ -35,6 +35,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     project creation) 
   - Add `python_basedpyright` as an alternative Python language server
   - Nix/nixd: support custom `ls_path` launchers and external JSON settings through `config_path` #1737
+  - Fix: Nix/nixd diagnostics now use published diagnostics instead of the unsupported
+    `textDocument/diagnostic` request, which terminated nixd #1802
   - Fix: `get_diagnostics_for_file` crashed with `SolidLSPException` for any Ansible file with at least
     one lint finding, because `ansible-language-server` doesn't implement `textDocument/documentSymbol`
     and the request used to map diagnostics onto owning symbols just threw. `AnsibleLanguageServer` now
