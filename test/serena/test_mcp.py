@@ -1,7 +1,7 @@
 """Tests for the mcp.py module in serena."""
 
 import pytest
-from mcp.server.fastmcp.tools.base import Tool as MCPTool
+from mcp.server.mcpserver.tools.base import Tool as MCPTool
 
 from serena.agent import Tool, ToolRegistry
 from serena.config.context_mode import SerenaAgentContext
