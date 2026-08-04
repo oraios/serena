@@ -259,3 +259,4 @@ class TestNixLanguageServer:
             (),
             min_count=1,
         )
+        assert language_server.is_running()
