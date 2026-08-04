@@ -562,6 +562,7 @@ class SolidLanguageServer(ABC):
         self._load_document_symbols_cache()
 
         self.server_started = False
+        self._request_timeout: float | None = None
         if config.trace_lsp_communication:
 
             def logging_fn(source: str, target: str, msg: StringDict | str) -> None:
@@ -1183,7 +1184,13 @@ class SolidLanguageServer(ABC):
         """
         :param timeout: the timeout, in seconds, for requests to the language server.
         """
+        self._request_timeout = timeout
         self.server.set_request_timeout(timeout)
+
+    @property
+    def request_timeout(self) -> float | None:
+        """Return the configured timeout for requests to the language server."""
+        return self._request_timeout
 
     def get_ignore_spec(self) -> pathspec.PathSpec:
         """

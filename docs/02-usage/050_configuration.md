@@ -706,7 +706,7 @@ The following settings are supported for the Java language server:
 | `lombok_show_generated` | `true` | Show Lombok-generated methods (`getX/setX`, `builder()`, `equals/hashCode/toString`, `withX`, fluent accessors) in `find_symbol`, `get_symbols_overview` and the symbol-edit tools. Set to `false` to restore the previous JDTLS default and hide the synthetic methods (e.g. when `@Data` classes pollute the outline with too many getters/setters). Requires JDTLS commit `b2d8952` / `vscode-java >= 1.53.0`; the bundled default already meets this. |
 | `jdtls_xmx` | `3G` | Maximum heap size for the JDTLS server JVM. |
 | `jdtls_xms` | `100m` | Initial heap size for the JDTLS server JVM. |
-| `startup_timeout` | `600` | Maximum seconds to wait for each required JDTLS startup signal. Applied separately to IntelliCode command registration (vscode-java mode only) and `ServiceReady`; on timeout Serena stops JDTLS and reports the current phase and latest language status. |
+| `startup_timeout` | `600` | Maximum total seconds for JDTLS startup, shared across initialization, IntelliCode command registration (vscode-java mode only), and `ServiceReady`. Serena caps this deadline below the outer tool timeout so it has time to stop JDTLS and report the current phase and latest language status. |
 | `intellicode_xmx` | `1G` | (vscode-java mode only) Maximum heap size for the IntelliCode embedded JVM. |
 | `intellicode_xms` | `100m` | (vscode-java mode only) Initial heap size for the IntelliCode embedded JVM. |
 

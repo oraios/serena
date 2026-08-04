@@ -39,8 +39,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
     project creation) 
   - Add `python_basedpyright` as an alternative Python language server
-  - Java/JDTLS: bound required startup waits and report the current phase and latest language status
-    on timeout instead of blocking until an outer task or CI limit is reached #1789
+  - Java/JDTLS: bound initialization and required startup waits with one total deadline that leaves
+    time for shutdown and reports the current phase and latest language status before an outer tool timeout #1789
   - Nix/nixd: support custom `ls_path` launchers and external JSON settings through `config_path` #1737
   - Fix: Nix/nixd diagnostics now use published diagnostics instead of the unsupported
     `textDocument/diagnostic` request, which terminated nixd #1802
