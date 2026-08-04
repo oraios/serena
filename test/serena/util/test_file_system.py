@@ -1,11 +1,13 @@
 import os
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 
+import pytest
 from pathspec import PathSpec
 
-from serena.util.file_system import GitignoreParser, GitignoreSpec, match_path
+from serena.util.file_system import GitignoreParser, GitignoreSpec, _escape_gitignore_path_component, match_path
 
 
 class TestGitignoreParser:
@@ -715,6 +717,7 @@ src/*.o
         # foo.txt in other/ should NOT be ignored (outside foo/ subtree)
         assert not parser.should_ignore("other/foo.txt"), "other/foo.txt should NOT be ignored by foo/.gitignore"
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="'*' is illegal in Windows filenames; this directory name cannot exist there")
     def test_gitignore_dir_name_with_glob_metachars_is_not_a_wildcard(self):
         """A directory named with glob metacharacters (e.g. a stray '***' venv) must be
         matched literally, not interpreted as a pattern (issue #1806).
@@ -756,6 +759,7 @@ src/*.o
         assert not parser.should_ignore("pkg/mod.py"), "pkg/mod.py should not be ignored by a[1]/.gitignore"
         assert parser.should_ignore("a[1]/mod.py"), "a[1]/mod.py should be ignored by its own /mod.py pattern"
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="'?' is illegal in Windows filenames; this directory name cannot exist there")
     def test_gitignore_dir_name_with_metachars_implicit_double_star_pattern(self):
         """A non-anchored pattern with no leading '**/' is joined as (rel_dir, "**", line):
         the third join site. An unescaped '?' in the directory name would leak the pattern
@@ -777,6 +781,16 @@ src/*.o
         # "q?/.gitignore" must not reach into the sibling "qA/" directory just because "?"
         # would match the "A" in "qA" if left as a wildcard.
         assert not parser.should_ignore("qA/sub/mod.py"), "qA/sub/mod.py should not be ignored by q?/.gitignore"
+
+    def test_escape_gitignore_path_component_escapes_all_metachars(self):
+        """Pure-function coverage for the '*' and '?' escaping cases the two directory-creation
+        tests above cannot exercise on Windows (those characters are illegal in Windows
+        filenames, so this runs on every platform instead of touching the filesystem).
+        """
+        assert _escape_gitignore_path_component("***") == "\\*\\*\\*"
+        assert _escape_gitignore_path_component("q?") == "q\\?"
+        assert _escape_gitignore_path_component("a[1]") == "a\\[1\\]"
+        assert _escape_gitignore_path_component("plain") == "plain"
 
 
 class TestGitignoreParserPermissionError:
