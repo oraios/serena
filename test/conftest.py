@@ -32,6 +32,11 @@ logging.configure(level=PYTEST_LOG_LEVEL)
 log = logging.getLogger(__name__)
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    if os.getenv("PYCHARM_HOSTED") == "1":
+        config.option.patch_pycharm_diff = True
+
+
 @pytest.fixture(scope="session")
 def resources_dir() -> Path:
     """Path to the test resources directory."""
