@@ -90,6 +90,7 @@ KOTLIN_SERVER_ARTIFACT_BY_PLATFORM: dict[str, tuple[str, FileUtils.ArchiveType, 
     "osx-x64": (".sit", "zip", ("kotlin-server-{version}", "bin", "intellij-server")),
     "osx-arm64": ("-aarch64.sit", "zip", ("kotlin-server-{version}", "bin", "intellij-server")),
 }
+KOTLIN_SERVER_LAUNCHER_NAMES = frozenset({"intellij-server", "intellij-server.exe"})
 
 
 @dataclass(frozen=True)
@@ -220,9 +221,11 @@ class KotlinLanguageServer(SolidLanguageServer):
             return kotlin_script
 
         def _create_launch_command(self, core_path: str) -> list[str]:
-            kotlin_lsp_version = self._custom_settings.get("kotlin_lsp_version", DEFAULT_KOTLIN_LSP_VERSION)
             command = [core_path, "--stdio"]
-            if _uses_kotlin_server_packaging(kotlin_lsp_version):
+            # A custom ls_path is independent of Serena's managed version. Select
+            # arguments from the actual launcher so existing kotlin-lsp.sh/.cmd
+            # configurations do not inherit IntelliJ-server-only options.
+            if os.path.basename(core_path).lower() in KOTLIN_SERVER_LAUNCHER_NAMES:
                 command.extend(["--system-path", os.path.join(self._project_cache_dir, "kotlin-lsp-system")])
             return command
 

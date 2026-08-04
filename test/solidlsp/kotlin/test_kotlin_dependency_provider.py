@@ -207,17 +207,17 @@ class TestKotlinDependencyProvider:
             allowed_hosts=KOTLIN_LSP_ALLOWED_HOSTS,
         )
 
-    def test_launch_command_uses_persistent_system_path_only_for_modern_server(self, tmp_path: Path) -> None:
-        modern_provider = _make_provider(tmp_path)
-        legacy_provider = _make_provider(tmp_path, {"kotlin_lsp_version": INITIAL_KOTLIN_LSP_VERSION})
+    def test_custom_launcher_arguments_do_not_inherit_managed_default_version(self, tmp_path: Path) -> None:
+        modern_provider = _make_provider(tmp_path, {"ls_path": "/path/to/intellij-server"})
+        legacy_provider = _make_provider(tmp_path, {"ls_path": "/path/to/kotlin-lsp.sh"})
 
-        assert modern_provider._create_launch_command("/path/to/intellij-server") == [
+        assert modern_provider.create_launch_command() == [
             "/path/to/intellij-server",
             "--stdio",
             "--system-path",
             str(tmp_path / "project-cache" / "kotlin-lsp-system"),
         ]
-        assert legacy_provider._create_launch_command("/path/to/kotlin-lsp.sh") == [
+        assert legacy_provider.create_launch_command() == [
             "/path/to/kotlin-lsp.sh",
             "--stdio",
         ]
