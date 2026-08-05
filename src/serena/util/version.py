@@ -42,16 +42,24 @@ class Version:
             int_components.append(int(num_str))
         return int_components
 
+    def _get_component(self, index: int) -> int:
+        """
+        :param index: the index of the version component to retrieve
+        :return: the respective version component, treating missing components as 0 (i.e. "1.6" compares as "1.6.0").
+            Version strings are externally sourced (PyPI, `dotnet --version`, plugin metadata) and may contain
+            fewer components than the version being compared against - or none at all.
+        """
+        return self.components[index] if index < len(self.components) else 0
+
     def is_at_least(self, *components: int) -> bool:
         """
         Checks this version against the given version components.
-        This version object must contain at least the respective number of components
 
         :param components: version components in order (i.e. major, minor, patch, etc.)
         :return: True if the version is at least the given version, False otherwise
         """
         for i, desired_min_version in enumerate(components):
-            actual_version = self.components[i]
+            actual_version = self._get_component(i)
             if actual_version < desired_min_version:
                 return False
             elif actual_version > desired_min_version:
@@ -61,13 +69,12 @@ class Version:
     def is_at_most(self, *components: int) -> bool:
         """
         Checks this version against the given version components.
-        This version object must contain at least the respective number of components
 
         :param components: version components in order (i.e. major, minor, patch, etc.)
         :return: True if the version is at most the given version, False otherwise
         """
         for i, desired_max_version in enumerate(components):
-            actual_version = self.components[i]
+            actual_version = self._get_component(i)
             if actual_version > desired_max_version:
                 return False
             elif actual_version < desired_max_version:
