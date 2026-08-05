@@ -183,6 +183,58 @@ def test_apply_ex_records_exactly_once_on_exception(monkeypatch):
     assert "deliberate failure" in (record_calls[0]["error_message"] or "")
 
 
+def test_timed_out_tool_call_is_recorded_once_as_failure(monkeypatch):
+    """A call exceeding the tool timeout is reported to the client as a failure while its thread keeps
+    running. The waiter records the timeout; the task finishing later must not add a second record nor
+    overwrite the failure with a success.
+    """
+    from serena.agent import SerenaAgent
+    from serena.tools.tools_base import Tool, ToolMarkerDoesNotRequireActiveProject
+
+    class _SlowTool(Tool, ToolMarkerDoesNotRequireActiveProject):
+        """A minimal tool that succeeds, but only after the waiter has given up."""
+
+        def apply(self) -> str:
+            """Apply the tool."""
+            return "late success"
+
+    agent = SerenaAgent.__new__(SerenaAgent)
+    agent._tool_usage_stats = ToolUsageStats()
+    agent.serena_config = SimpleNamespace(tool_timeout=0.01)
+
+    tool = _SlowTool.__new__(_SlowTool)
+    tool.agent = agent
+    monkeypatch.setattr(tool, "is_active", lambda: True)
+
+    # Stub issue_task so waiting always times out; keep the task callable so we can run it
+    # afterwards, simulating the tool thread finishing after the client already saw the failure.
+    pending: dict[str, Any] = {}
+
+    def _timing_out_issue_task(fn, name="", timeout=None):
+        pending["task"] = fn
+
+        class _FakeFuture:
+            def result(self, timeout=None):
+                raise TimeoutError("simulated timeout")
+
+        return _FakeFuture()
+
+    agent.issue_task = _timing_out_issue_task
+
+    result = tool.apply_ex(log_call=False, catch_exceptions=True)
+    assert "timed out" in result
+
+    # the tool thread finishes late and tries to record itself as a success
+    assert pending["task"]() == "late success"
+
+    recs, _ = agent._tool_usage_stats.get_records_since(since_seq=None, tool=None, limit=10)
+    assert len(recs) == 1, f"Expected exactly 1 record, got {[(r.success, r.error_message) for r in recs]}"
+    assert recs[0].success is False
+    assert "timed out" in (recs[0].error_message or "")
+    # and the call must not be double-counted in the aggregate stats
+    assert agent._tool_usage_stats.get_stats(recs[0].tool).num_times_called == 1
+
+
 def test_failed_tool_call_is_recorded_with_error_message():
     from serena.agent import SerenaAgent
 

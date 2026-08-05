@@ -188,8 +188,12 @@ class TaskExecutor:
             return int(max(0.0, (self.finished_at - self.started_at) * 1000))
 
         def get_error_message(self) -> str | None:
-            if not self.future.done() or self.future.cancelled():
+            if not self.future.done():
                 return None
+            if self.future.cancelled():
+                # cancellation is how an exceeded timeout manifests, but the user can also cancel
+                # a task from the dashboard, so report it without claiming a specific cause
+                return "Cancelled (timed out or cancelled by user)"
             exc = self.future.exception()
             if exc is None:
                 return None
