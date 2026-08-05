@@ -4,6 +4,7 @@ import jinja2
 import jinja2.meta
 import jinja2.nodes
 import jinja2.visitor
+from jinja2.sandbox import SandboxedEnvironment
 
 from interprompt.util.class_decorators import singleton
 
@@ -19,7 +20,7 @@ class _JinjaEnvProvider:
 
     def get_env(self) -> jinja2.Environment:
         if self._env is None:
-            self._env = jinja2.Environment()
+            self._env = SandboxedEnvironment()
         return self._env
 
 
