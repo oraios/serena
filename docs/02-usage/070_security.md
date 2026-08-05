@@ -111,7 +111,9 @@ By default, these services accept connections from localhost only, which is a se
 
 These services can be reconfigured to listen on other addresses, but doing so may have security implications.
 If you need to allow connections from other machines, we recommend that you set up a secure networking environment 
-(e.g. using a VPN or SSH tunnels) and ensure that only trusted machines can connect to these services.
+and ensure that only trusted machines can connect to these services.
+It is the responsibility of the user to restrict access appropriately, e.g. by placing the service behind a reverse
+proxy (adding authentication) or firewall.
 
 ## Supply Chain Security
 
