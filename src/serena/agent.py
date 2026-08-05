@@ -388,8 +388,7 @@ class DashboardManager:
                 case "Windows":
                     return cls.WEBVIEW
                 case "Darwin":
-                    # TODO: Switch to TRAY_MANAGER once support is tested
-                    return cls.BROWSER
+                    return cls.TRAY_MANAGER
                 case _:
                     return cls.BROWSER
 
