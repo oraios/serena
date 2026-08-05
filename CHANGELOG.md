@@ -13,6 +13,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Project activation errors are now reported to the client in Serena's system prompt, instead of failures 
     being visible only in the log. This applies both to a failed activation of an explicitly given project and to a 
     failed `--project-from-cwd` auto-detection (#1773).
+  - ProjectServer: Configure trusted hosts for localhost case
 
 * CLI:
   - Fix: `start-mcp-server` help text for `--project-from-cwd` falsely promised a fallback to the CWD, which was 

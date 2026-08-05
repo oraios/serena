@@ -44,8 +44,15 @@ class ProjectServer:
 
     PORT = SerenaPorts.PROJECT_SERVER_PORT
 
-    def __init__(self) -> None:
+    def __init__(self, host: str = "127.0.0.1", port: int | None = None) -> None:
+        """
+        :param host: the host address to listen on.
+        :param port: the port to listen on; if None, use default
+        """
         from serena.agent import SerenaAgent
+
+        if port is None:
+            port = self.PORT
 
         serena_config = SerenaConfig.from_config_file()
         serena_config.gui_log_window = False
@@ -54,9 +61,15 @@ class ProjectServer:
 
         self._agent = SerenaAgent(serena_config=serena_config)
         self._loaded_projects_by_root: dict[str, "Project"] = {}
+        self._port = port
+        self._host = host
 
-        # create the Flask application
+        # create the Flask application, limiting trusted hosts for the case where the server is running on localhost
         self._app = Flask(__name__)
+        local_hosts = ["localhost", "127.0.0.1"]
+        if self._host in local_hosts:
+            self._app.config["TRUSTED_HOSTS"] = local_hosts
+
         self._setup_routes()
 
     def _setup_routes(self) -> None:
@@ -97,12 +110,9 @@ class ProjectServer:
             params = json.loads(req.tool_params_json)
             return tool.apply_ex(**params)
 
-    def run(self, host: str = "127.0.0.1", port: int = PORT) -> int:
-        """Run the server on the given host and port.
-
-        :param host: the host address to listen on.
-        :param port: the port to listen on.
-        :return: the port number the server is running on.
+    def run(self) -> None:
+        """
+        Run the server on the given host and port.
         """
         from flask import cli
 
@@ -111,8 +121,7 @@ class ProjectServer:
         # replacement, even one with an identical signature), so the monkeypatch is suppressed here
         cli.show_server_banner = lambda *args, **kwargs: None  # ty: ignore[invalid-assignment]
 
-        self._app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
-        return port
+        self._app.run(host=self._host, port=self._port, debug=False, use_reloader=False, threaded=True)
 
 
 class ProjectServerClient:
