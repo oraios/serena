@@ -1065,7 +1065,7 @@ class SerenaAgent:
 
         self._project_prompt_status.mark_project_activation_message_as_provided(session_id)
 
-        return msg
+        return self._format_prompt(msg)
 
     def _update_active_modes(self, log_message: bool = True) -> None:
         """
