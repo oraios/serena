@@ -14,6 +14,7 @@ from serena.hooks import (
     PreToolUseHook,
     PreToolUseRemindAboutSymbolicToolsHook,
     SessionEndCleanupHook,
+    SessionStartActivateProjectHook,
     hook_commands,
 )
 
@@ -963,6 +964,28 @@ class TestSessionEndCleanupHook:
             SessionEndCleanupHook(HookClient.CODEX).execute()
 
 
+class TestSessionStartActivateProjectHook:
+    def test_missing_session_id_does_not_raise(self, tmp_path: Path):
+        """activate only emits a static reminder and never touches session_persistence_dir,
+        so a missing session id must not abort it, mirroring cleanup's tolerance (PR #1738 review)."""
+        stdin_data = {"hookEventName": "SessionStart"}
+        with patch("sys.stdin", _make_stdin(stdin_data)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            SessionStartActivateProjectHook(HookClient.CODEX).execute()
+
+    def test_empty_stdin_does_not_raise(self, tmp_path: Path):
+        """activate invoked with no stdin must not crash."""
+        with patch("sys.stdin", StringIO("")), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            SessionStartActivateProjectHook(HookClient.CODEX).execute()
+
+    def test_with_session_id_still_works(self, tmp_path: Path):
+        """A present session id is still accepted and stored as before."""
+        stdin_data = {"session_id": "activate-session"}
+        with patch("sys.stdin", _make_stdin(stdin_data)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            hook = SessionStartActivateProjectHook(HookClient.CLAUDE_CODE)
+            assert hook.session_persistence_dir is not None
+            hook.execute()
+
+
 class TestHookCli:
     """Tests for the Click CLI entry point (serena-hooks)."""
 
@@ -1157,6 +1180,14 @@ class TestHookCli:
             assert result.output == ""
         else:
             assert json.loads(result.output) == expected_output
+
+    def test_activate_command_without_session_id_does_not_raise(self, tmp_path: Path):
+        """activate must not crash if a client omits session_id on SessionStart (PR #1738 review)."""
+        stdin_json = json.dumps({"hookEventName": "SessionStart"})
+        runner = CliRunner()
+        with patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            result = runner.invoke(hook_commands, ["activate", "--client", "codex"], input=stdin_json)
+        assert result.exit_code == 0
 
     def test_client_default_is_claude_code(self, tmp_path: Path):
         """When --client is omitted, it defaults to claude-code."""

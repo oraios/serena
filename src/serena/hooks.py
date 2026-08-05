@@ -534,6 +534,12 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
 
 
 class SessionStartActivateProjectHook(Hook):
+    def __init__(self, client: HookClient):
+        # this hook only emits a static reminder message and never touches
+        # session_persistence_dir, so a missing session id must not abort it
+        # (see PR #1738 review): some clients may omit session_id on SessionStart
+        super().__init__(client, require_session_id=False)
+
     def execute(self) -> None:
         message = (
             "**IMPORTANT**: If the current directory is a coding project you are working on:"
