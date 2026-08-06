@@ -770,7 +770,8 @@ Supported settings:
 
 The managed `262.9593.0` packages include a bundled JBR. For a custom `ls_path`, point directly to
 `bin/intellij-server` (`bin/intellij-server.exe` on Windows). Serena also retains the legacy download
-layout for custom Kotlin LSP versions older than `262.4739.0`.
+layout for custom Kotlin LSP versions older than `262.4739.0`. The pinned current and frozen initial
+releases are checksum-verified; arbitrary custom versions are downloaded without checksum verification.
 
 Example:
 

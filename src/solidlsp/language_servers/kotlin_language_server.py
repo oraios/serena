@@ -25,6 +25,7 @@ from dataclasses import dataclass
 
 from overrides import override
 
+from solidlsp.dependency_provider import DownloadedDependency, DownloadedDependencyHashDatabase
 from solidlsp.ls import (
     LanguageServerDependencyProvider,
     LanguageServerDependencyProviderSinglePath,
@@ -45,23 +46,9 @@ KOTLIN_LSP_ALLOWED_HOSTS = ("download-cdn.jetbrains.com",)
 # Version pinning convention (see eclipse_jdtls.py for the full spec):
 #   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
 #   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
+# NOTE: After changing either pinned version, run scripts/update_downloaded_dependency_hashes.py.
 INITIAL_KOTLIN_LSP_VERSION = "261.13587.0"
-INITIAL_KOTLIN_LSP_SHA256_BY_SUFFIX = {
-    "win-x64": "2806c2bd4810bd8e7ccc27d8c0ca4a5232a1c4f26ea1f4ba40e578b60860ccad",
-    "linux-x64": "dc0ed2e70cb0d61fdabb26aefce8299b7a75c0dcfffb9413715e92caec6e83ec",
-    "linux-aarch64": "d1dceb000fe06c5e2c30b95e7f4ab01d05101bd03ed448167feeb544a9f1d651",
-    "mac-x64": "a3972f27229eba2c226060e54baea1c958c82c326dfc971bf53f72a74d0564a3",
-    "mac-aarch64": "d4ea28b22b29cf906fe16d23698a8468f11646a6a66dcb15584f306aaefbee6c",
-}
 DEFAULT_KOTLIN_LSP_VERSION = "262.9593.0"
-DEFAULT_KOTLIN_LSP_SHA256_BY_PLATFORM = {
-    "win-x64": "f2daaa476f26d99301b406f76de6d87c437d04dc72f06845154619d8f991c51f",
-    "win-arm64": "73a552a6a420158622e5ad8d96b53da8aa8ced3f88a24fded01575927a2fd8e7",
-    "linux-x64": "2d99d8e198fbe4aa8f4481e37799724ce94803b4ea12a60b416040e3fcd7cc5e",
-    "linux-arm64": "2317831c6e5607d05b7ebc1da655330125ce0e3d66fbf24517dfce442debc14e",
-    "osx-x64": "17369fda97c85418ac24ab38a9df56b21522a3468dfe193832fe455c13920745",
-    "osx-arm64": "6ba6021a706b21e64cef33f7e2b79f187c0910320722bb2d3ed05ad1115ec43f",
-}
 
 # Versions before this one use kotlin-lsp-{version}-{platform}.zip and a kotlin-lsp script.
 # Starting with 262.4739.0, JetBrains publishes kotlin-server archives with platform-specific
@@ -90,58 +77,12 @@ KOTLIN_SERVER_ARTIFACT_BY_PLATFORM: dict[str, tuple[str, FileUtils.ArchiveType, 
     "osx-x64": (".sit", "zip", ("kotlin-server-{version}", "bin", "intellij-server")),
     "osx-arm64": ("-aarch64.sit", "zip", ("kotlin-server-{version}", "bin", "intellij-server")),
 }
-KOTLIN_SERVER_LAUNCHER_NAMES = frozenset({"intellij-server", "intellij-server.exe"})
 
 
 @dataclass(frozen=True)
 class KotlinLSPArtifact:
-    url: str
-    archive_type: FileUtils.ArchiveType
+    dependency: DownloadedDependency
     launcher_parts: tuple[str, ...]
-    sha256: str | None
-
-
-def _parse_kotlin_lsp_version(version: str) -> tuple[int, ...]:
-    try:
-        return tuple(int(part) for part in version.split("."))
-    except ValueError as exc:
-        raise ValueError(f"Kotlin LSP version must contain only dot-separated integers: {version!r}") from exc
-
-
-def _uses_kotlin_server_packaging(version: str) -> bool:
-    return _parse_kotlin_lsp_version(version) >= KOTLIN_SERVER_PACKAGING_MIN_VERSION
-
-
-def _uses_kotlin_server_cdn_path(version: str) -> bool:
-    return _parse_kotlin_lsp_version(version) >= KOTLIN_SERVER_CDN_PATH_MIN_VERSION
-
-
-def _resolve_kotlin_lsp_artifact(version: str, platform_id: PlatformId) -> KotlinLSPArtifact:
-    if _uses_kotlin_server_packaging(version):
-        artifact_config = KOTLIN_SERVER_ARTIFACT_BY_PLATFORM.get(platform_id.value)
-        if artifact_config is None:
-            raise ValueError(f"Unsupported platform for Kotlin LSP {version}: {platform_id.value}")
-
-        asset_suffix, archive_type, launcher_parts = artifact_config
-        asset_name = f"kotlin-server-{version}{asset_suffix}"
-        cdn_path = "language-server/kotlin-server" if _uses_kotlin_server_cdn_path(version) else "kotlin-lsp"
-        return KotlinLSPArtifact(
-            url=f"https://download-cdn.jetbrains.com/{cdn_path}/{version}/{asset_name}",
-            archive_type=archive_type,
-            launcher_parts=tuple(part.format(version=version) for part in launcher_parts),
-            sha256=DEFAULT_KOTLIN_LSP_SHA256_BY_PLATFORM.get(platform_id.value) if version == DEFAULT_KOTLIN_LSP_VERSION else None,
-        )
-
-    kotlin_suffix = LEGACY_PLATFORM_KOTLIN_SUFFIX.get(platform_id.value)
-    if kotlin_suffix is None:
-        raise ValueError(f"Unsupported platform for Kotlin LSP {version}: {platform_id.value}")
-
-    return KotlinLSPArtifact(
-        url=f"https://download-cdn.jetbrains.com/kotlin-lsp/{version}/kotlin-lsp-{version}-{kotlin_suffix}.zip",
-        archive_type="zip",
-        launcher_parts=("kotlin-lsp.cmd",) if platform_id.is_windows() else ("kotlin-lsp.sh",),
-        sha256=INITIAL_KOTLIN_LSP_SHA256_BY_SUFFIX.get(kotlin_suffix) if version == INITIAL_KOTLIN_LSP_VERSION else None,
-    )
 
 
 class KotlinLanguageServer(SolidLanguageServer):
@@ -178,6 +119,67 @@ class KotlinLanguageServer(SolidLanguageServer):
             super().__init__(custom_settings, ls_resources_dir)
             self._project_cache_dir = project_cache_dir
 
+        @classmethod
+        def _create_artifact(cls, version: str, platform_id: PlatformId) -> KotlinLSPArtifact:
+            """Build download and launcher metadata for one Kotlin LSP release.
+
+            JetBrains has three publishing layouts: legacy ZIPs before 262.4739.0,
+            modern platform archives under ``/kotlin-lsp`` through 262.7569.0,
+            and modern archives under ``/language-server/kotlin-server`` from
+            262.8190.0 onward. Serena verifies the frozen initial and current default
+            releases; arbitrary user-selected versions are unverified by design.
+            """
+            try:
+                version_parts = tuple(int(part) for part in version.split("."))
+            except ValueError as exc:
+                raise ValueError(f"Kotlin LSP version must contain only dot-separated integers: {version!r}") from exc
+
+            verified = version in {INITIAL_KOTLIN_LSP_VERSION, DEFAULT_KOTLIN_LSP_VERSION}
+            if version_parts >= KOTLIN_SERVER_PACKAGING_MIN_VERSION:
+                artifact_config = KOTLIN_SERVER_ARTIFACT_BY_PLATFORM.get(platform_id.value)
+                if artifact_config is None:
+                    raise ValueError(f"Unsupported platform for Kotlin LSP {version}: {platform_id.value}")
+
+                asset_suffix, archive_type, launcher_parts = artifact_config
+                asset_name = f"kotlin-server-{version}{asset_suffix}"
+                cdn_path = "language-server/kotlin-server" if version_parts >= KOTLIN_SERVER_CDN_PATH_MIN_VERSION else "kotlin-lsp"
+                return KotlinLSPArtifact(
+                    dependency=DownloadedDependency(
+                        url=f"https://download-cdn.jetbrains.com/{cdn_path}/{version}/{asset_name}",
+                        archive_type=archive_type,
+                        allowed_hosts=KOTLIN_LSP_ALLOWED_HOSTS,
+                        verified=verified,
+                    ),
+                    launcher_parts=tuple(part.format(version=version) for part in launcher_parts),
+                )
+
+            kotlin_suffix = LEGACY_PLATFORM_KOTLIN_SUFFIX.get(platform_id.value)
+            if kotlin_suffix is None:
+                raise ValueError(f"Unsupported platform for Kotlin LSP {version}: {platform_id.value}")
+
+            return KotlinLSPArtifact(
+                dependency=DownloadedDependency(
+                    url=f"https://download-cdn.jetbrains.com/kotlin-lsp/{version}/kotlin-lsp-{version}-{kotlin_suffix}.zip",
+                    archive_type="zip",
+                    allowed_hosts=KOTLIN_LSP_ALLOWED_HOSTS,
+                    verified=verified,
+                ),
+                launcher_parts=("kotlin-lsp.cmd",) if platform_id.is_windows() else ("kotlin-lsp.sh",),
+            )
+
+        @classmethod
+        def update_dep_hashes(cls) -> None:
+            pinned_artifacts = [
+                *(cls._create_artifact(INITIAL_KOTLIN_LSP_VERSION, PlatformId(platform)) for platform in LEGACY_PLATFORM_KOTLIN_SUFFIX),
+                *(
+                    cls._create_artifact(DEFAULT_KOTLIN_LSP_VERSION, PlatformId(platform))
+                    for platform in KOTLIN_SERVER_ARTIFACT_BY_PLATFORM
+                ),
+            ]
+            with DownloadedDependencyHashDatabase.get_instance().update_context() as database:
+                for artifact in pinned_artifacts:
+                    database.update(artifact.dependency)
+
         def _get_or_install_core_dependency(self) -> str:
             """
             Setup runtime dependencies for Kotlin Language Server and return the path to the executable script.
@@ -186,7 +188,7 @@ class KotlinLanguageServer(SolidLanguageServer):
 
             # Setup paths for dependencies; legacy unversioned dir reserved for INITIAL only
             kotlin_lsp_version = self._custom_settings.get("kotlin_lsp_version", DEFAULT_KOTLIN_LSP_VERSION)
-            artifact = _resolve_kotlin_lsp_artifact(kotlin_lsp_version, platform_id)
+            artifact = self._create_artifact(kotlin_lsp_version, platform_id)
             ls_dirname = (
                 "kotlin_language_server"
                 if kotlin_lsp_version == INITIAL_KOTLIN_LSP_VERSION
@@ -200,13 +202,7 @@ class KotlinLanguageServer(SolidLanguageServer):
 
             if not os.path.exists(kotlin_script):
                 log.info("Downloading Kotlin Language Server...")
-                FileUtils.download_and_extract_archive_verified(
-                    artifact.url,
-                    static_dir,
-                    artifact.archive_type,
-                    expected_sha256=artifact.sha256,
-                    allowed_hosts=KOTLIN_LSP_ALLOWED_HOSTS,
-                )
+                artifact.dependency.download_to(static_dir)
 
                 if os.path.exists(kotlin_script) and not platform_id.is_windows():
                     os.chmod(
@@ -225,7 +221,9 @@ class KotlinLanguageServer(SolidLanguageServer):
             # A custom ls_path is independent of Serena's managed version. Select
             # arguments from the actual launcher so existing kotlin-lsp.sh/.cmd
             # configurations do not inherit IntelliJ-server-only options.
-            if os.path.basename(core_path).lower() in KOTLIN_SERVER_LAUNCHER_NAMES:
+            platform_id = PlatformUtils.get_platform_id()
+            intellij_launcher_name = "intellij-server.exe" if platform_id.is_windows() else "intellij-server"
+            if os.path.basename(core_path).lower() == intellij_launcher_name:
                 command.extend(["--system-path", os.path.join(self._project_cache_dir, "kotlin-lsp-system")])
             return command
 
