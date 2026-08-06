@@ -38,6 +38,9 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Language Servers: 
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
     project creation) 
+  - **Add support for Nextflow** (language server `nextflow`), using the official
+    [Nextflow language server](https://github.com/nextflow-io/language-server); the JAR is downloaded
+    automatically, a Java 17+ runtime is required
   - Add `python_basedpyright` as an alternative Python language server
   - Nix/nixd: support custom `ls_path` launchers and external JSON settings through `config_path` #1737
   - Fix: Nix/nixd diagnostics now use published diagnostics instead of the unsupported
