@@ -77,8 +77,8 @@ class MemoryGetFrontmatterTool(Tool, ToolMarkerOptional):
     """
     Reads scalar frontmatter metadata from a memory.
 
-    The metadata is stored in an optional block delimited by ``---`` lines at
-    the beginning of the memory file.
+    Managed metadata starts with ``serena_frontmatter_version: 1`` and requires
+    a non-empty ``type`` field. The Serena version marker is not returned.
     """
 
     def apply(self, memory_name: str) -> str:
@@ -91,14 +91,14 @@ class MemoryGetFrontmatterTool(Tool, ToolMarkerOptional):
 
 
 class MemoryAddFrontmatterTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
-    """Adds or updates one scalar frontmatter field in a memory."""
+    """Adds or updates one scalar field in versioned Serena frontmatter."""
 
     def apply(self, memory_name: str, key: str, value: str) -> str:
         """
         Add or update a frontmatter field without changing the memory body.
 
         :param memory_name: memory name
-        :param key: frontmatter field name
+        :param key: frontmatter field name; ``serena_frontmatter_version`` is reserved
         :param value: scalar frontmatter value
         """
         return self.memory_manager.add_memory_frontmatter(memory_name, key, value, is_tool_context=True)

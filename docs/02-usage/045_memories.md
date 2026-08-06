@@ -71,6 +71,31 @@ Memories can be organized into **topics** by using `/` in the memory name (e.g. 
 The structure is mapped to the file system, where topics correspond to subdirectories.
 The `list_memories` tool can filter by topic, allowing the agent to explore even large numbers of memories in a structured way.
 
+### Optional Frontmatter Metadata
+
+The optional `memory_get_frontmatter` and `memory_add_frontmatter` tools expose scalar metadata
+without mixing it into the content returned by `read_memory`. Serena only treats a leading block
+as managed frontmatter when its first field is the persisted version marker shown below:
+
+```yaml
+---
+serena_frontmatter_version: 1
+type: "Serena Memory"
+description: "Short summary"
+---
+```
+
+The marker is reserved for Serena and is not returned as metadata. A non-empty `type` is required;
+new blocks default it to `"Serena Memory"`. Existing files whose leading `---` block lacks the
+marker remain ordinary memory body content, including valid-looking or malformed legacy blocks.
+Frontmatter recognition does not depend on which tools are active, so `read_memory` consistently
+hides marked metadata and body-only writes preserve its original serialization.
+
+The names `type` and `description` follow the useful field-level conventions of Google's
+[Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md).
+Serena memories are not OKF bundles: Serena does not use OKF's reserved `index.md` or `log.md`
+behavior, and structured OKF fields are outside this scalar-only metadata feature.
+
 (memory-references)=
 ### Referencing Memories from Other Memories
 

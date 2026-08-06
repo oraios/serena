@@ -270,50 +270,143 @@ def _write(manager: MemoryManager, name: str, content: str) -> None:
 
 
 class TestMemoryFrontmatter:
-    def test_load_hides_frontmatter_and_preserves_body_whitespace(self, fs_manager: MemoryManager) -> None:
-        content = "---\nsummary: Notes\ncustom: value:with:colons\n---\n\n# Body\n\nTail\n"
+    @pytest.mark.parametrize(
+        "content",
+        [
+            "---\ndescription: Legacy metadata\n---\n\n# Body\n",
+            "---\n---\nBody\n",
+            "---\nmalformed legacy block\nBody\n",
+            "---\r\ndescription: Legacy CRLF\r\n---\r\n\r\nBody\r\n",
+        ],
+    )
+    def test_unmarked_legacy_content_survives_read_save_cycle_exactly(self, fs_manager: MemoryManager, content: str) -> None:
+        _write(fs_manager, "notes", content)
+
+        loaded = fs_manager.load_memory("notes")
+        fs_manager.save_memory("notes", loaded, is_tool_context=False)
+
+        assert loaded == content
+        assert fs_manager.get_memory_frontmatter("notes") == {}
+        assert fs_manager.get_memory_file_path("notes").read_bytes() == content.encode()
+
+    def test_load_hides_marked_frontmatter_and_preserves_body_whitespace(self, fs_manager: MemoryManager) -> None:
+        content = (
+            "---\n"
+            "serena_frontmatter_version: 1\n"
+            'type: "Serena Memory"\n'
+            'description: "Notes"\n'
+            "custom: value:with:colons\n"
+            "---\n"
+            "\n# Body\n\nTail\n"
+        )
         _write(fs_manager, "notes", content)
 
         assert fs_manager.get_memory_frontmatter("notes") == {
-            "summary": "Notes",
+            "type": "Serena Memory",
+            "description": "Notes",
             "custom": "value:with:colons",
         }
+        assert "serena_frontmatter_version" not in fs_manager.get_memory_frontmatter("notes")
         assert fs_manager.load_memory("notes") == "\n# Body\n\nTail\n"
 
-    def test_add_and_update_frontmatter_without_changing_body(self, fs_manager: MemoryManager) -> None:
-        body = "# Body\n\nTail\n"
-        _write(fs_manager, "notes", body)
+    def test_add_frontmatter_wraps_complete_legacy_content(self, fs_manager: MemoryManager) -> None:
+        legacy = "---\r\ndescription: legacy\r\n---\r\n\r\n# Body\r\n"
+        _write(fs_manager, "notes", legacy)
 
-        fs_manager.add_memory_frontmatter("notes", "summary", "First", is_tool_context=True)
-        fs_manager.add_memory_frontmatter("notes", "summary", "Updated", is_tool_context=True)
-        fs_manager.add_memory_frontmatter("notes", "owner", "team:core", is_tool_context=True)
+        fs_manager.add_memory_frontmatter("notes", "description", 'A "quoted" summary', is_tool_context=True)
 
-        assert fs_manager.get_memory_frontmatter("notes") == {
-            "summary": "Updated",
-            "owner": "team:core",
-        }
-        assert fs_manager.load_memory("notes") == body
-        assert fs_manager.get_memory_file_path("notes").read_text(encoding="utf-8") == (
-            "---\nsummary: Updated\nowner: team:core\n---\n# Body\n\nTail\n"
+        raw = fs_manager.get_memory_file_path("notes").read_bytes().decode()
+        expected_prefix = '---\nserena_frontmatter_version: 1\ntype: "Serena Memory"\ndescription: "A \\"quoted\\" summary"\n---\n'
+        assert raw == expected_prefix + legacy
+        assert fs_manager.load_memory("notes") == legacy
+
+    def test_update_frontmatter_preserves_unrelated_lines_and_body(self, fs_manager: MemoryManager) -> None:
+        original = (
+            "---\r\n"
+            "serena_frontmatter_version: 1\r\n"
+            'type :  "Serena Memory"  \r\n'
+            "description  :   old:value   \r\n"
+            'owner:\t"team:core"\r\n'
+            "---\r\n"
+            "\r\n# Body\r\n"
         )
+        path = fs_manager.get_memory_file_path("notes")
+        path.write_bytes(original.encode())
 
-    def test_save_memory_retains_existing_frontmatter(self, fs_manager: MemoryManager) -> None:
-        _write(fs_manager, "notes", "---\nsummary: Keep me\n---\nOriginal\n")
+        fs_manager.add_memory_frontmatter("notes", "description", "Updated", is_tool_context=True)
 
-        fs_manager.save_memory("notes", "Updated\n", is_tool_context=False)
+        assert path.read_bytes() == original.replace("old:value", '"Updated"').encode()
+        assert fs_manager.load_memory("notes") == "\r\n# Body\r\n"
 
-        assert fs_manager.get_memory_frontmatter("notes") == {"summary": "Keep me"}
-        assert fs_manager.load_memory("notes") == "Updated\n"
+    def test_save_memory_retains_exact_marked_prefix_with_crlf(self, fs_manager: MemoryManager) -> None:
+        prefix = '---\r\nserena_frontmatter_version: 1\r\ntype : "Serena Memory"  \r\ndescription:\t"Keep me"\r\n---\r\n'
+        path = fs_manager.get_memory_file_path("notes")
+        path.write_bytes((prefix + "Original\r\n").encode())
+
+        fs_manager.save_memory("notes", "Updated\r\n", is_tool_context=False)
+
+        assert path.read_bytes() == (prefix + "Updated\r\n").encode()
+
+    def test_edit_memory_only_edits_body(self, fs_manager: MemoryManager) -> None:
+        prefix = '---\nserena_frontmatter_version: 1\ntype: "Serena Memory"\ndescription :  "Keep bytes"  \n---\n'
+        path = fs_manager.get_memory_file_path("notes")
+        path.write_bytes((prefix + "Old body\n").encode())
+
+        fs_manager.edit_memory("notes", "Old", "New", "literal", False, is_tool_context=True)
+
+        assert path.read_bytes() == (prefix + "New body\n").encode()
+
+    @pytest.mark.parametrize(
+        "invalid",
+        [
+            "---\nserena_frontmatter_version: 2\ntype: Serena Memory\n---\nBody\n",
+            "---\nserena_frontmatter_version: 1\ndescription: Missing type\n---\nBody\n",
+            "---\nserena_frontmatter_version: 1\ntype: Serena Memory\ntype: Duplicate\n---\nBody\n",
+            '---\nserena_frontmatter_version: 1\ntype: Serena Memory\ndescription: "bad\n---\nBody\n',
+        ],
+    )
+    def test_invalid_marked_memory_fails_before_modification(self, fs_manager: MemoryManager, invalid: str) -> None:
+        path = fs_manager.get_memory_file_path("notes")
+        path.write_bytes(invalid.encode())
+
+        with pytest.raises(ValueError, match="memory 'notes'"):
+            fs_manager.save_memory("notes", "Replacement\n", is_tool_context=False)
+        with pytest.raises(ValueError, match="memory 'notes'"):
+            fs_manager.add_memory_frontmatter("notes", "owner", "team", is_tool_context=True)
+
+        assert path.read_bytes() == invalid.encode()
+
+    def test_invalid_marked_new_memory_is_not_created(self, fs_manager: MemoryManager) -> None:
+        invalid = "---\nserena_frontmatter_version: 1\ndescription: Missing type\n---\nBody\n"
+        path = fs_manager.get_memory_file_path("notes")
+
+        with pytest.raises(ValueError, match="memory 'notes'"):
+            fs_manager.save_memory("notes", invalid, is_tool_context=False)
+
+        assert not path.exists()
+
+    def test_reserved_marker_update_fails_without_modification(self, fs_manager: MemoryManager) -> None:
+        _write(fs_manager, "notes", "Body\n")
+        path = fs_manager.get_memory_file_path("notes")
+        before = path.read_bytes()
+
+        with pytest.raises(ValueError, match="reserved"):
+            fs_manager.add_memory_frontmatter("notes", "serena_frontmatter_version", "2", is_tool_context=True)
+
+        assert path.read_bytes() == before
 
     def test_missing_frontmatter_memory_raises(self, fs_manager: MemoryManager) -> None:
         with pytest.raises(FileNotFoundError):
             fs_manager.get_memory_frontmatter("missing")
         with pytest.raises(FileNotFoundError):
-            fs_manager.add_memory_frontmatter("missing", "summary", "Missing", is_tool_context=True)
+            fs_manager.add_memory_frontmatter("missing", "description", "Missing", is_tool_context=True)
 
     def test_ignored_memory_frontmatter_is_inaccessible(self, tmp_path) -> None:
         manager = MemoryManager(serena_data_folder=tmp_path, ignored_memory_patterns=[r"secret"])
-        manager.get_memory_file_path("secret").write_text("---\nsummary: Hidden\n---\nBody\n", encoding="utf-8")
+        manager.get_memory_file_path("secret").write_text(
+            '---\nserena_frontmatter_version: 1\ntype: "Serena Memory"\ndescription: "Hidden"\n---\nBody\n',
+            encoding="utf-8",
+        )
 
         with pytest.raises(ValueError, match="ignored_memory_patterns"):
             manager.get_memory_frontmatter("secret")
@@ -325,27 +418,35 @@ class TestMemoryFrontmatter:
         _write(manager, "frozen/notes", "Body\n")
 
         with pytest.raises(PermissionError):
-            manager.add_memory_frontmatter("frozen/notes", "summary", "Frozen", is_tool_context=True)
+            manager.add_memory_frontmatter("frozen/notes", "description", "Frozen", is_tool_context=True)
 
     def test_global_topic_frontmatter(self, fs_manager: MemoryManager, tmp_path, monkeypatch) -> None:
         global_dir = tmp_path / "global"
         monkeypatch.setattr(fs_manager, "_global_memory_dir", global_dir)
         _write(fs_manager, "global/topic/notes", "Body\n")
 
-        fs_manager.add_memory_frontmatter("global/topic/notes", "summary", "Global", is_tool_context=True)
+        fs_manager.add_memory_frontmatter("global/topic/notes", "description", "Global", is_tool_context=True)
 
-        assert fs_manager.get_memory_frontmatter("global/topic/notes") == {"summary": "Global"}
+        assert fs_manager.get_memory_frontmatter("global/topic/notes") == {
+            "type": "Serena Memory",
+            "description": "Global",
+        }
         assert fs_manager.load_memory("global/topic/notes") == "Body\n"
 
     def test_reference_autofix_retains_frontmatter(self, fs_manager: MemoryManager) -> None:
         _write(fs_manager, "auth/login", "# Login\n")
-        _write(fs_manager, "docs", "---\nsummary: Authentication docs\n---\nSee auth/login for details.\n")
+        prefix = '---\nserena_frontmatter_version: 1\ntype: "Serena Memory"\ndescription :  "Authentication docs"  \n---\n'
+        _write(fs_manager, "docs", prefix + "See auth/login for details.\n")
 
         report = fs_manager.auto_prefix_bare_references()
 
         assert report.total_replacements == 1
-        assert fs_manager.get_memory_frontmatter("docs") == {"summary": "Authentication docs"}
+        assert fs_manager.get_memory_frontmatter("docs") == {
+            "type": "Serena Memory",
+            "description": "Authentication docs",
+        }
         assert fs_manager.load_memory("docs") == "See mem:auth/login for details.\n"
+        assert fs_manager.get_memory_file_path("docs").read_bytes().startswith(prefix.encode())
 
 
 class TestListMemoriesFollowsSymlinks:
