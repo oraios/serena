@@ -1,3 +1,4 @@
+import os
 import shutil
 from pathlib import Path
 
@@ -50,28 +51,33 @@ class TestNextflowLanguageServer:
     @pytest.mark.parametrize("language_server", [LanguageServerId.NEXTFLOW], indirect=True)
     def test_find_references_within_file(self, language_server: SolidLanguageServer) -> None:
         """``normalizeName`` is defined and called within modules/util/main.nf only."""
-        util_path = "modules/util/main.nf"
+        util_path = os.path.join("modules", "util", "main.nf")
         symbol = self._get_symbol(language_server, util_path, "normalizeName")
         start = symbol["selectionRange"]["start"]
 
         refs = language_server.request_references(util_path, start["line"], start["character"])
-        ref_lines = {(ref["relativePath"], ref["range"]["start"]["line"]) for ref in refs}
+        ref_lines = self._reference_lines(refs)
         # modules/util/main.nf, 0-indexed line 5: return "Hello, " + normalizeName(name)
         assert (util_path, 5) in ref_lines, f"call to normalizeName inside buildGreeting not found. Found: {ref_lines}"
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.NEXTFLOW], indirect=True)
     def test_find_references_across_files(self, language_server: SolidLanguageServer) -> None:
         """The GREET process is defined in a module and used by the workflow in main.nf."""
-        module_path = "modules/greet/main.nf"
+        module_path = os.path.join("modules", "greet", "main.nf")
         symbol = self._get_symbol(language_server, module_path, "GREET")
         start = symbol["selectionRange"]["start"]
 
         refs = language_server.request_references(module_path, start["line"], start["character"])
-        ref_lines = {(ref["relativePath"], ref["range"]["start"]["line"]) for ref in refs}
+        ref_lines = self._reference_lines(refs)
         # main.nf, 0-indexed line 2: include { GREET; SHOUT } from './modules/greet/main.nf'
         assert ("main.nf", 2) in ref_lines, f"include of GREET in main.nf not found. Found: {ref_lines}"
         # main.nf, 0-indexed line 12: greetings = GREET(names)
         assert ("main.nf", 12) in ref_lines, f"invocation of GREET in main.nf not found. Found: {ref_lines}"
+
+    @staticmethod
+    def _reference_lines(references: list[dict]) -> set[tuple[str, int]]:
+        """(relative path, 0-indexed start line) per reference; paths use the platform separator."""
+        return {(ref["relativePath"], ref["range"]["start"]["line"]) for ref in references}
 
     @staticmethod
     def _get_symbol(language_server: SolidLanguageServer, relative_path: str, name: str) -> dict:

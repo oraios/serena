@@ -32,6 +32,7 @@ from solidlsp.ls import (
 )
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
+from solidlsp.lsp_protocol_handler import lsp_types
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -297,8 +298,23 @@ class NextflowLanguageServer(SolidLanguageServer):
             log.warning("Nextflow LS did not signal scan completion within %.0fs; proceeding anyway", _WORKSPACE_SCAN_TIMEOUT)
 
     @override
+    def _send_references_request(self, relative_file_path: str, line: int, column: int) -> list[lsp_types.Location] | None:
+        """
+        Flushes the server's pending recompile before asking for references.
+
+        Every ``didOpen``/``didChange`` schedules a debounced (1s) update of the file's AST, and
+        ``LanguageService.references`` is the one request that does not await it (``documentSymbol``,
+        ``codeLens``, ``documentLink`` and ``semanticTokensFull`` all do). A references request issued
+        within the debounce window therefore races the recompile of the very file it asks about and can
+        come back empty. Sending a ``documentSymbol`` request for the same file first is a cheap way to
+        block until the update has been applied.
+        """
+        self.server.send.document_symbol({"textDocument": {"uri": self._resolve_file_uri(relative_file_path)}})
+        return super()._send_references_request(relative_file_path, line, column)
+
+    @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
-        """Small safety buffer since we already waited for the workspace scan in _start_server."""
+        """Small safety buffer; the actual synchronisation happens in _send_references_request."""
         return 1.0
 
     @override
