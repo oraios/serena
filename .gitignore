@@ -83,6 +83,8 @@ lib/
 !test/resources/repos/dart/test_repo/lib/diagnostics_sample.dart
 !test/resources/repos/svelte/test_repo/src/lib/
 !test/resources/repos/svelte/test_repo/src/lib/**
+!dashboard/src/lib/
+!dashboard/src/lib/**
 lib64/
 parts/
 sdist/
@@ -276,3 +278,6 @@ zz-misc/
 vue-implementation/
 
 news/news.json
+
+# Playwright MCP session artifacts (screenshots, console logs, page snapshots)
+.playwright-mcp/

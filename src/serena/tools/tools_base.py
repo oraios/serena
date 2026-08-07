@@ -1,5 +1,7 @@
 import inspect
 import json
+import threading
+import time
 from abc import ABC
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -268,7 +270,9 @@ class Tool(Component):
 
     def _log_tool_application(self, frame: Any, session_id: str) -> None:
         params = {}
-        ignored_params = {"self", "log_call", "catch_exceptions", "args", "apply_fn"}
+        # NOTE: f_locals also exposes closure variables of the enclosing apply_ex, so anything
+        # referenced inside its task() must be listed here or it shows up as a tool parameter.
+        ignored_params = {"self", "log_call", "catch_exceptions", "args", "apply_fn", "record_call"}
         for param, value in frame.f_locals.items():
             if param in ignored_params:
                 continue
@@ -277,6 +281,48 @@ class Tool(Component):
             else:
                 params[param] = value
         log.info(f"{self.get_name_from_cls()}: {dict_string(params)}; session_id: {session_id}")
+
+    def _build_apply_kwargs(self, kwargs: dict[str, Any], session_id: str) -> dict[str, Any]:
+        """
+        Constructs the kwargs to pass to the tool's apply function, adding session_id if the tool is session-aware.
+        """
+        apply_kwargs = dict(kwargs)
+        if self._is_session_aware:
+            apply_kwargs["session_id"] = session_id
+        return apply_kwargs
+
+    def _make_call_recorder(self, tool_name: str, input_str: str) -> Callable[[str, float, bool, str | None], None]:
+        """
+        Builds a callable that records the tool call into the dashboard analytics at most once.
+
+        A call exceeding the tool timeout is cancelled and reported to the client as a failure, but its
+        thread keeps running and would later record itself as a success. Both the waiter and the task may
+        therefore try to record the same call; the first one wins, so analytics shows exactly one record
+        and it matches what the client actually saw.
+
+        :param tool_name: the name of the tool being called
+        :param input_str: the string representation of the tool's arguments
+        :return: a function recording (output_str, duration_ms, success, error_message), a no-op after the first call
+        """
+        lock = threading.Lock()
+        already_recorded = False
+
+        def record(output_str: str, duration_ms: float, success: bool, error_message: str | None) -> None:
+            nonlocal already_recorded
+            with lock:
+                if already_recorded:
+                    return
+                already_recorded = True
+            self.agent._record_tool_call_safely(
+                tool_name=tool_name,
+                input_str=input_str,
+                output_str=output_str,
+                duration_ms=duration_ms,
+                success=success,
+                error_message=error_message,
+            )
+
+        return record
 
     def _limit_length(
         self,
@@ -351,18 +397,27 @@ class Tool(Component):
             except Exception as e:
                 log.info(f"Failed to get client info: {e}.")
 
+        # tool-usage analytics instrumentation (dashboard): every applied tool call is recorded,
+        # including failures and timeouts, via the finally block and the timeout handler below
+        record_call = self._make_call_recorder(self.get_name(), str(self._build_apply_kwargs(kwargs, session_id)))
+
         def task() -> str:
             apply_fn = self.get_apply_fn()
 
+            if not self.is_active():
+                raise ToolCallError(f"Tool '{self.get_name_from_cls()}' is not active. Active tools: {self.agent.get_active_tool_names()}")
+
+            if log_call:
+                self._log_tool_application(inspect.currentframe(), session_id)
+
+            # NOTE: keep this after the logging call above, which reports the frame's locals
+            apply_kwargs = self._build_apply_kwargs(kwargs, session_id)
+
+            result: str = ""
+            success = True
+            error_message: str | None = None
+            start = time.perf_counter()
             try:
-                if not self.is_active():
-                    raise ToolCallError(
-                        f"Tool '{self.get_name_from_cls()}' is not active. Active tools: {self.agent.get_active_tool_names()}"
-                    )
-
-                if log_call:
-                    self._log_tool_application(inspect.currentframe(), session_id)
-
                 # check whether the tool requires an active project and language server
                 if not isinstance(self, ToolMarkerDoesNotRequireActiveProject):
                     if self.agent.get_active_project() is None:
@@ -370,11 +425,6 @@ class Tool(Component):
                             "No active project. Ask the user to provide the project path or to select a project from this list of known projects: "
                             + f"{self.agent.serena_config.project_names}"
                         )
-
-                # construct apply kwargs, adding session_id if the tool is session-aware
-                apply_kwargs = dict(kwargs)
-                if self._is_session_aware:
-                    apply_kwargs["session_id"] = session_id
 
                 # apply the actual tool
                 try:
@@ -396,15 +446,20 @@ class Tool(Component):
                     else:
                         raise
 
-                # record tool usage
-                self.agent.record_tool_usage(apply_kwargs, result, self)
-
-            except ToolCallError:
+            except ToolCallError as e:
+                success = False
+                error_message = e.get_error_message()
+                result = e.get_error_message()
                 raise
             except Exception as e:
                 msg = f"{e.__class__.__name__}: {e}"
+                success = False
+                error_message = msg
+                result = msg
                 log.error(msg, exc_info=e)
                 raise ToolCallError(msg)
+            finally:
+                record_call(result, (time.perf_counter() - start) * 1000, success, error_message)
 
             if log_call:
                 log.info(f"Result: {result}")
@@ -422,6 +477,7 @@ class Tool(Component):
         # (task timeout bounds task execution in the dispatcher once it runs, result timeout limits the time we wait)
         tool_call_error: ToolCallError
         timeout = self.agent.serena_config.tool_timeout
+        call_start = time.perf_counter()
         try:
             task_exec = self.agent.issue_task(task, name=self.__class__.__name__, timeout=timeout)
             return task_exec.result(timeout=timeout)
@@ -430,6 +486,9 @@ class Tool(Component):
         except TimeoutError:
             msg = f"Tool execution timed out after {timeout} seconds. "
             log.error(msg)
+            # record the timeout now: the task thread may still be running (and would otherwise
+            # record this failed call as a success once it eventually finishes) or may never finish
+            record_call(msg, (time.perf_counter() - call_start) * 1000, False, msg)
             tool_call_error = ToolCallError(msg)
         except Exception as e:  # unexpected errors (exceptions in the task itself are caught and forwarded as ToolCallError)
             msg = f"{e.__class__.__name__}: {e}"
