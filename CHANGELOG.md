@@ -39,6 +39,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
     project creation) 
   - Add `python_basedpyright` as an alternative Python language server
+  - Java/JDTLS: stop downloading and loading the unused IntelliCode completion-ranking bundle; the retired
+    `intellicode_version`, `intellicode_xmx` and `intellicode_xms` settings remain accepted but are ignored #1821
   - Nix/nixd: support custom `ls_path` launchers and external JSON settings through `config_path` #1737
   - Fix: Nix/nixd diagnostics now use published diagnostics instead of the unsupported
     `textDocument/diagnostic` request, which terminated nixd #1802

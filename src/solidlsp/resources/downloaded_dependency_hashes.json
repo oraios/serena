@@ -1,6 +1,5 @@
 {
   "https://services.gradle.org/distributions/gradle-8.14.2-bin.zip": "7197a12f450794931532469d4ff21a59ea2c1cd59a3ec3f89c035c3c420a6999",
-  "https://VisualStudioExptTeam.gallery.vsassets.io/_apis/public/gallery/publisher/VisualStudioExptTeam/extension/vscodeintellicode/1.2.30/assetbyname/Microsoft.VisualStudio.Services.VSIXPackage": "7f61a7f96d101cdf230f96821be3fddd8f890ebfefb3695d18beee43004ae251",
   "https://github.com/redhat-developer/vscode-java/releases/download/v1.54.0/java-darwin-arm64-1.54.0-923.vsix": "c54c45cb0d2579d8e0a4ddeb24d4a9dd0b460d07d9366adea2b38a1da22a463c",
   "https://github.com/redhat-developer/vscode-java/releases/download/v1.54.0/java-darwin-x64-1.54.0-923.vsix": "dfc98abc4e54165a78372e280242a039671729b1b03420608df3b10c6b629fb6",
   "https://github.com/redhat-developer/vscode-java/releases/download/v1.54.0/java-linux-arm64-1.54.0-923.vsix": "e2bb22c427d90da8dbb1afff72ff1e2dce38d50b76deb02d7bc313a330a1330c",

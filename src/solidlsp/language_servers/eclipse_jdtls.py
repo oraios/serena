@@ -35,11 +35,6 @@ log = logging.getLogger(__name__)
 
 GRADLE_ALLOWED_HOSTS = ("services.gradle.org", "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
 VSCODE_JAVA_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
-INTELLICODE_ALLOWED_HOSTS = (
-    "visualstudioexptteam.gallery.vsassets.io",
-    "marketplace.visualstudio.com",
-    "download.visualstudio.microsoft.com",
-)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -77,10 +72,9 @@ class RuntimeDependencyPaths:
     """
     Stores the paths to the runtime dependencies of EclipseJDTLS.
 
-    In the default mode (vscode-java VSIX), all paths are populated.
-    In the upstream-jdtls mode (when ``jdtls_path`` and ``lombok_path`` are set),
-    fields that have no upstream equivalent (gradle distribution, IntelliCode bundle)
-    are set to None.
+    In the default mode (vscode-java VSIX), all paths are populated. In the
+    upstream-jdtls mode (when ``jdtls_path`` and ``lombok_path`` are set), the
+    Gradle distribution path is ``None`` because Serena does not download it.
     """
 
     jre_path: str
@@ -89,8 +83,6 @@ class RuntimeDependencyPaths:
     jdtls_readonly_config_path: str
     lombok_jar_path: str
     gradle_path: str | None = None
-    intellicode_jar_path: str | None = None
-    intellisense_members_path: str | None = None
 
 
 @dataclass
@@ -113,8 +105,8 @@ class EclipseJDTLS(SolidLanguageServer):
     Two installation modes are supported:
 
     1. **Default vscode-java VSIX mode** (no extra config required) — Serena downloads the platform-specific
-       vscode-java VSIX bundle (~500 MB: JDTLS + bundled JRE 21 + Lombok + IntelliCode), Gradle distribution
-       and IntelliCode VSIX from public hosts. Suitable when public network access is available.
+       vscode-java VSIX bundle (JDTLS + bundled JRE 21 + Lombok) and Gradle distribution from public hosts.
+       Suitable when public network access is available.
 
     2. **Upstream JDTLS mode** (activated by setting both ``jdtls_path`` and ``lombok_path``) — uses an
        existing JDTLS installation and the system JDK. Nothing is downloaded. Suitable for restricted-network
@@ -143,8 +135,6 @@ class EclipseJDTLS(SolidLanguageServer):
               gradle_java_home is unset, Gradle import (default: false)
         - jdtls_xmx: Maximum heap size for the JDTLS server JVM (default: "3G")
         - jdtls_xms: Initial heap size for the JDTLS server JVM (default: "100m")
-        - intellicode_xmx: Maximum heap size for the IntelliCode embedded JVM (default: "1G")
-        - intellicode_xms: Initial heap size for the IntelliCode embedded JVM (default: "100m")
         - lombok_show_generated: Show Lombok-generated methods (getX/setX/builder()/...) in document
               symbols by sending java.symbols.includeGeneratedCode=true to JDTLS (default: true).
               Set to false for @Data-heavy projects where the extra getters/setters are noise.
@@ -155,7 +145,6 @@ class EclipseJDTLS(SolidLanguageServer):
               Pinned versions: "1.54.0-923" (default) and "1.42.0-561" (legacy / initial). Other versions
               are not supported in default VSIX mode (the resource paths inside the archive change between
               releases); use upstream-jdtls mode for arbitrary versions.
-        - intellicode_version: Override the pinned IntelliCode VSIX version downloaded by Serena
         - runtimes: Additional JRE/JDK entries to register with JDT-LS's ``java.configuration.runtimes``,
               for projects whose source/target level exceeds the JDK JDT-LS itself runs on (currently
               JDK 21 in default vscode-java VSIX mode). Each entry is a mapping with:
@@ -190,12 +179,9 @@ class EclipseJDTLS(SolidLanguageServer):
         use_system_java_home: true  # set to true to use system JAVA_HOME for JDTLS and Gradle fallback
         jdtls_xmx: "3G"  # maximum heap size for the JDTLS server JVM
         jdtls_xms: "100m"  # initial heap size for the JDTLS server JVM
-        intellicode_xmx: "1G"  # maximum heap size for the IntelliCode embedded JVM
-        intellicode_xms: "100m"  # initial heap size for the IntelliCode embedded JVM
         lombok_show_generated: true  # show Lombok-generated methods in document symbols (default true)
         gradle_version: "8.14.2"
         vscode_java_version: "1.54.0-923"  # also accepts pinned legacy "1.42.0-561"
-        intellicode_version: "1.2.30"
         runtimes:  # register additional JDKs for projects targeting a newer Java version
           - name: "JavaSE-25"
             path: "/home/user/Java/jdk25"
@@ -220,7 +206,6 @@ class EclipseJDTLS(SolidLanguageServer):
 
         self._service_ready_event = threading.Event()
         self._project_ready_event = threading.Event()
-        self._intellicode_enable_command_available = threading.Event()
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         ls_resources_dir = self.ls_resources_dir(self._solidlsp_settings)
@@ -258,7 +243,6 @@ class EclipseJDTLS(SolidLanguageServer):
 
         # versions used initially (which use default paths without version suffix)
         INITIAL_VSCODE_JAVA_VERSION = "1.42.0-561"
-        INITIAL_INTELLICODE_VERSION = "1.2.30"
         INITIAL_VSCODE_JAVA_PATHS = VsixResourcePaths(
             jre_version="21.0.7",
             lombok_jar_basename="lombok-1.18.36.jar",
@@ -270,7 +254,6 @@ class EclipseJDTLS(SolidLanguageServer):
         #       scripts/update_downloaded_dependency_hashes.py and commit the resulting changes.
         DEFAULT_GRADLE_VERSION = "8.14.2"
         DEFAULT_VSCODE_JAVA_VERSION = "1.54.0-923"
-        DEFAULT_INTELLICODE_VERSION = "1.2.30"
         DEFAULT_VSCODE_JAVA_PATHS = VsixResourcePaths(
             jre_version="21.0.10",
             lombok_jar_basename="lombok-1.18.39-4050.jar",
@@ -321,18 +304,8 @@ class EclipseJDTLS(SolidLanguageServer):
             return deps
 
         @classmethod
-        def _create_dep_intellicode(cls, intellicode_version: str | None = None) -> DownloadedDependency:
-            intellicode_version = intellicode_version or cls.DEFAULT_INTELLICODE_VERSION
-            return DownloadedDependency(
-                url=f"https://VisualStudioExptTeam.gallery.vsassets.io/_apis/public/gallery/publisher/VisualStudioExptTeam/extension/vscodeintellicode/{intellicode_version}/assetbyname/Microsoft.VisualStudio.Services.VSIXPackage",
-                archive_type="zip",
-                allowed_hosts=INTELLICODE_ALLOWED_HOSTS,
-                verified=intellicode_version == cls.DEFAULT_INTELLICODE_VERSION,
-            )
-
-        @classmethod
         def update_dep_hashes(cls) -> None:
-            deps = [cls._create_dep_gradle(), cls._create_dep_intellicode()] + list(cls._create_deps_vscode_java().values())
+            deps = [cls._create_dep_gradle()] + list(cls._create_deps_vscode_java().values())
             with DownloadedDependencyHashDatabase.get_instance().update_context() as db:
                 for dep in deps:
                     db.update(dep)
@@ -351,8 +324,8 @@ class EclipseJDTLS(SolidLanguageServer):
               ``brew install jdtls`` or extracted ``jdt-language-server-*.tar.gz``) and the system JDK.
               Nothing is downloaded by Serena. Suitable for restricted-network/corporate environments.
             * **Default vscode-java VSIX mode** (activated otherwise): downloads the platform-specific
-              vscode-java VSIX bundle (containing JDTLS, bundled JRE 21, Lombok, IntelliCode), Gradle
-              distribution and IntelliCode VSIX from public hosts. Original behaviour, unchanged.
+              vscode-java VSIX bundle (containing JDTLS, bundled JRE 21 and Lombok) and a Gradle
+              distribution from public hosts.
             """
             jdtls_path = custom_settings.get("jdtls_path")
             lombok_path = custom_settings.get("lombok_path")
@@ -369,15 +342,11 @@ class EclipseJDTLS(SolidLanguageServer):
             platformId = PlatformUtils.get_platform_id()
             gradle_version = custom_settings.get("gradle_version", cls.DEFAULT_GRADLE_VERSION)
             vscode_java_version = custom_settings.get("vscode_java_version", cls.DEFAULT_VSCODE_JAVA_VERSION)
-            intellicode_version = custom_settings.get("intellicode_version", cls.DEFAULT_INTELLICODE_VERSION)
 
             # install-dir name per the version-pinning convention (see module-level block):
             # INITIAL -> legacy unversioned dir; everything else -> "{name}-{resolved}" subdir
             vscode_java_dirname = (
                 "vscode-java" if vscode_java_version == cls.INITIAL_VSCODE_JAVA_VERSION else f"vscode-java-{vscode_java_version}"
-            )
-            intellicode_dirname = (
-                "intellicode" if intellicode_version == cls.INITIAL_INTELLICODE_VERSION else f"intellicode-{intellicode_version}"
             )
 
             # Resolve internal VSIX paths (JRE / Lombok / launcher filenames). For pinned versions
@@ -478,26 +447,6 @@ class EclipseJDTLS(SolidLanguageServer):
             assert os.path.exists(jdtls_launcher_jar_path)
             assert os.path.exists(jdtls_readonly_config_path)
 
-            intellicode_dep = cls._create_dep_intellicode(intellicode_version)
-            intellicode_directory_path = str(PurePath(ls_resources_dir, intellicode_dirname))
-            os.makedirs(intellicode_directory_path, exist_ok=True)
-            intellicode_jar_path = str(
-                PurePath(intellicode_directory_path, "extension/dist/com.microsoft.jdtls.intellicode.core-0.7.0.jar")
-            )
-            intellisense_members_path = str(PurePath(intellicode_directory_path, "extension/dist/bundledModels/java_intellisense-members"))
-            if not all(
-                [
-                    os.path.exists(intellicode_directory_path),
-                    os.path.exists(intellicode_jar_path),
-                    os.path.exists(intellisense_members_path),
-                ]
-            ):
-                intellicode_dep.download_to(intellicode_directory_path)
-
-            assert os.path.exists(intellicode_directory_path)
-            assert os.path.exists(intellicode_jar_path)
-            assert os.path.exists(intellisense_members_path)
-
             return RuntimeDependencyPaths(
                 gradle_path=gradle_path,
                 lombok_jar_path=lombok_jar_path,
@@ -505,8 +454,6 @@ class EclipseJDTLS(SolidLanguageServer):
                 jre_home_path=jre_home_path,
                 jdtls_launcher_jar_path=jdtls_launcher_jar_path,
                 jdtls_readonly_config_path=jdtls_readonly_config_path,
-                intellicode_jar_path=intellicode_jar_path,
-                intellisense_members_path=intellisense_members_path,
             )
 
         @staticmethod
@@ -520,7 +467,7 @@ class EclipseJDTLS(SolidLanguageServer):
             :param jdtls_path: absolute path to the JDTLS root (containing ``plugins/`` and ``config_<platform>/``)
             :param lombok_path: absolute path to the Lombok jar (mandatory; agent is always attached)
             :param custom_settings: language-server-specific settings from ls_specific_settings.java
-            :return: populated RuntimeDependencyPaths with gradle/intellicode fields set to None
+            :return: populated RuntimeDependencyPaths with ``gradle_path`` set to ``None``
             """
             # validate jdtls_path structure (root + plugins dir)
             jdtls_root = Path(jdtls_path)
@@ -569,8 +516,6 @@ class EclipseJDTLS(SolidLanguageServer):
                 jdtls_readonly_config_path=str(config_dir),
                 lombok_jar_path=lombok_path,
                 gradle_path=None,
-                intellicode_jar_path=None,
-                intellisense_members_path=None,
             )
 
         @staticmethod
@@ -1006,10 +951,6 @@ class EclipseJDTLS(SolidLanguageServer):
             gradle_user_home = None
             log.info(f"Gradle user home not found at default location ({default_gradle_home}), will use JDTLS defaults")
 
-        # IntelliCode JVM settings (used in vmargs for the embedded JVM)
-        intellicode_xmx = self._custom_settings.get("intellicode_xmx", "1G")
-        intellicode_xms = self._custom_settings.get("intellicode_xms", "100m")
-
         # Lombok-generated symbols (getX/setX/builder()/equals/hashCode/toString/...): JDTLS filters
         # these out of documentSymbol results by default. Without them, find_symbol/get_symbols_overview
         # return only user-written sources, which breaks navigation around @Data/@Builder/@Getter/@Setter
@@ -1194,19 +1135,10 @@ class EclipseJDTLS(SolidLanguageServer):
                 "notebookDocument": {"synchronization": {"dynamicRegistration": True, "executionSummarySupport": True}},
             },
             "initializationOptions": {
-                "bundles": ["intellicode-core.jar"],
+                "bundles": [],
                 "settings": {
                     "java": {
                         "home": None,
-                        "jdt": {
-                            "ls": {
-                                "java": {"home": None},
-                                "vmargs": f"-XX:+UseParallelGC -XX:GCTimeRatio=4 -XX:AdaptiveSizePolicyWeight=90 -Dsun.zip.disableMemoryMapping=true -Xmx{intellicode_xmx} -Xms{intellicode_xms} -Xlog:disable",
-                                "lombokSupport": {"enabled": True},
-                                "protobufSupport": {"enabled": True},
-                                "androidSupport": {"enabled": True},
-                            }
-                        },
                         "errors": {"incompleteClasspath": {"severity": "error"}},
                         "configuration": {
                             "checkProjectSettingsExclusions": False,
@@ -1326,14 +1258,6 @@ class EclipseJDTLS(SolidLanguageServer):
 
         initialize_params["initializationOptions"]["workspaceFolders"] = [repo_uri]
 
-        # IntelliCode bundle: only attached in default vscode-java VSIX mode.
-        # In upstream-jdtls mode (jdtls_path set) we don't ship IntelliCode — agentic Serena workflows
-        # don't use completion ranking, so the bundle would be inert dead weight.
-        if self.runtime_dependency_paths.intellicode_jar_path is not None:
-            initialize_params["initializationOptions"]["bundles"] = [self.runtime_dependency_paths.intellicode_jar_path]
-        else:
-            initialize_params["initializationOptions"]["bundles"] = []
-
         # merge the bundled JRE with any additional runtimes configured via ls_specific_settings.java.runtimes
         # (e.g. so projects targeting a newer Java version than the bundled JRE resolve their JRE container)...
         default_runtime = {"name": "JavaSE-21", "path": self.runtime_dependency_paths.jre_home_path, "default": True}
@@ -1378,9 +1302,6 @@ class EclipseJDTLS(SolidLanguageServer):
                         "*",
                         " ",
                     ]
-                if registration["method"] == "workspace/executeCommand":
-                    if "java.intellicode.enable" in registration["registerOptions"]["commands"]:
-                        self._intellicode_enable_command_available.set()
             return
 
         def lang_status_handler(params: dict) -> None:
@@ -1423,23 +1344,6 @@ class EclipseJDTLS(SolidLanguageServer):
         self.server.notify.initialized({})
 
         self.server.notify.workspace_did_change_configuration({"settings": initialize_params["initializationOptions"]["settings"]})  # type: ignore
-
-        # IntelliCode enablement is only relevant in the default vscode-java VSIX mode where the
-        # IntelliCode bundle is shipped. In upstream-jdtls mode it's absent and the
-        # 'java.intellicode.enable' command will never be registered, so we skip the wait/call.
-        if self.runtime_dependency_paths.intellicode_jar_path is not None:
-            self._intellicode_enable_command_available.wait()
-
-            java_intellisense_members_path = self.runtime_dependency_paths.intellisense_members_path
-            assert java_intellisense_members_path is not None
-            assert os.path.exists(java_intellisense_members_path)
-            intellicode_enable_result = self.server.send.execute_command(
-                {
-                    "command": "java.intellicode.enable",
-                    "arguments": [True, java_intellisense_members_path],
-                }
-            )
-            assert intellicode_enable_result
 
         if not self._service_ready_event.is_set():
             log.info("Waiting for service to be ready ...")
