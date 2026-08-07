@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 from typing import TYPE_CHECKING
 
 import requests as requests_lib
@@ -61,6 +62,12 @@ class ProjectServer:
 
         self._agent = SerenaAgent(serena_config=serena_config)
         self._loaded_projects_by_root: dict[str, "Project"] = {}
+        # Requests are served by concurrent Flask worker threads, but the agent's active
+        # project is a single process-wide slot. Serialize the section that holds it;
+        # project loading is guarded separately so that a cold language server startup
+        # does not block queries against already-loaded projects.
+        self._active_project_lock = threading.Lock()
+        self._loaded_projects_lock = threading.Lock()
         self._port = port
         self._host = host
 
@@ -91,19 +98,26 @@ class ProjectServer:
 
         key = str(registered_project.project_root)
 
-        if key in self._loaded_projects_by_root:
-            return self._loaded_projects_by_root[key]
+        with self._loaded_projects_lock:
+            if key in self._loaded_projects_by_root:
+                return self._loaded_projects_by_root[key]
 
-        with LogTime(f"Loading project '{project_root_or_name}'"):
-            project = registered_project.get_project_instance(serena_config)
-            project.create_language_server_manager()
-        self._loaded_projects_by_root[key] = project
-        return project
+            with LogTime(f"Loading project '{project_root_or_name}'"):
+                project = registered_project.get_project_instance(serena_config)
+                project.create_language_server_manager()
+            self._loaded_projects_by_root[key] = project
+            return project
 
     def _query_project(self, req: QueryProjectRequest) -> str:
-        """Handle a /query_project request by invoking the agent on the specified project and tool."""
+        """Handle a /query_project request by invoking the agent on the specified project and tool.
+
+        The active project is process-wide state, whereas ``apply_ex`` runs the tool on the
+        agent's task executor thread. Without the lock, a second request entering
+        ``active_project_context`` while the first request's tool is still executing would
+        redirect that tool to the wrong project (and restore the wrong project afterwards).
+        """
         project = self._get_project(req.project_name)
-        with self._agent.active_project_context(project):
+        with self._active_project_lock, self._agent.active_project_context(project):
             tool = self._agent.get_tool_by_name(req.tool_name)
             if not tool.is_readonly():
                 raise ValueError(f"Tool '{req.tool_name}' is not read-only and cannot be executed via the query_project route")
