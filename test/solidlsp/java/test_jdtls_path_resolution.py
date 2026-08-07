@@ -455,7 +455,7 @@ class TestSetupFromExistingInstall:
         (jdk / "bin" / "java").touch()
         return jdk
 
-    def test_happy_path_returns_runtime_paths_with_no_gradle_and_no_intellicode(
+    def test_happy_path_returns_runtime_paths_with_no_gradle(
         self, tmp_path: Path, jdtls_root: Path, lombok_jar: Path, custom_settings: SolidLSPSettings.CustomLSSettings
     ) -> None:
         jdk = self._fake_jdk(tmp_path)
@@ -465,8 +465,6 @@ class TestSetupFromExistingInstall:
                 result = EclipseJDTLS.DependencyProvider._setup_from_existing_install(str(jdtls_root), str(lombok_jar), custom_settings)
 
         assert result.gradle_path is None
-        assert result.intellicode_jar_path is None
-        assert result.intellisense_members_path is None
         assert result.lombok_jar_path == str(lombok_jar)
         assert result.jre_home_path == str(jdk)
         assert Path(result.jdtls_launcher_jar_path).name.startswith("org.eclipse.equinox.launcher_")
