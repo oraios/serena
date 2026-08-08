@@ -116,8 +116,12 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Dashboard:
   - Fix: Serena PyPI version check triggered by callback on main thread could delay agent startup #1774
-  - Fix: on macOS, the `tray_manager` interface put an icon in the Dock and in the app switcher
-    (should only use menu bar icon)
+  - Improvements in `tray_manager` interface mode:
+    - Fix: on macOS, the `tray_manager` interface put an icon in the Dock and in the app switcher
+      (should only use menu bar icon)
+    - On Serena shutdown, message the tray manager before lengthy project shutdowns
+    - Fix: When dead ports are detected (Serena instance gone), explicitly update the tray menu 
+      immediately (may not update automatically)
   - Use `tray_manager` interface as new default on macOS
 
 * Hooks:

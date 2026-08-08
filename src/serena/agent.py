@@ -1472,10 +1472,7 @@ class SerenaAgent:
         Shutdown handler of the agent, freeing resources and stopping background tasks.
         """
         log.info("SerenaAgent is shutting down ...")
-        if self._active_project is not None:
-            log.info(f"Shutting down active project '{self._active_project.project_name}' ...")
-            self._active_project.shutdown(timeout=timeout)
-            self._active_project = None
+        # apply shutdown depending on allocated resources, handling quick ones first (dashboard manager & GUI viewer)
         if self._gui_log_viewer:
             log.info("Stopping the GUI log window ...")
             self._gui_log_viewer.stop()
@@ -1483,6 +1480,10 @@ class SerenaAgent:
         if self._dashboard_manager:
             self._dashboard_manager.shutdown()
             self._dashboard_manager = None
+        if self._active_project is not None:
+            log.info(f"Shutting down active project '{self._active_project.project_name}' ...")
+            self._active_project.shutdown(timeout=timeout)
+            self._active_project = None
 
     def shutdown(self) -> None:
         """

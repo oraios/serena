@@ -1155,6 +1155,7 @@ class SerenaDashboardTrayManager:
                         for port in dead_ports:
                             self._instances.pop(port, None)
                             log.info("Removed unreachable instance on port %d", port)
+                    self._update_menu()
 
                 # terminate if no instances remain
                 with self._lock:
