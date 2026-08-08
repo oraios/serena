@@ -55,9 +55,7 @@ class ProjectServer:
         if port is None:
             port = self.PORT
 
-        serena_config = SerenaConfig.from_config_file()
-        serena_config.gui_log_window = False
-        serena_config.web_dashboard = False
+        serena_config = SerenaConfig.from_config_file().with_headless_mode_overrides()
         serena_config.language_backend = LanguageBackend.LSP
 
         self._agent = SerenaAgent(serena_config=serena_config)
