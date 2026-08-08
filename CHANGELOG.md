@@ -3,7 +3,7 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
-  - Fix: the README, the Language Support docs page and the project template omitted several already-supported language servers
+  - Fix: Race conditions in ProjectServer when used by multiple clients in parallel   
   - Fix: a tool call exceeding the timeout blocked the task executor indefinitely; the executor now
     recovers without user-induced cancellation
   - Add Grok Build support (context `grok`, setup CLI, hooks)
@@ -15,6 +15,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     failed `--project-from-cwd` auto-detection (#1773).
   - ProjectServer: Configure trusted hosts (local hosts only) when listening on localhost
   - SerenaDashboardTrayManager: Configure trusted hosts (local hosts only)
+  - Enclose sub-prompts in XML-like tags to make scopes explicit
+  - Allow initial project prompts and project-specific newly activated modes to use templating 
 
 * CLI:
   - Fix: `start-mcp-server` help text for `--project-from-cwd` falsely promised a fallback to the CWD, which was 
@@ -39,6 +41,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
     project creation) 
   - Add `python_basedpyright` as an alternative Python language server
+  - Java/JDTLS: stop downloading and loading the unused IntelliCode completion-ranking bundle; the retired
+    `intellicode_version`, `intellicode_xmx` and `intellicode_xms` settings remain accepted but are ignored #1821
+  - Kotlin: update the managed Kotlin LSP from `261.13587.0` to `262.9593.0`, including support for the
+    new platform-specific archive layout and Windows ARM64 builds
   - Nix/nixd: support custom `ls_path` launchers and external JSON settings through `config_path` #1737
   - Fix: Nix/nixd diagnostics now use published diagnostics instead of the unsupported
     `textDocument/diagnostic` request, which terminated nixd #1802
@@ -83,6 +89,13 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Language servers and their dependency providers now go through the `subprocess_run` helper instead of
     calling `subprocess.run` directly (e.g. for installation processes), so all such subprocesses get 
     `stdin=DEVNULL` and can no longer interfere with the stdio MCP connection #1748
+  - `scala`: Fix: Metals asks via `window/showMessageRequest` whether to import a workspace it has not
+    seen before, and Serena had no handler, so the request failed with `MethodNotFound` and Metals gave
+    up on the import ("Unexpected error initializing server"). No build server was ever connected and
+    every cross-file query fell back to the presentation compiler, which sees one file at a time, unless
+    the project happened to have been imported beforehand by another editor. The three prompts that lead
+    to a build server are now answered; anything else is dismissed, including the choice between several
+    build definitions in one workspace. `ls_specific_settings.scala.auto_import_build: false` opts out
 
 * Dashboard:
   - Fix: Serena PyPI version check triggered by callback on main thread could delay agent startup #1774

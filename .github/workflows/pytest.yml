@@ -706,7 +706,11 @@ jobs:
         id: cache-language-servers
         uses: actions/cache@v3
         with:
-          path: ~/.serena/language_servers/static
+          # JDTLS workspaces contain mutable Eclipse/Buildship runtime state.
+          # Cache the installed servers, but create each JDTLS workspace locally.
+          path: |
+            ~/.serena/language_servers/static
+            !~/.serena/language_servers/static/EclipseJDTLS/workspaces/**
           key: language-servers-${{ runner.os }}-${{ matrix.batch }}-v1
           restore-keys: |
             language-servers-${{ runner.os }}-${{ matrix.batch }}-

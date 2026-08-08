@@ -28,6 +28,22 @@ DEFAULT_METALS_VERSION = "1.6.4"
 DEFAULT_CLIENT_NAME = "Serena"
 DEFAULT_ON_STALE_LOCK = "auto-clean"
 DEFAULT_LOG_MULTI_INSTANCE_NOTICE = True
+DEFAULT_AUTO_IMPORT_BUILD = True
+
+# The `window/showMessageRequest` actions Serena answers affirmatively: the ones standing between
+# an un-imported workspace and a build server. Everything else is dismissed, since a prompt we do
+# not recognise is one whose consequences we cannot judge — `Messages.OldBloopVersionRunning`
+# offers to kill a process, `Messages.NewScalaProject` to open a window. "Don't show again" is
+# never chosen: Metals persists that dismissal in the project's own state.
+# (scala/meta/internal/metals/Messages.scala, at `ImportBuild`, `ImportBuildChanges`,
+# `GenerateBspAndConnect`.)
+#
+# Not answered, deliberately: `Messages.ChooseBuildTool` ("Multiple build definitions found. Which
+# would you like to use?"), whose actions are the build tools' own executable names. It precedes
+# the import prompt in a workspace holding more than one kind of build, so such a workspace is
+# still not imported — but choosing a build tool for the user is a guess of a different order, and
+# Metals offers no way to say "whichever you would have picked".
+BUILD_IMPORT_PROMPT_ACTIONS = ("Import build", "Import changes", "Connect")
 
 
 class StaleLockMode(Enum):
@@ -43,6 +59,28 @@ class StaleLockMode(Enum):
     """Raise an error and refuse to start."""
 
 
+def choose_show_message_request_action(params: dict, auto_import_build: bool = DEFAULT_AUTO_IMPORT_BUILD) -> dict | None:
+    """
+    Choose Serena's answer to a `window/showMessageRequest`, which Metals uses to ask whether to
+    import the build.
+
+    :param params: the request's `ShowMessageRequestParams`
+    :param auto_import_build: whether to answer the build-import prompts affirmatively
+    :return: the action to select, or None to select none — which is what the LSP spec provides
+        for, and what leaving the request unanswered fails to say
+    """
+    message = params.get("message", "")
+    actions = params.get("actions") or []
+    if auto_import_build:
+        for action in actions:
+            if isinstance(action, dict) and action.get("title") in BUILD_IMPORT_PROMPT_ACTIONS:
+                log.info(f"Metals asked: {message!r}; answering {action['title']!r}")
+                return action
+    offered = [action.get("title") for action in actions if isinstance(action, dict)]
+    log.info(f"Metals asked: {message!r}; dismissing (offered: {offered})")
+    return None
+
+
 def _get_scala_settings(solidlsp_settings: SolidLSPSettings) -> dict[str, object]:
     """
     Extract Scala-specific settings with defaults applied.
@@ -52,6 +90,7 @@ def _get_scala_settings(solidlsp_settings: SolidLSPSettings) -> dict[str, object
         - client_name: str
         - on_stale_lock: StaleLockMode
         - log_multi_instance_notice: bool
+        - auto_import_build: bool
     """
     from solidlsp.ls_config import LanguageServerId
 
@@ -60,6 +99,7 @@ def _get_scala_settings(solidlsp_settings: SolidLSPSettings) -> dict[str, object
         "client_name": DEFAULT_CLIENT_NAME,
         "on_stale_lock": StaleLockMode.AUTO_CLEAN,
         "log_multi_instance_notice": DEFAULT_LOG_MULTI_INSTANCE_NOTICE,
+        "auto_import_build": DEFAULT_AUTO_IMPORT_BUILD,
     }
 
     if not solidlsp_settings.ls_specific_settings:
@@ -80,6 +120,7 @@ def _get_scala_settings(solidlsp_settings: SolidLSPSettings) -> dict[str, object
         "client_name": scala_settings.get("client_name", DEFAULT_CLIENT_NAME),
         "on_stale_lock": on_stale_lock,
         "log_multi_instance_notice": scala_settings.get("log_multi_instance_notice", DEFAULT_LOG_MULTI_INSTANCE_NOTICE),
+        "auto_import_build": scala_settings.get("auto_import_build", DEFAULT_AUTO_IMPORT_BUILD),
     }
 
 
@@ -100,6 +141,14 @@ class ScalaLanguageServer(SolidLanguageServer):
             metals_version: '1.6.4'
             # Client identifier sent to Metals (default: DEFAULT_CLIENT_NAME)
             client_name: 'Serena'
+            # Answer Metals' build-import prompts affirmatively, which lets it run the project's
+            # build tool (e.g. sbt bloopInstall). Set false to leave the build un-imported.
+            auto_import_build: true
+
+    Build import:
+        Metals asks, via `window/showMessageRequest`, whether to import a workspace it has not
+        seen before; until that is answered it has no build server and so no build target, and
+        every cross-file query is served by the fallback presentation compiler.
 
     Multi-instance support:
         Metals uses H2 AUTO_SERVER mode (enabled by default) to support multiple
@@ -115,6 +164,8 @@ class ScalaLanguageServer(SolidLanguageServer):
         """
         # Check for stale locks before setting up dependencies (fail-fast)
         self._check_metals_db_status(repository_root_path, solidlsp_settings)
+
+        self._auto_import_build: bool = _get_scala_settings(solidlsp_settings)["auto_import_build"]  # type: ignore[assignment]
 
         scala_lsp_executable_path = self._setup_runtime_dependencies(config, solidlsp_settings)
         super().__init__(
@@ -300,10 +351,15 @@ class ScalaLanguageServer(SolidLanguageServer):
         }
         return initialize_params
 
+    def _answer_show_message_request(self, params: dict) -> dict | None:
+        return choose_show_message_request_action(params, auto_import_build=self._auto_import_build)
+
     def _start_server(self) -> None:
         """
         Starts the Scala Language Server
         """
+        self.server.on_request("window/showMessageRequest", self._answer_show_message_request)
+
         log.info("Starting Scala server process")
         self.server.start()
 
