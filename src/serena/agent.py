@@ -1041,13 +1041,13 @@ class SerenaAgent:
 
         # provide basic project information (name, location, languages, encoding)
         if proj.is_newly_created:
-            msg = f"Created and activated a new project with name '{proj.project_name}' at {proj.project_root}. "
+            msg = f"Created and activated a new project with name '{proj.project_name}' at {proj.project_root}.\n"
         else:
-            msg = f"The project with name '{proj.project_name}' at {proj.project_root} is activated."
+            msg = f"The project with name '{proj.project_name}' at {proj.project_root} is activated.\n"
         if self._language_backend == LanguageBackend.LSP:
-            languages_str = ", ".join([lang.value for lang in proj.project_config.language_servers])
-            msg += f"\nProgramming languages: {languages_str}."
-        msg += f"File encoding: {proj.project_config.encoding}."
+            language_servers_str = ", ".join([ls.value for ls in proj.project_config.language_servers])
+            msg += f"Active language servers: {language_servers_str}.\n"
+        msg += f"File encoding: {proj.project_config.encoding}.\n"
 
         # add list of memories (if memories are enabled)
         include_memories = self._active_tools.contains_tool_class(ReadMemoryTool)
@@ -1055,11 +1055,11 @@ class SerenaAgent:
             project_memories = proj.memory_manager.list_project_memories()
             if project_memories:
                 msg += (
-                    f"\n{json.dumps(project_memories.to_dict())}\n"
-                    + "Use the `read_memory` tool to read these memories later if they are relevant to the task."
+                    f"{json.dumps(project_memories.to_dict())}\n"
+                    + f"Use the `{ReadMemoryTool.get_name_from_cls()}` tool to read these memories later if they are relevant to the task.\n"
                 )
             elif self._active_tools.contains_tool_class(OnboardingTool):
-                msg += "Onboarding has not been performed yet, you should call Serena's `onboarding` tool now to set up project memories."
+                msg += f"Onboarding has not been performed yet. Ask the user whether to perform onboarding via the `{OnboardingTool.get_name_from_cls()}` tool.\n"
 
         # add prompts for modes that were dynamically activated by the project
         modes_with_prompts = self._project_prompt_status.get_modes_with_prompts_to_be_provided_for_project_activation(session_id)
