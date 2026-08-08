@@ -292,6 +292,14 @@ class LanguageServerId(str, Enum):
     project.yml — Angular LS supersedes both for Angular projects.
     Must be explicitly specified in project.yml.
     """
+    DENO = "deno"
+    """Deno's built-in language server (``deno lsp``) for Deno TypeScript/JavaScript projects.
+    Understands Deno module resolution (``npm:`` / ``jsr:`` / ``https:`` imports) and the
+    ``Deno.*`` globals, which the plain typescript-language-server does not. Overlaps the
+    TypeScript server on file extensions (.ts/.tsx/.js/.jsx/.mts/.cts/.mjs/.cjs), so it is
+    experimental and must be explicitly specified via ``languages: [deno]`` in project.yml;
+    do not also enable typescript for the same files. Requires the ``deno`` CLI on PATH.
+    """
 
     @classmethod
     def iter_all(cls, include_experimental: bool = True, include_non_programming_languages: bool = True) -> Iterable[Self]:
@@ -327,6 +335,7 @@ class LanguageServerId(str, Enum):
             self.HTML,
             self.SCSS,
             self.ANGULAR,
+            self.DENO,
         }
 
     def is_programming_language(self) -> bool:
@@ -597,6 +606,14 @@ class LanguageServerId(str, Enum):
                 for prefix in ["c", "m", ""]:
                     for postfix in ["x", ""]:
                         path_patterns.append(f".{prefix}ts{postfix}")
+                return FilenameMatcher(*path_patterns)
+            case self.DENO:
+                # Deno serves the same TS/JS family as the TypeScript server.
+                path_patterns = []
+                for prefix in ["c", "m", ""]:
+                    for postfix in ["x", ""]:
+                        for base_pattern in ["ts", "js"]:
+                            path_patterns.append(f".{prefix}{base_pattern}{postfix}")
                 return FilenameMatcher(*path_patterns)
             case _:
                 raise ValueError(f"Unhandled language: {self}")
@@ -885,6 +902,10 @@ class LanguageServerId(str, Enum):
                 from solidlsp.language_servers.angular_language_server import AngularLanguageServer
 
                 return AngularLanguageServer
+            case self.DENO:
+                from solidlsp.language_servers.deno_language_server import DenoLanguageServer
+
+                return DenoLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 

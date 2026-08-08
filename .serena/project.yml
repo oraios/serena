@@ -85,7 +85,11 @@ initial_prompt: |
     For simple data storage, you use dataclasses instead of dictionaries or tuples.
 
   Testing:
-  You test externally observable behavior and guarantees, never implementation structure.
+  The key principle is to test *only* externally observable behavior and guarantees, never implementation structure.
+  * Litmus test: a behaviour-preserving refactoring must not break any test. A test that could break is wrong and must not be written.
+  * When functionality is removed, you delete its tests. You never add tests asserting the *absence* of something; 
+    absence of an implementation detail is not a behaviour, and such tests only freeze the current implementation and burden maintenance.
+  * Fewer, behaviour-anchored tests are preferred; a missing test is better than an implementation-coupled one.
 
   Docstrings & Comments:
   * You consistently use reStructuredText.

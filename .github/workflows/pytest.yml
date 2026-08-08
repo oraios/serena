@@ -71,7 +71,7 @@ jobs:
       # other-langs: grab-bag + scripting languages + haskell + qml. Haskell (GHC/HLS) and qml (qmlls) are
       # installed only on Linux -- too slow/expensive to build on the macOS runner (Haskell), or not worth
       # the cost of a cross-OS Qt pull (qmlls) -- and skip on Windows+macOS via the central conftest guard.
-      MARKERS_OTHER_LANGS: "ruby or php or lua or luau or bash or powershell or elixir or erlang or dart or haxe or haskell or terraform or rego or ansible or yaml or toml or markdown or latex or crystal or cue or fortran or ada or matlab or systemverilog or hlsl or msl or al or qml"
+      MARKERS_OTHER_LANGS: "ruby or php or lua or luau or bash or powershell or elixir or erlang or dart or deno or haxe or haskell or terraform or rego or ansible or yaml or toml or markdown or latex or crystal or cue or fortran or ada or matlab or systemverilog or hlsl or msl or al or qml"
       # niche: slow, mostly-cached toolchains. ocaml + haskell are the two slowest -- kept in separate
       # batches (ocaml here, haskell in other-langs). nix + perl skip on Windows via the guard.
       MARKERS_NICHE: "julia or r or perl or lean4 or nix or ocaml"
@@ -219,6 +219,13 @@ jobs:
         with:
           terraform_version: "1.5.0"
           terraform_wrapper: false
+      # Deno ships its language server with the CLI (`deno lsp`), so installing the
+      # runtime is all that is needed for the deno-marked tests.
+      - name: Install Deno
+        if: matrix.batch == 'other-langs'
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
       # - name: Install swift
       #   if: runner.os != 'Windows'
       #   uses: swift-actions/setup-swift@v2
@@ -706,7 +713,11 @@ jobs:
         id: cache-language-servers
         uses: actions/cache@v3
         with:
-          path: ~/.serena/language_servers/static
+          # JDTLS workspaces contain mutable Eclipse/Buildship runtime state.
+          # Cache the installed servers, but create each JDTLS workspace locally.
+          path: |
+            ~/.serena/language_servers/static
+            !~/.serena/language_servers/static/EclipseJDTLS/workspaces/**
           key: language-servers-${{ runner.os }}-${{ matrix.batch }}-v1
           restore-keys: |
             language-servers-${{ runner.os }}-${{ matrix.batch }}-
