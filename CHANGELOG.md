@@ -3,7 +3,7 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
-  - Fix: the README, the Language Support docs page and the project template omitted several already-supported language servers
+  - Fix: Race conditions in ProjectServer when used by multiple clients in parallel   
   - Fix: a tool call exceeding the timeout blocked the task executor indefinitely; the executor now
     recovers without user-induced cancellation
   - Add Grok Build support (context `grok`, setup CLI, hooks)
@@ -39,6 +39,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
     project creation) 
   - Add `python_basedpyright` as an alternative Python language server
+  - Java/JDTLS: stop downloading and loading the unused IntelliCode completion-ranking bundle; the retired
+    `intellicode_version`, `intellicode_xmx` and `intellicode_xms` settings remain accepted but are ignored #1821
   - Kotlin: update the managed Kotlin LSP from `261.13587.0` to `262.9593.0`, including support for the
     new platform-specific archive layout and Windows ARM64 builds
   - Nix/nixd: support custom `ls_path` launchers and external JSON settings through `config_path` #1737
