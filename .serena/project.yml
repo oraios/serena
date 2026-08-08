@@ -71,7 +71,7 @@ included_optional_tools: []
 # initial prompt for the project. It will always be given to the LLM upon activating the project
 # (contrary to the memories, which are loaded on demand).
 initial_prompt: |
-  ALWAYS read the `critical_info` memory before doing anything else. It contains absolutely critical information about the project.
+  {{ embed_memory("critical_info") }}
 
 # the encoding used by text files in the project
 # For a list of possible encodings, see https://docs.python.org/3.11/library/codecs.html#standard-encodings

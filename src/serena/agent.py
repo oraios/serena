@@ -962,11 +962,20 @@ class SerenaAgent:
         return f"{open_tag}\n{text.strip()}\n{close_tag}"
 
     def _format_prompt(self, prompt_template: str, tag: str | None = None, tag_name_attr: str | None = None) -> str:
+        def embed_memory(memory_name: str) -> str:
+            try:
+                memory_manager = self._get_memory_manager()
+                return self._format_prompt_tag(memory_manager.load_memory(memory_name), tag="memory", tag_name_attr=memory_name)
+            except Exception as e:
+                log.error("Tried to embed memory '%s' but failed to load it: %s", memory_name, e)
+                return ""
+
         template = JinjaTemplate(prompt_template)
         text = template.render(
             available_tools=self._exposed_tools.tool_names,
             available_markers=self._exposed_tools.tool_marker_names,
             tool_names=self._prompt_tool_names_mapping,
+            embed_memory=embed_memory,
         )
 
         if tag is not None:
@@ -982,6 +991,21 @@ class SerenaAgent:
         """
         return self.prompt_factory.create_connection_prompt()
 
+    def _create_global_memory_manager(self) -> MemoryManager:
+        """
+        :return: a memory manager for global memories only (no project memories)
+        """
+        return MemoryManager(serena_data_folder=None, read_only_memory_patterns=self.serena_config.read_only_memory_patterns)
+
+    def _get_memory_manager(self) -> MemoryManager:
+        """
+        :return: the memory manager for the active project (if any) or a global memory manager if no project is active
+        """
+        if self._active_project is not None:
+            return self._active_project.memory_manager
+        else:
+            return self._create_global_memory_manager()
+
     def create_system_prompt(self, session_id: str = "global") -> str:
         """
         Returns the 'Serena Instructions Manual', i.e. Serena's system prompt.
@@ -991,9 +1015,7 @@ class SerenaAgent:
         """
         available_tools = self._active_tools
         available_markers = available_tools.tool_marker_names
-        global_memories = MemoryManager(
-            serena_data_folder=None, read_only_memory_patterns=self.serena_config.read_only_memory_patterns
-        ).list_global_memories()
+        global_memories = self._create_global_memory_manager().list_global_memories()
         global_memories_str = dict_string(global_memories.to_dict()) if len(global_memories) > 0 else ""
         log.info("Generating system prompt with available_tools=(see active tools), available_markers=%s", available_markers)
 
