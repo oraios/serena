@@ -66,12 +66,12 @@ jobs:
     # test can fall through to "no batch". To add/rebalance: edit a MARKERS_* var, and (for a new
     # group) add a case branch below + the batch name to the matrix list.
     env:
-      MARKERS_JVM: "java or csharp or fsharp or kotlin or scala or groovy or clojure or bsl"
+      MARKERS_JVM: "java or csharp or fsharp or kotlin or scala or groovy or clojure or bsl or nextflow"
       MARKERS_NATIVE: "cpp or rust or go or zig or pascal or swift"  # swift is macOS-only (skips elsewhere via the guard)
       # other-langs: grab-bag + scripting languages + haskell + qml. Haskell (GHC/HLS) and qml (qmlls) are
       # installed only on Linux -- too slow/expensive to build on the macOS runner (Haskell), or not worth
       # the cost of a cross-OS Qt pull (qmlls) -- and skip on Windows+macOS via the central conftest guard.
-      MARKERS_OTHER_LANGS: "ruby or php or lua or luau or bash or powershell or elixir or erlang or dart or haxe or haskell or terraform or rego or ansible or yaml or toml or markdown or latex or crystal or cue or fortran or ada or matlab or systemverilog or hlsl or msl or al or qml or gleam"
+      MARKERS_OTHER_LANGS: "ruby or php or lua or luau or bash or powershell or elixir or erlang or dart or deno or haxe or haskell or terraform or rego or ansible or yaml or toml or markdown or latex or crystal or cue or fortran or ada or matlab or systemverilog or hlsl or msl or al or qml or gleam"
       # niche: slow, mostly-cached toolchains. ocaml + haskell are the two slowest -- kept in separate
       # batches (ocaml here, haskell in other-langs). nix + perl skip on Windows via the guard.
       MARKERS_NICHE: "julia or r or perl or lean4 or nix or ocaml"
@@ -81,7 +81,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.11"]
         # 5 batches, each installs ONLY the toolchains its languages need (steps gated by matrix.batch).
-        # Node/Python/uv stay in every batch (cheap, needed for the venv + auto-installed LSes).
+        # Python/uv stay in every batch; Node is limited to other-langs and catch-all.
         # catch-all = web + python + the core framework.
         batch: [jvm, native, other-langs, niche, catch-all]
         # --- OS gating: which batch runs on which OS -----------------------------------------
@@ -106,9 +106,10 @@ jobs:
         with:
           go-version: ">=1.17.0"
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        if: matrix.batch == 'other-langs' || matrix.batch == 'catch-all'
+        uses: actions/setup-node@v7
         with:
-          node-version: '20.x'
+          node-version: '24.x'
       - name: Ensure cached directory exist before calling cache-related actions
         shell: bash
         run: |
@@ -218,6 +219,13 @@ jobs:
         with:
           terraform_version: "1.5.0"
           terraform_wrapper: false
+      # Deno ships its language server with the CLI (`deno lsp`), so installing the
+      # runtime is all that is needed for the deno-marked tests.
+      - name: Install Deno
+        if: matrix.batch == 'other-langs'
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
       # - name: Install swift
       #   if: runner.os != 'Windows'
       #   uses: swift-actions/setup-swift@v2
@@ -723,7 +731,11 @@ jobs:
         id: cache-language-servers
         uses: actions/cache@v3
         with:
-          path: ~/.serena/language_servers/static
+          # JDTLS workspaces contain mutable Eclipse/Buildship runtime state.
+          # Cache the installed servers, but create each JDTLS workspace locally.
+          path: |
+            ~/.serena/language_servers/static
+            !~/.serena/language_servers/static/EclipseJDTLS/workspaces/**
           key: language-servers-${{ runner.os }}-${{ matrix.batch }}-v1
           restore-keys: |
             language-servers-${{ runner.os }}-${{ matrix.batch }}-

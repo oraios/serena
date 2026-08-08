@@ -323,6 +323,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             ".lua",
             ".m",
             ".matlab",
+            ".nf",
             ".php",
             ".proto",
             ".ps1",

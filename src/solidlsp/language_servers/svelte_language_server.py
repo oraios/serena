@@ -592,7 +592,9 @@ class SvelteLanguageServer(SolidLanguageServer):
         self.server.on_request("workspace/applyEdit", workspace_apply_edit_handler)
         self.server.on_request("workspace/configuration", configuration_handler)
         self.server.on_request("workspace/diagnostic/refresh", do_nothing)
-        self.server.on_request("workspace/inlayHints/refresh", do_nothing)
+        # `inlayHint` is singular per the LSP spec; the previous `inlayHints`
+        # spelling matched no real request and was therefore never invoked.
+        self.server.on_request("workspace/inlayHint/refresh", do_nothing)
         self.server.on_request("workspace/semanticTokens/refresh", do_nothing)
         self._wrap_notify_send_for_ts_js_mirror()
         self.server.start()

@@ -317,7 +317,6 @@ max-complexity = 20
 "test/solidlsp/bsl/**" = ["RUF001", "RUF002", "RUF003"]
 
 [tool.pytest.ini_options]
-addopts = "--snapshot-patch-pycharm-diff"
 markers = [
   "clojure: language server running for Clojure",
   "crystal: language server running for Crystal",
@@ -329,6 +328,7 @@ markers = [
   "groovy: language server running for Groovy",
   "rust: language server running for Rust",
   "typescript: language server running for TypeScript",
+  "deno: language server running for Deno (uses the built-in deno lsp)",
   "svelte: language server running for Svelte (uses svelte-language-server)",
   "vue: language server running for Vue (uses TypeScript LSP)",
   "php: language server running for PHP",
@@ -345,6 +345,7 @@ markers = [
   "zig: language server running for Zig",
   "lua: language server running for Lua",
   "luau: language server running for Luau",
+  "nextflow: language server running for Nextflow",
   "nix: language server running for Nix",
   "dart: language server running for Dart",
   "erlang: language server running for Erlang",
