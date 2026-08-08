@@ -87,6 +87,13 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Language servers and their dependency providers now go through the `subprocess_run` helper instead of
     calling `subprocess.run` directly (e.g. for installation processes), so all such subprocesses get 
     `stdin=DEVNULL` and can no longer interfere with the stdio MCP connection #1748
+  - `scala`: Fix: Metals asks via `window/showMessageRequest` whether to import a workspace it has not
+    seen before, and Serena had no handler, so the request failed with `MethodNotFound` and Metals gave
+    up on the import ("Unexpected error initializing server"). No build server was ever connected and
+    every cross-file query fell back to the presentation compiler, which sees one file at a time, unless
+    the project happened to have been imported beforehand by another editor. The three prompts that lead
+    to a build server are now answered; anything else is dismissed, including the choice between several
+    build definitions in one workspace. `ls_specific_settings.scala.auto_import_build: false` opts out
 
 * Dashboard:
   - Fix: Serena PyPI version check triggered by callback on main thread could delay agent startup #1774
