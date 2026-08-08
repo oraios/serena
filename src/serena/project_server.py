@@ -62,12 +62,7 @@ class ProjectServer:
 
         self._agent = SerenaAgent(serena_config=serena_config)
         self._loaded_projects_by_root: dict[str, "Project"] = {}
-        # Keep these locks for the server's lifetime. Removing one after a failed load could
-        # let a retry initialize concurrently with threads already waiting on the old lock.
         self._project_load_locks_by_root: dict[str, threading.Lock] = {}
-        # Requests are served by concurrent Flask worker threads, but the agent's active
-        # project is a single process-wide slot. Serialize the section that holds it;
-        # project loading uses one lock per project so unrelated projects remain independent.
         self._active_project_lock = threading.Lock()
         self._loaded_projects_lock = threading.Lock()
         self._port = port
