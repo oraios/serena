@@ -155,6 +155,43 @@ You can manage modes using the `mode` command,
     serena mode edit <mode-name>
     serena mode delete <mode-name>
 
+(prompt-templates)=
+## Prompt Templates
+
+All prompts that Serena provides to the LLM are [Jinja2](https://jinja.palletsprojects.com/) templates.
+Templating applies to
+
+ * **Serena's system prompt** (the "Serena Instructions Manual"), which is defined in the prompt template `system_prompt`
+   (see [Custom Prompts](custom-prompts) for how to override it),
+ * **context and mode prompts**, i.e. the `prompt` field in context and mode definition files, and
+ * **the project prompt**, i.e. `initial_prompt` in `project.yml`, which is provided to the LLM upon project activation.
+
+Templating allows prompts to adapt to the active configuration; for instance, a mode prompt can mention a tool
+only if that tool is actually available in the current session.
+
+### Variables and Functions
+
+The following variables can be used in all of the above templates:
+
+| Variable            | Description                                                                                                                                                                                                                                                                                                                                                |
+|---------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `available_tools`   | the list of names of the tools that are currently exposed to the LLM. Use it to include content conditionally, e.g. `{% if 'replace_content' in available_tools %}…{% endif %}`.                                                                                                                                                                           |
+| `available_markers` | the list of names of the tool markers (tool categories, e.g. `ToolMarkerSymbolicRead`) for which at least one tool is exposed; useful for conditioning on entire groups of tools.                                                                                                                                                                          |
+| `tool_names`        | a mapping from canonical tool names to effective tool names, which accounts for legacy tool renames as well as for tools being functionally replaced due to the active language backend (e.g. `find_symbol` being replaced by `jet_brains_find_symbol` when the JetBrains backend is active). Prefer `{{ tool_names['find_symbol'] }}` over hard-coded names. |
+
+Context, mode and project prompts (but not Serena's system prompt) additionally support the following function:
+
+| Function             | Description                                                                                                                                                                                                                                                                       |
+|----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `embed_memory(name)` | embeds the content of the memory with the given name, wrapped in a tag `<memory name="...">`. Use this to inline knowledge that shall always be provided to the LLM rather than being loaded on demand. If the memory cannot be loaded, an error is logged and nothing is rendered. |
+
+For example, a project can inline its coding conventions from a memory into the project prompt:
+
+```yaml
+initial_prompt: |
+  {{ embed_memory("coding_conventions") }}
+```
+
 ## Advanced Configuration
 
 For advanced users, Serena's configuration can be further customized.
@@ -1247,6 +1284,7 @@ Supported settings:
 | `yaml_language_server_version` | `1.19.2` | Override the npm package version Serena installs when `ls_path` is not set. |
 | `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
 
+(custom-prompts)=
 ### Custom Prompts
 
 All of Serena's prompts can be fully customized.
