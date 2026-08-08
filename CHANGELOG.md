@@ -3,24 +3,80 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
-  - Fix: the README, the Language Support docs page and the project template omitted several already-supported language servers
+  - Fix: Race conditions in ProjectServer when used by multiple clients in parallel   
   - Fix: a tool call exceeding the timeout blocked the task executor indefinitely; the executor now
     recovers without user-induced cancellation
   - Add Grok Build support (context `grok`, setup CLI, hooks)
   - The `languages` key in project configurations was changed to `language_servers` to better reflect
     the actual semantics (configurations are automatically migrated)
   - Fix: glob matching bare `*` and `?` in non-`**` patterns matched across `/`, contradicting documented behaviour #1732
+  - Project activation errors are now reported to the client in Serena's system prompt, instead of failures 
+    being visible only in the log. This applies both to a failed activation of an explicitly given project and to a 
+    failed `--project-from-cwd` auto-detection (#1773).
+  - ProjectServer: Configure trusted hosts (local hosts only) when listening on localhost
+  - SerenaDashboardTrayManager: Configure trusted hosts (local hosts only)
+  - Enclose sub-prompts in XML-like tags to make scopes explicit
+  - Allow initial project prompts and project-specific newly activated modes to use templating 
+
+* CLI:
+  - Fix: `start-mcp-server` help text for `--project-from-cwd` falsely promised a fallback to the CWD, which was 
+    removed in v1.0.0 #1773
+  - Fix: `project health-check` always exited with code 0, even when the check failed, so callers 
+    (CI, scripts) could not act on its verdict; it now exits with code 1 on failure. A `find_symbol` 
+    result without any matches is now reported as a failure rather than as a warning.
+
+* Tools:
+  - `find_symbol`, `jet_brains_find_symbol`: Change tool description to improve tool search results in clients that load tools dynamically
+  - `get_current_config`: Result now includes language server status #1782
+  - More liberal handling of ignored paths in file access tools:
+    - Tools that explicitly target a single file (`create_text_file`, `read_file`, `replace_content`) no longer 
+      consider ignored paths in general, i.e. all files can be accessed. 
+      When a path is explicitly accessed, we should not try to prevent it; the agent is assumed to have a good reason 
+      for doing so.
+    - Tools that traverse a subtree of the project (`list_dir`, `find_file`, `search_for_pattern`) now all have an 
+      option `skip_ignored_files` (whether to skip ignored sub-paths).
+      Note that if the base path is itself ignored, ignored paths cannot be considered.
 
 * Language Servers: 
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
     project creation) 
   - Add `python_basedpyright` as an alternative Python language server
+  - Java/JDTLS: stop downloading and loading the unused IntelliCode completion-ranking bundle; the retired
+    `intellicode_version`, `intellicode_xmx` and `intellicode_xms` settings remain accepted but are ignored #1821
+  - Kotlin: update the managed Kotlin LSP from `261.13587.0` to `262.9593.0`, including support for the
+    new platform-specific archive layout and Windows ARM64 builds
   - Nix/nixd: support custom `ls_path` launchers and external JSON settings through `config_path` #1737
+  - Fix: Nix/nixd diagnostics now use published diagnostics instead of the unsupported
+    `textDocument/diagnostic` request, which terminated nixd #1802
+  - Fix: `get_diagnostics_for_file` crashed with `SolidLSPException` for any Ansible file with at least
+    one lint finding, because `ansible-language-server` doesn't implement `textDocument/documentSymbol`
+    and the request used to map diagnostics onto owning symbols just threw. `AnsibleLanguageServer` now
+    overrides that request to return `None` directly, so diagnostics fall back to being grouped under
+    the file-level path as already documented #1758
+  - Fix: pull-diagnostics fallback in `request_text_document_diagnostics` no longer swallows
+    `LanguageServerTerminatedException`, so a crash during a diagnostics pull triggers the existing
+    language-server restart path instead of silently returning no diagnostics #1770
+  - Fix: F#'s `module <Name>` declarations reported a `selectionRange` pointing at the `module`
+    keyword instead of at `<Name>`, so looking up hover/references from a module symbol's position
+    returned the keyword's own docs instead of the module's #925
+  - Fix: Erlang functions could not be addressed by any tool taking an exact name path, because
+    Erlang LS identifies them as `name/arity` and `/` separates name path components. The arity is
+    now separated by `#` instead (e.g. `create_user#4`), so the reported name path round-trips and
+    `find_referencing_symbols`/`replace_symbol_body`/`insert_after_symbol` work on Erlang
+    functions #1797
+  - Fix: `LSPFileBuffer`: a stale content hash could be returned if files are kept open 
+    and file contents were not read before trying to retrieve the hash value  
+  - Fix: Change semantics of file opening (`open_file`) in the language server from "open file (if not already open)"
+    to "ensure that the language server has the (current) contents of the file" (by sending `textDocument/didOpen`
+    or `textDocument/didChange`), as this is always the intention of calling the method.
+    If files were kept open in the language server (which the Svelte and Vue language servers did),
+    the language server was not necessarily informed about updated contents.
 
 * JetBrains:
   - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file
 
 * Language Servers:
+  - Rust: reduce rust-analyzer memory usage and reload churn by disabling cache priming and Cargo autoreload while preserving diagnostics.
   - `typescript`: Fix: on large projects, the first `find_referencing_symbols`/`request_references` call
     could silently race tsserver's project load and return incomplete results, because the fixed 2s
     grace for tsserver to *start* reporting `$/progress` (distinct from the separate, already
@@ -33,6 +89,13 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Language servers and their dependency providers now go through the `subprocess_run` helper instead of
     calling `subprocess.run` directly (e.g. for installation processes), so all such subprocesses get 
     `stdin=DEVNULL` and can no longer interfere with the stdio MCP connection #1748
+  - `scala`: Fix: Metals asks via `window/showMessageRequest` whether to import a workspace it has not
+    seen before, and Serena had no handler, so the request failed with `MethodNotFound` and Metals gave
+    up on the import ("Unexpected error initializing server"). No build server was ever connected and
+    every cross-file query fell back to the presentation compiler, which sees one file at a time, unless
+    the project happened to have been imported beforehand by another editor. The three prompts that lead
+    to a build server are now answered; anything else is dismissed, including the choice between several
+    build definitions in one workspace. `ls_specific_settings.scala.auto_import_build: false` opts out
   - `scala`: Fix: in a repository whose builds live below its root, Metals was given only the repository
     root as a workspace folder, and its own one-level search takes just the first build it finds — so in
     a monorepo all but one build were served with no build target, silently returning no cross-file
@@ -40,8 +103,15 @@ Status of the `main` branch. Changes prior to the next official version change w
     build; `ls_specific_settings.scala.project_roots` and `project_root_scan_depth` override the
     detection #1766
 
+* Dashboard:
+  - Fix: Serena PyPI version check triggered by callback on main thread could delay agent startup #1774
+  - Fix: on macOS, the `tray_manager` interface put an icon in the Dock and in the app switcher
+    (should only use menu bar icon)
+  - Use `tray_manager` interface as new default on macOS
+
 * Hooks:
   - Add `serena-hooks --client=grok`, including Grok-native PreToolUse allow/deny output.
+  - Use `SessionEnd` for Codex 0.145.0+ cleanup hooks and document the known `Stop` compatibility issue affecting older Codex versions.
   - PreToolUse remind hook: coerce non-string shell command values instead of failing, and recognize
     `target_file`/`targetFile` file-path keys (shared payload parsing, applies to all hook clients).
   - Fix hook input parsing for clients that emit raw control characters in JSON string values #1743.
@@ -87,6 +157,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     coverage-report output, but matched by bare dirname and so also hid legitimate source directories named
     `coverage` (e.g. `src/routes/coverage/`) from symbol tools. Generated report dirs are already covered by
     gitignore. Fixes #1523.
+  - Fix: Restore `erlang` support (broken since v1.6.0 due to an implementation error) 
 
 * Tools:
   - Fix: `search_for_pattern` marked one line too many as matched whenever a match ended with a line

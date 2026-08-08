@@ -1,4 +1,3 @@
-import logging
 import os
 import platform
 import re
@@ -11,7 +10,7 @@ from typing import Any
 
 import pytest
 from _pytest.mark import Mark, MarkDecorator
-from sensai.util.logging import configure
+from sensai.util import logging
 
 from serena.agent import SerenaAgent
 from serena.config.serena_config import SerenaConfig, SerenaPaths
@@ -26,9 +25,16 @@ from .solidlsp.clojure import is_clojure_cli_available
 from .solidlsp.elixir import EXPERT_UNAVAILABLE
 from .solidlsp.erlang import ERLANG_LS_UNAVAILABLE
 
-configure(level=logging.INFO)
+PYTEST_LOG_LEVEL = logging.DEBUG
+
+logging.configure(level=PYTEST_LOG_LEVEL)
 
 log = logging.getLogger(__name__)
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    if os.getenv("PYCHARM_HOSTED") == "1":
+        config.option.patch_pycharm_diff = True
 
 
 @pytest.fixture(scope="session")
@@ -131,7 +137,7 @@ def start_default_ls_context(ls_id: LanguageServerId) -> Iterator[SolidLanguageS
 
 
 def create_default_serena_config():
-    return SerenaConfig().with_headless_mode_overrides()
+    return SerenaConfig(log_level=PYTEST_LOG_LEVEL).with_headless_mode_overrides()
 
 
 def _create_default_project(ls_id: LanguageServerId, repo_root_override: str | None = None) -> Project:

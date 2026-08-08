@@ -355,7 +355,7 @@ Then create `~/.codex/hooks.json` with the following content:
                 ]
             }
         ],
-        "Stop": [
+        "SessionEnd": [
             {
                 "hooks": [
                     {
@@ -368,6 +368,12 @@ Then create `~/.codex/hooks.json` with the following content:
     }
 }
 ```
+
+The `SessionEnd` cleanup hook requires Codex 0.145.0 or newer. Older Codex versions only support
+`Stop` for cleanup, which currently has a [known compatibility issue](https://github.com/oraios/serena/issues/1533).
+If you still configure it, replace `SessionEnd` with `Stop` in the example above. Configure cleanup
+under exactly one of these events, never both: `Stop` runs after every turn, while `SessionEnd` runs
+when Codex tears down the root thread.
 
 The hooks will:
 

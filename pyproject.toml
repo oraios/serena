@@ -317,7 +317,6 @@ max-complexity = 20
 "test/solidlsp/bsl/**" = ["RUF001", "RUF002", "RUF003"]
 
 [tool.pytest.ini_options]
-addopts = "--snapshot-patch-pycharm-diff"
 markers = [
   "clojure: language server running for Clojure",
   "crystal: language server running for Crystal",

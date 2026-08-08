@@ -68,7 +68,8 @@ Some languages require additional installations or setup steps, as noted.
 * **Elm**  
   (requires Elm compiler)
 * **Erlang**  
-  (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls); experimental, might be slow or hang)
+  (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls); experimental, might be slow or hang;
+  note that functions are addressed as `name#arity`, e.g. `create_user#4`, because `/` is reserved as the name path separator)
 * **F#**  
   (requires [.NET v8.0+](https://dotnet.microsoft.com/en-us/download/dotnet); uses FsAutoComplete/Ionide, which is auto-installed; for Homebrew .NET on macOS, set DOTNET_ROOT in your environment)
 * **Fortran**   
@@ -146,7 +147,7 @@ Some languages require additional installations or setup steps, as noted.
 * **Rust**  
   (requires [rustup](https://rustup.rs/) - uses rust-analyzer from your toolchain)
 * **Scala**  
-  (requires some [manual setup](../03-special-guides/scala_setup_guide_for_serena); uses Metals LSP)
+  (uses Metals LSP, which imports the build on first use — see the [setup guide](../03-special-guides/scala_setup_guide_for_serena))
 * **SCSS / Sass / CSS**
   (experimental; requires Node.js + npm; uses [some-sass-language-server](https://github.com/wkillerud/some-sass) to handle
   `.scss`, `.sass`, and `.css`)

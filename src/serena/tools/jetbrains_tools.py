@@ -35,12 +35,12 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         max_answer_chars: int = -1,
     ) -> str:
         """
-        Retrieves information on all symbols/code entities (classes, methods, etc.) based on the given name path pattern.
+        Finds symbols and code entities (classes, methods, etc.) based on the given name path pattern.
         The returned symbol information can be used for edits or further queries.
         Specify `depth > 0` to retrieve children (e.g., methods of a class).
         Important: through `search_deps=True` dependencies can be searched, which
         should be preferred to web search or other less sophisticated approaches to analyzing dependencies.
-        You will always receive at least quick info on the symbol (even if `include_info=False`).
+        You will always receive at least quick info for returned symbols (even if `include_info=False`).
 
         A name path is a path in the symbol tree *within a source file*.
         For example, the method `my_method` defined in class `MyClass` would have the name path `MyClass/my_method`.

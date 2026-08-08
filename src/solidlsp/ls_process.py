@@ -35,6 +35,12 @@ from solidlsp.util import subprocess_util
 
 log = logging.getLogger(__name__)
 
+
+DEFAULT_LS_REQUEST_TIMEOUT: float = 300.0
+"""
+Default request timeout, in seconds, when callers do not pass an explicit timeout
+"""
+
 # Per the LSP spec, `ContentModified` (-32801) means the server discarded a stale, in-flight
 # computation because the workspace changed underneath it, not that the request itself is
 # invalid. A well-behaved client is expected to retry such requests -- but only requests it has
