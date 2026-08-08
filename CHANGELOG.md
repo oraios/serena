@@ -16,7 +16,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - ProjectServer: Configure trusted hosts (local hosts only) when listening on localhost
   - SerenaDashboardTrayManager: Configure trusted hosts (local hosts only)
   - Enclose sub-prompts in XML-like tags to make scopes explicit
-  - Allow initial project prompts and project-specific newly activated modes to use templating 
+  - Prompts and prompt templates:
+    - Allow initial project prompts and project-specific newly activated modes to use templating
+    - Support function `embed_memory` in prompt templates to inline a memory's contents
 
 * CLI:
   - Fix: `start-mcp-server` help text for `--project-from-cwd` falsely promised a fallback to the CWD, which was 
