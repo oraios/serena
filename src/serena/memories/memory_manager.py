@@ -12,6 +12,7 @@ from serena.config.serena_config import (
 from serena.constants import SERENA_FILE_ENCODING
 from serena.util.text_utils import ContentReplacer
 
+from .frontmatter import FrontmatterParser, FrontmatterParseResult
 from .memory_reference_analysis import (
     MEMORY_REF_PREFIX,
     AutofixReport,
@@ -201,23 +202,71 @@ class MemoryManager:
         if is_tool_context and self._is_read_only_memory(name):
             raise PermissionError(f"Attempted to write to read_only memory: '{name}')")
 
-    def load_memory(self, name: str) -> str:
+    def _load_memory_raw(self, name: str) -> tuple[str, str]:
         name = self._sanitize_name(name)
         self._check_not_ignored(name)
         memory_file_path = self.get_memory_file_path(name)
         if not memory_file_path.exists():
             raise FileNotFoundError(f"Memory named '{name}' not found")
-        with open(memory_file_path, encoding=self._encoding) as f:
-            return f.read()
+        with open(memory_file_path, encoding=self._encoding, newline="") as f:
+            return name, f.read()
 
-    def save_memory(self, name: str, content: str, is_tool_context: bool) -> str:
+    def _save_memory_raw(self, name: str, content: str, is_tool_context: bool) -> str:
         name = self._sanitize_name(name)
         self._check_not_ignored(name)
         self._check_write_access(name, is_tool_context)
         memory_file_path = self.get_memory_file_path(name)
-        with open(memory_file_path, "w", encoding=self._encoding) as f:
+        with open(memory_file_path, "w", encoding=self._encoding, newline="") as f:
             f.write(content)
         return f"Memory {name} written."
+
+    @staticmethod
+    def _parse_frontmatter(name: str, content: str) -> FrontmatterParseResult:
+        try:
+            return FrontmatterParser.parse(content)
+        except ValueError as exc:
+            raise ValueError(f"Invalid Serena frontmatter in memory '{name}': {exc}") from exc
+
+    def load_memory(self, name: str) -> str:
+        name, raw = self._load_memory_raw(name)
+        return self._parse_frontmatter(name, raw).body
+
+    def save_memory(self, name: str, content: str, is_tool_context: bool) -> str:
+        """
+        Saves memory body content while retaining any existing frontmatter.
+
+        New memories may still be created from raw content containing a valid, marked
+        frontmatter block. Once managed frontmatter exists, callers that only know
+        about the body cannot accidentally discard or reserialize it.
+        """
+        name = self._sanitize_name(name)
+        self._check_not_ignored(name)
+        self._check_write_access(name, is_tool_context)
+        memory_file_path = self.get_memory_file_path(name)
+        if memory_file_path.exists():
+            with open(memory_file_path, encoding=self._encoding, newline="") as f:
+                parsed = self._parse_frontmatter(name, f.read())
+            if parsed.is_managed:
+                content = parsed.with_body(content)
+            else:
+                self._parse_frontmatter(name, content)
+        else:
+            self._parse_frontmatter(name, content)
+        return self._save_memory_raw(name, content, is_tool_context)
+
+    def get_memory_frontmatter(self, name: str) -> dict[str, str]:
+        name, raw = self._load_memory_raw(name)
+        return dict(self._parse_frontmatter(name, raw).frontmatter)
+
+    def add_memory_frontmatter(self, name: str, key: str, value: str, is_tool_context: bool) -> str:
+        name, raw = self._load_memory_raw(name)
+        self._check_write_access(name, is_tool_context)
+        parsed = self._parse_frontmatter(name, raw)
+        try:
+            content = FrontmatterParser.upsert(parsed, key, value)
+        except ValueError as exc:
+            raise ValueError(f"Invalid Serena frontmatter update for memory '{name}': {exc}") from exc
+        return self._save_memory_raw(name, content, is_tool_context)
 
     class MemoriesList:
         def __init__(self) -> None:
@@ -237,8 +286,8 @@ class MemoryManager:
             self.memories.extend(other.memories)
             self.read_only_memories.extend(other.read_only_memories)
 
-        def to_dict(self) -> dict[str, list[str]]:
-            result = {}
+        def to_dict(self) -> dict[str, object]:
+            result: dict[str, object] = {}
             if self.memories:
                 result["memories"] = sorted(self.memories)
             if self.read_only_memories:
@@ -395,12 +444,12 @@ class MemoryManager:
         memory_file_path = self.get_memory_file_path(name)
         if not memory_file_path.exists():
             raise FileNotFoundError(f"Memory {name} not found.")
-        with open(memory_file_path, encoding=self._encoding) as f:
-            original_content = f.read()
+        with open(memory_file_path, encoding=self._encoding, newline="") as f:
+            parsed = self._parse_frontmatter(name, f.read())
         replacer = ContentReplacer(mode=mode, allow_multiple_occurrences=allow_multiple_occurrences, regex_multiline=regex_multiline)
-        updated_content = replacer.replace(original_content, needle, repl)
-        with open(memory_file_path, "w", encoding=self._encoding) as f:
-            f.write(updated_content)
+        updated_body = replacer.replace(parsed.body, needle, repl)
+        with open(memory_file_path, "w", encoding=self._encoding, newline="") as f:
+            f.write(parsed.with_body(updated_body))
         return f"Memory {name} edited successfully."
 
     def validate_referential_integrity(

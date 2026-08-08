@@ -83,6 +83,13 @@ Status of the `main` branch. Changes prior to the next official version change w
 * JetBrains:
   - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file
 
+* Memories:
+  - Add opt-in tools for reading and updating versioned scalar frontmatter metadata while keeping
+    `read_memory` focused on memory body content. Managed blocks start with
+    `serena_frontmatter_version: 1`, require `type`, and use the Open Knowledge Format field name
+    `description` where applicable. This is field-level alignment, not OKF bundle conformance;
+    unmarked legacy `---` blocks remain ordinary memory body content.
+
 * Language Servers:
   - Rust: reduce rust-analyzer memory usage and reload churn by disabling cache priming and Cargo autoreload while preserving diagnostics.
   - `typescript`: Fix: on large projects, the first `find_referencing_symbols`/`request_references` call

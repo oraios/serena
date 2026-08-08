@@ -1,7 +1,7 @@
 import logging
 from typing import Literal
 
-from serena.tools import Tool, ToolMarkerCanEdit
+from serena.tools import Tool, ToolMarkerCanEdit, ToolMarkerOptional
 
 log = logging.getLogger(__name__)
 
@@ -55,8 +55,53 @@ class ListMemoriesTool(Tool):
     def apply(self, topic: str = "") -> str:
         """
         Lists available memories, optionally filtered by topic.
+        Includes frontmatter metadata when the optional memory_get_frontmatter
+        tool is active.
         """
-        return self._to_json(self.memory_manager.list_memories(topic).to_dict())
+        memories = self.memory_manager.list_memories(topic)
+        result = memories.to_dict()
+
+        if MemoryGetFrontmatterTool.get_name_from_cls() in self.agent.get_active_tool_names():
+            frontmatter = {}
+            for memory_name in memories.get_full_list():
+                metadata = self.memory_manager.get_memory_frontmatter(memory_name)
+                if metadata:
+                    frontmatter[memory_name] = metadata
+            if frontmatter:
+                result["frontmatter"] = frontmatter
+
+        return self._to_json(result)
+
+
+class MemoryGetFrontmatterTool(Tool, ToolMarkerOptional):
+    """
+    Reads scalar frontmatter metadata from a memory.
+
+    Managed metadata starts with ``serena_frontmatter_version: 1`` and requires
+    a non-empty ``type`` field. The Serena version marker is not returned.
+    """
+
+    def apply(self, memory_name: str) -> str:
+        """
+        Return the memory's frontmatter as JSON, or an empty object when absent.
+
+        :param memory_name: memory name
+        """
+        return self._to_json(self.memory_manager.get_memory_frontmatter(memory_name))
+
+
+class MemoryAddFrontmatterTool(Tool, ToolMarkerCanEdit, ToolMarkerOptional):
+    """Adds or updates one scalar field in versioned Serena frontmatter."""
+
+    def apply(self, memory_name: str, key: str, value: str) -> str:
+        """
+        Add or update a frontmatter field without changing the memory body.
+
+        :param memory_name: memory name
+        :param key: frontmatter field name; ``serena_frontmatter_version`` is reserved
+        :param value: scalar frontmatter value
+        """
+        return self.memory_manager.add_memory_frontmatter(memory_name, key, value, is_tool_context=True)
 
 
 class DeleteMemoryTool(Tool, ToolMarkerCanEdit):
