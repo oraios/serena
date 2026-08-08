@@ -104,6 +104,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     the project happened to have been imported beforehand by another editor. The three prompts that lead
     to a build server are now answered; anything else is dismissed, including the choice between several
     build definitions in one workspace. `ls_specific_settings.scala.auto_import_build: false` opts out
+  - `scala`: Fix: in a repository whose builds live below its root, Metals was given only the repository
+    root as a workspace folder, and its own one-level search takes just the first build it finds — so in
+    a monorepo all but one build were served with no build target, silently returning no cross-file
+    references. The build roots are now detected and passed as workspace folders, one Metals service per
+    build; `ls_specific_settings.scala.project_roots` and `project_root_scan_depth` override the
+    detection #1766
 
 * Dashboard:
   - Fix: Serena PyPI version check triggered by callback on main thread could delay agent startup #1774
