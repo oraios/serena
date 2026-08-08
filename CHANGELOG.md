@@ -39,6 +39,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
     project creation) 
   - Add `python_basedpyright` as an alternative Python language server
+  - Add support for Wolfram Language via the official [WolframResearch LSPServer](https://github.com/WolframResearch/LSPServer) paclet.
+    Requires Wolfram Mathematica 13.0+ or Wolfram Engine 12.1+. Set `WOLFRAM_PATH` environment variable or configure
+    `ls_path` in `ls_specific_settings`. Supports .wl and .wls files with diagnostics, document symbols,
+    within-file references, hover documentation, and formatting.
   - Nix/nixd: support custom `ls_path` launchers and external JSON settings through `config_path` #1737
   - Fix: Nix/nixd diagnostics now use published diagnostics instead of the unsupported
     `textDocument/diagnostic` request, which terminated nixd #1802

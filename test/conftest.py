@@ -484,6 +484,15 @@ def _determine_disabled_language_servers() -> list[LanguageServerId]:
     if is_ci:
         result.append(LanguageServerId.KOTLIN)  # IntelliJ-based Kotlin LSP crashes on JVM restart under CI memory limits
 
+    # Disable Wolfram tests if WolframKernel is not available (checked with the same
+    # discovery logic used by the language server itself)
+    from solidlsp.language_servers.wolfram_language_server import _find_wolfram_kernel
+
+    try:
+        _find_wolfram_kernel()
+    except FileNotFoundError:
+        result.append(LanguageServerId.WOLFRAM)
+
     return result
 
 
