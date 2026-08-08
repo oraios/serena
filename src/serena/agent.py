@@ -956,12 +956,22 @@ class SerenaAgent:
             result[tool_class.get_name_from_cls()] = new_tool_class.get_name_from_cls()
         return result
 
-    def _format_prompt_tag(self, text: str, tag: str, tag_name_attr: str | None = None) -> str:
+    @staticmethod
+    def _format_prompt_tag(text: str, tag: str, tag_name_attr: str | None = None) -> str:
         open_tag = f"<{tag}" + (f' name="{tag_name_attr}"' if tag_name_attr is not None else "") + ">"
         close_tag = f"</{tag}>"
         return f"{open_tag}\n{text.strip()}\n{close_tag}"
 
-    def _format_prompt(self, prompt_template: str, tag: str | None = None, tag_name_attr: str | None = None) -> str:
+    def _render_prompt(self, prompt_template: str, tag: str | None = None, tag_name_attr: str | None = None) -> str:
+        """
+        Renders the given prompt template, providing the necessary variables and functions
+
+        :param prompt_template: the template text (jinja2) to render
+        :param tag: if not None, wraps the rendered prompt text in a tag
+        :param tag_name_attr: for the case where tag is not None, specifies the value of the "name" attribute of the tag
+        :return: the rendered prompt
+        """
+
         def embed_memory(memory_name: str) -> str:
             try:
                 memory_manager = self._get_memory_manager()
@@ -1029,8 +1039,8 @@ class SerenaAgent:
         self._project_prompt_status.mark_mode_prompts_as_provided(session_id)
 
         system_prompt = self.prompt_factory.create_system_prompt(
-            context_system_prompt=self._format_prompt(self._context.prompt, tag="context"),
-            mode_system_prompts=[self._format_prompt(mode.prompt, tag="mode", tag_name_attr=mode.name) for mode in relevant_modes],
+            context_system_prompt=self._render_prompt(self._context.prompt, tag="context"),
+            mode_system_prompts=[self._render_prompt(mode.prompt, tag="mode", tag_name_attr=mode.name) for mode in relevant_modes],
             available_tools=available_tools.tool_names,
             available_markers=available_markers,
             global_memories_list=global_memories_str,
@@ -1087,12 +1097,12 @@ class SerenaAgent:
         modes_with_prompts = self._project_prompt_status.get_modes_with_prompts_to_be_provided_for_project_activation(session_id)
         if modes_with_prompts:
             for mode in modes_with_prompts:
-                msg += self._format_prompt(mode.prompt, tag="mode", tag_name_attr=mode.name) + "\n"
+                msg += self._render_prompt(mode.prompt, tag="mode", tag_name_attr=mode.name) + "\n"
         self._project_prompt_status.mark_mode_prompts_as_provided(session_id)
 
         # add project-specific prompt
         if proj.project_config.initial_prompt:
-            msg += "\n" + self._format_prompt(proj.project_config.initial_prompt, tag="project-instructions")
+            msg += "\n" + self._render_prompt(proj.project_config.initial_prompt, tag="project-instructions")
 
         self._project_prompt_status.mark_project_activation_message_as_provided(session_id)
 
