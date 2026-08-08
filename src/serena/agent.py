@@ -956,13 +956,20 @@ class SerenaAgent:
             result[tool_class.get_name_from_cls()] = new_tool_class.get_name_from_cls()
         return result
 
-    def _format_prompt(self, prompt_template: str) -> str:
+    def _format_prompt(self, prompt_template: str, tag: str | None = None, name : str | None = None) -> str:
         template = JinjaTemplate(prompt_template)
-        return template.render(
+        text = template.render(
             available_tools=self._exposed_tools.tool_names,
             available_markers=self._exposed_tools.tool_marker_names,
             tool_names=self._prompt_tool_names_mapping,
         )
+
+        if tag is not None:
+            open_tag = f"<{tag}" + (f' name="{name}"' if name is not None else "") + ">"
+            close_tag = f"</{tag}>"
+            text = f"{open_tag}{text}{close_tag}"
+
+        return text
 
     def create_connection_prompt(self) -> str:
         """
@@ -997,8 +1004,8 @@ class SerenaAgent:
         self._project_prompt_status.mark_mode_prompts_as_provided(session_id)
 
         system_prompt = self.prompt_factory.create_system_prompt(
-            context_system_prompt=self._format_prompt(self._context.prompt),
-            mode_system_prompts=[self._format_prompt(mode.prompt) for mode in relevant_modes],
+            context_system_prompt=self._format_prompt(self._context.prompt, tag="context"),
+            mode_system_prompts=[self._format_prompt(mode.prompt, tag="mode", name=mode.name) for mode in relevant_modes],
             available_tools=available_tools.tool_names,
             available_markers=available_markers,
             global_memories_list=global_memories_str,
@@ -1007,7 +1014,7 @@ class SerenaAgent:
 
         # provide the project activation message if it hasn't yet been provided
         if self._active_project is not None and not self._project_prompt_status.is_project_activation_message_already_provided(session_id):
-            system_prompt += "\n\n" + self.get_project_activation_message(session_id)
+            system_prompt += "\n\n<active-project>" + self.get_project_activation_message(session_id) + "</active-project>"
         elif self._project_activation_error:
             system_prompt += f"\n\nNo project is active ({self._project_activation_error})."
 
@@ -1054,14 +1061,13 @@ class SerenaAgent:
         # add prompts for modes that were dynamically activated by the project
         modes_with_prompts = self._project_prompt_status.get_modes_with_prompts_to_be_provided_for_project_activation(session_id)
         if modes_with_prompts:
-            msg += "\nNewly applicable mode instructions:"
             for mode in modes_with_prompts:
-                msg += f"\n{mode.prompt}"
+                msg += f'\n<mode name="{mode.name}">{mode.prompt}</mode>'
         self._project_prompt_status.mark_mode_prompts_as_provided(session_id)
 
         # add project-specific prompt
         if proj.project_config.initial_prompt:
-            msg += f"\nProject-specific instructions:\n {proj.project_config.initial_prompt}"
+            msg += f"\n<project-instructions>{proj.project_config.initial_prompt}</project-instructions>"
 
         self._project_prompt_status.mark_project_activation_message_as_provided(session_id)
 

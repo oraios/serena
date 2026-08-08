@@ -15,6 +15,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     failed `--project-from-cwd` auto-detection (#1773).
   - ProjectServer: Configure trusted hosts (local hosts only) when listening on localhost
   - SerenaDashboardTrayManager: Configure trusted hosts (local hosts only)
+  - Enclose sub-prompts in XML-like tags to make scopes explicit
 
 * CLI:
   - Fix: `start-mcp-server` help text for `--project-from-cwd` falsely promised a fallback to the CWD, which was 
