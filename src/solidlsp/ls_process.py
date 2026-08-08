@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 import socket
 import subprocess
 import threading
@@ -510,6 +511,9 @@ class StdioLanguageServer(LanguageServerInterface):
         self.process_launch_info = process_launch_info
         self.process: subprocess.Popen[bytes] | None = None
         self.start_independent_lsp_process = start_independent_lsp_process
+        self._process_group_id: int | None = None
+        """the POSIX process group ID owned by ``self.process``, captured at launch time (see
+        ``_start``); ``None`` on Windows or when the process was not started in its own session"""
 
         self._stdin_lock = threading.Lock()
 
@@ -523,6 +527,8 @@ class StdioLanguageServer(LanguageServerInterface):
             self.process_launch_info, start_new_session=self.start_independent_lsp_process
         )
         self.process = process
+        # start_new_session=True makes the new process its own group leader, so its PGID is its PID.
+        self._process_group_id = process.pid if (self.start_independent_lsp_process and os.name == "posix") else None
 
         # Check if process terminated immediately
         if process.returncode is not None:
@@ -559,10 +565,14 @@ class StdioLanguageServer(LanguageServerInterface):
                 # Ignore errors here, we are proceeding to terminate anyway.
             # terminate the process
             subprocess_util.terminate_process_tree_with_kill_fallback(
-                self.process, terminate_timeout=timeout, process_name=f"LS[{self.ls_id.value}]"
+                self.process,
+                terminate_timeout=timeout,
+                process_name=f"LS[{self.ls_id.value}]",
+                process_group_id=self._process_group_id,
             )
         finally:
             self.process = None
+            self._process_group_id = None
 
     @staticmethod
     def _safely_close_pipe(pipe: IO[AnyStr] | None) -> None:

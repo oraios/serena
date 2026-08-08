@@ -8,6 +8,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     a directory named with pattern metacharacters (e.g. a stray `***`) could turn a scoped pattern
     into one matching far more than intended, silently excluding most or all of the project from
     indexing #1806
+  - Fix: cleanup of an independently-started LSP process and its children required enumerating the
+    system process table (`psutil`), which can be denied even for processes Serena owns in a
+    sandboxed environment; cleanup now signals the known process group directly (#1818)
   - Fix: the README, the Language Support docs page and the project template omitted several already-supported language servers
   - Fix: a tool call exceeding the timeout blocked the task executor indefinitely; the executor now
     recovers without user-induced cancellation

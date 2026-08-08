@@ -246,7 +246,33 @@ def _signal_process_tree(process: subprocess.Popen[bytes], terminate: bool = Tru
         signal_process(process)
 
 
-def terminate_process_tree_with_kill_fallback(process: subprocess.Popen, terminate_timeout: float, process_name: str = "Process") -> None:
+def _signal_process_group(pgid: int, terminate: bool = True) -> None:
+    """
+    Sends a signal to every process in the given POSIX process group by group ID, without
+    enumerating the system process table. Requires the caller to know the group already exists
+    and is owned by us (see ``terminate_process_tree_with_kill_fallback``'s ``process_group_id``).
+
+    :param pgid: the process group ID to signal
+    :param terminate: if True, signal terminate (SIGTERM), otherwise signal kill (SIGKILL)
+    """
+    sig = signal.SIGTERM if terminate else signal.SIGKILL
+    try:
+        os.killpg(pgid, sig)
+    except ProcessLookupError:
+        # the group is already gone; nothing left to signal
+        pass
+    except PermissionError as e:
+        log.warning(f"Permission denied signaling process group {pgid} with {sig.name}: {e}")
+    except Exception as e:
+        log.warning(f"Unexpected error signaling process group {pgid} with {sig.name}: {e}")
+
+
+def terminate_process_tree_with_kill_fallback(
+    process: subprocess.Popen,
+    terminate_timeout: float,
+    process_name: str = "Process",
+    process_group_id: int | None = None,
+) -> None:
     """
     Attempts to terminate the given process and its children by signaling them to terminate,
     and if that fails (i.e. they don't exit within the given timeout), forcefully kills them.
@@ -256,9 +282,23 @@ def terminate_process_tree_with_kill_fallback(process: subprocess.Popen, termina
     :param process: the process to terminate
     :param terminate_timeout: the time to wait for the process to terminate gracefully before killing it
     :param process_name: the name of the process (used for logging purposes); should start with capital letter
+    :param process_group_id: if given, the POSIX process group ID that ``process`` leads (i.e. it was
+        launched with ``start_new_session=True``, so its PGID equals its PID). When set, cleanup
+        signals the whole group directly via ``os.killpg`` instead of walking the process tree with
+        ``psutil``, which requires system-wide process-table enumeration (``sysctl(KERN_PROC_ALL)`` on
+        macOS) that can be denied even for processes we started and own. Only pass this for a process
+        that was started in its own session: signaling the group of a process that shares ours would
+        also signal us.
     """
     log.debug(f"Terminating process {process.pid}, current status: {process.poll()}")
-    _signal_process_tree(process, terminate=True)
+
+    def signal_tree(terminate: bool) -> None:
+        if process_group_id is not None:
+            _signal_process_group(process_group_id, terminate=terminate)
+        else:
+            _signal_process_tree(process, terminate=terminate)
+
+    signal_tree(terminate=True)
     try:
         log.debug(f"Waiting for process {process.pid} to terminate...")
         exit_code = process.wait(timeout=terminate_timeout)
@@ -266,7 +306,7 @@ def terminate_process_tree_with_kill_fallback(process: subprocess.Popen, termina
     except subprocess.TimeoutExpired:
         # If termination failed, forcefully kill the process
         log.warning(f"{process_name} (pid={process.pid}) termination timed out, killing process forcefully...")
-        _signal_process_tree(process, terminate=False)
+        signal_tree(terminate=False)
         try:
             exit_code = process.wait(timeout=2.0)
             log.info(f"{process_name} killed successfully with exit code {exit_code}.")
