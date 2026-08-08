@@ -78,6 +78,8 @@ Some languages require additional installations or setup steps, as noted.
   (requires the Godot editor to be running with its built-in LSP enabled — default on port 6008;
   Serena connects over TCP and does not launch Godot itself;
   see the [GDScript Setup Guide](../03-special-guides/godot_gdscript_setup_guide_for_serena) for details)
+* **Gleam**  
+  (requires the [Gleam compiler](https://gleam.run) on PATH; the language server is bundled with the compiler and started via `gleam lsp`)
 * **Go**  
   (requires installation of `gopls`)
 * **Groovy**  

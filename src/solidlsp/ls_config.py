@@ -185,6 +185,11 @@ class LanguageServerId(str, Enum):
     Supports .qml files. Requires Qt 6 installation providing qmlls on PATH.
     See https://doc.qt.io/qt-6/qtqml-tool-qmlls.html
     """
+    GLEAM = "gleam"
+    """Gleam language server bundled with the Gleam compiler (`gleam lsp`).
+    Supports .gleam files. Requires the `gleam` binary on PATH.
+    See https://gleam.run/getting-started/installing/ for installation.
+    """
     NEXTFLOW = "nextflow"
     """Nextflow language server (https://github.com/nextflow-io/language-server), the one that backs the
     official VS Code extension. Supports .nf scripts (Nextflow .config files are parsed by the server, but
@@ -587,6 +592,8 @@ class LanguageServerId(str, Enum):
                 return FilenameMatcher(".gd", ".gdscript")
             case self.QML:
                 return FilenameMatcher(".qml")
+            case self.GLEAM:
+                return FilenameMatcher(".gleam")
             case self.NEXTFLOW:
                 # only scripts: the language server does have a service for .config files, but it provides
                 # no symbols for them, so treating them as source files would only pollute the symbol index
@@ -886,6 +893,10 @@ class LanguageServerId(str, Enum):
                 from solidlsp.language_servers.qml_language_server import QmlLanguageServer
 
                 return QmlLanguageServer
+            case self.GLEAM:
+                from solidlsp.language_servers.gleam_language_server import GleamLanguageServer
+
+                return GleamLanguageServer
             case self.NEXTFLOW:
                 from solidlsp.language_servers.nextflow_language_server import NextflowLanguageServer
 
