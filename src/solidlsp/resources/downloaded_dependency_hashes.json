@@ -5,6 +5,7 @@
   "https://github.com/redhat-developer/vscode-java/releases/download/v1.54.0/java-linux-arm64-1.54.0-923.vsix": "e2bb22c427d90da8dbb1afff72ff1e2dce38d50b76deb02d7bc313a330a1330c",
   "https://github.com/redhat-developer/vscode-java/releases/download/v1.54.0/java-linux-x64-1.54.0-923.vsix": "9d4b15da54e25a0192f9bac073f086c015397d3676623b68dbf83a5dbaf5132b",
   "https://github.com/redhat-developer/vscode-java/releases/download/v1.54.0/java-win32-x64-1.54.0-923.vsix": "66f3914987edeccfee8a2558470e0fde4f8c4154232ff4baa5d73373ebc819d4",
+  "https://github.com/nextflow-io/language-server/releases/download/v26.04.3/language-server-all.jar": "20cfa34f6e202d6b8babd8d786202ce00e0d39b70ccec3290e2ab3fbd02bc016",
   "https://download-cdn.jetbrains.com/kotlin-lsp/261.13587.0/kotlin-lsp-261.13587.0-win-x64.zip": "2806c2bd4810bd8e7ccc27d8c0ca4a5232a1c4f26ea1f4ba40e578b60860ccad",
   "https://download-cdn.jetbrains.com/kotlin-lsp/261.13587.0/kotlin-lsp-261.13587.0-linux-x64.zip": "dc0ed2e70cb0d61fdabb26aefce8299b7a75c0dcfffb9413715e92caec6e83ec",
   "https://download-cdn.jetbrains.com/kotlin-lsp/261.13587.0/kotlin-lsp-261.13587.0-linux-aarch64.zip": "d1dceb000fe06c5e2c30b95e7f4ab01d05101bd03ed448167feeb544a9f1d651",

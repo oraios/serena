@@ -345,6 +345,7 @@ markers = [
   "zig: language server running for Zig",
   "lua: language server running for Lua",
   "luau: language server running for Luau",
+  "nextflow: language server running for Nextflow",
   "nix: language server running for Nix",
   "dart: language server running for Dart",
   "erlang: language server running for Erlang",

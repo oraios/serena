@@ -185,6 +185,12 @@ class LanguageServerId(str, Enum):
     Supports .qml files. Requires Qt 6 installation providing qmlls on PATH.
     See https://doc.qt.io/qt-6/qtqml-tool-qmlls.html
     """
+    NEXTFLOW = "nextflow"
+    """Nextflow language server (https://github.com/nextflow-io/language-server), the one that backs the
+    official VS Code extension. Supports .nf scripts (Nextflow .config files are parsed by the server, but
+    it reports no symbols for them, so they are not treated as source files here).
+    Automatically downloads the language server JAR; requires Java 17+ (JAVA_HOME or 'java' on PATH).
+    """
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -581,6 +587,10 @@ class LanguageServerId(str, Enum):
                 return FilenameMatcher(".gd", ".gdscript")
             case self.QML:
                 return FilenameMatcher(".qml")
+            case self.NEXTFLOW:
+                # only scripts: the language server does have a service for .config files, but it provides
+                # no symbols for them, so treating them as source files would only pollute the symbol index
+                return FilenameMatcher(".nf")
             case self.HTML:
                 return FilenameMatcher(".html", ".htm")
             case self.SCSS:
@@ -876,6 +886,10 @@ class LanguageServerId(str, Enum):
                 from solidlsp.language_servers.qml_language_server import QmlLanguageServer
 
                 return QmlLanguageServer
+            case self.NEXTFLOW:
+                from solidlsp.language_servers.nextflow_language_server import NextflowLanguageServer
+
+                return NextflowLanguageServer
             case self.HTML:
                 from solidlsp.language_servers.vscode_html_language_server import VsCodeHtmlLanguageServer
 

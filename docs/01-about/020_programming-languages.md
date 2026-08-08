@@ -115,6 +115,11 @@ Some languages require additional installations or setup steps, as noted.
 * **mSL** (mIRC Scripting Language)  
   (auto-installed; no external dependencies required — uses a custom pygls-based LSP server shipped with Serena;
   supports document symbols, workspace symbols, references, and go-to-definition for aliases, events, menus, dialogs, and CTCP handlers in `.mrc` files)
+* **Nextflow**  
+  (uses the official [Nextflow language server](https://github.com/nextflow-io/language-server), which is automatically
+  downloaded; requires a Java 17+ runtime, discovered via `ls_specific_settings.nextflow.java_home`, `JAVA_HOME` or `java` on PATH;
+  covers `.nf` scripts — Nextflow `.config` files are not treated as source files, since the language server reports no symbols for them;
+  processes, workflows and functions are reported under their declared name, e.g. `GREET` for `process GREET`)
 * **Nix**  
   (requires nixd installation)
 * **OCaml**
