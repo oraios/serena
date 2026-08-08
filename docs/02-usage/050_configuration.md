@@ -759,15 +759,20 @@ Supported settings:
 | Setting | Default | Description |
 |---|---|---|
 | `ls_path` | managed download | Override the Kotlin Language Server executable path. |
-| `kotlin_lsp_version` | `261.13587.0` | Override the Kotlin Language Server version Serena downloads when `ls_path` is not set. |
+| `kotlin_lsp_version` | `262.9593.0` | Override the Kotlin Language Server version Serena downloads when `ls_path` is not set. |
 | `jvm_options` | `-Xmx2G` | Value assigned to `JAVA_TOOL_OPTIONS` for the Kotlin LS process. Set to `""` to disable JVM options entirely. |
+
+The managed `262.9593.0` packages include a bundled JBR. For a custom `ls_path`, point directly to
+`bin/intellij-server` (`bin/intellij-server.exe` on Windows). Serena also retains the legacy download
+layout for custom Kotlin LSP versions older than `262.4739.0`. The pinned current and frozen initial
+releases are checksum-verified; arbitrary custom versions are downloaded without checksum verification.
 
 Example:
 
 ```yaml
 ls_specific_settings:
   kotlin:
-    kotlin_lsp_version: "261.13587.0"
+    kotlin_lsp_version: "262.9593.0"
     jvm_options: "-Xmx4G -XX:+UseG1GC"
 ```
 

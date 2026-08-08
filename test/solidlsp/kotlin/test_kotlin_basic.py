@@ -10,7 +10,7 @@ from test.conftest import language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
-# Kotlin LSP (IntelliJ-based, pre-alpha v261) crashes on JVM restart under CI resource constraints
+# Kotlin LSP (IntelliJ-based, pre-alpha v262) crashes on JVM restart under CI resource constraints
 # (2 CPUs, 7GB RAM). First start succeeds but subsequent starts fail with cancelled (-32800).
 # Tests pass reliably on developer machines. See PR #1061 for investigation details.
 # (The CI quarantine lives centrally in test/conftest.py::_determine_disabled_languages.)
