@@ -68,8 +68,9 @@ excluded_tools: []
 # Find the list of tools here: https://oraios.github.io/serena/01-about/035_tools.html
 included_optional_tools: []
 
-# initial prompt for the project. It will always be given to the LLM upon activating the project
-# (contrary to the memories, which are loaded on demand).
+# initial prompt for the project,  which will be provided to the LLM upon project activation
+# (or within Serena's initial instructions if the project is activated at startup).
+## See:  https://oraios.github.io/serena/02-usage/050_configuration.html#prompt-templates
 initial_prompt: |
   {{ embed_memory("critical_info") }}
 
