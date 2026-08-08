@@ -62,10 +62,12 @@ class ProjectServer:
 
         self._agent = SerenaAgent(serena_config=serena_config)
         self._loaded_projects_by_root: dict[str, "Project"] = {}
+        # Keep these locks for the server's lifetime. Removing one after a failed load could
+        # let a retry initialize concurrently with threads already waiting on the old lock.
+        self._project_load_locks_by_root: dict[str, threading.Lock] = {}
         # Requests are served by concurrent Flask worker threads, but the agent's active
         # project is a single process-wide slot. Serialize the section that holds it;
-        # project loading is guarded separately so that a cold language server startup
-        # does not block queries against already-loaded projects.
+        # project loading uses one lock per project so unrelated projects remain independent.
         self._active_project_lock = threading.Lock()
         self._loaded_projects_lock = threading.Lock()
         self._port = port
@@ -98,14 +100,29 @@ class ProjectServer:
 
         key = str(registered_project.project_root)
 
+        # find or publish the per-project load lock while holding the shared dictionaries
         with self._loaded_projects_lock:
-            if key in self._loaded_projects_by_root:
-                return self._loaded_projects_by_root[key]
+            project = self._loaded_projects_by_root.get(key)
+            if project is not None:
+                return project
+            project_load_lock = self._project_load_locks_by_root.get(key)
+            if project_load_lock is None:
+                project_load_lock = threading.Lock()
+                self._project_load_locks_by_root[key] = project_load_lock
+
+        # initialize only this project; another project's cached lookup or cold load can proceed
+        with project_load_lock:
+            with self._loaded_projects_lock:
+                project = self._loaded_projects_by_root.get(key)
+                if project is not None:
+                    return project
 
             with LogTime(f"Loading project '{project_root_or_name}'"):
                 project = registered_project.get_project_instance(serena_config)
                 project.create_language_server_manager()
-            self._loaded_projects_by_root[key] = project
+
+            with self._loaded_projects_lock:
+                self._loaded_projects_by_root[key] = project
             return project
 
     def _query_project(self, req: QueryProjectRequest) -> str:
