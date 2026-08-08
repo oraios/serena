@@ -71,6 +71,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     or `textDocument/didChange`), as this is always the intention of calling the method.
     If files were kept open in the language server (which the Svelte and Vue language servers did),
     the language server was not necessarily informed about updated contents.
+  - Add Deno support (experimental; language server `deno`, backed by the Deno CLI's built-in
+    `deno lsp`). Understands Deno module resolution (`npm:` / `jsr:` / `https:` imports) and the
+    `Deno.*` globals, which the plain TypeScript language server does not. Overlaps TypeScript on
+    file extensions, so it is not auto-detected and must be selected explicitly; requires the
+    `deno` CLI on PATH
 
 * JetBrains:
   - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file
