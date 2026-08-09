@@ -7,6 +7,7 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_utils import SymbolUtils
+from test.conftest import start_default_ls_context
 
 pytestmark = pytest.mark.skipif(shutil.which("java") is None, reason="Nextflow language server requires a Java runtime")
 
@@ -71,6 +72,25 @@ class TestNextflowLanguageServer:
         ref_lines = self._reference_lines(refs)
         # main.nf, 0-indexed line 2: include { GREET; SHOUT } from './modules/greet/main.nf'
         assert ("main.nf", 2) in ref_lines, f"include of GREET in main.nf not found. Found: {ref_lines}"
+        # main.nf, 0-indexed line 12: greetings = GREET(names)
+        assert ("main.nf", 12) in ref_lines, f"invocation of GREET in main.nf not found. Found: {ref_lines}"
+
+    def test_find_references_across_files_on_a_fresh_server(self) -> None:
+        """Cross-file references must not depend on another request having opened the referencing file.
+
+        The module-scoped ``language_server`` fixture is shared, so by the time
+        ``test_find_references_across_files`` runs, earlier tests have already opened main.nf and thereby
+        forced the server to compile it. This test starts its own server and touches nothing but the
+        defining file, which is what a real session's first request looks like.
+        """
+        module_path = os.path.join("modules", "greet", "main.nf")
+        with start_default_ls_context(LanguageServerId.NEXTFLOW) as language_server:
+            symbol = self._get_symbol(language_server, module_path, "GREET")
+            start = symbol["selectionRange"]["start"]
+
+            refs = language_server.request_references(module_path, start["line"], start["character"])
+
+        ref_lines = self._reference_lines(refs)
         # main.nf, 0-indexed line 12: greetings = GREET(names)
         assert ("main.nf", 12) in ref_lines, f"invocation of GREET in main.nf not found. Found: {ref_lines}"
 

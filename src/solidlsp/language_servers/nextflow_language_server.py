@@ -88,6 +88,10 @@ class NextflowLanguageServer(SolidLanguageServer):
         self._active_progress_tokens: set[str] = set()
         self._progress_lock = threading.Lock()
 
+        # Whether the server's deferred workspace scan has been observed to complete
+        # (see _flush_deferred_workspace_scan).
+        self._workspace_scan_flushed = False
+
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
@@ -297,6 +301,46 @@ class NextflowLanguageServer(SolidLanguageServer):
         else:
             log.warning("Nextflow LS did not signal scan completion within %.0fs; proceeding anyway", _WORKSPACE_SCAN_TIMEOUT)
 
+    def _flush_deferred_workspace_scan(self, relative_file_path: str) -> None:
+        """
+        Forces the server to scan the workspace, which it does not do when it appears to.
+
+        ``LanguageService.initialize`` (which the "Initializing" progress notification wraps) only marks
+        the workspace as unscanned; the scan itself happens in ``LanguageService.update0``, behind a 1s
+        debounce, and *only* on a round where no file change is pending -- a round that finds pending
+        changes re-defers it via ``updateLater``. The first ``didOpen`` of a session therefore pushes the
+        scan out by at least one further round, so a references request issued right after it sees an AST
+        cache holding nothing but the file it just opened, and answers with an empty list.
+
+        ``completion`` is one of the two requests that call ``updateNow`` before consulting their provider,
+        and ``DebouncingExecutor.executeNow`` cancels the pending debounce and runs the update synchronously
+        on the request thread, so the response is not sent until that round has finished. Two rounds suffice
+        whatever the workspace size: the first drains the pending file changes -- which is what re-defers
+        the scan -- and the second finds nothing pending, so it takes the ``getWorkspaceFiles`` branch and
+        compiles the whole workspace before replying.
+
+        Waiting on the workspace symbol index instead would be unsound: ``LanguageService.symbol`` neither
+        awaits the update nor holds the monitor that ``update`` synchronises on, so once a workspace is big
+        enough for the scan to outlast a poll interval, a poll can observe a half-populated cache and
+        conclude the scan is done while files are still being compiled.
+
+        The completion results are discarded; only the barrier matters, and it is reached before the
+        provider runs, so even a provider-side failure leaves the workspace scanned.
+        """
+        if self._workspace_scan_flushed:
+            return
+
+        params: lsp_types.CompletionParams = {
+            "textDocument": {"uri": self._resolve_file_uri(relative_file_path)},
+            "position": {"line": 0, "character": 0},
+        }
+        for _ in range(2):
+            try:
+                self.server.send.completion(params)
+            except Exception as e:
+                log.debug("Completion request used to flush the Nextflow workspace scan failed: %s", e)
+        self._workspace_scan_flushed = True
+
     @override
     def _send_references_request(self, relative_file_path: str, line: int, column: int) -> list[lsp_types.Location] | None:
         """
@@ -309,13 +353,14 @@ class NextflowLanguageServer(SolidLanguageServer):
         come back empty. Sending a ``documentSymbol`` request for the same file first is a cheap way to
         block until the update has been applied.
         """
+        self._flush_deferred_workspace_scan(relative_file_path)
         self.server.send.document_symbol({"textDocument": {"uri": self._resolve_file_uri(relative_file_path)}})
         return super()._send_references_request(relative_file_path, line, column)
 
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
-        """Small safety buffer; the actual synchronisation happens in _send_references_request."""
-        return 1.0
+        """No blind wait is needed: _send_references_request synchronises with the server explicitly."""
+        return 0.0
 
     @override
     def _document_symbols_cache_fingerprint(self) -> Hashable:
