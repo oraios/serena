@@ -247,7 +247,7 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         :return: whether the symbol is a low-level symbol (variable, constant, etc.), which typically represents data
             rather than structure and therefore is not relevant in a high-level overview of the code.
         """
-        return self.symbol_kind >= SymbolKind.Variable.value
+        return not SymbolKind.is_container(self.symbol_kind)
 
     @property
     def overload_idx(self) -> int | None:

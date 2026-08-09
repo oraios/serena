@@ -48,6 +48,7 @@ from solidlsp.lsp_protocol_handler.lsp_types import (
     LocationLink,
     RenameParams,
     SymbolInformation,
+    SymbolKind,
 )
 from solidlsp.lsp_protocol_handler.server import (
     LSPError,
@@ -2590,16 +2591,6 @@ class SolidLanguageServer(ABC):
                 location["relativePath"] = relative_file_path
                 location["uri"] = Path(absolute_file_path).as_uri()
 
-        # allowed container kinds; Struct and Interface cover languages (e.g. Go, Rust, C) whose
-        # containers are not reported as classes
-        container_symbol_kinds = {
-            ls_types.SymbolKind.Method,
-            ls_types.SymbolKind.Function,
-            ls_types.SymbolKind.Class,
-            ls_types.SymbolKind.Struct,
-            ls_types.SymbolKind.Interface,
-        }
-
         def is_position_in_range(line: int, range_d: ls_types.Range) -> bool:
             start = range_d["start"]
             end = range_d["end"]
@@ -2615,17 +2606,15 @@ class SolidLanguageServer(ABC):
                     column_condition = column >= start["character"]
             return line_condition and column_condition
 
+        def is_multiline_container(s):
+            return SymbolKind.is_container(s["kind"]) and s["location"]["range"]["start"]["line"] != s["location"]["range"]["end"]["line"]
+
+        def is_variable_or_constant(s):
+            return s["kind"] in {ls_types.SymbolKind.Variable, ls_types.SymbolKind.Constant}
+
         # Only consider containers that are not one-liners (otherwise we may get imports)
-        candidate_containers = [
-            s
-            for s in document_symbols.iter_symbols()
-            if s["kind"] in container_symbol_kinds and s["location"]["range"]["start"]["line"] != s["location"]["range"]["end"]["line"]
-        ]
         # variables and constants are admitted even as one-liners (e.g. members of a Go const group)
-        var_containers = [
-            s for s in document_symbols.iter_symbols() if s["kind"] in {ls_types.SymbolKind.Variable, ls_types.SymbolKind.Constant}
-        ]
-        candidate_containers.extend(var_containers)
+        candidate_containers = [s for s in document_symbols.iter_symbols() if is_multiline_container(s) or is_variable_or_constant(s)]
 
         if not candidate_containers:
             return None
