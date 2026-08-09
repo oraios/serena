@@ -101,10 +101,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     file extensions, so it is not auto-detected and must be selected explicitly; requires the
     `deno` CLI on PATH
   - Fix: `find_referencing_symbols` reported file-level containers for references located inside Go
-    struct bodies, interface bodies and `const` groups, because containing-symbol detection admitted
-    only Python's container kinds; `Struct`, `Interface` and `Constant` symbols are now admitted as
-    containers
-
+    struct bodies, interface bodies and `const` groups; improve the logic for finding the nearest
+    enclosing symbol, adding the helper function `SymbolKind.is_container` (which is now also
+    applied to identify high-level symbols that should appear in symbol overiews).
+    
 * JetBrains:
   - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file
 
