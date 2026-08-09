@@ -22,7 +22,7 @@ See the corresponding [memory](.serena/memories/adding_new_language_support_guid
 
 Before submitting a PR, be sure to document your relevant changes (i.e. new features, fixes) in `CHANGELOG.md`.
 Use a concise style and add your change to the appropriate section
-("Language Servers", "Tools", "JetBrains", "CLI", "Memories", "Dashboard", "Hooks", "General").
+("Language Servers", "Tools", "JetBrains", "CLI", "Memories", "Dashboard", "Hooks", "General", "Security").
 
 ## Python Environment Setup
 

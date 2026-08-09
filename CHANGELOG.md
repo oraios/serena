@@ -13,13 +13,15 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Project activation errors are now reported to the client in Serena's system prompt, instead of failures 
     being visible only in the log. This applies both to a failed activation of an explicitly given project and to a 
     failed `--project-from-cwd` auto-detection (#1773).
-  - ProjectServer: Configure trusted hosts (local hosts only) when listening on localhost
-  - SerenaDashboardTrayManager: Configure trusted hosts (local hosts only)
   - Enclose sub-prompts in XML-like tags to make scopes explicit
   - Prompts and prompt templates:
     - Allow initial project prompts and project-specific newly activated modes to use templating
     - Support function `embed_memory` in prompt templates to inline a memory's contents
-  - Security: Use sandboxed environment for prompt templating, preventing attackers from using custom prompts to
+
+* Security:
+  - ProjectServer: Configure trusted hosts (local hosts only) when listening on localhost
+  - SerenaDashboardTrayManager: Configure trusted hosts (local hosts only)
+  - Use sandboxed environment for prompt templating, preventing attackers from using custom prompts to
     execute commands in an uncontrolled manner
 
 * CLI:
