@@ -51,11 +51,16 @@ class WolframLanguageServer(SolidLanguageServer):
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
+        # Only Mathematica-installation-specific directory names are listed here.
+        # "Documentation" and "FrontEnd" were previously included as a defensive guess,
+        # but they are common, generic names that real Wolfram projects legitimately use
+        # for their own content (e.g. paclets ship an actual Documentation/ folder with
+        # reference pages, as WolframResearch/LSPServer itself does). Matching on the bare
+        # name anywhere in the repository would silently exclude such folders from
+        # indexing, so they have been removed. See the discussion on PR #1108.
         return super().is_ignored_dirname(dirname) or dirname in [
             ".Wolfram",
             "SystemFiles",
-            "Documentation",
-            "FrontEnd",
         ]
 
     def _create_base_initialize_params(self) -> dict:
