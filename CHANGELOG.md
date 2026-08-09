@@ -2,6 +2,8 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+# v1.7.0 (2026-08-09)
+
 * General:
   - Fix: Race conditions in ProjectServer when used by multiple clients in parallel   
   - Fix: `GitignoreParser` interpolated a directory's name unescaped into gitignore pattern position;
