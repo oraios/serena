@@ -2,7 +2,6 @@ import asyncio
 import json
 import logging
 import socket
-import subprocess
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -32,6 +31,7 @@ from solidlsp.lsp_protocol_handler.server import (
     make_response,
 )
 from solidlsp.util import subprocess_util
+from solidlsp.util.subprocess_util import ManagedSubprocess
 
 log = logging.getLogger(__name__)
 
@@ -507,22 +507,21 @@ class StdioLanguageServer(LanguageServerInterface):
         """
         super().__init__(ls_id, determine_log_level, logger, request_timeout)
 
-        self.process_launch_info = process_launch_info
-        self.process: subprocess.Popen[bytes] | None = None
-        self.start_independent_lsp_process = start_independent_lsp_process
-
+        self._process_launch_info = process_launch_info
+        self._process: ManagedSubprocess[bytes] | None = None
+        self._start_independent_lsp_process = start_independent_lsp_process
         self._stdin_lock = threading.Lock()
 
     def is_running(self) -> bool:
-        return self.process is not None and self.process.returncode is None
+        return self._process is not None and self._process.returncode is None
 
     def _start(self) -> None:
-        log.info("Starting language server process via command: %s", self.process_launch_info.cmd)
+        log.info("Starting language server process via command: %s", self._process_launch_info.cmd)
 
-        process = subprocess_util.LanguageServerSubprocessLauncher.get_instance().launch(
-            self.process_launch_info, start_new_session=self.start_independent_lsp_process
+        process = subprocess_util.ManagedSubprocessLauncher.get_instance().launch(
+            self._process_launch_info, name=f"LS[{self.ls_id.value}]", start_new_session=self._start_independent_lsp_process
         )
-        self.process = process
+        self._process = process
 
         # Check if process terminated immediately
         if process.returncode is not None:
@@ -545,7 +544,7 @@ class StdioLanguageServer(LanguageServerInterface):
         ).start()
 
     def _stop(self, timeout: float) -> None:
-        if self.process is None:
+        if self._process is None:
             log.debug("Server process is None, cannot shutdown.")
             return
 
@@ -553,16 +552,14 @@ class StdioLanguageServer(LanguageServerInterface):
             # send LSP shutdown and close stdin to signal no more input
             try:
                 self._send_shutdown_in_thread()
-                self._safely_close_pipe(self.process.stdin)
+                self._safely_close_pipe(self._process.stdin)
             except Exception as e:
                 log.debug(f"Exception during graceful shutdown: {e}")
                 # Ignore errors here, we are proceeding to terminate anyway.
             # terminate the process
-            subprocess_util.terminate_process_tree_with_kill_fallback(
-                self.process, terminate_timeout=timeout, process_name=f"LS[{self.ls_id.value}]"
-            )
+            self._process.terminate(timeout=timeout)
         finally:
-            self.process = None
+            self._process = None
 
     @staticmethod
     def _safely_close_pipe(pipe: IO[AnyStr] | None) -> None:
@@ -573,7 +570,7 @@ class StdioLanguageServer(LanguageServerInterface):
             except Exception:
                 pass
 
-    def _read_bytes_from_process(self, process, stream, num_bytes) -> bytes:
+    def _read_bytes_from_process(self, process: ManagedSubprocess[bytes], stream: IO[bytes], num_bytes: int) -> bytes:
         """Read exactly num_bytes from process stdout"""
         data = b""
         while len(data) < num_bytes:
@@ -597,10 +594,10 @@ class StdioLanguageServer(LanguageServerInterface):
         """
         exception: Exception | None = None
         try:
-            while self.process and self.process.stdout:
-                if self.process.poll() is not None:  # process has terminated
+            while self._process and self._process.stdout:
+                if self._process.poll() is not None:  # process has terminated
                     break
-                line = self.process.stdout.readline()
+                line = self._process.stdout.readline()
                 if not line:
                     continue
                 try:
@@ -610,10 +607,10 @@ class StdioLanguageServer(LanguageServerInterface):
                 if num_bytes is None:
                     continue
                 while line and line.strip():
-                    line = self.process.stdout.readline()
+                    line = self._process.stdout.readline()
                 if not line:
                     continue
-                body = self._read_bytes_from_process(self.process, self.process.stdout, num_bytes)
+                body = self._read_bytes_from_process(self._process, self._process.stdout, num_bytes)
 
                 self._handle_body(body)
         except LanguageServerTerminatedException as e:
@@ -636,11 +633,11 @@ class StdioLanguageServer(LanguageServerInterface):
         Continuously read from the language server process stderr and log the messages
         """
         try:
-            while self.process and self.process.stderr:
-                if self.process.poll() is not None:
+            while self._process and self._process.stderr:
+                if self._process.poll() is not None:
                     # process has terminated
                     break
-                line = self.process.stderr.readline()
+                line = self._process.stderr.readline()
                 if not line:
                     continue
                 line_str = line.decode(ENCODING, errors="replace")
@@ -654,7 +651,7 @@ class StdioLanguageServer(LanguageServerInterface):
             log.info("Language server stderr reader thread has terminated")
 
     def _send_payload(self, payload: StringDict) -> None:
-        if not self.process or not self.process.stdin:
+        if not self._process or not self._process.stdin:
             return
         self._trace("solidlsp", "ls", payload)
         msg = create_message(payload)
@@ -662,8 +659,8 @@ class StdioLanguageServer(LanguageServerInterface):
         # Use lock to prevent concurrent writes to stdin that cause buffer corruption
         with self._stdin_lock:
             try:
-                self.process.stdin.writelines(msg)
-                self.process.stdin.flush()
+                self._process.stdin.writelines(msg)
+                self._process.stdin.flush()
             except (BrokenPipeError, ConnectionResetError, OSError) as e:
                 # Log the error but don't raise to prevent cascading failures
                 log.error(f"Failed to write to stdin: {e}")
