@@ -2,6 +2,7 @@ import os
 
 import pytest
 
+from serena.symbol import LanguageServerSymbol
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
@@ -81,7 +82,7 @@ class TestVueSymbolRetrieval:
         ], f"Expected property/variable/function kind for computed, got {containing_symbol.get('kind')}"
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
-    def test_request_containing_symbol_no_containing_symbol(self, language_server: SolidLanguageServer) -> None:
+    def test_request_containing_symbol_import_in_script_tag(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "components", "CalculatorInput.vue")
 
         # Position in the import statements at the top of the script setup
@@ -92,10 +93,10 @@ class TestVueSymbolRetrieval:
         # Request containing symbol for a position in the imports
         containing_symbol = language_server.request_containing_symbol(file_path, import_line, import_character)
 
-        # Should return None or empty dictionary for positions without containing symbol
-        assert containing_symbol is None or containing_symbol == {}, (
-            f"Expected None or empty dict for import position, got {containing_symbol}"
-        )
+        # Containing symbol is the script tag
+        assert containing_symbol is not None
+        s = LanguageServerSymbol(containing_symbol)
+        assert s.get_name_path().startswith("script")
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_request_referencing_symbols_store_function(self, language_server: SolidLanguageServer) -> None:
