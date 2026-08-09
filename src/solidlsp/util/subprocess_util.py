@@ -6,10 +6,11 @@ import signal
 import subprocess
 import threading
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, cast
+from typing import IO, TYPE_CHECKING, Any, Generic, TypeVar, cast
 
 import oslex
 import psutil
+from sensai.util.string import ToStringMixin
 
 if TYPE_CHECKING:
     import ctypes
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
     from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 
 log = logging.getLogger(__name__)
+TStream = TypeVar("TStream", bound=str | bytes)
 
 
 def subprocess_kwargs() -> dict:
@@ -70,9 +72,73 @@ def convert_shell_cmd(cmd: str | list[str]) -> str:
     return oslex.join(cmd) if isinstance(cmd, list) else cmd
 
 
-class LanguageServerSubprocessLauncher:
+class ManagedSubprocess(Generic[TStream], ToStringMixin):
     """
-    Launcher for language server subprocesses, which are started for stdio-based communication.
+    Represents a subprocess.Popen instance with additional lifecycle management, including the ability to terminate the process
+    and its children gracefully, with a fallback to forceful termination if necessary.
+    """
+
+    def __init__(self, popen: subprocess.Popen[TStream], name: str, start_new_session: bool) -> None:
+        """
+        :param popen: the subprocess.Popen instance representing the launched process
+        :param start_new_session: whether the process was launched in its own session, i.e. whether it is the
+            leader of its own process group
+        """
+        self._popen = popen
+        self._name = name
+
+        # a process launched with start_new_session=True is its own group leader, so its PGID is its PID
+        self._process_group_id = popen.pid if (start_new_session and os.name == "posix") else None
+
+    def _tostring_includes(self) -> list[str]:
+        return ["_name"]
+
+    @property
+    def stdin(self) -> "IO[TStream] | None":
+        return self._popen.stdin
+
+    @property
+    def stdout(self) -> "IO[TStream] | None":
+        return self._popen.stdout
+
+    @property
+    def stderr(self) -> "IO[TStream] | None":
+        return self._popen.stderr
+
+    @property
+    def returncode(self) -> int | None:
+        """
+        :return: the exit code of the process as of the most recent status check (see :meth:`poll`),
+            or None if the process was not yet known to have terminated
+        """
+        return self._popen.returncode
+
+    def poll(self) -> int | None:
+        """
+        Checks whether the process has terminated, updating :attr:`returncode` accordingly.
+
+        :return: the exit code of the process or None if it is still running
+        """
+        return self._popen.poll()
+
+    def terminate(self, timeout: float) -> None:
+        """
+        Terminates the process and its children, forcefully killing them if they do not exit in time.
+
+        :param timeout: the time to wait for the process to terminate gracefully before killing it
+        :param process_name: the name of the process (used for logging purposes); should start with a capital letter
+        """
+        terminate_process_tree_with_kill_fallback(
+            self._popen,
+            terminate_timeout=timeout,
+            process_name=self._name,
+            process_group_id=self._process_group_id,
+        )
+
+
+class ManagedSubprocessLauncher:
+    """
+    Launcher for managed subprocesses (see :class:`ManagedSubprocess`), which are started for stdio-based communication.
     It is home to the concern of launching a subprocess with well-defined lifecycle properties,
     ensuring, in particular, that a launched subprocess cannot outlive this process (insofar as
     the platform allows) -- even if the subprocess is started in its own session (see
@@ -85,16 +151,16 @@ class LanguageServerSubprocessLauncher:
     _PR_SET_PDEATHSIG = 1
     """the PR_SET_PDEATHSIG option value for prctl(2)"""
 
-    _instance: "LanguageServerSubprocessLauncher | None" = None
+    _instance: "ManagedSubprocessLauncher | None" = None
     _instance_lock = threading.Lock()
 
     def __init__(self) -> None:
         self._libc = self._load_libc()
-        self._spawner: "LanguageServerSubprocessLauncher._PDeathSigSpawner | None" = None
+        self._spawner: "ManagedSubprocessLauncher._PDeathSigSpawner | None" = None
         self._spawner_lock = threading.Lock()
 
     @classmethod
-    def get_instance(cls) -> "LanguageServerSubprocessLauncher":
+    def get_instance(cls) -> "ManagedSubprocessLauncher":
         if cls._instance is None:
             with cls._instance_lock:
                 if cls._instance is None:
@@ -115,7 +181,7 @@ class LanguageServerSubprocessLauncher:
             return ctypes.CDLL(None)
         except OSError as e:
             log.warning(
-                "Could not load libc (%s); language server processes will not be protected against "
+                "Could not load libc (%s); subprocesses will not be protected against "
                 "orphaning if this process is killed without a chance to shut down cleanly",
                 e,
             )
@@ -130,11 +196,12 @@ class LanguageServerSubprocessLauncher:
         if self._libc is not None:
             self._libc.prctl(self._PR_SET_PDEATHSIG, signal.SIGTERM)
 
-    def launch(self, process_launch_info: "ProcessLaunchInfo", start_new_session: bool) -> subprocess.Popen[bytes]:
+    def launch(self, process_launch_info: "ProcessLaunchInfo", name: str, start_new_session: bool) -> ManagedSubprocess[bytes]:
         """
-        Launches a language server process from ``process_launch_info``.
+        Launches a subprocess from ``process_launch_info``.
 
         :param process_launch_info: the command, environment and working directory to launch with
+        :param name: the name of the process (used for logging purposes); should start with a capital letter
         :param start_new_session: whether to start the process in its own session (own process
             group, detached from ours)
         """
@@ -158,8 +225,8 @@ class LanguageServerSubprocessLauncher:
         if use_pdeathsig:
             kwargs["preexec_fn"] = self._set_pdeathsig_on_parent_exit
 
-        def do_popen() -> subprocess.Popen[bytes]:
-            return cast(
+        def do_popen() -> ManagedSubprocess[bytes]:
+            popen = cast(
                 "subprocess.Popen[bytes]",
                 subprocess.Popen(
                     cmd,
@@ -172,6 +239,7 @@ class LanguageServerSubprocessLauncher:
                     **kwargs,
                 ),
             )
+            return ManagedSubprocess(popen, name, start_new_session)
 
         # perform the actual Popen call, funneling the fork() through the dedicated spawner thread
         # when pdeathsig applies
@@ -192,7 +260,7 @@ class LanguageServerSubprocessLauncher:
         """
 
         def __init__(self) -> None:
-            self._queue: queue.Queue[tuple[Callable[[], subprocess.Popen], "queue.Queue"]] = queue.Queue()
+            self._queue: queue.Queue[tuple[Callable[[], ManagedSubprocess[bytes]], "queue.Queue"]] = queue.Queue()
             self._thread = threading.Thread(target=self._run, name="solidlsp-pdeathsig-spawner", daemon=True)
             self._thread.start()
 
@@ -204,7 +272,7 @@ class LanguageServerSubprocessLauncher:
                 except BaseException as e:
                     result_queue.put((e, None))
 
-        def spawn(self, func: Callable[[], subprocess.Popen]) -> subprocess.Popen:
+        def spawn(self, func: Callable[[], ManagedSubprocess[bytes]]) -> ManagedSubprocess[bytes]:
             result_queue: queue.Queue = queue.Queue(maxsize=1)
             self._queue.put((func, result_queue))
             error, process = result_queue.get()
