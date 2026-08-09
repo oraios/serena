@@ -1,6 +1,7 @@
 import logging
 import os
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -11,16 +12,16 @@ from sensai.util.string import TextBuilder, ToStringMixin
 from serena.config.serena_config import (
     LanguageBackend,
     ProjectConfig,
+    ProjectConfigAutoGenerationMode,
     SerenaConfig,
 )
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from serena.memories.memory_manager import MemoryManager
-from serena.util.file_proxy import FileCollection
+from serena.util.file_proxy import FileCollection, FileProxy
 from serena.util.file_system import GitignoreParser, match_path, scan_directory
 from serena.util.text_utils import MatchedConsecutiveLines, search_files
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
-from solidlsp.ls_utils import FileUtils
+from solidlsp.ls_config import LanguageServerId
 
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
@@ -137,13 +138,13 @@ class Project(ToStringMixin):
         cls,
         project_root: str | Path,
         serena_config: "SerenaConfig",
-        autogenerate: bool = True,
+        autogen: ProjectConfigAutoGenerationMode = ProjectConfigAutoGenerationMode.SYNCHRONOUS,
     ) -> "Project":
         assert serena_config is not None
         project_root = Path(project_root).resolve()
         if not project_root.exists():
             raise FileNotFoundError(f"Project root not found: {project_root}")
-        project_config = ProjectConfig.load(project_root, serena_config=serena_config, autogenerate=autogenerate)
+        project_config = ProjectConfig.load(project_root, serena_config=serena_config, autogen=autogen)
         return Project(project_root=str(project_root), project_config=project_config, serena_config=serena_config)
 
     def save_config(self) -> None:
@@ -168,13 +169,13 @@ class Project(ToStringMixin):
 
     def read_file(self, relative_path: str) -> str:
         """
-        Reads a file relative to the project root.
+        Reads a project file.
 
-        :param relative_path: the path to the file relative to the project root
+        :param relative_path: the path to the file relative to the project root or an external
+            path token like "<ext:FileUtil.class|472e0a13>"
         :return: the content of the file
         """
-        abs_path = Path(self.project_root) / relative_path
-        return FileUtils.read_file(str(abs_path), self.project_config.encoding)
+        return FileProxy.from_project_relative_path(self, relative_path).get_contents()
 
     @property
     def _ignore_spec(self) -> pathspec.PathSpec:
@@ -238,7 +239,7 @@ class Project(ToStringMixin):
             if self.language_backend.is_lsp():
                 if os.path.isfile(abs_path):
                     is_file_in_supported_language = False
-                    for language in self.project_config.languages:
+                    for language in self.project_config.language_servers:
                         fn_matcher = language.get_source_fn_matcher()
                         if fn_matcher.is_relevant_filename(abs_path):
                             is_file_in_supported_language = True
@@ -277,6 +278,19 @@ class Project(ToStringMixin):
 
         return self._is_ignored_relative_path(str(relative_path), ignore_non_source_files=ignore_non_source_files)
 
+    def get_is_ignored_path_fn(self, base_path: str, skip_ignored_paths: bool) -> Callable[[str], bool]:
+        """
+        Returns a function for checking whether a path should be ignored during a traversal of the given base path.
+
+        :param base_path: the relative base path representing the starting point of the traversal.
+            If the path is itself ignored, then the returned function will not consider ignored paths.
+        :param skip_ignored_paths: whether to skip ignored (sub-)paths
+        :return: a function that takes a path and returns True if the path should be ignored, False otherwise.
+        """
+        if not skip_ignored_paths or self.is_ignored_path(base_path):
+            return lambda _: False
+        return self.is_ignored_path
+
     def is_path_in_project(self, path: str | Path) -> bool:
         """
         Checks if the given (absolute or relative) path is inside the project directory.
@@ -296,15 +310,20 @@ class Project(ToStringMixin):
             # occurs, in particular, if paths are on different drives on Windows
             return False
 
-    def relative_path_exists(self, relative_path: str) -> bool:
+    def relative_path_exists(self, relative_path: str, require_file: bool = False) -> bool:
         """
         Checks if the given relative path exists in the project directory.
 
         :param relative_path: the path to check, relative to the project root
+        :param require_file: whether to return True only if the path exists and is a file
         :return: True if the path exists, False otherwise
         """
         abs_path = Path(self.project_root) / relative_path
-        return abs_path.exists()
+        exists = abs_path.exists()
+        if require_file:
+            return exists and abs_path.is_file()
+        else:
+            return exists
 
     def validate_relative_path(self, relative_path: str, require_not_ignored: bool = False) -> None:
         """
@@ -315,12 +334,15 @@ class Project(ToStringMixin):
         :param relative_path: the path to validate, relative to the project root
         :param require_not_ignored: if True, the path must not be ignored according to the project's ignore settings
         """
+        if FileProxy.is_external_path(relative_path):
+            return
+
         if not self.is_path_in_project(relative_path):
             raise ValueError(f"{relative_path=} points outside the project root ({self.project_root})")
 
         if require_not_ignored:
             if self.is_ignored_path(relative_path):
-                raise ValueError(f"Path {relative_path} is ignored; cannot access for safety reasons")
+                raise ValueError(f"Path {relative_path} is ignored")
 
     def gather_source_files(self, relative_path: str = "") -> list[str]:
         """Retrieves relative paths of all source files, optionally limited to the given path
@@ -359,6 +381,43 @@ class Project(ToStringMixin):
                         )
             return rel_file_paths
 
+    def _create_file_collection(self, relative_path: str, *, code_files_only: bool, skip_ignored_files: bool) -> FileCollection:
+        """
+        Creates the file collection for the given relative path.
+
+        :param relative_path: the relative path to create the file collection for, relative to the project root
+        :param code_files_only: whether to include only (non-ignored) code files
+        :param skip_ignored_files: whether to skip ignored files; has no effect if `code_files_only` is True
+        :return:
+        """
+        if FileProxy.is_external_path(relative_path):
+            # single external path: create appropriate proxy
+            file_collection = FileCollection([FileProxy.from_project_relative_path(self, relative_path)])
+        else:
+            # path is a local project path
+            abs_path = os.path.join(self.project_root, relative_path)
+            if not os.path.exists(abs_path):
+                raise FileNotFoundError(f"Relative path {relative_path} does not exist.")
+
+            if code_files_only:
+                relative_file_paths = self.gather_source_files(relative_path=relative_path)
+                file_collection = FileCollection.from_local_project_paths(relative_file_paths, self)
+            else:
+                abs_path = os.path.join(self.project_root, relative_path)
+                if os.path.isfile(abs_path):
+                    rel_paths_to_search = [relative_path]
+                else:
+                    is_ignored_path_fn = self.get_is_ignored_path_fn(base_path=relative_path, skip_ignored_paths=skip_ignored_files)
+                    _dirs, rel_paths_to_search = scan_directory(
+                        path=abs_path,
+                        recursive=True,
+                        is_ignored_dir=is_ignored_path_fn,
+                        is_ignored_file=is_ignored_path_fn,
+                        relative_to=self.project_root,
+                    )
+                file_collection = FileCollection.from_local_project_paths(rel_paths_to_search, self)
+        return file_collection
+
     def search_project_files_for_pattern(
         self,
         pattern: str,
@@ -369,36 +428,34 @@ class Project(ToStringMixin):
         paths_exclude_glob: str | None = None,
         multiline: bool = True,
         code_files_only: bool = True,
+        skip_ignored_files: bool = True,
     ) -> list[MatchedConsecutiveLines]:
         """
         Search for a pattern across all (non-ignored) source files
 
-        :param pattern: Regular expression pattern to search for, either as a compiled Pattern or string
-        :param relative_path:
-        :param context_lines_before: Number of lines of context to include before each match
-        :param context_lines_after: Number of lines of context to include after each match
-        :param paths_include_glob: Glob pattern to filter which files to include in the search
-        :param paths_exclude_glob: Glob pattern to filter which files to exclude from the search. Takes precedence over paths_include_glob.
-        :param multiline: Whether to compile the regex with the DOTALL flag (``.`` matches newlines).
-        :return: List of matched consecutive lines with context
+        :param pattern: regular expression pattern to search for, either as a compiled Pattern or string
+        :param relative_path: the relative path to search in, relative to the project root; if empty, search in the entire project
+        :param context_lines_before: number of lines of context to include before each match
+        :param context_lines_after: number of lines of context to include after each match
+        :param paths_include_glob: glob pattern to filter which files to include in the search
+        :param paths_exclude_glob: glob pattern to filter which files to exclude from the search. Takes precedence over paths_include_glob.
+        :param multiline: whether to compile the regex with the DOTALL flag (`.` matches newlines).
+        :param code_files_only: whether to include only (non-ignored) code files
+        :param skip_ignored_files: whether to skip ignored files; has no effect if `code_files_only` is True
+        :return: list of matches
         """
-        if code_files_only:
-            relative_file_paths = self.gather_source_files(relative_path=relative_path)
-            file_collection = FileCollection.from_local_project_paths(relative_file_paths, self)
-        else:
-            abs_path = os.path.join(self.project_root, relative_path)
-            if os.path.isfile(abs_path):
-                rel_paths_to_search = [relative_path]
-            else:
-                _dirs, rel_paths_to_search = scan_directory(
-                    path=abs_path,
-                    recursive=True,
-                    is_ignored_dir=self.is_ignored_path,
-                    is_ignored_file=self.is_ignored_path,
-                    relative_to=self.project_root,
-                )
-            file_collection = FileCollection.from_local_project_paths(rel_paths_to_search, self)
-
+        file_collection = self._create_file_collection(
+            relative_path, code_files_only=code_files_only, skip_ignored_files=skip_ignored_files
+        )
+        return search_files(
+            file_collection,
+            pattern,
+            context_lines_before=context_lines_before,
+            context_lines_after=context_lines_after,
+            paths_include_glob=paths_include_glob,
+            paths_exclude_glob=paths_exclude_glob,
+            multiline=multiline,
+        )
         return search_files(
             file_collection,
             pattern,
@@ -438,6 +495,10 @@ class Project(ToStringMixin):
         :return: the language server manager, which is also stored in the project instance
         """
         try:
+            # ensure that the project configuration, particularly the list of languages is complete,
+            # despite asynchronous first-time project configuration generation (which may not have completed yet)
+            self.project_config.await_asynchronous_completion()
+
             # determine timeout to use for LS calls
             tool_timeout = self.serena_config.tool_timeout
             if tool_timeout is None or tool_timeout < 0:
@@ -474,11 +535,24 @@ class Project(ToStringMixin):
                 ls_specific_settings=ls_specific_settings,
                 trace_lsp_communication=self.serena_config.trace_lsp_communication,
             )
-            self.language_server_manager = LanguageServerManager.from_languages(self.project_config.languages, factory)
+            self.language_server_manager = LanguageServerManager.from_languages(self.project_config.language_servers, factory, self)
             return self.language_server_manager
         except Exception as e:
             self._language_server_manager_init_error = e
             raise
+
+    def get_language_server_manager_status(self) -> str:
+        """
+        :return: a status string describing the state of the language server manager; if its initialisation resulted in an
+            error, the error message is included in the status string
+        """
+        if self.language_server_manager is None:
+            if self._language_server_manager_init_error is not None:
+                return f"error ({self._language_server_manager_init_error})"
+            else:
+                return "not initialized"
+        else:
+            return "ready"
 
     def get_language_server_manager_or_raise(self) -> LanguageServerManager:
         if self.language_server_manager is None:
@@ -493,50 +567,58 @@ class Project(ToStringMixin):
             raise Exception(msg.build())
         return self.language_server_manager
 
-    def add_language(self, language: Language) -> None:
+    def add_language_server(self, ls_id: LanguageServerId) -> None:
         """
-        Adds a new programming language to the project configuration, starting the corresponding
-        language server instance if the LS manager is active.
+        Adds a new language server to the project configuration, starting the corresponding
+        server instance if the LS manager is active.
         The project configuration is saved to disk after adding the language.
 
-        :param language: the programming language to add
+        :param ls_id: the language server to add
         """
-        if language in self.project_config.languages:
-            log.info(f"Language {language.value} is already present in the project configuration.")
+        if ls_id in self.project_config.language_servers:
+            log.info(f"Language server {ls_id.value} is already present in the project configuration.")
             return
 
         # start the language server (if the LS manager is active)
         if self.language_server_manager is None:
             log.info("Language server manager is not active; skipping language server startup for the new language.")
         else:
-            log.info("Adding and starting the language server for new language %s ...", language.value)
-            self.language_server_manager.add_language_server(language)
+            log.info("Adding and starting the language server '%s' ...", ls_id.value)
+            self.language_server_manager.add_language_server(ls_id)
 
         # update the project configuration
-        self.project_config.languages.append(language)
+        self.project_config.language_servers.append(ls_id)
         self.save_config()
 
-    def remove_language(self, language: Language) -> None:
+    def remove_language_server(self, ls_id: LanguageServerId) -> None:
         """
-        Removes a programming language from the project configuration, stopping the corresponding
-        language server instance if the LS manager is active.
+        Removes a language server from the project configuration, stopping the corresponding
+        server instance if the LS manager is active.
         The project configuration is saved to disk after removing the language.
 
-        :param language: the programming language to remove
+        :param ls_id: the language server to remove
         """
-        if language not in self.project_config.languages:
-            log.info(f"Language {language.value} is not present in the project configuration.")
+        if ls_id not in self.project_config.language_servers:
+            log.info(f"Language {ls_id.value} is not present in the project configuration.")
             return
         # update the project configuration
-        self.project_config.languages.remove(language)
+        self.project_config.language_servers.remove(ls_id)
         self.save_config()
 
         # stop the language server (if the LS manager is active)
         if self.language_server_manager is None:
             log.info("Language server manager is not active; skipping language server shutdown for the removed language.")
         else:
-            log.info("Removing and stopping the language server for language %s ...", language.value)
-            self.language_server_manager.remove_language_server(language)
+            log.info("Removing and stopping the language server for language %s ...", ls_id.value)
+            self.language_server_manager.remove_language_server(ls_id)
+
+    def ls_sync_file_system_changes(self) -> int:
+        """
+        Synchronizes file system changes with the project's associated language server(s), if applicable
+        """
+        if self.language_server_manager:
+            return self.language_server_manager.sync_file_system_changes()
+        return 0
 
     def shutdown(self, timeout: float = 2.0) -> None:
         if self.language_server_manager is not None:

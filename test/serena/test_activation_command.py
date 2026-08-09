@@ -8,7 +8,7 @@ import pytest
 
 from serena.config.serena_config import ProjectConfig, SerenaConfig
 from serena.project import Project
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 
 
 def _make_project(
@@ -25,7 +25,7 @@ def _make_project(
     )
     project_config = ProjectConfig(
         project_name="test-activation",
-        languages=[Language.PYTHON],
+        language_servers=[LanguageServerId.PYTHON],
         activation_command=activation_command,
         activation_command_timeout=activation_command_timeout,
     )

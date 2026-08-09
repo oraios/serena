@@ -8,7 +8,7 @@ like request_document_symbols using the PowerShell test repository.
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_utils import SymbolUtils
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
@@ -17,13 +17,13 @@ from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name,
 class TestPowerShellLanguageServerBasics:
     """Test basic functionality of the PowerShell language server."""
 
-    @pytest.mark.parametrize("language_server", [Language.POWERSHELL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.POWERSHELL], indirect=True)
     def test_powershell_language_server_initialization(self, language_server: SolidLanguageServer) -> None:
         """Test that PowerShell language server can be initialized successfully."""
         assert language_server is not None
-        assert language_server.language == Language.POWERSHELL
+        assert language_server.ls_id == LanguageServerId.POWERSHELL
 
-    @pytest.mark.parametrize("language_server", [Language.POWERSHELL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.POWERSHELL], indirect=True)
     def test_powershell_request_document_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test request_document_symbols for PowerShell files."""
         # Test getting symbols from main.ps1
@@ -43,7 +43,7 @@ class TestPowerShellLanguageServerBasics:
         assert has_function("Main"), f"Should find Main function in {function_names}"
         assert len(function_symbols) >= 3, f"Should find at least 3 functions, found {len(function_symbols)}"
 
-    @pytest.mark.parametrize("language_server", [Language.POWERSHELL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.POWERSHELL], indirect=True)
     def test_powershell_utils_functions(self, language_server: SolidLanguageServer) -> None:
         """Test function detection in utils.ps1 file."""
         # Test with utils.ps1
@@ -73,7 +73,7 @@ class TestPowerShellLanguageServerBasics:
 
         assert len(utils_function_symbols) >= 8, f"Should find at least 8 functions in utils.ps1, found {len(utils_function_symbols)}"
 
-    @pytest.mark.parametrize("language_server", [Language.POWERSHELL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.POWERSHELL], indirect=True)
     def test_powershell_function_with_parameters(self, language_server: SolidLanguageServer) -> None:
         """Test that functions with CmdletBinding and parameters are detected correctly."""
         all_symbols, _root_symbols = language_server.request_document_symbols("main.ps1").get_all_symbols_and_roots()
@@ -89,7 +89,7 @@ class TestPowerShellLanguageServerBasics:
         process_items_symbol = next((sym for sym in function_symbols if "Process-Items" in sym["name"]), None)
         assert process_items_symbol is not None, f"Should find Process-Items function in {[s['name'] for s in function_symbols]}"
 
-    @pytest.mark.parametrize("language_server", [Language.POWERSHELL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.POWERSHELL], indirect=True)
     def test_powershell_all_function_detection(self, language_server: SolidLanguageServer) -> None:
         """Test that all expected functions are detected across both files."""
         # Get symbols from main.ps1
@@ -132,7 +132,7 @@ class TestPowerShellLanguageServerBasics:
         assert len(main_functions) >= 3, f"Should find at least 3 functions in main.ps1, found {len(main_functions)}"
         assert len(utils_functions) >= 8, f"Should find at least 8 functions in utils.ps1, found {len(utils_functions)}"
 
-    @pytest.mark.parametrize("language_server", [Language.POWERSHELL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.POWERSHELL], indirect=True)
     def test_powershell_class_method_symbols_use_bare_method_name(self, language_server: SolidLanguageServer) -> None:
         """Test whether PSES already reports class methods with bare names."""
         symbols = language_server.request_full_symbol_tree(within_relative_path="main.ps1")
@@ -140,7 +140,7 @@ class TestPowerShellLanguageServerBasics:
         assert SymbolUtils.symbol_tree_contains_name(symbols, "PersonFormatter"), "Should find PersonFormatter class in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "FormatName"), "Expected PowerShell method to be exposed with bare name"
 
-    @pytest.mark.parametrize("language_server", [Language.POWERSHELL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.POWERSHELL], indirect=True)
     def test_powershell_find_references_within_file(self, language_server: SolidLanguageServer) -> None:
         """Test finding references to a function within the same file."""
         main_path = "main.ps1"
@@ -163,7 +163,7 @@ class TestPowerShellLanguageServerBasics:
             f"Should find reference in main.ps1, got {refs}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.POWERSHELL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.POWERSHELL], indirect=True)
     def test_powershell_find_definition_across_files(self, language_server: SolidLanguageServer) -> None:
         """Test finding definition of functions across files (main.ps1 -> utils.ps1)."""
         # main.ps1 calls Convert-ToUpperCase from utils.ps1 at line 99 (0-indexed: 98)
@@ -183,7 +183,7 @@ class TestPowerShellLanguageServerBasics:
             f"Should find definition in utils.ps1, got {definition_locations}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.POWERSHELL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.POWERSHELL], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

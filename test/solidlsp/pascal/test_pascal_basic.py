@@ -15,14 +15,16 @@ import shutil
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
-from test.conftest import is_ci, language_tests_enabled
+from test.conftest import is_ci, language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 pytestmark = [
     pytest.mark.pascal,
-    pytest.mark.skipif(not language_tests_enabled(Language.PASCAL), reason="Pascal tests are disabled (pasls/fpc not available)"),
+    pytest.mark.skipif(
+        not language_server_tests_enabled(LanguageServerId.PASCAL), reason="Pascal tests are disabled (pasls/fpc not available)"
+    ),
 ]
 
 
@@ -31,13 +33,13 @@ pytestmark = [
 class TestPascalLanguageServerBasics:
     """Test basic functionality of the Pascal language server."""
 
-    @pytest.mark.parametrize("language_server", [Language.PASCAL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.PASCAL], indirect=True)
     def test_pascal_language_server_initialization(self, language_server: SolidLanguageServer) -> None:
         """Test that Pascal language server can be initialized successfully."""
         assert language_server is not None
-        assert language_server.language == Language.PASCAL
+        assert language_server.ls_id == LanguageServerId.PASCAL
 
-    @pytest.mark.parametrize("language_server", [Language.PASCAL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.PASCAL], indirect=True)
     def test_pascal_request_document_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test request_document_symbols for Pascal files.
 
@@ -65,7 +67,7 @@ class TestPascalLanguageServerBasics:
         assert "TUser" in class_names, "Should find TUser class"
         assert "TUserManager" in class_names, "Should find TUserManager class"
 
-    @pytest.mark.parametrize("language_server", [Language.PASCAL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.PASCAL], indirect=True)
     def test_pascal_class_methods(self, language_server: SolidLanguageServer) -> None:
         """Test detection of class methods in Pascal files.
 
@@ -89,7 +91,7 @@ class TestPascalLanguageServerBasics:
             found = method in method_names
             assert found, f"Should find method '{method}'"
 
-    @pytest.mark.parametrize("language_server", [Language.PASCAL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.PASCAL], indirect=True)
     def test_pascal_helper_unit_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test function detection in Helper unit."""
         # Test with lib/helper.pas
@@ -113,7 +115,7 @@ class TestPascalLanguageServerBasics:
         assert "FormatString" in method_names, "Should find FormatString method"
         assert "IsEven" in method_names, "Should find IsEven method"
 
-    @pytest.mark.parametrize("language_server", [Language.PASCAL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.PASCAL], indirect=True)
     def test_pascal_cross_file_references(self, language_server: SolidLanguageServer) -> None:
         """Test that Pascal LSP can handle cross-file references."""
         # main.pas uses Helper unit
@@ -128,7 +130,7 @@ class TestPascalLanguageServerBasics:
         helper_function_names = [s["name"] for s in helper_symbols if s.get("kind") == SymbolKind.Function]
         assert "GetHelperMessage" in helper_function_names, "Helper unit should export GetHelperMessage"
 
-    @pytest.mark.parametrize("language_server", [Language.PASCAL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.PASCAL], indirect=True)
     def test_pascal_symbol_locations(self, language_server: SolidLanguageServer) -> None:
         """Test that symbols have correct location information.
 
@@ -160,7 +162,7 @@ class TestPascalLanguageServerBasics:
         # genericptr pasls returns interface declaration location
         assert 35 <= line <= 45, f"CalculateSum should be around line 41 (interface), got {line}"
 
-    @pytest.mark.parametrize("language_server", [Language.PASCAL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.PASCAL], indirect=True)
     def test_pascal_namespace_symbol(self, language_server: SolidLanguageServer) -> None:
         """Test that genericptr pasls returns Interface namespace symbol."""
         all_symbols, _root_symbols = language_server.request_document_symbols("main.pas").get_all_symbols_and_roots()
@@ -174,7 +176,7 @@ class TestPascalLanguageServerBasics:
         # Interface namespace may or may not be present depending on pasls configuration
         _ = symbol_names  # used for potential future assertions
 
-    @pytest.mark.parametrize("language_server", [Language.PASCAL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.PASCAL], indirect=True)
     def test_pascal_hover_with_doc_comments(self, language_server: SolidLanguageServer) -> None:
         """Test that hover returns documentation comments.
 
@@ -198,7 +200,7 @@ class TestPascalLanguageServerBasics:
         # Should contain the doc comment
         assert "Calculates the sum" in value, f"Hover should include doc comment. Got: {value[:500]}"
 
-    @pytest.mark.parametrize("language_server", [Language.PASCAL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.PASCAL], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

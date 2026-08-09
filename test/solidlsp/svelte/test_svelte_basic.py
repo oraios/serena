@@ -5,7 +5,7 @@ import pytest
 
 from serena.util.text_utils import find_text_coordinates
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_utils import SymbolUtils
 from test.solidlsp.conftest import read_repo_file
 from test.solidlsp.svelte import conftest as svelte_test_conftest
@@ -15,14 +15,14 @@ pytestmark = pytest.mark.svelte
 
 
 class TestSvelteLanguageServer:
-    @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.SVELTE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SVELTE], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.SVELTE], indirect=True)
     def test_svelte_language_server_root_matches_repo_path(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         assert language_server.is_running()
         assert repo_path.resolve() == svelte_test_conftest.repo_path.resolve()
         assert Path(language_server.language_server.repo_path).resolve() == repo_path.resolve()
 
-    @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SVELTE], indirect=True)
     def test_svelte_and_typescript_files_in_symbol_tree(self, language_server: SolidLanguageServer) -> None:
         symbols = language_server.request_full_symbol_tree()
 
@@ -37,7 +37,7 @@ class TestSvelteLanguageServer:
             "GAME_VERSION (defined only in a .ts file) not found in symbol tree"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SVELTE], indirect=True)
     def test_document_symbols_inside_svelte_file(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "lib", "components", "Counter.svelte")
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
@@ -46,7 +46,7 @@ class TestSvelteLanguageServer:
         assert "offset" in symbol_names
         assert "modulo" in symbol_names
 
-    @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SVELTE], indirect=True)
     def test_document_symbols_inside_typescript_file(self, language_server: SolidLanguageServer) -> None:
         # document symbols of a plain .ts file must be served by the companion TS server, not the
         # base svelte LS (which only provides documentSymbol for .svelte files); see issue #1552.
@@ -60,7 +60,7 @@ class TestSvelteLanguageServer:
         assert "enter" in symbol_names, symbol_names
         assert "toString" in symbol_names, symbol_names
 
-    @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SVELTE], indirect=True)
     def test_overview_of_typescript_file(self, language_server: SolidLanguageServer) -> None:
         # get_symbols_overview on a .ts file must not be empty in svelte-only mode (issue #1552).
         file_path = os.path.join("src", "lib", "game.ts")
@@ -70,7 +70,7 @@ class TestSvelteLanguageServer:
         assert "GAME_VERSION" in top_level_names, overview
         assert "Game" in top_level_names, overview
 
-    @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SVELTE], indirect=True)
     def test_definition_from_component_import_to_svelte_file(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "lib", "components", "Header.svelte")
         coords = find_text_coordinates(read_repo_file(language_server, file_path), r"(count)")
@@ -81,7 +81,7 @@ class TestSvelteLanguageServer:
         assert len(definitions) == 1, definition_paths
         assert definitions[0]["relativePath"].replace("\\", "/") == "src/lib/components/Counter.svelte", definition_paths
 
-    @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SVELTE], indirect=True)
     def test_diagnostics_in_typescript_file(self, language_server: SolidLanguageServer) -> None:
         assert_file_diagnostics(
             language_server,
@@ -90,7 +90,7 @@ class TestSvelteLanguageServer:
             min_count=2,
         )
 
-    @pytest.mark.parametrize("language_server", [Language.SVELTE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SVELTE], indirect=True)
     def test_diagnostics_in_svelte_file(self, language_server: SolidLanguageServer) -> None:
         assert_file_diagnostics(
             language_server,

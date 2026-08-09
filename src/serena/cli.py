@@ -37,9 +37,10 @@ from serena.constants import (
     SERENAS_OWN_MODE_YAMLS_DIR,
 )
 from serena.prompt_factory import SerenaPromptFactory
+from serena.tools import ActivateProjectTool
 from serena.util.cli_util import AutoRegisteringGroup
 from serena.util.logging import MemoryLogHandler
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
 from solidlsp.util.subprocess_util import subprocess_kwargs
 
@@ -312,7 +313,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         "--project-from-cwd",
         is_flag=True,
         default=False,
-        help="Auto-detect project from current working directory (searches for .serena/project.yml or .git, falls back to CWD). Intended for CLI-based agents like Claude Code, Gemini and Codex.",
+        help="Auto-detect project from current working directory (nearest ancestor containing .serena/project.yml or .git). If none is found, no project is activated. Intended for CLI-based agents like Claude Code, Gemini and Codex.",
     )
     def start_mcp_server(
         project: str | None,
@@ -355,6 +356,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         log.info("Storing logs in %s", log_path)
 
         # Handle --project-from-cwd flag
+        project_activation_error: str | None = None
         if project_from_cwd:
             if project is not None or project_file_arg is not None:
                 raise click.UsageError("--project-from-cwd cannot be used with --project or positional project argument")
@@ -362,7 +364,12 @@ class TopLevelCommands(AutoRegisteringGroup):
             if project is not None:
                 log.info("Auto-detected project root: %s", project)
             else:
-                log.warning("No project root found from %s; not activating any project", os.getcwd())
+                project_activation_error = (
+                    f"No project root found from cwd={os.getcwd()} (no .serena/project.yml or .git found); "
+                    "no project activated. If the folder is a coding project folder to be worked on, "
+                    f"activate the folder explicitly using the {ActivateProjectTool.get_name_from_cls()} tool."
+                )
+                log.warning(project_activation_error)
 
         project_file = project_file_arg or project
 
@@ -382,6 +389,7 @@ class TopLevelCommands(AutoRegisteringGroup):
             log_level=log_level,
             trace_lsp_communication=trace_lsp_communication,
             tool_timeout=tool_timeout,
+            project_activation_error=project_activation_error,
         )
         if project_file_arg:
             log.warning(
@@ -481,11 +489,8 @@ class TopLevelCommands(AutoRegisteringGroup):
         log.info("Starting Serena project server")
         log.info("Storing logs in %s", log_path)
 
-        server = ProjectServer()
-        run_kwargs: dict[str, Any] = {"host": host}
-        if port is not None:
-            run_kwargs["port"] = port
-        server.run(**run_kwargs)
+        server = ProjectServer(host=host, port=port)
+        server.run()
 
     @staticmethod
     @click.command(
@@ -701,13 +706,13 @@ class ProjectCommands(AutoRegisteringGroup):
         if os.path.exists(yml_path):
             raise FileExistsError(f"Project file {yml_path} already exists.")
 
-        languages: list[Language] = []
+        languages: list[LanguageServerId] = []
         if language:
             for lang in language:
                 try:
-                    languages.append(Language(lang.lower()))
+                    languages.append(LanguageServerId(lang.lower()))
                 except ValueError:
-                    all_langs = [l.value for l in Language]
+                    all_langs = [l.value for l in LanguageServerId]
                     raise ValueError(f"Unknown language '{lang}'. Supported: {all_langs}")
 
         generated_conf = ProjectConfig.autogenerate(
@@ -717,8 +722,8 @@ class ProjectCommands(AutoRegisteringGroup):
             languages=languages if languages else None,
             interactive=True,
         )
-        languages_str = ", ".join([lang.value for lang in generated_conf.languages]) if generated_conf.languages else "N/A"
-        click.echo(f"Generated project with languages {{{languages_str}}} at {yml_path}.")
+        languages_str = ", ".join([lang.value for lang in generated_conf.language_servers]) if generated_conf.language_servers else "N/A"
+        click.echo(f"Generated project with language servers {{{languages_str}}} at {yml_path}.")
         registered_project = serena_config.get_registered_project(str(project_root))
         if registered_project is None:
             registered_project = RegisteredProject(str(project_root), generated_conf)
@@ -731,7 +736,12 @@ class ProjectCommands(AutoRegisteringGroup):
     @click.argument("project_path", type=click.Path(exists=True, file_okay=False), default=os.getcwd())
     @click.option("--name", type=str, default=None, help="Project name; defaults to directory name if not specified.")
     @click.option(
-        "--language", type=str, multiple=True, help="Programming language(s); inferred if not specified. Can be passed multiple times."
+        "--ls",
+        "--language",
+        "language",
+        type=str,
+        multiple=True,
+        help="Language server(s); inferred if not specified. Can be passed multiple times.",
     )
     @click.option("--index", is_flag=True, help="Index the project after creation.")
     @click.option(
@@ -761,10 +771,12 @@ class ProjectCommands(AutoRegisteringGroup):
     @click.argument("project", type=PROJECT_TYPE, default=os.getcwd(), required=False)
     @click.option("--name", type=str, default=None, help="Project name (only used if auto-creating project.yml).")
     @click.option(
+        "--ls",
         "--language",
+        "language",
         type=str,
         multiple=True,
-        help="Programming language(s) (only used if auto-creating project.yml). Inferred if not specified.",
+        help="Language server(s) (only used if auto-creating project.yml). Inferred if not specified.",
     )
     @click.option(
         "--log-level",
@@ -801,13 +813,13 @@ class ProjectCommands(AutoRegisteringGroup):
 
             collected_exceptions: list[Exception] = []
             files_failed = []
-            language_file_counts: dict[Language, int] = collections.defaultdict(lambda: 0)
+            language_file_counts: dict[LanguageServerId, int] = collections.defaultdict(lambda: 0)
             last_save_time = time.monotonic()
             for i, f in enumerate(tqdm(files, desc="Indexing")):
                 try:
                     ls = ls_mgr.get_language_server(f)
                     ls.request_document_symbols(f)
-                    language_file_counts[ls.language] += 1
+                    language_file_counts[ls.ls_id] += 1
                 except Exception as e:
                     log.error(f"Failed to index {f}, continuing.")
                     collected_exceptions.append(e)
@@ -882,7 +894,7 @@ class ProjectCommands(AutoRegisteringGroup):
         ls_mgr = proj.create_language_server_manager()
         try:
             for ls in ls_mgr.iter_language_servers():
-                click.echo(f"Indexing for language {ls.language.value} …")
+                click.echo(f"Indexing for language {ls.ls_id.value} …")
                 document_symbols = ls.request_document_symbols(file)
                 symbols, _ = document_symbols.get_all_symbols_and_roots()
                 if verbose:
@@ -893,6 +905,12 @@ class ProjectCommands(AutoRegisteringGroup):
                 click.echo(f"Successfully indexed file '{file}', {len(symbols)} symbols saved to cache in {ls.cache_dir}.")
         finally:
             ls_mgr.stop_all()
+
+    class _HealthCheckFailure(Exception):
+        """
+        A condition under which the health check is to be considered failed.
+        The exception message is the explanation presented to the user.
+        """
 
     @staticmethod
     @click.command(
@@ -924,6 +942,9 @@ class ProjectCommands(AutoRegisteringGroup):
         os.makedirs(log_dir, exist_ok=True)
         log_file = os.path.join(log_dir, f"health_check_{timestamp}.log")
 
+        # the check's verdict: the explanation of the failure, or None if the check passed (see below)
+        failure_reason: str | None = None
+
         with FileLoggerContext(log_file, append=False, enabled=True):
             log.info("Starting health check for project: %s", project_path)
 
@@ -942,7 +963,7 @@ class ProjectCommands(AutoRegisteringGroup):
                 for file_path in files:
                     try:
                         full_path = os.path.join(project_path, file_path)
-                        if os.path.getsize(full_path) > 0:
+                        if os.path.getsize(full_path) > 1000:
                             target_file = file_path
                             log.info("Found analyzable file: %s", target_file)
                             break
@@ -950,10 +971,7 @@ class ProjectCommands(AutoRegisteringGroup):
                         continue
 
                 if not target_file:
-                    log.error("No analyzable files found in project")
-                    click.echo("❌ Health check failed: No analyzable files found")
-                    click.echo(f"Log saved to: {log_file}")
-                    return
+                    raise ProjectCommands._HealthCheckFailure("No analyzable files found")
 
                 # Get tools from agent
                 overview_tool = agent.get_tool(GetSymbolsOverviewTool)
@@ -967,10 +985,7 @@ class ProjectCommands(AutoRegisteringGroup):
                 log.info(f"GetSymbolsOverviewTool returned: {overview_data}")
 
                 if not overview_data:
-                    log.error("No symbols found in file %s", target_file)
-                    click.echo("❌ Health check failed: No symbols found in target file")
-                    click.echo(f"Log saved to: {log_file}")
-                    return
+                    raise ProjectCommands._HealthCheckFailure(f"No symbols found in target file {target_file}")
 
                 # Extract suitable symbol (prefer class or function over variables)
                 preferred_kinds = {SymbolKind.Class.name, SymbolKind.Function.name, SymbolKind.Method.name, SymbolKind.Constructor.name}
@@ -1021,27 +1036,31 @@ class ProjectCommands(AutoRegisteringGroup):
                     pattern_matches = 0
 
                 # Verify tools worked as expected
-                tools_working = True
                 if not find_symbol_data:
-                    log.error("FindSymbolTool returned no results")
-                    tools_working = False
+                    raise ProjectCommands._HealthCheckFailure("FindSymbolTool returned no results")
 
                 if len(find_refs_data) == 0 and pattern_matches == 0:
                     log.warning("Both FindReferencingSymbolsTool and SearchForPatternTool found no matches - this might indicate an issue")
 
                 log.info("Health check completed successfully")
 
-                if tools_working:
-                    click.echo("✅ Health check passed - All tools working correctly")
-                else:
-                    click.echo("⚠️  Health check completed with warnings - Check log for details")
-
+            # expected failures and unexpected exceptions are reported alike: both mean the project's
+            # tooling is not functional, which is the single thing this command is asked to determine
             except Exception as e:
                 log.exception("Health check failed with exception: %s", str(e))
-                click.echo(f"❌ Health check failed: {e!s}")
+                failure_reason = str(e)
 
             finally:
                 click.echo(f"Log saved to: {log_file}")
+
+        # the verdict is reported outside the checked region, so that a failure to write the report
+        # cannot be mistaken for a failure of the check itself; the exit code lets callers
+        # (CI, scripts) act on the verdict
+        if failure_reason is None:
+            click.echo("✅ Health check passed - All tools working correctly")
+        else:
+            click.echo(f"❌ Health check failed: {failure_reason}")
+            raise SystemExit(1)
 
 
 class ToolCommands(AutoRegisteringGroup):
@@ -1124,17 +1143,11 @@ class MemoryCommands(AutoRegisteringGroup):
         exist at the configured location). Never auto-creates the ``.serena`` directory —
         if no project configuration is found, the user is directed at ``serena project create``.
         """
-        from serena.project import Project
-
         serena_config = SerenaConfig.from_config_file()
-        project_path = os.path.abspath(project)
-        try:
-            proj = Project.load(project_path, serena_config=serena_config, autogenerate=False)
-        except FileNotFoundError as e:
-            raise click.UsageError(
-                f"{e}\nNo Serena project found at {project_path}. Create one first with:\n  serena project create {project_path}"
-            ) from e
-        return proj.memory_manager
+        registered_project = serena_config.get_registered_project(project)
+        if registered_project is None:
+            raise click.UsageError(f"No Serena project found for '{project}'. Create one first.")
+        return registered_project.get_project_instance(serena_config).memory_manager
 
     @staticmethod
     @click.command(

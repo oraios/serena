@@ -13,16 +13,16 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.language_servers.ocaml_lsp_server import OcamlLanguageServer
-from solidlsp.ls_config import Language
-from test.conftest import language_tests_enabled
+from solidlsp.ls_config import LanguageServerId
+from test.conftest import language_server_tests_enabled
 
 log = logging.getLogger(__name__)
 
 
-@pytest.mark.skipif(not language_tests_enabled(Language.OCAML), reason="OCaml tests are disabled (opam not available)")
+@pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.OCAML), reason="OCaml tests are disabled (opam not available)")
 @pytest.mark.ocaml
 class TestCrossFileReferences:
-    @pytest.mark.parametrize("language_server", [Language.OCAML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.OCAML], indirect=True)
     def test_fib_has_cross_file_references(self, language_server: SolidLanguageServer) -> None:
         """Test that fib function references are found across multiple files.
 

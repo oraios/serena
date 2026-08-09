@@ -23,12 +23,12 @@ from collections.abc import Iterator
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_utils import SymbolUtils
 from test.conftest import find_identifier_position, get_repo_path, start_ls_context
 from test.solidlsp.conftest import document_symbol_names, find_document_symbol
 
-UE_REPO_PATH = get_repo_path(Language.CPP).parent / "ue_test_repo"
+UE_REPO_PATH = get_repo_path(LanguageServerId.CPP).parent / "ue_test_repo"
 ABILITY_COMPONENT_H = os.path.join("Source", "TestGame", "AbilityComponent.h")
 ABILITY_ACTOR_H = os.path.join("Source", "TestGame", "AbilityActor.h")
 ABILITY_ACTOR_CPP = os.path.join("Source", "TestGame", "AbilityActor.cpp")
@@ -37,7 +37,7 @@ ABILITY_ACTOR_CPP = os.path.join("Source", "TestGame", "AbilityActor.cpp")
 @pytest.fixture(scope="module")
 def language_server() -> Iterator[SolidLanguageServer]:
     """Clangd over ue_test_repo; overrides the shared fixture for this module."""
-    with start_ls_context(Language.CPP, repo_path=str(UE_REPO_PATH)) as ls:
+    with start_ls_context(LanguageServerId.CPP, repo_path=str(UE_REPO_PATH)) as ls:
         yield ls
 
 

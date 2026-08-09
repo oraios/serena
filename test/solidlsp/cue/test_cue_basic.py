@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_utils import SymbolUtils
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
@@ -27,14 +27,14 @@ class TestCueLanguageServer:
     ``cue lsp v0.16.1`` responses against this repository.
     """
 
-    @pytest.mark.parametrize("language_server", [Language.CUE], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.CUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CUE], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.CUE], indirect=True)
     def test_ls_is_running(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """The server starts and reports the expected repository root."""
         assert language_server.is_running()
         assert Path(language_server.language_server.repository_root_path).resolve() == repo_path.resolve()
 
-    @pytest.mark.parametrize("language_server", [Language.CUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CUE], indirect=True)
     def test_document_symbols_schema(self, language_server: SolidLanguageServer) -> None:
         """``schema.cue`` exposes its top-level definitions with the expected hierarchy."""
         # request hierarchical document symbols for schema.cue
@@ -54,7 +54,7 @@ class TestCueLanguageServer:
         # fields must not also appear at root level (that would be the flat fallback)
         assert "name" not in root_names, f"name should be a child of #Person, not a root. Roots: {root_names}"
 
-    @pytest.mark.parametrize("language_server", [Language.CUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CUE], indirect=True)
     def test_full_symbol_tree_contains_cross_file_names(self, language_server: SolidLanguageServer) -> None:
         """The repository-wide symbol tree contains definitions from all three CUE files."""
         symbols = language_server.request_full_symbol_tree()
@@ -71,8 +71,8 @@ class TestCueLanguageServer:
         ):
             assert SymbolUtils.symbol_tree_contains_name(symbols, expected), f"{expected} missing from full symbol tree"
 
-    @pytest.mark.parametrize("language_server", [Language.CUE], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.CUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CUE], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.CUE], indirect=True)
     def test_find_definition_across_files(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """``#Person`` used in ``main.cue`` resolves to its definition in ``schema.cue``."""
         # main.cue line 3 (0-indexed): "alice: #Person & {"
@@ -85,8 +85,8 @@ class TestCueLanguageServer:
         assert target["uri"].endswith("schema.cue")
         assert target["range"]["start"] == {"line": 3, "character": 0}
 
-    @pytest.mark.parametrize("language_server", [Language.CUE], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.CUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CUE], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.CUE], indirect=True)
     def test_find_references_across_files_person(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """``#Person`` has references in ``lib.cue`` and ``main.cue`` beyond its declaration."""
         schema_path = str(repo_path / "schema.cue")
@@ -103,8 +103,8 @@ class TestCueLanguageServer:
         assert ("lib.cue", 5) in ref_pairs, f"Expected lib.cue:5 reference, got {sorted(ref_pairs)}"
         assert ("main.cue", 3) in ref_pairs, f"Expected main.cue:3 reference, got {sorted(ref_pairs)}"
 
-    @pytest.mark.parametrize("language_server", [Language.CUE], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.CUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CUE], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.CUE], indirect=True)
     def test_find_references_within_file_build_greeting(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """``#BuildGreeting`` (defined in lib.cue) is referenced from main.cue."""
         lib_path = str(repo_path / "lib.cue")
@@ -117,8 +117,8 @@ class TestCueLanguageServer:
         # use site in main.cue is line 10: "greetingForAlice: (#BuildGreeting & {for_: alice}).result"
         assert ("main.cue", 10) in ref_pairs, f"Expected main.cue:10 reference, got {sorted(ref_pairs)}"
 
-    @pytest.mark.parametrize("language_server", [Language.CUE], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.CUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CUE], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.CUE], indirect=True)
     def test_find_references_default_locale(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """``defaultLocale`` (schema.cue) is used in main.cue."""
         schema_path = str(repo_path / "schema.cue")
@@ -130,7 +130,7 @@ class TestCueLanguageServer:
         # use site in main.cue is line 13: "locale: defaultLocale"
         assert ("main.cue", 13) in ref_pairs, f"Expected main.cue:13 reference, got {sorted(ref_pairs)}"
 
-    @pytest.mark.parametrize("language_server", [Language.CUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CUE], indirect=True)
     def test_bare_symbol_names(self, language_server: SolidLanguageServer) -> None:
         """CUE symbols must have bare names (no whitespace/bracket/paren/comma/colon pollution)."""
         # `.` is allowed because the synthetic directory symbol for `cue.mod/` contains a literal

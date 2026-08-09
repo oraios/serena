@@ -8,18 +8,18 @@ from pathlib import Path
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
-from test.conftest import language_tests_enabled
+from solidlsp.ls_config import LanguageServerId
+from test.conftest import language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
-@pytest.mark.skipif(not language_tests_enabled(Language.R), reason="R tests are disabled (R not available)")
+@pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.R), reason="R tests are disabled (R not available)")
 @pytest.mark.r
 class TestRLanguageServer:
     """Test basic functionality of the R language server."""
 
-    @pytest.mark.parametrize("language_server", [Language.R], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.R], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.R], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.R], indirect=True)
     def test_server_initialization(self, language_server: SolidLanguageServer, repo_path: Path):
         """Test that the R language server initializes properly."""
         assert language_server is not None
@@ -27,7 +27,7 @@ class TestRLanguageServer:
         assert language_server.is_running()
         assert Path(language_server.language_server.repository_root_path).resolve() == repo_path.resolve()
 
-    @pytest.mark.parametrize("language_server", [Language.R], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.R], indirect=True)
     def test_symbol_retrieval(self, language_server: SolidLanguageServer):
         """Test R document symbol extraction."""
         all_symbols, _root_symbols = language_server.request_document_symbols(os.path.join("R", "utils.R")).get_all_symbols_and_roots()
@@ -41,7 +41,7 @@ class TestRLanguageServer:
         expected_functions = {"calculate_mean", "process_data", "create_data_frame"}
         assert expected_functions.issubset(function_names), f"Expected functions {expected_functions} but found {function_names}"
 
-    @pytest.mark.parametrize("language_server", [Language.R], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.R], indirect=True)
     def test_find_definition_across_files(self, language_server: SolidLanguageServer):
         """Test finding function definitions across files."""
         analysis_file = os.path.join("examples", "analysis.R")
@@ -58,7 +58,7 @@ class TestRLanguageServer:
         # Definition should be around line 37 (0-indexed: 36) where create_data_frame is defined
         assert definition_location["range"]["start"]["line"] >= 35
 
-    @pytest.mark.parametrize("language_server", [Language.R], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.R], indirect=True)
     def test_find_references_across_files(self, language_server: SolidLanguageServer):
         """Test finding function references across files."""
         analysis_file = os.path.join("examples", "analysis.R")
@@ -85,7 +85,7 @@ class TestRLanguageServer:
 
     def test_file_matching(self):
         """Test that R files are properly matched."""
-        matcher = Language.R.get_source_fn_matcher()
+        matcher = LanguageServerId.R.get_source_fn_matcher()
 
         assert matcher.is_relevant_filename("script.R")
         assert matcher.is_relevant_filename("analysis.r")
@@ -94,10 +94,10 @@ class TestRLanguageServer:
 
     def test_r_language_enum(self):
         """Test R language enum value."""
-        assert Language.R == "r"
-        assert str(Language.R) == "r"
+        assert LanguageServerId.R == "r"
+        assert str(LanguageServerId.R) == "r"
 
-    @pytest.mark.parametrize("language_server", [Language.R], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.R], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

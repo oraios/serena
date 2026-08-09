@@ -2,7 +2,6 @@ import logging
 import os
 import pathlib
 import stat
-import subprocess
 import threading
 from collections.abc import Hashable
 from typing import Any
@@ -10,10 +9,11 @@ from typing import Any
 from overrides import override
 
 from solidlsp.ls import RawDocumentSymbol, SolidLanguageServer
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.ls_utils import FileUtils, PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 from ..common import RuntimeDependency
 
@@ -64,7 +64,7 @@ class ElixirTools(SolidLanguageServer):
     def _get_elixir_version(cls) -> str | None:
         """Get the installed Elixir version or None if not found."""
         try:
-            result = subprocess.run(["elixir", "--version"], capture_output=True, text=True, check=False)
+            result = subprocess_run(["elixir", "--version"], capture_output=True, text=True, check=False)
             if result.returncode == 0:
                 return result.stdout.strip()
         except FileNotFoundError:
@@ -77,7 +77,7 @@ class ElixirTools(SolidLanguageServer):
         Setup runtime dependencies for Expert.
         Downloads the Expert binary for the current platform and returns the path to the executable.
         """
-        elixir_settings = solidlsp_settings.get_ls_specific_settings(Language.ELIXIR)
+        elixir_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.ELIXIR)
         expert_version = elixir_settings.get("expert_version", EXPERT_VERSION)
         # Check if Elixir is available first
         elixir_version = cls._get_elixir_version()

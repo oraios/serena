@@ -77,18 +77,26 @@ class TaskExecutor:
             """
             return self.future.done()
 
-        def result(self, timeout: float | None = None) -> T:
+        def result(self, timeout: float | None = None, cancel_on_timeout: bool = True) -> T:
             """
             Blocks until the task is done or the timeout is reached, and returns the result.
             If an exception occurred during task execution, it is raised here.
-            If the timeout is reached, a TimeoutError is raised (but the task is not cancelled).
+            If the timeout is reached, a TimeoutError is raised.
             If the task is cancelled, a CancelledError is raised.
 
-            :param timeout: the maximum time to wait in seconds; if None, use the task's own timeout
-                (which may be None to wait indefinitely)
+            :param timeout: the maximum time to wait in seconds; if None, wait indefinitely
+            :param cancel_on_timeout: whether to cancel the task if the timeout is reached.
+                If the task has not yet started, cancellation prevents its execution entirely;
+                if it is already running, the underlying thread continues to run, but its result
+                is discarded and any waiter will receive a CancelledError.
             :return: the result of the task
             """
-            return self.future.result(timeout=timeout)
+            try:
+                return self.future.result(timeout=timeout)
+            except concurrent.futures.TimeoutError:
+                if cancel_on_timeout:
+                    self.cancel()
+                raise
 
         def cancel(self) -> None:
             """
@@ -98,18 +106,20 @@ class TaskExecutor:
             """
             self.future.cancel()
 
-        def wait_until_done(self, timeout: float | None = None) -> None:
+        def wait_until_done(self) -> bool:
             """
-            Waits until the task is done or the timeout is reached.
+            Waits until the task is done or its timeout is reached.
             The task is done if it either completed successfully, failed with an exception, or was cancelled.
 
-            :param timeout: the maximum time to wait in seconds; if None, use the task's own timeout
-                (which may be None to wait indefinitely)
+            :return: True if the task is done (successfully, with failure, or via cancellation), False if the timeout was reached
             """
             try:
-                self.future.result(timeout=timeout)
+                self.future.result(timeout=self.timeout)
+            except concurrent.futures.TimeoutError:
+                return False
             except:
                 pass
+            return True
 
     def _process_task_queue(self) -> None:
         while True:
@@ -130,7 +140,9 @@ class TaskExecutor:
             task.start()
 
             # wait for task completion
-            task.wait_until_done(timeout=task.timeout)
+            is_done = task.wait_until_done()
+            if not is_done:
+                log.warning("Task %s did not complete within the timeout of %s seconds; continuing ...", task.name, task.timeout)
             with self._task_executor_lock:
                 self._task_executor_current_task = None
                 if task.logged:
@@ -219,7 +231,7 @@ class TaskExecutor:
         :return: the result of the task execution
         """
         task_obj = self.issue_task(task, name=name, logged=logged, timeout=timeout)
-        return task_obj.result()
+        return task_obj.result(timeout=timeout)
 
     def get_last_executed_task(self) -> TaskInfo | None:
         """

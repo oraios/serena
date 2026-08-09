@@ -429,6 +429,8 @@ class JetBrainsPluginClient(ToStringMixin):
         :param include_location: whether to include symbol location information
         :param search_deps: whether to also search in dependencies
         """
+        if "*" in name_path:
+            self._require_version_at_least(2023, 3, 1)
         request_data = {
             "namePath": name_path,
             "relativePath": relative_path,
@@ -699,6 +701,7 @@ class JetBrainsPluginClient(ToStringMixin):
             NOTE: The response is currently *not* a well-defined DTO, because it stores variable data in keys.
             Consequently, the `pythonify` option is disabled for this request, and the response is returned as-is.
         """
+        self._require_version_at_least(2023, 2, 14)
         request_data: dict[str, Any] = {
             "relativePath": relative_path,
         }
@@ -723,12 +726,23 @@ class JetBrainsPluginClient(ToStringMixin):
         :param language: optional language to filter inspections by (e.g. "Java", "Python")
         :param group_path_contains: optional substring to filter inspection group paths
         """
+        self._require_version_at_least(2023, 2, 14)
         request_data: dict[str, Any] = {}
         if language is not None:
             request_data["language"] = language
         if group_path_contains is not None:
             request_data["groupPathContains"] = group_path_contains
         return cast(jb.ListInspectionsResponse, self._make_request("POST", "/listInspections", request_data))
+
+    def read_file(self, relative_path: str) -> str:
+        self._require_version_at_least(2023, 3, 3)
+        request_data = {
+            "relativePath": relative_path,
+        }
+        response = self._make_request("POST", "/readFile", request_data)
+        if "content" not in response:
+            raise PluginServerError(f"Unexpected response from readFile: {response}")
+        return response["content"]
 
     def close(self) -> None:
         self._session.close()

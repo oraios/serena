@@ -17,6 +17,7 @@ from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
 
@@ -40,11 +41,6 @@ class Solargraph(SolidLanguageServer):
             "ruby",
             solidlsp_settings,
         )
-        # Override internal language enum for file matching (excludes .erb files)
-        # while keeping LSP languageId as "ruby" for protocol compliance
-        from solidlsp.ls_config import Language
-
-        self.language = Language.RUBY_SOLARGRAPH
         self.analysis_complete = threading.Event()
         self.service_ready_event = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
@@ -76,7 +72,7 @@ class Solargraph(SolidLanguageServer):
         """
         # Check if Ruby is installed
         try:
-            result = subprocess.run(["ruby", "--version"], check=True, capture_output=True, cwd=repository_root_path, text=True)
+            result = subprocess_run(["ruby", "--version"], check=True, capture_output=True, cwd=repository_root_path, text=True)
             ruby_version = result.stdout.strip()
             log.info(f"Ruby version: {ruby_version}")
 
@@ -183,12 +179,12 @@ class Solargraph(SolidLanguageServer):
 
             dependency = runtime_dependencies[0]
             try:
-                result = subprocess.run(
+                result = subprocess_run(
                     ["gem", "list", "^solargraph$", "-i"], check=False, capture_output=True, text=True, cwd=repository_root_path
                 )
                 if result.stdout.strip() == "false":
                     log.info("Installing Solargraph...")
-                    subprocess.run(dependency["installCommand"].split(), check=True, capture_output=True, cwd=repository_root_path)
+                    subprocess_run(dependency["installCommand"].split(), check=True, capture_output=True, cwd=repository_root_path)
 
                 return "gem exec solargraph"
             except subprocess.CalledProcessError as e:

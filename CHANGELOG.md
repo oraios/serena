@@ -3,6 +3,221 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - Fix: Race conditions in ProjectServer when used by multiple clients in parallel   
+  - Fix: a tool call exceeding the timeout blocked the task executor indefinitely; the executor now
+    recovers without user-induced cancellation
+  - Add Grok Build support (context `grok`, setup CLI, hooks)
+  - The `languages` key in project configurations was changed to `language_servers` to better reflect
+    the actual semantics (configurations are automatically migrated)
+  - Fix: glob matching bare `*` and `?` in non-`**` patterns matched across `/`, contradicting documented behaviour #1732
+  - Project activation errors are now reported to the client in Serena's system prompt, instead of failures 
+    being visible only in the log. This applies both to a failed activation of an explicitly given project and to a 
+    failed `--project-from-cwd` auto-detection (#1773).
+  - ProjectServer: Configure trusted hosts (local hosts only) when listening on localhost
+  - SerenaDashboardTrayManager: Configure trusted hosts (local hosts only)
+  - Enclose sub-prompts in XML-like tags to make scopes explicit
+  - Prompts and prompt templates:
+    - Allow initial project prompts and project-specific newly activated modes to use templating
+    - Support function `embed_memory` in prompt templates to inline a memory's contents
+
+* CLI:
+  - Fix: `start-mcp-server` help text for `--project-from-cwd` falsely promised a fallback to the CWD, which was 
+    removed in v1.0.0 #1773
+  - Fix: `project health-check` always exited with code 0, even when the check failed, so callers 
+    (CI, scripts) could not act on its verdict; it now exits with code 1 on failure. A `find_symbol` 
+    result without any matches is now reported as a failure rather than as a warning.
+
+* Tools:
+  - `find_symbol`, `jet_brains_find_symbol`: Change tool description to improve tool search results in clients that load tools dynamically
+  - `get_current_config`: Result now includes language server status #1782
+  - More liberal handling of ignored paths in file access tools:
+    - Tools that explicitly target a single file (`create_text_file`, `read_file`, `replace_content`) no longer 
+      consider ignored paths in general, i.e. all files can be accessed. 
+      When a path is explicitly accessed, we should not try to prevent it; the agent is assumed to have a good reason 
+      for doing so.
+    - Tools that traverse a subtree of the project (`list_dir`, `find_file`, `search_for_pattern`) now all have an 
+      option `skip_ignored_files` (whether to skip ignored sub-paths).
+      Note that if the base path is itself ignored, ignored paths cannot be considered.
+
+* Language Servers: 
+  - Add Gleam language server support (via the `gleam lsp` server bundled with the Gleam compiler)
+  - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
+    project creation) 
+  - **Add support for Nextflow** (language server `nextflow`), using the official
+    [Nextflow language server](https://github.com/nextflow-io/language-server); the JAR is downloaded
+    automatically, a Java 17+ runtime is required
+  - Add `python_basedpyright` as an alternative Python language server
+  - Java/JDTLS: stop downloading and loading the unused IntelliCode completion-ranking bundle; the retired
+    `intellicode_version`, `intellicode_xmx` and `intellicode_xms` settings remain accepted but are ignored #1821
+  - Kotlin: update the managed Kotlin LSP from `261.13587.0` to `262.9593.0`, including support for the
+    new platform-specific archive layout and Windows ARM64 builds
+  - Nix/nixd: support custom `ls_path` launchers and external JSON settings through `config_path` #1737
+  - Fix: Nix/nixd diagnostics now use published diagnostics instead of the unsupported
+    `textDocument/diagnostic` request, which terminated nixd #1802
+  - Fix: `get_diagnostics_for_file` crashed with `SolidLSPException` for any Ansible file with at least
+    one lint finding, because `ansible-language-server` doesn't implement `textDocument/documentSymbol`
+    and the request used to map diagnostics onto owning symbols just threw. `AnsibleLanguageServer` now
+    overrides that request to return `None` directly, so diagnostics fall back to being grouped under
+    the file-level path as already documented #1758
+  - Fix: pull-diagnostics fallback in `request_text_document_diagnostics` no longer swallows
+    `LanguageServerTerminatedException`, so a crash during a diagnostics pull triggers the existing
+    language-server restart path instead of silently returning no diagnostics #1770
+  - Fix: F#'s `module <Name>` declarations reported a `selectionRange` pointing at the `module`
+    keyword instead of at `<Name>`, so looking up hover/references from a module symbol's position
+    returned the keyword's own docs instead of the module's #925
+  - Fix: Erlang functions could not be addressed by any tool taking an exact name path, because
+    Erlang LS identifies them as `name/arity` and `/` separates name path components. The arity is
+    now separated by `#` instead (e.g. `create_user#4`), so the reported name path round-trips and
+    `find_referencing_symbols`/`replace_symbol_body`/`insert_after_symbol` work on Erlang
+    functions #1797
+  - Fix: `LSPFileBuffer`: a stale content hash could be returned if files are kept open 
+    and file contents were not read before trying to retrieve the hash value  
+  - Fix: Change semantics of file opening (`open_file`) in the language server from "open file (if not already open)"
+    to "ensure that the language server has the (current) contents of the file" (by sending `textDocument/didOpen`
+    or `textDocument/didChange`), as this is always the intention of calling the method.
+    If files were kept open in the language server (which the Svelte and Vue language servers did),
+    the language server was not necessarily informed about updated contents.
+  - Add Deno support (experimental; language server `deno`, backed by the Deno CLI's built-in
+    `deno lsp`). Understands Deno module resolution (`npm:` / `jsr:` / `https:` imports) and the
+    `Deno.*` globals, which the plain TypeScript language server does not. Overlaps TypeScript on
+    file extensions, so it is not auto-detected and must be selected explicitly; requires the
+    `deno` CLI on PATH
+
+* JetBrains:
+  - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file
+
+* Language Servers:
+  - Rust: reduce rust-analyzer memory usage and reload churn by disabling cache priming and Cargo autoreload while preserving diagnostics.
+  - `typescript`: Fix: on large projects, the first `find_referencing_symbols`/`request_references` call
+    could silently race tsserver's project load and return incomplete results, because the fixed 2s
+    grace for tsserver to *start* reporting `$/progress` (distinct from the separate, already
+    configurable `indexing_timeout` used to wait for it to *drain*) was hardcoded and not large enough
+    for projects where the initial project-graph resolution itself takes longer than that. The grace
+    is now `indexing_start_grace` (default 5.0s), configurable the same way as `indexing_timeout` and
+    `server_ready_timeout` #1586
+  - Fix: On Linux, a language server process spawned in its own session (the default) is no longer
+    orphaned when Serena is killed without a chance to shut down cleanly (e.g. SIGKILL, OOM) #1490
+  - Language servers and their dependency providers now go through the `subprocess_run` helper instead of
+    calling `subprocess.run` directly (e.g. for installation processes), so all such subprocesses get 
+    `stdin=DEVNULL` and can no longer interfere with the stdio MCP connection #1748
+  - `scala`: Fix: Metals asks via `window/showMessageRequest` whether to import a workspace it has not
+    seen before, and Serena had no handler, so the request failed with `MethodNotFound` and Metals gave
+    up on the import ("Unexpected error initializing server"). No build server was ever connected and
+    every cross-file query fell back to the presentation compiler, which sees one file at a time, unless
+    the project happened to have been imported beforehand by another editor. The three prompts that lead
+    to a build server are now answered; anything else is dismissed, including the choice between several
+    build definitions in one workspace. `ls_specific_settings.scala.auto_import_build: false` opts out
+  - `scala`: Fix: in a repository whose builds live below its root, Metals was given only the repository
+    root as a workspace folder, and its own one-level search takes just the first build it finds — so in
+    a monorepo all but one build were served with no build target, silently returning no cross-file
+    references. The build roots are now detected and passed as workspace folders, one Metals service per
+    build; `ls_specific_settings.scala.project_roots` and `project_root_scan_depth` override the
+    detection #1766
+
+* Dashboard:
+  - Fix: Serena PyPI version check triggered by callback on main thread could delay agent startup #1774
+  - Improvements in `tray_manager` interface mode:
+    - Fix: on macOS, the `tray_manager` interface put an icon in the Dock and in the app switcher
+      (should only use menu bar icon)
+    - On Serena shutdown, message the tray manager before lengthy project shutdowns
+    - Fix: When dead ports are detected (Serena instance gone), explicitly update the tray menu 
+      immediately (may not update automatically)
+  - Use `tray_manager` interface as new default on macOS
+
+* Hooks:
+  - Add `serena-hooks --client=grok`, including Grok-native PreToolUse allow/deny output.
+  - Use `SessionEnd` for Codex 0.145.0+ cleanup hooks and document the known `Stop` compatibility issue affecting older Codex versions.
+  - PreToolUse remind hook: coerce non-string shell command values instead of failing, and recognize
+    `target_file`/`targetFile` file-path keys (shared payload parsing, applies to all hook clients).
+  - Fix hook input parsing for clients that emit raw control characters in JSON string values #1743.
+
+
+# v1.6.1 (2026-07-21)
+
+* General:
+  - Fix: `FileUtils.read_file`'s `charset_normalizer` fallback (used when a file cannot be decoded with
+    the project's configured `encoding`) decoded the raw bytes directly and therefore skipped the
+    universal-newline translation that the primary read path applies. CR characters from disk thus
+    reached Serena's in-memory file contents, where the rest of the code assumes LF-normalized text and
+    the `line_ending` setting is meant to be the single point of line-ending translation on write. The
+    fallback now normalizes line endings to LF, consistently with the primary path.
+  - Fix: a symbol whose LSP range ended exactly one line past EOF, at column 0 (the convention for
+    a range covering whole lines through the end of the file), raised `IndexError` in
+    `SymbolBody.get_text`. That one well-defined case is now corrected to end at the actual last
+    line; any other out-of-range end position now raises `InvalidTextLocationError` instead,
+    rather than guessing at a body that could be wrong #1498
+
+* Language Servers:
+  - Fix: Properly differentiate between raw and high-level symbol cache fingerprints, avoiding unnecessary
+    invalidations of the raw cache when only the derived high-level representation changes
+  - Fix: Language servers were not notified of external file system changes, causing some
+    symbolic operations (such as `find_referencing_symbols`) to report stale information.
+    An explicit file system polling mechanism is now used to detect changes prior to the affected
+    tool executions.
+  - Fix: Order of ignore patterns passed to language servers was not respected #1729 
+  - Improve uv-based language server launch command compatibility: Use the more widely supported 
+    `uv tool run` instead of `uv x` #1721
+  - Java (JDT-LS): add `runtimes` to `ls_specific_settings.java`, a list of extra JRE/JDK entries
+    (`name`, `path`, optional `default`/`sources`/`javadoc`) passed through to JDT-LS's
+    `java.configuration.runtimes`. Fixes silently broken JDK type resolution (`java.lang.Object`
+    and other JDK types reported as "cannot be resolved") for projects whose source/target level
+    exceeds the bundled JDK 21 JRE JDT-LS registers by default; configured runtimes extend rather
+    than replace that bundled default. #1478
+  - `gopls`: Fix `replace_symbol_body` corrupting single `type`/`var`/`const` declarations by
+    duplicating the leading keyword (e.g. `type Foo` becoming `type type Foo`). gopls reports the
+    symbol range of such declarations starting at the identifier rather than the keyword (unlike
+    `func` declarations); the range is now extended to include the keyword so the body and the
+    replacement range stay consistent.
+  - `typescript` / `typescript_vts`: No longer ignore directories named `coverage`. This was intended to skip
+    coverage-report output, but matched by bare dirname and so also hid legitimate source directories named
+    `coverage` (e.g. `src/routes/coverage/`) from symbol tools. Generated report dirs are already covered by
+    gitignore. Fixes #1523.
+  - Fix: Restore `erlang` support (broken since v1.6.0 due to an implementation error) 
+
+* Tools:
+  - Fix: `search_for_pattern` marked one line too many as matched whenever a match ended with a line
+    break, because the match's exclusive end index was mapped to a line number directly and therefore
+    resolved to the start of the following line. The line the match ends on is now determined correctly,
+    which also keeps `context_lines_after` aligned.
+  - `safe_delete`: Add heuristic to delete superfluous empty lines after a deletion
+  - `search_for_pattern`: on overflow, the shortening chain now emits each match's first line (full when
+    it fits, otherwise truncated with a trailing '...' and a note) before falling back to bare line
+    numbers, so agents can pick the right match without re-reading files. #1640
+
+* Language Servers:
+  - PHP: treat `.phtml` files as PHP sources by default (all PHP language servers) #1710
+  - PHP/Intelephense: expose `file_filter` via `ls_specific_settings["php"]`, so that additional
+    extensions containing PHP sources (e.g. Drupal's `.module` / `.install` / `.inc` / `.theme`)
+    become visible to the symbol tools and are indexed by the language server #1710
+  - Fix: an LSP `ContentModified` (-32801) response was surfaced as a hard `SolidLSPException`
+    instead of being retried, as the spec expects for requests a client declared it will reissue.
+    `send_request` now retries such responses for methods declared via a server's
+    `retryOnContentModified` capability; rust-analyzer declares `textDocument/hover`, fixing the
+    flaky `test_find_symbol[rust_add_function]` on windows-latest. #1724
+
+* JetBrains:
+  - Allow external files from dependencies (specified via references like "<ext:FileUtil.class|472e0a13>") to be
+    - read via `ReadFileTool` 
+    - searched via `SearchForPatternTool`
+    - used in `JetBrainsFindDeclarationTool`
+    when using plugin version 2023.3.3+
+
+* Dashboard:
+  - The version display now indicates when a newer Serena version is available
+  - Fix: the "Last Execution" panel stayed on "Loading..." forever when there was no logged execution
+    (e.g. a fresh server / no tool run yet), because `loadLastExecution()` only rendered the panel when
+    the backend returned a non-null execution; the empty state is now rendered via the existing
+    `displayLastExecution(null)` path, mirroring the other panels #1713
+
+* Dependencies:
+  - Bump `mcp` from 1.27.0 to 1.28.1
+  - Bump `anthropic` from 0.59.0 to 0.117.0
+
+# v1.6.0 (2026-07-16)
+
+* General:
+  - Speed up MCP startup when auto-creating projects at startup (e.g. using `--project-from-cwd`) by
+    determining the project's languages in a background thread #1683
   - Fix: in `glob_to_regex` / `search_text(is_glob=True)`, a `?` wildcard matched two characters instead
     of one (it emitted `..` rather than `.`); it now matches a single character, consistent with the
     `?` semantics documented for `glob_match` and the `test_??.py` example in `search_text`'s docstring.
@@ -33,6 +248,15 @@ Status of the `main` branch. Changes prior to the next official version change w
   - During project creation, language composition percentages are now computed relative to the total number 
     of recognised source files instead of all files, i.e. unrecognised files are ignored in the percentage 
     computation.
+  - Consider all LSP-compliant line endings ("\n", "\r\n" and "\r") in `TextUtils`, noting that 
+    only "\n" appears in files read by `FileUtils.read_file` (Serena's default reading mechanism)
+  - Fix: Apply consistent line splitting across tools, uniformly applying the LSP splitting semantics; 
+    affects `search_text` used by `search_for_pattern` tool (reported in #1684)
+  - Fix in `TextUtils` (used by editors): Deleting up to the end of the file, referencing the line one past 
+    the end of the file (particularly for files with no newline at end of file) raised `InvalidTextLocationError`
+    instead of accepting the deletion (change in `TextUtils.delete_text_between_positions`,
+    which now accepts the end position similar to `insert_text_at_position`).
+  - Fix: glob pattern expansion in `expand_braces` did not terminate with empty or unbalanced braces #1690
 
 * CLI:
   - Fix `--project-from-cwd` hijacking git worktrees nested under a Serena project. `find_project_root`

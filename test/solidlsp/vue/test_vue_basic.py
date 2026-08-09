@@ -3,14 +3,14 @@ import os
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_utils import SymbolUtils
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
 @pytest.mark.vue
 class TestVueLanguageServer:
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_vue_files_in_symbol_tree(self, language_server: SolidLanguageServer) -> None:
         symbols = language_server.request_full_symbol_tree()
         assert SymbolUtils.symbol_tree_contains_name(symbols, "App"), "App not found in symbol tree"
@@ -18,7 +18,7 @@ class TestVueLanguageServer:
         assert SymbolUtils.symbol_tree_contains_name(symbols, "CalculatorInput"), "CalculatorInput not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "CalculatorDisplay"), "CalculatorDisplay not found in symbol tree"
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
         store_file = os.path.join("src", "stores", "calculator.ts")
         symbols = language_server.request_document_symbols(store_file).get_all_symbols_and_roots()
@@ -46,7 +46,7 @@ class TestVueLanguageServer:
 
 @pytest.mark.vue
 class TestVueDualLspArchitecture:
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_typescript_server_coordination(self, language_server: SolidLanguageServer) -> None:
         ts_file = os.path.join("src", "stores", "calculator.ts")
         ts_symbols = language_server.request_document_symbols(ts_file).get_all_symbols_and_roots()
@@ -63,7 +63,7 @@ class TestVueDualLspArchitecture:
         assert len(vue_symbols[0]) >= 15, f"Vue server should return at least 15 symbols for App.vue, got {len(vue_symbols[0])}"
         assert "appTitle" in vue_symbol_names, "Vue server should extract ref declarations from script setup"
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_cross_file_references_vue_to_typescript(self, language_server: SolidLanguageServer) -> None:
         store_file = os.path.join("src", "stores", "calculator.ts")
         store_symbols = language_server.request_document_symbols(store_file).get_all_symbols_and_roots()
@@ -103,7 +103,7 @@ class TestVueDualLspArchitecture:
             f"Expected any of {expected_vue_files}, found references in: {[ref.get('uri', '') for ref in vue_refs]}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_cross_file_references_typescript_to_vue(self, language_server: SolidLanguageServer) -> None:
         types_file = os.path.join("src", "types", "index.ts")
         types_symbols = language_server.request_document_symbols(types_file).get_all_symbols_and_roots()
@@ -136,7 +136,7 @@ class TestVueDualLspArchitecture:
             f"Operation type should be referenced in TypeScript files like calculator.ts. Found references in: {all_ref_uris}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_reference_deduplication(self, language_server: SolidLanguageServer) -> None:
         store_file = os.path.join("src", "stores", "calculator.ts")
         store_symbols = language_server.request_document_symbols(store_file).get_all_symbols_and_roots()
@@ -181,7 +181,7 @@ class TestVueDualLspArchitecture:
 
 @pytest.mark.vue
 class TestVueEdgeCases:
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_symbol_tree_structure(self, language_server: SolidLanguageServer) -> None:
         full_tree = language_server.request_full_symbol_tree()
 
@@ -247,7 +247,7 @@ class TestVueEdgeCases:
             matching_files = [p for p in all_paths if expected_file in p]
             assert len(matching_files) > 0, f"Expected file '{expected_file}' should be in symbol tree. All paths: {all_paths}"
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_document_overview(self, language_server: SolidLanguageServer) -> None:
         app_file = os.path.join("src", "App.vue")
         overview = language_server.request_document_overview(app_file)
@@ -294,7 +294,7 @@ class TestVueEdgeCases:
             f"Found {len(button_symbol_names)} symbols: {button_symbol_names}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_directory_overview(self, language_server: SolidLanguageServer) -> None:
         components_dir = os.path.join("src", "components")
         dir_overview = language_server.request_dir_overview(components_dir)
@@ -362,7 +362,7 @@ class TestVueEdgeCases:
                 f"Found {len(matching_files)} matches. All files: {list(composables_overview.keys())}"
             )
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

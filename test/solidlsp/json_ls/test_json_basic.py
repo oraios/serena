@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
@@ -18,17 +18,17 @@ from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name,
 class TestJsonLanguageServerBasics:
     """Test basic functionality of the JSON language server."""
 
-    @pytest.mark.parametrize("language_server", [Language.JSON], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.JSON], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.JSON], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.JSON], indirect=True)
     def test_json_language_server_initialization(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that JSON language server can be initialized successfully."""
         assert language_server is not None
-        assert language_server.language == Language.JSON
+        assert language_server.ls_id == LanguageServerId.JSON
         assert language_server.is_running()
         assert Path(language_server.language_server.repository_root_path).resolve() == repo_path.resolve()
 
-    @pytest.mark.parametrize("language_server", [Language.JSON], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.JSON], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.JSON], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.JSON], indirect=True)
     def test_json_config_file_symbols(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test document symbols detection in config.json with specific symbol verification."""
         all_symbols, root_symbols = language_server.request_document_symbols("config.json").get_all_symbols_and_roots()
@@ -47,8 +47,8 @@ class TestJsonLanguageServerBasics:
         assert "port" in symbol_names, "Should detect nested 'port' key"
         assert "debug" in symbol_names, "Should detect nested 'debug' key"
 
-    @pytest.mark.parametrize("language_server", [Language.JSON], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.JSON], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.JSON], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.JSON], indirect=True)
     def test_json_data_file_symbols(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test symbol detection in data.json with array structures."""
         all_symbols, root_symbols = language_server.request_document_symbols("data.json").get_all_symbols_and_roots()
@@ -63,7 +63,7 @@ class TestJsonLanguageServerBasics:
         assert "email" in symbol_names, "Should detect 'email' fields"
         assert "id" in symbol_names, "Should detect 'id' fields"
 
-    @pytest.mark.parametrize("language_server", [Language.JSON], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.JSON], indirect=True)
     def test_bare_symbol_names(self, language_server: SolidLanguageServer) -> None:
         """Test that symbol names do not contain malformed characters."""
         all_symbols = request_all_symbols(language_server)

@@ -12,7 +12,7 @@ from sensai.util.logging import LogTime
 
 from solidlsp import ls_types
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -73,7 +73,7 @@ class ElmLanguageServer(SolidLanguageServer):
         """
         Setup runtime dependencies for Elm Language Server and return the command to start the server.
         """
-        elm_config = solidlsp_settings.get_ls_specific_settings(Language.ELM)
+        elm_config = solidlsp_settings.get_ls_specific_settings(LanguageServerId.ELM)
         elm_language_server_version = elm_config.get("elm_language_server_version", DEFAULT_ELM_LANGUAGE_SERVER_VERSION)
         elm_compiler_version = elm_config.get("elm_compiler_version", DEFAULT_ELM_COMPILER_VERSION)
         npm_registry = elm_config.get("npm_registry")

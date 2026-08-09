@@ -35,11 +35,12 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         max_answer_chars: int = -1,
     ) -> str:
         """
-        Retrieves information on all symbols/code entities (classes, methods, etc.) based on the given name path pattern.
+        Finds symbols and code entities (classes, methods, etc.) based on the given name path pattern.
         The returned symbol information can be used for edits or further queries.
         Specify `depth > 0` to retrieve children (e.g., methods of a class).
         Important: through `search_deps=True` dependencies can be searched, which
         should be preferred to web search or other less sophisticated approaches to analyzing dependencies.
+        You will always receive at least quick info for returned symbols (even if `include_info=False`).
 
         A name path is a path in the symbol tree *within a source file*.
         For example, the method `my_method` defined in class `MyClass` would have the name path `MyClass/my_method`.
@@ -52,6 +53,8 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
          * a relative path like "class/method", which will match any symbol with that name path suffix
          * an absolute name path "/class/method" (absolute name path), which requires an exact match of the full name path within the source file.
         Append an index `[i]` to match a specific overload only, e.g. "MyClass/my_method[1]".
+        In any path component, using `*` will match any sequence of characters (excluding /), e.g. "Class/*substring*" matches a member substring.
+        A pattern must not contain only wildcards (e.g. "*" or "/*").
 
         :param name_path_pattern: the name path matching pattern (see above)
         :param depth: depth up to which descendants shall be retrieved (e.g. use 1 to also retrieve immediate children;
@@ -60,7 +63,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         :param relative_path: Optional. Restrict search to this file or directory. If not specified, searches entire codebase.
             Note: for external dependencies, this must be an identifier starting with `<ext` that you have received
             earlier (don't try to guess!).
-        :param include_body: If True, include the symbol's source code. Use judiciously.
+        :param include_body: If True, include the symbol's full source code.
         :param include_info: whether to include additional info (hover-like, typically including docstring and signature),
             about the symbol.
             Default False; info is never included for child symbols or if include_body is True.
@@ -70,6 +73,18 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         :param max_answer_chars: max characters for the result (-1 for default). If exceeded, no content/a shortened result is returned.
         :return: symbols matching the name.
         """
+        # check input
+        # - pattern with only wildcards is invalid, but in some cases we delegate to the overview tool
+        if name_path_pattern.replace("*", "").replace("/", "") == "":
+            if relative_path:
+                if self.project.relative_path_exists(relative_path, require_file=True):
+                    overview_tool = self.agent.get_tool(JetBrainsGetSymbolsOverviewTool)
+                    overview_response = overview_tool.apply(relative_path, depth=depth)
+                    return self._wrapped_tool_response(
+                        overview_response, f"Wildcard-only pattern not admitted; used {overview_tool.get_name()} instead"
+                    )
+            raise ValueError("name_path_pattern must not be empty or contain only wildcards; consider using the overview tool")
+
         if include_body:
             depth = 0  # ignore user-specified depth if body is requested
 
@@ -257,7 +272,6 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
 
     symbol_dict_grouper = JetBrainsSymbolDictGrouper(["relative_path", "type"], ["type"], collapse_singleton=True)
 
-    # TODO: (maybe) - add content snippets showing the references like in LS based version?
     def apply(
         self,
         name_path: str,
@@ -265,11 +279,14 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
         max_answer_chars: int = -1,
     ) -> str:
         """
-        Finds symbols that reference the symbol at the specified symbol, i.e. returns symbols whose definitions (e.g. a function body) contain a reference to the given symbol.
-        The result will contain metadata about the referencing symbols.
+        Finds all symbols that reference the given symbol — its callers / usages / dependents, i.e. the
+        symbols whose own definition (e.g. a method body) contains a reference to it. For each, returns its
+        name path, file, and the surrounding line of code.
 
         :param name_path: name path of the symbol for which to find references
         :param relative_path: the relative path to the file containing the symbol (must be a file, not a directory)
+            Note: for external dependencies, this must be an identifier starting with `<ext` that you have received
+            earlier (don't try to guess!).
         :param max_answer_chars: max characters for the result (-1 for default). If exceeded, no content/a shortened result is returned.
         """
         relative_path = self._sanitize_input_param(relative_path)
@@ -328,11 +345,9 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
         include_file_documentation: bool = False,
     ) -> str:
         """
-        Gets an overview of the top-level symbols in the given file.
-        Calling this is often a good idea before more targeted reading, searching or editing operations on the code symbols.
-        Before requesting a symbol overview, it is usually a good idea to narrow down the scope of the overview
-        by first understanding the basic directory structure of the repository that you can get from memories
-        or by using the `list_dir` and `find_file` tools (or similar).
+        Gets an overview of the top-level symbols defined in the given file (classes, methods, fields) — its
+        STRUCTURE, without their bodies. This is the cheap, structure-first way to learn what a file
+        contains: it costs far less context than reading the whole file.
 
         :param relative_path: the relative path to the file to get the overview of
         :param depth: depth up to which descendants shall be retrieved.
@@ -590,8 +605,8 @@ class JetBrainsDebugTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
         repl_key: str = "default",
     ) -> str:
         """
-        Debug code interactively by evaluating Groovy expressions in a persistent REPL.
-        Important: Debugging should only be applied if the user has requested it!
+        Debug code by evaluating Groovy/Java expressions in a persistent REPL attached to the IDE's
+        debugger (run configs, breakpoints, stepping, inspection of live state).
 
         Use the `serena_info` tool with topic `jet_brains_debug_repl` for usage information.
 

@@ -68,7 +68,8 @@ Some languages require additional installations or setup steps, as noted.
 * **Elm**  
   (requires Elm compiler)
 * **Erlang**  
-  (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls); experimental, might be slow or hang)
+  (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls); experimental, might be slow or hang;
+  note that functions are addressed as `name#arity`, e.g. `create_user#4`, because `/` is reserved as the name path separator)
 * **F#**  
   (requires [.NET v8.0+](https://dotnet.microsoft.com/en-us/download/dotnet); uses FsAutoComplete/Ionide, which is auto-installed; for Homebrew .NET on macOS, set DOTNET_ROOT in your environment)
 * **Fortran**   
@@ -77,6 +78,8 @@ Some languages require additional installations or setup steps, as noted.
   (requires the Godot editor to be running with its built-in LSP enabled — default on port 6008;
   Serena connects over TCP and does not launch Godot itself;
   see the [GDScript Setup Guide](../03-special-guides/godot_gdscript_setup_guide_for_serena) for details)
+* **Gleam**  
+  (requires the [Gleam compiler](https://gleam.run) on PATH; the language server is bundled with the compiler and started via `gleam lsp`)
 * **Go**  
   (requires installation of `gopls`)
 * **Groovy**  
@@ -109,9 +112,16 @@ Some languages require additional installations or setup steps, as noted.
 * **Luau**
 * **Markdown**  
   (must explicitly enable language `markdown`, primarily useful for documentation-heavy projects)
+* **MATLAB**  
+  (requires Node.js and a licensed local MATLAB installation, R2021b or later; Serena automatically downloads version 1.3.9 of the VS Code MATLAB extension, which bundles the language server)
 * **mSL** (mIRC Scripting Language)  
   (auto-installed; no external dependencies required — uses a custom pygls-based LSP server shipped with Serena;
   supports document symbols, workspace symbols, references, and go-to-definition for aliases, events, menus, dialogs, and CTCP handlers in `.mrc` files)
+* **Nextflow**  
+  (uses the official [Nextflow language server](https://github.com/nextflow-io/language-server), which is automatically
+  downloaded; requires a Java 17+ runtime, discovered via `ls_specific_settings.nextflow.java_home`, `JAVA_HOME` or `java` on PATH;
+  covers `.nf` scripts — Nextflow `.config` files are not treated as source files, since the language server reports no symbols for them;
+  processes, workflows and functions are reported under their declared name, e.g. `GREET` for `process GREET`)
 * **Nix**  
   (requires nixd installation)
 * **OCaml**
@@ -124,22 +134,27 @@ Some languages require additional installations or setup steps, as noted.
   (by default, uses the Intelephense language server (language `php`), set `INTELEPHENSE_LICENSE_KEY` environment variable for premium features;
   we also support [Phpactor](https://github.com/phpactor/phpactor) (language `php_phpactor`), which requires PHP 8.1+;
   and the experimental [PHPantom](https://github.com/PHPantom-dev/phpantom_lsp) backend (language `php_phpantom`)
+* **PowerShell**  
+  (requires PowerShell 7+ (`pwsh`) on PATH or in a standard install location; Serena automatically downloads PowerShell Editor Services 4.4.0 and installs PSScriptAnalyzer 1.25.0 via `Save-Module` from your configured PowerShell repository)
 * **Python**
   (by default, uses [Pyright](https://github.com/microsoft/pyright) (language `python`);
-  alternatives: [ty](https://github.com/astral-sh/ty) (language `python_ty`),
+  alternatives: [BasedPyright](https://github.com/DetachHead/basedpyright) (language `python_basedpyright`),
+  [ty](https://github.com/astral-sh/ty) (language `python_ty`),
   [pyrefly](https://github.com/facebook/pyrefly) (language `python_pyrefly`),
   [Jedi](https://github.com/palotas/jedi-language-server) (language `python_jedi`);
-  ty and pyrefly require `uv`/`uvx` in PATH)
+  Pyright, BasedPyright, ty, and pyrefly require `uv`/`uvx` in PATH)
 * **QML**
   (requires Qt 6, provides `qmlls` or `qmlls6` on PATH; see the [Qt qmlls documentation](https://doc.qt.io/qt-6/qtqml-tool-qmlls.html))
 * **R**  
   (requires installation of the `languageserver` R package)
+* **Rego**  
+  (requires the [Regal](https://github.com/open-policy-agent/regal) language server on PATH)
 * **Ruby**  
   (by default, uses [ruby-lsp](https://github.com/Shopify/ruby-lsp) (language `ruby`); use language `ruby_solargraph` to use Solargraph instead.)
 * **Rust**  
   (requires [rustup](https://rustup.rs/) - uses rust-analyzer from your toolchain)
 * **Scala**  
-  (requires some [manual setup](../03-special-guides/scala_setup_guide_for_serena); uses Metals LSP)
+  (uses Metals LSP, which imports the build on first use — see the [setup guide](../03-special-guides/scala_setup_guide_for_serena))
 * **SCSS / Sass / CSS**
   (experimental; requires Node.js + npm; uses [some-sass-language-server](https://github.com/wkillerud/some-sass) to handle
   `.scss`, `.sass`, and `.css`)
@@ -149,7 +164,19 @@ Some languages require additional installations or setup steps, as noted.
 * **Svelte**
   (requires Node.js v18+ and npm; supports `.svelte` Single File Components plus TypeScript/JavaScript files via `svelte-language-server`; a companion `typescript-language-server` + `typescript-svelte-plugin` is spawned automatically for cross-file rename, go-to-definition, and references across `.ts`/`.js` and `.svelte` files; use language `svelte` for Svelte projects instead of also enabling `typescript`)
 * **Swift**
+* **SystemVerilog**  
+  (uses `verible-verilog-ls`, taken from PATH if present, otherwise version `v0.0-4051-g9fdb4057` is downloaded automatically)
+* **Terraform**  
+  (uses `terraform-ls` 0.36.5, which Serena downloads automatically; requires Terraform on PATH)
+* **TOML**  
+  (experimental; uses Taplo 0.10.0, taken from PATH if present, otherwise downloaded automatically)
 * **TypeScript**
+* **Deno**  
+  (experimental; requires the `deno` CLI on PATH — it bundles the language server used here;
+  serves Deno TypeScript/JavaScript and understands `npm:` / `jsr:` / `https:` imports and the `Deno.*`
+  globals, which the plain TypeScript language server does not; overlaps `typescript` on file extensions,
+  so it is not auto-detected and must be set as the language explicitly — do not also enable `typescript`
+  for the same files)
 * **Vue**    
   (3.x with TypeScript; requires Node.js v18+ and npm; supports .vue Single File Components with monorepo detection)
 * **YAML**

@@ -13,8 +13,8 @@ Requirements:
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
-from test.conftest import language_tests_enabled
+from solidlsp.ls_config import LanguageServerId
+from test.conftest import language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
@@ -22,17 +22,19 @@ from test.solidlsp.util.diagnostics import assert_file_diagnostics
 pytestmark = pytest.mark.matlab
 
 
-@pytest.mark.skipif(not language_tests_enabled(Language.MATLAB), reason="MATLAB tests are disabled (MATLAB installation not found)")
+@pytest.mark.skipif(
+    not language_server_tests_enabled(LanguageServerId.MATLAB), reason="MATLAB tests are disabled (MATLAB installation not found)"
+)
 class TestMatlabLanguageServerBasics:
     """Test basic functionality of the MATLAB language server."""
 
-    @pytest.mark.parametrize("language_server", [Language.MATLAB], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MATLAB], indirect=True)
     def test_matlab_language_server_initialization(self, language_server: SolidLanguageServer) -> None:
         """Test that MATLAB language server can be initialized successfully."""
         assert language_server is not None
-        assert language_server.language == Language.MATLAB
+        assert language_server.ls_id == LanguageServerId.MATLAB
 
-    @pytest.mark.parametrize("language_server", [Language.MATLAB], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MATLAB], indirect=True)
     def test_matlab_request_document_symbols_class(self, language_server: SolidLanguageServer) -> None:
         """Test request_document_symbols for MATLAB class file."""
         # Test getting symbols from Calculator.m (class file)
@@ -54,7 +56,7 @@ class TestMatlabLanguageServerBasics:
         for method in expected_methods:
             assert method in method_names, f"Should find {method} method in Calculator class"
 
-    @pytest.mark.parametrize("language_server", [Language.MATLAB], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MATLAB], indirect=True)
     def test_matlab_request_document_symbols_function(self, language_server: SolidLanguageServer) -> None:
         """Test request_document_symbols for MATLAB function file."""
         # Test getting symbols from lib/mathUtils.m (function file)
@@ -72,7 +74,7 @@ class TestMatlabLanguageServerBasics:
         for func in expected_local_functions:
             assert func in function_names, f"Should find {func} local function"
 
-    @pytest.mark.parametrize("language_server", [Language.MATLAB], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MATLAB], indirect=True)
     def test_matlab_request_document_symbols_script(self, language_server: SolidLanguageServer) -> None:
         """Test request_document_symbols for MATLAB script file."""
         # Test getting symbols from main.m (script file)
@@ -83,11 +85,13 @@ class TestMatlabLanguageServerBasics:
         assert all_symbols is not None
 
 
-@pytest.mark.skipif(not language_tests_enabled(Language.MATLAB), reason="MATLAB tests are disabled (MATLAB installation not found)")
+@pytest.mark.skipif(
+    not language_server_tests_enabled(LanguageServerId.MATLAB), reason="MATLAB tests are disabled (MATLAB installation not found)"
+)
 class TestMatlabLanguageServerReferences:
     """Test find references functionality of the MATLAB language server."""
 
-    @pytest.mark.parametrize("language_server", [Language.MATLAB], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MATLAB], indirect=True)
     def test_matlab_find_references_within_file(self, language_server: SolidLanguageServer) -> None:
         """Test finding references within a single MATLAB file."""
         # Find references to 'result' variable in Calculator.m
@@ -97,7 +101,7 @@ class TestMatlabLanguageServerReferences:
         # Should find at least the definition
         assert references is not None
 
-    @pytest.mark.parametrize("language_server", [Language.MATLAB], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MATLAB], indirect=True)
     def test_matlab_find_references_cross_file(self, language_server: SolidLanguageServer) -> None:
         """Test finding references across MATLAB files."""
         # Find references to Calculator class used in main.m
@@ -106,7 +110,7 @@ class TestMatlabLanguageServerReferences:
         # Should find references in both main.m and Calculator.m
         assert references is not None
 
-    @pytest.mark.parametrize("language_server", [Language.MATLAB], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MATLAB], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []
@@ -119,7 +123,7 @@ class TestMatlabLanguageServerReferences:
                 pytrace=False,
             )
 
-    @pytest.mark.parametrize("language_server", [Language.MATLAB], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MATLAB], indirect=True)
     def test_file_diagnostics(self, language_server: SolidLanguageServer) -> None:
         assert_file_diagnostics(
             language_server,

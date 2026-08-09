@@ -12,8 +12,8 @@ from typing import Optional
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
-from test.conftest import language_has_verified_implementation_support
+from solidlsp.ls_config import LanguageServerId
+from test.conftest import ls_has_verified_implementation_support
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
@@ -37,17 +37,17 @@ def _find_identifier_position(file_path: Path, symbol_name: str) -> Optional[tup
 class TestSolidityLanguageServerBasics:
     """Test basic functionality of the Solidity language server."""
 
-    @pytest.mark.parametrize("language_server", [Language.SOLIDITY], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.SOLIDITY], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SOLIDITY], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.SOLIDITY], indirect=True)
     def test_solidity_language_server_initialization(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that the Solidity language server starts and initializes correctly."""
         assert language_server is not None
-        assert language_server.language == Language.SOLIDITY
+        assert language_server.ls_id == LanguageServerId.SOLIDITY
         assert language_server.is_running()
         assert Path(language_server.language_server.repository_root_path).resolve() == repo_path.resolve()
 
-    @pytest.mark.parametrize("language_server", [Language.SOLIDITY], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.SOLIDITY], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SOLIDITY], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.SOLIDITY], indirect=True)
     def test_token_contract_symbols(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that document symbols are found in Token.sol.
 
@@ -79,8 +79,8 @@ class TestSolidityLanguageServerBasics:
         assert "approve" in symbol_names, "Should detect the 'approve' function"
         assert "transferFrom" in symbol_names, "Should detect the 'transferFrom' function"
 
-    @pytest.mark.parametrize("language_server", [Language.SOLIDITY], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.SOLIDITY], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SOLIDITY], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.SOLIDITY], indirect=True)
     def test_interface_symbols(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that document symbols are found in IERC20.sol."""
         all_symbols, root_symbols = language_server.request_document_symbols("contracts/interfaces/IERC20.sol").get_all_symbols_and_roots()
@@ -107,8 +107,8 @@ class TestSolidityLanguageServerBasics:
         assert "approve" in symbol_names, "Should detect approve"
         assert "transferFrom" in symbol_names, "Should detect transferFrom"
 
-    @pytest.mark.parametrize("language_server", [Language.SOLIDITY], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.SOLIDITY], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SOLIDITY], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.SOLIDITY], indirect=True)
     def test_library_symbols(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that document symbols are found in SafeMath.sol."""
         all_symbols, root_symbols = language_server.request_document_symbols("contracts/lib/SafeMath.sol").get_all_symbols_and_roots()
@@ -127,8 +127,8 @@ class TestSolidityLanguageServerBasics:
         assert "mul" in symbol_names, "Should detect the 'mul' function"
         assert "div" in symbol_names, "Should detect the 'div' function"
 
-    @pytest.mark.parametrize("language_server", [Language.SOLIDITY], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.SOLIDITY], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SOLIDITY], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.SOLIDITY], indirect=True)
     def test_within_file_references(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test finding within-file references to the _transfer helper in Token.sol."""
         # Use the file to find the exact identifier position: the Solidity LSP reports
@@ -148,8 +148,8 @@ class TestSolidityLanguageServerBasics:
         ref_files = {ref.get("uri", "") for ref in references}
         assert any("Token.sol" in uri for uri in ref_files), "References should include Token.sol"
 
-    @pytest.mark.parametrize("language_server", [Language.SOLIDITY], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.SOLIDITY], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SOLIDITY], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.SOLIDITY], indirect=True)
     def test_cross_file_references(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test finding cross-file references: IERC20.transfer implemented in Token.sol."""
         # Use 'transfer' in the interface — Token.sol inherits IERC20 and overrides it,
@@ -166,10 +166,10 @@ class TestSolidityLanguageServerBasics:
         ref_files = {ref.get("uri", "") for ref in references}
         assert any("Token.sol" in uri for uri in ref_files), "IERC20.transfer references should include Token.sol"
 
-    if language_has_verified_implementation_support(Language.SOLIDITY):
+    if ls_has_verified_implementation_support(LanguageServerId.SOLIDITY):
 
-        @pytest.mark.parametrize("language_server", [Language.SOLIDITY], indirect=True)
-        @pytest.mark.parametrize("repo_path", [Language.SOLIDITY], indirect=True)
+        @pytest.mark.parametrize("language_server", [LanguageServerId.SOLIDITY], indirect=True)
+        @pytest.mark.parametrize("repo_path", [LanguageServerId.SOLIDITY], indirect=True)
         def test_find_implementations(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
             pos = _find_identifier_position(repo_path / "contracts/interfaces/IERC20.sol", "transfer")
             assert pos is not None, "Should find 'transfer' identifier in IERC20.sol"
@@ -180,8 +180,8 @@ class TestSolidityLanguageServerBasics:
                 f"Expected Token.transfer implementation, got: {implementations}"
             )
 
-        @pytest.mark.parametrize("language_server", [Language.SOLIDITY], indirect=True)
-        @pytest.mark.parametrize("repo_path", [Language.SOLIDITY], indirect=True)
+        @pytest.mark.parametrize("language_server", [LanguageServerId.SOLIDITY], indirect=True)
+        @pytest.mark.parametrize("repo_path", [LanguageServerId.SOLIDITY], indirect=True)
         def test_request_implementing_symbols(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
             pos = _find_identifier_position(repo_path / "contracts/interfaces/IERC20.sol", "transfer")
             assert pos is not None, "Should find 'transfer' identifier in IERC20.sol"
@@ -193,7 +193,7 @@ class TestSolidityLanguageServerBasics:
                 for symbol in implementing_symbols
             ), f"Expected Token.transfer symbol, got: {implementing_symbols}"
 
-    @pytest.mark.parametrize("language_server", [Language.SOLIDITY], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SOLIDITY], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

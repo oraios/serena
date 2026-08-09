@@ -34,7 +34,7 @@ class TyLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             None,
-            str(config.code_language),
+            str(config.ls_id),
             solidlsp_settings,
         )
 

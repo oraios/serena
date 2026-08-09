@@ -355,7 +355,7 @@ Then create `~/.codex/hooks.json` with the following content:
                 ]
             }
         ],
-        "Stop": [
+        "SessionEnd": [
             {
                 "hooks": [
                     {
@@ -369,6 +369,12 @@ Then create `~/.codex/hooks.json` with the following content:
 }
 ```
 
+The `SessionEnd` cleanup hook requires Codex 0.145.0 or newer. Older Codex versions only support
+`Stop` for cleanup, which currently has a [known compatibility issue](https://github.com/oraios/serena/issues/1533).
+If you still configure it, replace `SessionEnd` with `Stop` in the example above. Configure cleanup
+under exactly one of these events, never both: `Stop` runs after every turn, while `SessionEnd` runs
+when Codex tears down the root thread.
+
 The hooks will:
 
 - **`activate`**: Prompt the agent to activate the current project and read Serena's instructions
@@ -379,6 +385,88 @@ The hooks will:
 
 The `PreToolUse` matcher is intentionally restricted to `Bash`. The Serena reminder hook for Codex
 tracks shell-based grep and code-file reads, so running it for every tool call is unnecessary.
+
+## Grok
+
+Serena provides native support for xAI's Grok Build CLI. To set up the Serena MCP server for Grok,
+simply run:
+
+    serena setup grok
+
+### Manual Setup
+
+**Global Configuration**. To add the Serena MCP server for all your projects, use Grok's user-level configuration and the `--project-from-cwd` flag:
+
+```bash
+grok mcp add --scope user serena -- serena start-mcp-server --context=grok --project-from-cwd
+```
+
+Alternatively, add the following to `~/.grok/config.toml`:
+
+```toml
+[mcp_servers.serena]
+command = "serena"
+args = ["start-mcp-server", "--project-from-cwd", "--context=grok"]
+```
+
+**Project-Level Configuration**. To add the Serena MCP server for a single project only:
+
+```bash
+grok mcp add --scope project serena -- serena start-mcp-server --context=grok --project "$(pwd)"
+```
+
+**Verification.**
+Run `grok inspect` and verify that Serena is listed as an MCP server. You can also use Grok's `/mcps`
+modal to inspect, refresh, enable, or disable configured MCP servers.
+
+Grok can also load existing Claude Code MCP configuration. If you previously ran `serena setup claude-code`,
+Serena may already appear in Grok, but it will use the `claude-code` context instead of the dedicated `grok` context.
+
+### Hooks
+
+Grok supports lifecycle hooks; see Grok's bundled hooks documentation for details. To enable Serena's hooks
+for Grok globally, create `~/.grok/hooks/serena-hooks.json` with the following content. For a single project,
+create `.grok/hooks/serena-hooks.json` in that project instead; note that Grok loads project-scoped hooks
+only after you have trusted the project for hook execution (via Grok's `/hooks-trust` command).
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "grep|read_file|run_terminal_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "serena-hooks remind --client=grok",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "serena-hooks cleanup --client=grok",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The hooks will:
+
+- **`remind`**: Nudge the agent to use Serena's symbolic tools when it makes too many consecutive
+  code-search or code-file-read calls without using Serena tools in between.
+- **`cleanup`**: Clean up hook session data when the agent turn ends.
+
+Grok ignores stdout from passive hooks such as `SessionStart`, so the Grok hook setup intentionally
+uses only `PreToolUse` for reminders and `Stop` for cleanup.
 
 ## Claude Desktop
 

@@ -5,18 +5,18 @@ Note: Windows is not supported as Nix itself doesn't support Windows natively.
 """
 
 import logging
-import subprocess
 import time
 from typing import Any
 
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import DidChangeConfigurationParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class PerlLanguageServer(SolidLanguageServer):
     def _get_perl_version() -> str | None:
         """Get the installed Perl version or None if not found."""
         try:
-            result = subprocess.run(["perl", "-v"], capture_output=True, text=True, check=False)
+            result = subprocess_run(["perl", "-v"], capture_output=True, text=True, check=False)
             if result.returncode == 0:
                 return result.stdout.strip()
         except FileNotFoundError:
@@ -56,7 +56,7 @@ class PerlLanguageServer(SolidLanguageServer):
     def _get_perl_language_server_version() -> str | None:
         """Get the installed Perl::LanguageServer version or None if not found."""
         try:
-            result = subprocess.run(
+            result = subprocess_run(
                 ["perl", "-MPerl::LanguageServer", "-e", "print $Perl::LanguageServer::VERSION"],
                 capture_output=True,
                 text=True,
@@ -120,7 +120,7 @@ class PerlLanguageServer(SolidLanguageServer):
         ``ignore_dirs``); falls back to the defaults otherwise. Extracted as a pure function so the
         configuration plumbing can be unit-tested without starting the language server.
         """
-        perl_settings = solidlsp_settings.get_ls_specific_settings(Language.PERL)
+        perl_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.PERL)
         file_filter = perl_settings.get("file_filter", list(_DEFAULT_FILE_FILTER))
         ignore_dirs = perl_settings.get("ignore_dirs", list(_DEFAULT_IGNORE_DIRS))
         return file_filter, ignore_dirs
@@ -135,7 +135,7 @@ class PerlLanguageServer(SolidLanguageServer):
         language composition detection. Without this, ``find_symbol`` would not surface symbols in
         files whose extensions were added to ``file_filter`` (#1449).
         """
-        Language.PERL.get_source_fn_matcher().add_extensions(*file_filter)
+        LanguageServerId.PERL.get_source_fn_matcher().add_extensions(*file_filter)
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         # Setup runtime dependencies before initializing

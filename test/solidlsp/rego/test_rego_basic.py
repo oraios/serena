@@ -5,19 +5,19 @@ import os
 import pytest
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
-from test.conftest import language_tests_enabled
+from test.conftest import language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
-@pytest.mark.skipif(not language_tests_enabled(Language.REGO), reason="Rego tests are disabled (regal not available)")
+@pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.REGO), reason="Rego tests are disabled (regal not available)")
 @pytest.mark.rego
 class TestRegoLanguageServer:
     """Test Regal language server functionality for Rego."""
 
-    @pytest.mark.parametrize("language_server", [Language.REGO], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.REGO], indirect=True)
     def test_request_document_symbols_authz(self, language_server: SolidLanguageServer) -> None:
         """Test that document symbols can be retrieved from authz.rego."""
         file_path = os.path.join("policies", "authz.rego")
@@ -36,7 +36,7 @@ class TestRegoLanguageServer:
         assert "is_admin" in symbol_names, "is_admin function not found"
         assert "admin_roles" in symbol_names, "admin_roles constant not found"
 
-    @pytest.mark.parametrize("language_server", [Language.REGO], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.REGO], indirect=True)
     def test_request_document_symbols_helpers(self, language_server: SolidLanguageServer) -> None:
         """Test that document symbols can be retrieved from helpers.rego."""
         file_path = os.path.join("utils", "helpers.rego")
@@ -54,7 +54,7 @@ class TestRegoLanguageServer:
         assert "is_valid_email" in symbol_names, "is_valid_email function not found"
         assert "is_valid_username" in symbol_names, "is_valid_username function not found"
 
-    @pytest.mark.parametrize("language_server", [Language.REGO], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.REGO], indirect=True)
     def test_find_symbol_full_tree(self, language_server: SolidLanguageServer) -> None:
         """Test finding symbols across entire workspace using symbol tree."""
         symbols = language_server.request_full_symbol_tree()
@@ -64,7 +64,7 @@ class TestRegoLanguageServer:
         assert SymbolUtils.symbol_tree_contains_name(symbols, "is_valid_user"), "is_valid_user function not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "is_admin"), "is_admin function not found in symbol tree"
 
-    @pytest.mark.parametrize("language_server", [Language.REGO], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.REGO], indirect=True)
     def test_request_definition_within_file(self, language_server: SolidLanguageServer) -> None:
         """Test go-to-definition for symbols within the same file."""
         # In authz.rego, check_permission references admin_roles
@@ -90,7 +90,7 @@ class TestRegoLanguageServer:
         # Verify the definition points to admin_roles in the same file
         assert any("authz.rego" in defn.get("relativePath", "") for defn in definitions), "Definition should be in authz.rego"
 
-    @pytest.mark.parametrize("language_server", [Language.REGO], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.REGO], indirect=True)
     def test_request_definition_across_files(self, language_server: SolidLanguageServer) -> None:
         """Test go-to-definition for symbols across files (cross-file references)."""
         # In authz.rego line 11, the allow rule calls utils.is_valid_user
@@ -119,7 +119,7 @@ class TestRegoLanguageServer:
             "Definition should be in utils/helpers.rego (cross-file reference)"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.REGO], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.REGO], indirect=True)
     def test_find_symbols_validation(self, language_server: SolidLanguageServer) -> None:
         """Test finding symbols in validation.rego which has imports."""
         file_path = os.path.join("policies", "validation.rego")
@@ -137,7 +137,7 @@ class TestRegoLanguageServer:
         assert "has_valid_credentials" in symbol_names, "has_valid_credentials function not found"
         assert "validate_request" in symbol_names, "validate_request rule not found"
 
-    @pytest.mark.parametrize("language_server", [Language.REGO], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.REGO], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

@@ -17,7 +17,7 @@ from solidlsp.ls import (
     LSPFileBuffer,
     SolidLanguageServer,
 )
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler import lsp_types as protocol_lsp_types
 from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, LocationLink
@@ -165,9 +165,6 @@ class PHPantomServer(SolidLanguageServer):
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         super().__init__(config, repository_root_path, None, "php", solidlsp_settings)
-        self.request_id = 0
-        self.language = Language.PHP_PHPANTOM
-
         self._ignored_dirnames = {"node_modules", "cache"}
         if self._custom_settings.get("ignore_vendor", True):
             self._ignored_dirnames.add("vendor")

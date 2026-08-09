@@ -8,7 +8,7 @@ import pytest
 
 from serena.util.text_utils import find_text_coordinates
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import Location
 from test.solidlsp.conftest import read_repo_file
 
@@ -25,7 +25,7 @@ def _rel(location: Location) -> str:
 class TestLatexBeamer:
     """texlab handling of a beamer presentation (sections and frames)."""
 
-    @pytest.mark.parametrize("language_server", [Language.LATEX], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LATEX], indirect=True)
     def test_beamer_sections_and_frames_are_symbols(self, language_server: SolidLanguageServer) -> None:
         r"""Beamer sections and ``\frametitle`` frames both surface as document symbols."""
         symbols, _roots = language_server.request_document_symbols(SLIDES).get_all_symbols_and_roots()
@@ -33,7 +33,7 @@ class TestLatexBeamer:
         for expected in ("Overview", "Results", "Frame: Introduction", "Frame: Methodology", "Frame: Findings"):
             assert expected in names, f"Expected beamer symbol {expected!r}, got: {sorted(names)}"
 
-    @pytest.mark.parametrize("language_server", [Language.LATEX], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LATEX], indirect=True)
     def test_beamer_frames_nest_under_sections(self, language_server: SolidLanguageServer) -> None:
         r"""Frames are children of the section they appear in."""
         _symbols, roots = language_server.request_document_symbols(SLIDES).get_all_symbols_and_roots()
@@ -44,7 +44,7 @@ class TestLatexBeamer:
         overview_children = {child.get("name") for child in overview.get("children", [])}
         assert overview_children == {"Frame: Introduction", "Frame: Methodology"}, overview_children
 
-    @pytest.mark.parametrize("language_server", [Language.LATEX], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LATEX], indirect=True)
     def test_beamer_frame_ref_resolves_to_section(self, language_server: SolidLanguageServer) -> None:
         r"""A ``\ref`` inside a beamer frame resolves to the section it targets."""
         content = read_repo_file(language_server, SLIDES)

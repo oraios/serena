@@ -2,7 +2,7 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.language_servers.solidity_language_server import SolidityLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
 
@@ -37,7 +37,7 @@ class _AlwaysSignalledEvent:
 
 @pytest.mark.solidity
 class TestSolidityDiagnostics:
-    @pytest.mark.parametrize("language_server", [Language.SOLIDITY], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SOLIDITY], indirect=True)
     def test_file_diagnostics(self, language_server: SolidLanguageServer) -> None:
         assert_file_diagnostics(
             language_server,
@@ -46,7 +46,7 @@ class TestSolidityDiagnostics:
             min_count=1,
         )
 
-    @pytest.mark.parametrize("language_server", [Language.SOLIDITY], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SOLIDITY], indirect=True)
     def test_file_diagnostics_via_validation_completion(
         self, language_server: SolidLanguageServer, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -65,7 +65,7 @@ class TestSolidityDiagnostics:
             min_count=1,
         )
 
-    @pytest.mark.parametrize("language_server", [Language.SOLIDITY], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SOLIDITY], indirect=True)
     def test_file_diagnostics_without_validation_signal(
         self, language_server: SolidLanguageServer, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -82,7 +82,7 @@ class TestSolidityDiagnostics:
         diagnostics = language_server.request_text_document_diagnostics("contracts/DiagnosticsSample.sol", min_severity=1)
         assert diagnostics == []
 
-    @pytest.mark.parametrize("language_server", [Language.SOLIDITY], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SOLIDITY], indirect=True)
     def test_file_diagnostics_rearms_after_spurious_completion(
         self, language_server: SolidLanguageServer, monkeypatch: pytest.MonkeyPatch
     ) -> None:

@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
-from test.conftest import is_ci, is_windows, language_tests_enabled
+from solidlsp.ls_config import LanguageServerId
+from test.conftest import is_ci, is_windows, language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
@@ -15,20 +15,20 @@ def _php_supports_phpactor() -> bool:
     return "openssl" in installed_extensions
 
 
-_php_servers: list[Language] = [Language.PHP]
-if language_tests_enabled(Language.PHP_PHPACTOR):
+_php_servers: list[LanguageServerId] = [LanguageServerId.PHP]
+if language_server_tests_enabled(LanguageServerId.PHP_PHPACTOR):
     if not (is_windows and is_ci) and _php_supports_phpactor():
-        _php_servers.append(Language.PHP_PHPACTOR)
-if language_tests_enabled(Language.PHP_PHPANTOM):
-    _php_servers.append(Language.PHP_PHPANTOM)
+        _php_servers.append(LanguageServerId.PHP_PHPACTOR)
+if language_server_tests_enabled(LanguageServerId.PHP_PHPANTOM):
+    _php_servers.append(LanguageServerId.PHP_PHPANTOM)
 
 
 def _is_phpactor(language_server: SolidLanguageServer) -> bool:
-    return language_server.language_server.language == Language.PHP_PHPACTOR
+    return language_server.language_server.ls_id == LanguageServerId.PHP_PHPACTOR
 
 
 def _is_phpantom(language_server: SolidLanguageServer) -> bool:
-    return language_server.language_server.language == Language.PHP_PHPANTOM
+    return language_server.language_server.ls_id == LanguageServerId.PHP_PHPANTOM
 
 
 def _is_non_default_php_backend(language_server: SolidLanguageServer) -> bool:
@@ -38,14 +38,14 @@ def _is_non_default_php_backend(language_server: SolidLanguageServer) -> bool:
 @pytest.mark.php
 class TestPhpLanguageServers:
     @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.PHP], indirect=True)
     def test_ls_is_running(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that the language server starts and stops successfully."""
         assert language_server.is_running()
         assert Path(language_server.language_server.repository_root_path).resolve() == repo_path.resolve()
 
     @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.PHP], indirect=True)
     def test_find_definition_within_file(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         # In index.php:
         # Line 9 (1-indexed): $greeting = greet($userName);
@@ -74,7 +74,7 @@ class TestPhpLanguageServers:
             assert definition_location["range"]["start"]["character"] == 0
 
     @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.PHP], indirect=True)
     def test_find_definition_across_files(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         # Intelephense uses line 12 (0-indexed), Phpactor uses line 13 (0-indexed)
         if _is_non_default_php_backend(language_server):
@@ -94,7 +94,7 @@ class TestPhpLanguageServers:
             assert definition_location["range"]["start"]["character"] == 0
 
     @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.PHP], indirect=True)
     def test_find_definition_simple_variable(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         file_path = str(repo_path / "simple_var.php")
 
@@ -119,7 +119,7 @@ class TestPhpLanguageServers:
             assert definition_location["range"]["start"]["character"] == 0  # $localVar (0-indexed)
 
     @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.PHP], indirect=True)
     def test_find_references_within_file(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         index_php_path = str(repo_path / "index.php")
 
@@ -167,7 +167,7 @@ class TestPhpLanguageServers:
             assert actual_locations == expected_locations
 
     @pytest.mark.parametrize("language_server", _php_servers, indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.PHP], indirect=True)
     def test_find_references_across_files(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         helper_php_path = str(repo_path / "helper.php")
         # In index.php (0-indexed lines):
@@ -208,7 +208,7 @@ class TestPhpLanguageServers:
             usage_in_index_php = {"uri_suffix": "index.php", "line": 13, "character": 0}
             assert usage_in_index_php in actual_locations_comparable, "Usage of helperFunction in index.php not found"
 
-    @pytest.mark.parametrize("language_server", [Language.PHP, Language.PHP_PHPANTOM], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.PHP, LanguageServerId.PHP_PHPANTOM], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
         """Test that document symbols are properly retrieved after Intelephense capability fix."""
         from solidlsp.ls_utils import SymbolUtils
@@ -217,7 +217,7 @@ class TestPhpLanguageServers:
         assert SymbolUtils.symbol_tree_contains_name(symbols, "helperFunction"), "helperFunction not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "greet"), "greet function not found in symbol tree"
 
-    @pytest.mark.parametrize("language_server", [Language.PHP, Language.PHP_PHPANTOM], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.PHP, LanguageServerId.PHP_PHPANTOM], indirect=True)
     def test_document_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test that document symbols are properly retrieved for a specific file."""
         doc_symbols = language_server.request_document_symbols("helper.php")
@@ -225,7 +225,7 @@ class TestPhpLanguageServers:
         symbol_names = [sym.get("name") for sym in all_symbols[0] if sym.get("name")]
         assert "helperFunction" in symbol_names, f"helperFunction not found in document symbols. Found: {symbol_names}"
 
-    @pytest.mark.parametrize("language_server", [Language.PHP, Language.PHP_PHPANTOM], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.PHP, LanguageServerId.PHP_PHPANTOM], indirect=True)
     def test_document_symbols_hierarchical_structure(self, language_server: SolidLanguageServer) -> None:
         """Verify Intelephense returns hierarchical DocumentSymbol format.
 
@@ -259,7 +259,7 @@ class TestPhpLanguageServers:
         assert "greet" not in root_names, f"greet should be a child of Dog, not at root level. Roots: {root_names}"
         assert "fetch" not in root_names, f"fetch should be a child of Dog, not at root level. Roots: {root_names}"
 
-    @pytest.mark.parametrize("language_server", [Language.PHP, Language.PHP_PHPANTOM], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.PHP, LanguageServerId.PHP_PHPANTOM], indirect=True)
     def test_full_symbol_tree_within_file(self, language_server: SolidLanguageServer) -> None:
         """Verify request_full_symbol_tree scoped to a PHP file returns correct symbols.
 

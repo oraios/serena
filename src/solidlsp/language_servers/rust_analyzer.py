@@ -12,9 +12,16 @@ import threading
 
 from overrides import override
 
-from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
+from solidlsp import ls_types
+from solidlsp.ls import (
+    LanguageServerDependencyProvider,
+    LanguageServerDependencyProviderSinglePath,
+    LSPConstants,
+    SolidLanguageServer,
+)
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
 
@@ -49,7 +56,7 @@ class RustAnalyzer(SolidLanguageServer):
         def _get_rustup_version() -> str | None:
             """Get installed rustup version or None if not found."""
             try:
-                result = subprocess.run(["rustup", "--version"], capture_output=True, text=True, check=False)
+                result = subprocess_run(["rustup", "--version"], capture_output=True, text=True, check=False)
                 if result.returncode == 0:
                     return result.stdout.strip()
             except FileNotFoundError:
@@ -60,7 +67,7 @@ class RustAnalyzer(SolidLanguageServer):
         def _get_rust_analyzer_via_rustup() -> str | None:
             """Get rust-analyzer path via rustup. Returns None if not found."""
             try:
-                result = subprocess.run(["rustup", "which", "rust-analyzer"], capture_output=True, text=True, check=False)
+                result = subprocess_run(["rustup", "which", "rust-analyzer"], capture_output=True, text=True, check=False)
                 if result.returncode == 0:
                     return result.stdout.strip()
             except FileNotFoundError:
@@ -75,7 +82,7 @@ class RustAnalyzer(SolidLanguageServer):
             that fails because the component is not installed.
             """
             try:
-                result = subprocess.run([path, "--version"], capture_output=True, text=True, check=False, timeout=10)
+                result = subprocess_run([path, "--version"], capture_output=True, text=True, check=False, timeout=10)
                 return result.returncode == 0
             except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
                 return False
@@ -101,7 +108,7 @@ class RustAnalyzer(SolidLanguageServer):
             # If rustup is available but rust-analyzer not installed, auto-install it BEFORE
             # checking PATH. This ensures we get the correct version matching the toolchain.
             if RustAnalyzer.DependencyProvider._get_rustup_version():
-                result = subprocess.run(["rustup", "component", "add", "rust-analyzer"], check=False, capture_output=True, text=True)
+                result = subprocess_run(["rustup", "component", "add", "rust-analyzer"], check=False, capture_output=True, text=True)
                 if result.returncode == 0:
                     # Verify installation worked
                     rustup_path = RustAnalyzer.DependencyProvider._get_rust_analyzer_via_rustup()
@@ -413,6 +420,10 @@ class RustAnalyzer(SolidLanguageServer):
                             "textDocument/semanticTokens/full",
                             "textDocument/semanticTokens/range",
                             "textDocument/semanticTokens/full/delta",
+                            # rust-analyzer's internal cancellation tracking does not cover hover,
+                            # so hover requests it cancels while indexing come back ContentModified;
+                            # we retry them ourselves (see LanguageServerInterface.send_request). #1724
+                            "textDocument/hover",
                         ],
                     },
                     "regularExpressions": {"engine": "ECMAScript", "version": "ES2020"},
@@ -500,7 +511,10 @@ class RustAnalyzer(SolidLanguageServer):
                 "showUnlinkedFileNotification": True,
                 "showDependenciesExplorer": True,
                 "assist": {"emitMustUse": False, "expressionFillDefault": "todo"},
-                "cachePriming": {"enable": True, "numThreads": 0},
+                # Eager cache priming and automatic Cargo reloads can repeatedly
+                # index large, actively-built workspaces. Keep checkOnSave enabled
+                # because Rust diagnostics rely on flycheck.
+                "cachePriming": {"enable": False, "numThreads": 0},
                 "cargo": {
                     "autoreload": True,
                     "buildScripts": {
@@ -669,6 +683,36 @@ class RustAnalyzer(SolidLanguageServer):
             "trace": "verbose",
         }
         return initialize_params
+
+    @override
+    def _get_published_diagnostics_wait_timeout(self, pull_diagnostics_failed: bool) -> float:
+        timeout = super()._get_published_diagnostics_wait_timeout(pull_diagnostics_failed)
+        # Rust diagnostics are often published asynchronously after the pull-diagnostics request,
+        # so keep a wider fallback wait window across all platforms.
+        return max(timeout, 8.0)
+
+    @override
+    def request_text_document_diagnostics(
+        self,
+        relative_file_path: str,
+        start_line: int = 0,
+        end_line: int = -1,
+        min_severity: int = 4,
+    ) -> list[ls_types.Diagnostic]:
+        uri = self._validate_text_document_diagnostics_request(relative_file_path, start_line, end_line, min_severity)
+
+        # With cache priming disabled, startup can finish before rust-analyzer
+        # schedules its initial flycheck. Trigger the retained checkOnSave path
+        # explicitly whenever diagnostics are requested.
+        with self.open_file(relative_file_path):
+            self.server.notify.did_save_text_document(
+                {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                    LSPConstants.TEXT_DOCUMENT: {
+                        LSPConstants.URI: uri,
+                    }
+                }
+            )
+            return super().request_text_document_diagnostics(relative_file_path, start_line, end_line, min_severity)
 
     def _start_server(self) -> None:
         """

@@ -3,7 +3,7 @@ import os
 import pytest
 
 from solidlsp.language_servers.scala_language_server import ScalaLanguageServer
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.settings import SolidLSPSettings
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
@@ -17,7 +17,7 @@ pytestmark = pytest.mark.scala
 @pytest.fixture(scope="module")
 def scala_ls():
     repo_root = os.path.abspath("test/resources/repos/scala")
-    config = LanguageServerConfig(code_language=Language.SCALA)
+    config = LanguageServerConfig(ls_id=LanguageServerId.SCALA)
     solidlsp_settings = SolidLSPSettings()
     ls = ScalaLanguageServer(config, repo_root, solidlsp_settings)
 

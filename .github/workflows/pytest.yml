@@ -58,18 +58,22 @@ jobs:
   cpu:
     name: ${{ matrix.batch }} (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # Backstop against hung jobs: without this, GitHub's default limit is 6 hours (observed in
+    # run 29064865197, where a hung job burned the full 6h). Healthy runs peak at ~16 minutes
+    # warm-cache; 60 leaves ample headroom for cache-cold runs.
+    timeout-minutes: 60
     # Marker groups are defined once here and combined in the "Compute marker expression" step.
     # The catch-all batch is derived as the negation of all named groups, so adding a language to
     # any group automatically removes it from catch-all -- the partition can never desync, and no
     # test can fall through to "no batch". To add/rebalance: edit a MARKERS_* var, and (for a new
     # group) add a case branch below + the batch name to the matrix list.
     env:
-      MARKERS_JVM: "java or csharp or fsharp or kotlin or scala or groovy or clojure or bsl"
+      MARKERS_JVM: "java or csharp or fsharp or kotlin or scala or groovy or clojure or bsl or nextflow"
       MARKERS_NATIVE: "cpp or rust or go or zig or pascal or swift"  # swift is macOS-only (skips elsewhere via the guard)
       # other-langs: grab-bag + scripting languages + haskell + qml. Haskell (GHC/HLS) and qml (qmlls) are
       # installed only on Linux -- too slow/expensive to build on the macOS runner (Haskell), or not worth
       # the cost of a cross-OS Qt pull (qmlls) -- and skip on Windows+macOS via the central conftest guard.
-      MARKERS_OTHER_LANGS: "ruby or php or lua or luau or bash or powershell or elixir or erlang or dart or haxe or haskell or terraform or rego or ansible or yaml or toml or markdown or latex or crystal or cue or fortran or ada or matlab or systemverilog or hlsl or msl or al or qml"
+      MARKERS_OTHER_LANGS: "ruby or php or lua or luau or bash or powershell or elixir or erlang or dart or deno or haxe or haskell or terraform or rego or ansible or yaml or toml or markdown or latex or crystal or cue or fortran or ada or matlab or systemverilog or hlsl or msl or al or qml or gleam"
       # niche: slow, mostly-cached toolchains. ocaml + haskell are the two slowest -- kept in separate
       # batches (ocaml here, haskell in other-langs). nix + perl skip on Windows via the guard.
       MARKERS_NICHE: "julia or r or perl or lean4 or nix or ocaml"
@@ -79,7 +83,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.11"]
         # 5 batches, each installs ONLY the toolchains its languages need (steps gated by matrix.batch).
-        # Node/Python/uv stay in every batch (cheap, needed for the venv + auto-installed LSes).
+        # Python/uv stay in every batch; Node is limited to other-langs and catch-all.
         # catch-all = web + python + the core framework.
         batch: [jvm, native, other-langs, niche, catch-all]
         # --- OS gating: which batch runs on which OS -----------------------------------------
@@ -104,9 +108,10 @@ jobs:
         with:
           go-version: ">=1.17.0"
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        if: matrix.batch == 'other-langs' || matrix.batch == 'catch-all'
+        uses: actions/setup-node@v7
         with:
-          node-version: '20.x'
+          node-version: '24.x'
           # npm download cache, catch-all only (empty string disables caching in other
           # batches -- they run no npm installs). Warms the svelte fixture's test-time
           # `npm ci` and the global/LS npm installs; keyed on the committed lockfiles.
@@ -223,6 +228,13 @@ jobs:
         with:
           terraform_version: "1.5.0"
           terraform_wrapper: false
+      # Deno ships its language server with the CLI (`deno lsp`), so installing the
+      # runtime is all that is needed for the deno-marked tests.
+      - name: Install Deno
+        if: matrix.batch == 'other-langs'
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
       # - name: Install swift
       #   if: runner.os != 'Windows'
       #   uses: swift-actions/setup-swift@v2
@@ -450,6 +462,24 @@ jobs:
           missing="$(ldd "$QMLLS_DIR/qmlls" | grep 'not found' || true)"
           [ -z "$missing" ] || { echo "ERROR: qmlls has unresolved runtime libs:"; echo "$missing"; exit 1; }
           echo "$QMLLS_DIR" >> "$GITHUB_PATH"
+      - name: Install Gleam compiler
+        # Gleam's LSP is bundled with the compiler (started via `gleam lsp`). Restricted to Linux like
+        # qmlls; Gleam skips on Windows/macOS CI via the conftest guard. The compiler is a self-contained
+        # Rust binary (x86_64-unknown-linux-musl static build) with no runtime deps.
+        if: matrix.batch == 'other-langs' && runner.os == 'Linux'
+        shell: bash
+        run: |
+          GLEAM_VERSION="1.17.0"
+          GLEAM_DIR="$HOME/.gleam"
+          mkdir -p "$GLEAM_DIR"
+          curl -fsSL -o /tmp/gleam.tar.gz "https://github.com/gleam-lang/gleam/releases/download/v${GLEAM_VERSION}/gleam-v${GLEAM_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          tar xzf /tmp/gleam.tar.gz -C "$GLEAM_DIR"
+          rm /tmp/gleam.tar.gz
+          chmod +x "$GLEAM_DIR/gleam"
+          # Fail loudly if any shared lib is unresolved (the musl build should be fully static).
+          missing="$(ldd "$GLEAM_DIR/gleam" | grep 'not found' || true)"
+          [ -z "$missing" ] || { echo "ERROR: gleam has unresolved runtime libs:"; echo "$missing"; exit 1; }
+          echo "$GLEAM_DIR" >> "$GITHUB_PATH"
       - name: Cache Free Pascal Compiler
         if: matrix.batch == 'native'
         id: cache-fpc
@@ -719,7 +749,11 @@ jobs:
         id: cache-language-servers
         uses: actions/cache@v3
         with:
-          path: ~/.serena/language_servers/static
+          # JDTLS workspaces contain mutable Eclipse/Buildship runtime state.
+          # Cache the installed servers, but create each JDTLS workspace locally.
+          path: |
+            ~/.serena/language_servers/static
+            !~/.serena/language_servers/static/EclipseJDTLS/workspaces/**
           key: language-servers-${{ runner.os }}-${{ matrix.batch }}-v1
           restore-keys: |
             language-servers-${{ runner.os }}-${{ matrix.batch }}-

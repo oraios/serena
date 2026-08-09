@@ -10,13 +10,14 @@ from typing import Any
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_utils import SymbolUtils
-from test.conftest import language_tests_enabled
+from test.conftest import language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 pytestmark = pytest.mark.skipif(
-    not language_tests_enabled(Language.SYSTEMVERILOG), reason="SystemVerilog tests are disabled (verible-verilog-ls not available)"
+    not language_server_tests_enabled(LanguageServerId.SYSTEMVERILOG),
+    reason="SystemVerilog tests are disabled (verible-verilog-ls not available)",
 )
 
 
@@ -39,19 +40,19 @@ def _get_symbol_selection_start(language_server: SolidLanguageServer, file_path:
 class TestSystemVerilogSymbols:
     """Tests for document symbol extraction."""
 
-    @pytest.mark.parametrize("language_server", [Language.SYSTEMVERILOG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SYSTEMVERILOG], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
         """Test that symbol tree contains expected modules."""
         symbols = language_server.request_full_symbol_tree()
         assert SymbolUtils.symbol_tree_contains_name(symbols, "counter"), "Module 'counter' not found in symbol tree"
 
-    @pytest.mark.parametrize("language_server", [Language.SYSTEMVERILOG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SYSTEMVERILOG], indirect=True)
     def test_get_document_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test document symbols for counter.sv."""
         symbol = _find_symbol_by_name(language_server, "counter.sv", "counter")
         assert symbol is not None, "Expected 'counter' in document symbols"
 
-    @pytest.mark.parametrize("language_server", [Language.SYSTEMVERILOG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SYSTEMVERILOG], indirect=True)
     def test_find_top_module(self, language_server: SolidLanguageServer) -> None:
         """Test that top module is found (cross-file instantiation test)."""
         symbols = language_server.request_full_symbol_tree()
@@ -62,7 +63,7 @@ class TestSystemVerilogSymbols:
 class TestSystemVerilogDefinition:
     """Tests for go-to-definition functionality."""
 
-    @pytest.mark.parametrize("language_server", [Language.SYSTEMVERILOG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SYSTEMVERILOG], indirect=True)
     def test_goto_definition(self, language_server: SolidLanguageServer) -> None:
         """Test go to definition from signal usage to its declaration.
 
@@ -79,7 +80,7 @@ class TestSystemVerilogDefinition:
             f"Expected definition at line 7 (output port count), got line {def_in_counter[0]['range']['start']['line']}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.SYSTEMVERILOG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SYSTEMVERILOG], indirect=True)
     def test_goto_definition_cross_file(self, language_server: SolidLanguageServer) -> None:
         """Test go to definition from module instantiation in top.sv to counter.sv.
 
@@ -102,7 +103,7 @@ class TestSystemVerilogDefinition:
 class TestSystemVerilogReferences:
     """Tests for find-references functionality."""
 
-    @pytest.mark.parametrize("language_server", [Language.SYSTEMVERILOG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SYSTEMVERILOG], indirect=True)
     def test_find_references(self, language_server: SolidLanguageServer) -> None:
         """Test finding within-file references to a port signal.
 
@@ -122,7 +123,7 @@ class TestSystemVerilogReferences:
         assert 13 in ref_lines, f"Expected reference at line 13 (count <= '0), got lines: {ref_lines}"
         assert 15 in ref_lines, f"Expected reference at line 15 (count <= count + 1'b1), got lines: {ref_lines}"
 
-    @pytest.mark.parametrize("language_server", [Language.SYSTEMVERILOG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SYSTEMVERILOG], indirect=True)
     def test_find_references_cross_file(self, language_server: SolidLanguageServer) -> None:
         """Test that references to counter include its instantiation in top.sv.
 
@@ -154,7 +155,7 @@ def _extract_hover_text(hover_info: dict[str, Any]) -> str:
 class TestSystemVerilogHover:
     """Tests for hover information."""
 
-    @pytest.mark.parametrize("language_server", [Language.SYSTEMVERILOG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SYSTEMVERILOG], indirect=True)
     def test_hover(self, language_server: SolidLanguageServer) -> None:
         """Test hover information (experimental in verible, requires --lsp_enable_hover)."""
         line, char = _get_symbol_selection_start(language_server, "counter.sv", "counter")
@@ -166,7 +167,7 @@ class TestSystemVerilogHover:
         assert "counter" in hover_text.lower(), f"Hover should mention 'counter', got: {hover_text}"
         assert "module" in hover_text.lower(), f"Hover should identify 'counter' as a module, got: {hover_text}"
 
-    @pytest.mark.parametrize("language_server", [Language.SYSTEMVERILOG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SYSTEMVERILOG], indirect=True)
     def test_hover_includes_type_information(self, language_server: SolidLanguageServer) -> None:
         """Test that hover includes type information for a port signal.
 
@@ -197,7 +198,7 @@ def _extract_changes(workspace_edit: dict[str, Any]) -> dict[str, list[dict[str,
 class TestSystemVerilogRename:
     """Tests for rename functionality."""
 
-    @pytest.mark.parametrize("language_server", [Language.SYSTEMVERILOG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SYSTEMVERILOG], indirect=True)
     def test_rename_signal_within_file(self, language_server: SolidLanguageServer) -> None:
         """Test renaming a port signal from its declaration updates within-file occurrences.
 
@@ -221,7 +222,7 @@ class TestSystemVerilogRename:
         for edit in edits:
             assert edit["newText"] == "cnt", f"Expected newText 'cnt', got {edit['newText']}"
 
-    @pytest.mark.parametrize("language_server", [Language.SYSTEMVERILOG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SYSTEMVERILOG], indirect=True)
     def test_rename_signal_cross_file(self, language_server: SolidLanguageServer) -> None:
         """Test renaming a port signal from a usage site includes cross-file edits.
 
@@ -242,7 +243,7 @@ class TestSystemVerilogRename:
             for edit in edits:
                 assert edit["newText"] == "cnt", f"Expected 'cnt' in {uri}, got {edit['newText']}"
 
-    @pytest.mark.parametrize("language_server", [Language.SYSTEMVERILOG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SYSTEMVERILOG], indirect=True)
     def test_rename_module_name(self, language_server: SolidLanguageServer) -> None:
         """Test renaming a module name at its declaration.
 
@@ -269,7 +270,7 @@ class TestSystemVerilogRename:
             for edit in file_edits:
                 assert edit["newText"] == "my_counter", f"Expected 'my_counter', got {edit['newText']}"
 
-    @pytest.mark.parametrize("language_server", [Language.SYSTEMVERILOG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SYSTEMVERILOG], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

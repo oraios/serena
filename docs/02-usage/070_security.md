@@ -13,8 +13,18 @@ The current security model for Serena assumes:
 - package manager configuration (e.g. npm) for downloading additional dependencies (i.e. language servers when using Serena with the LSP backend) is trusted.
 
 Serena contains tools for executing shell commands and modifying files.
-As such tools are, however, an essential part of coding agent workflows, they typically need to be made available. 
+As such tools are, however, an essential part of coding agent workflows, they typically need to be made available – and need to be made available in a flexible, general form.
 Therefore, the only way to *fully* protect against unintended consequences is to use a [sandboxed environment](sandboxing) for running Serena.
+
+:::{admonition} Security Advisories
+:class: note
+Security advisories are welcome for issues that violate the security model described on this page.
+However, reports which amount to noting that Serena's tools can execute commands or modify files
+describe intended functionality rather than vulnerabilities, and we will reject advisories that fail to recognise this
+or otherwise ignore the above assumptions.  
+Sandboxing is the *only* way to fully protect against unintended consequences when using coding agents;
+constraints on the tools themselves cannot achieve this and are therefore not an approach we pursue.
+:::
 
 ## General Recommendations for Risk Reduction
 
@@ -23,7 +33,7 @@ To reduce the risk of unintended consequences, we recommend that you:
 - restrict the set of allowed tools via the [configuration](050_configuration),
 - do not expose [Serena's network services](network-security) to untrusted networks.
 
-If you do not fully the trust the client/the LLM, we additionally recommend to monitor tool executions carefully 
+If you do not fully trust the client/the LLM, we additionally recommend to monitor tool executions carefully 
 (provided that your MCP client supports this).
 
 (sandboxing)=
@@ -33,6 +43,59 @@ Sandboxing is the most effective way to mitigate risks when using coding agents.
 [Running Serena inside a docker container](docker) which only exposes the necessary files and tools to the agent is a good way to achieve this.
 
 While setting up a sandboxed environment may require some initial effort, we highly recommend it for all security-conscious users.
+
+(trusted-projects)=
+## Trusted Projects
+
+Sandboxing limits what Serena can affect while doing what it was asked to do.
+The notion of *trusted projects* (introduced in Serena v1.6.0) addresses a different question: 
+to what extent may the repository being worked on influence Serena's behaviour in the first place?
+
+A project is an input authored by whoever produced the repository, and it comprises more than source code:
+it also carries configuration (`.serena/project.yml`) as well as file system structure.
+Trust determines whether such repository-supplied input may influence Serena beyond having the code read and
+analysed as code — for example, by executing commands, by changing how dependencies are acquired, or by causing
+Serena to access locations outside the project root.
+Trust is decided by the project's root path, which is matched against `trusted_project_path_patterns` in Serena's
+[global configuration](global-config).
+
+We gate a feature on project trust whenever honouring repository-supplied input could have an effect beyond the
+scope of what the user visibly requested: activating a project is not a request to run a command, and searching a
+project's files is not a request to read files outside of it.
+
+### A Functionality Boundary, Not a Containment Boundary
+
+Untrusted projects are not sandboxed, restricted or otherwise contained.
+They are read, analysed and edited just like any other project; the only difference is that a small set of
+capabilities is unavailable to them.
+As soon as the agent is asked to do anything at all, the full tool surface applies to an untrusted project as well:
+commands can be executed, files can be modified, and the repository's contents can influence the LLM.
+
+Consequently, our assumption that the repository being worked on is trusted (see above) remains fully in force.
+Trust patterns eliminate a class of particularly straightforward attacks, namely those requiring no user
+interaction beyond opening a project, but exploits can generally not be prevented by such means.
+The question to ask is therefore not "is this project safe to work on because it is untrusted?" but rather
+"do I trust this repository enough to grant it the additional capabilities?".
+If a repository is not trustworthy, [sandboxing](sandboxing) is the answer, not the trust configuration.
+
+### Trust-Gated Features
+
+The set of trust-gated features is subject to change and can be expected to grow.
+The settings that require trust are annotated accordingly in the project configuration (see
+[configuration](050_configuration)); the two following current examples illustrate the principle:
+
+- `activation_command` is a shell command that a project can request to be run whenever it is activated.
+  Without trust gating, merely opening a repository in Serena would execute code chosen by its author,
+  before the user has issued a single request.
+- `ls_specific_settings` can, among other things, override the package version and the package registry from
+  which a language server is acquired.
+  Without trust gating, a repository could thereby silently circumvent the supply chain protections described
+  below (version pinning, host restrictions) and cause attacker-controlled code to be downloaded and executed.
+
+Note that the effective set of trusted paths depends on the age of your configuration: installations predating
+the introduction of this setting retain a pattern that trusts all projects, ensuring that existing workflows are
+not broken, whereas newly created configurations trust no project by default.
+The applicable value can be inspected in the dashboard.
 
 (network-security)=
 ## Network Security
@@ -48,7 +111,9 @@ By default, these services accept connections from localhost only, which is a se
 
 These services can be reconfigured to listen on other addresses, but doing so may have security implications.
 If you need to allow connections from other machines, we recommend that you set up a secure networking environment 
-(e.g. using a VPN or SSH tunnels) and ensure that only trusted machines can connect to these services.
+and ensure that only trusted machines can connect to these services.
+It is the responsibility of the user to restrict access appropriately, e.g. by placing the service behind a reverse
+proxy (adding authentication) or firewall.
 
 ## Supply Chain Security
 
@@ -109,64 +174,4 @@ Some parts of Serena rely on `uv` / `uvx`.
 
 One important detail is that `uvx` ignores the lockfile when installing directly from a Git repository. Because of that, we pin Serena's Python dependencies exactly in `pyproject.toml` so that installations from Git still resolve to exact dependency versions rather than floating ranges.
 
-For the `ty` Python language server, Serena also uses an exact pinned version when invoking it through `uvx`.
-
-```{dropdown} What Serena Downloads by Default for Language Servers
-:open:
-
-Only the language servers listed below download or install additional dependencies automatically by default when the required dependency is missing. Everything else either relies on a system-installed server or on tooling you install separately.
-
-### Release Artifacts, Archives, or VSIX Packages
-
-- **AL**: the pinned Microsoft AL VS Code extension (`ms-dynamics-smb.al`) from the VS Code Marketplace.
-- **C/C++ (`clangd`)**: pinned `clangd` release archives on supported platforms.
-- **C# (Roslyn LS)**: pinned Roslyn language-server NuGet package for the current platform.
-- **Clojure**: pinned `clojure-lsp` release artifact.
-- **Dart**: pinned Dart SDK archive that contains the language server.
-- **Elixir (`expert`)**: pinned Expert release binary, if not already available locally.
-- **Groovy**: pinned `vscode-java` runtime bundle used to provide Java for the Groovy LS setup.
-- **HLSL / shader-language-server**: pinned GitHub release artifacts on supported prebuilt platforms.
-- **Java (`eclipse.jdt.ls`)**: pinned Gradle distribution, pinned `vscode-java` extension bundle, and pinned IntelliCode VSIX.
-- **Kotlin**: pinned Kotlin LSP archive.
-- **Lua**: pinned `lua-language-server` release archive.
-- **Luau**: pinned `luau-lsp` release archive. In Roblox or standard-doc modes it may also download Luau/Roblox docs and type-definition files.
-- **Markdown (`marksman`)**: pinned Marksman release binary.
-- **MATLAB**: the pinned MathWorks MATLAB VS Code extension from the VS Code Marketplace.
-- **OmniSharp (legacy C# backend)**: pinned OmniSharp and Razor plugin archives.
-- **Pascal**: pinned Pascal language-server release artifact.
-- **PHP (`phpactor`)**: pinned `phpactor.phar`.
-- **PowerShell**: pinned PowerShell Editor Services archive.
-- **SystemVerilog (`verible`)**: pinned Verible release archive on supported platforms.
-- **TOML (`taplo`)**: pinned Taplo release artifact.
-- **Terraform**: pinned `terraform-ls` release archive. The Terraform CLI itself must still already be installed.
-
-### npm Package Installs
-
-- **Angular**: `@angular/language-server`, `@angular/language-service`, plus `typescript` and `typescript-language-server`
-- **Ansible**: `@ansible/ansible-language-server`
-- **Bash**: `bash-language-server`
-- **Elm**: `@elm-tooling/elm-language-server`
-- **HTML**: `vscode-langservers-extracted` (provides `vscode-html-language-server`)
-- **PHP (`intelephense`)**: `intelephense`
-- **SCSS / Sass / CSS**: `some-sass-language-server`
-- **Solidity**: `@nomicfoundation/solidity-language-server`
-- **Svelte**: `svelte-language-server`
-- **TypeScript**: `typescript` and `typescript-language-server`
-- **Vue**: `@vue/language-server`, plus `typescript` and `typescript-language-server`
-- **VTSLS**: `@vtsls/language-server`
-- **YAML**: `yaml-language-server`
-
-All of the above are installed with exact pinned package versions by default, into Serena-managed directories.
-
-### Other Package-Manager Based Installs
-
-- **F#**: installs pinned `fsautocomplete` via `dotnet tool install`.
-- **Ruby (`ruby-lsp`)**: if not already available through Bundler or as a global executable, Serena installs a pinned `ruby-lsp` gem.
-- **Python (`ty`)**: launched through `uvx` / `uv x` using an exact pinned `ty` version.
-- **HLSL on macOS**: if no prebuilt binary is used, Serena builds `shader_language_server` from a pinned version using Cargo.
-
-### No Automatic Download by Serena
-
-- **Python (`pyright`)**: Serena uses the locally available Python environment and starts `pyright.langserver` from there.
-- **Go (`gopls`)**, **Rust (`rust-analyzer`)**, and several other system-tool based integrations expect the language server to be available locally and do not download it automatically.
-```
+Some language servers also use exact pinned versions when invoking them through `uvx` / `uv tool run`. 

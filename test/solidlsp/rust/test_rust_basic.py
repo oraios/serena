@@ -3,15 +3,15 @@ import os
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_utils import SymbolUtils
-from test.conftest import find_identifier_position, get_repo_path, language_has_verified_implementation_support
+from test.conftest import find_identifier_position, get_repo_path, ls_has_verified_implementation_support
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
 @pytest.mark.rust
 class TestRustLanguageServer:
-    @pytest.mark.parametrize("language_server", [Language.RUST], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.RUST], indirect=True)
     def test_find_references_raw(self, language_server: SolidLanguageServer) -> None:
         # Directly test the request_references method for the add function
         file_path = os.path.join("src", "lib.rs")
@@ -28,14 +28,14 @@ class TestRustLanguageServer:
             "main.rs should reference add (raw, tried all positions in selectionRange)"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.RUST], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.RUST], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
         symbols = language_server.request_full_symbol_tree()
         assert SymbolUtils.symbol_tree_contains_name(symbols, "main"), "main function not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "add"), "add function not found in symbol tree"
         # Add more as needed based on test_repo
 
-    @pytest.mark.parametrize("language_server", [Language.RUST], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.RUST], indirect=True)
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
         # Find references to 'add' defined in lib.rs, should be referenced from main.rs
         file_path = os.path.join("src", "lib.rs")
@@ -52,17 +52,17 @@ class TestRustLanguageServer:
             "main.rs should reference add (tried all positions in selectionRange)"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.RUST], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.RUST], indirect=True)
     def test_overview_methods(self, language_server: SolidLanguageServer) -> None:
         symbols = language_server.request_full_symbol_tree()
         assert SymbolUtils.symbol_tree_contains_name(symbols, "main"), "main missing from overview"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "add"), "add missing from overview"
 
-    if language_has_verified_implementation_support(Language.RUST):
+    if ls_has_verified_implementation_support(LanguageServerId.RUST):
 
-        @pytest.mark.parametrize("language_server", [Language.RUST], indirect=True)
+        @pytest.mark.parametrize("language_server", [LanguageServerId.RUST], indirect=True)
         def test_find_implementations(self, language_server: SolidLanguageServer) -> None:
-            repo_path = get_repo_path(Language.RUST)
+            repo_path = get_repo_path(LanguageServerId.RUST)
             pos = find_identifier_position(repo_path / os.path.join("src", "lib.rs"), "format_greeting")
             assert pos is not None, "Could not find Greeter.format_greeting in fixture"
 
@@ -72,9 +72,9 @@ class TestRustLanguageServer:
                 f"Expected ConsoleGreeter.format_greeting in implementations, got: {implementations}"
             )
 
-        @pytest.mark.parametrize("language_server", [Language.RUST], indirect=True)
+        @pytest.mark.parametrize("language_server", [LanguageServerId.RUST], indirect=True)
         def test_request_implementing_symbols(self, language_server: SolidLanguageServer) -> None:
-            repo_path = get_repo_path(Language.RUST)
+            repo_path = get_repo_path(LanguageServerId.RUST)
             pos = find_identifier_position(repo_path / os.path.join("src", "lib.rs"), "format_greeting")
             assert pos is not None, "Could not find Greeter.format_greeting in fixture"
 
@@ -85,7 +85,7 @@ class TestRustLanguageServer:
                 for symbol in implementing_symbols
             ), f"Expected ConsoleGreeter.format_greeting symbol, got: {implementing_symbols}"
 
-    @pytest.mark.parametrize("language_server", [Language.RUST], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.RUST], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

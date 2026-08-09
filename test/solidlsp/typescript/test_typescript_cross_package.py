@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from test.conftest import start_ls_context
 
 CROSS_PKG_DIR = Path(__file__).parent.parent.parent / "resources" / "repos" / "typescript"
@@ -23,7 +23,7 @@ class TestCrossPackageReferences:
         references in package_b should be discovered.
         """
         with start_ls_context(
-            Language.TYPESCRIPT,
+            LanguageServerId.TYPESCRIPT,
             repo_path=PACKAGE_A,
             additional_workspace_folders=[PACKAGE_B],
         ) as ls:
@@ -47,7 +47,7 @@ class TestCrossPackageReferences:
     def test_cross_package_referencing_symbols(self) -> None:
         """Test the higher-level request_referencing_symbols across packages."""
         with start_ls_context(
-            Language.TYPESCRIPT,
+            LanguageServerId.TYPESCRIPT,
             repo_path=PACKAGE_A,
             additional_workspace_folders=[PACKAGE_B],
         ) as ls:
@@ -79,7 +79,7 @@ class TestCrossPackageReferences:
     def test_without_additional_workspace_no_cross_refs(self) -> None:
         """Baseline: without additional_workspace_folders, cross-package refs should NOT appear."""
         with start_ls_context(
-            Language.TYPESCRIPT,
+            LanguageServerId.TYPESCRIPT,
             repo_path=PACKAGE_A,
         ) as ls:
             symbols = ls.request_document_symbols("shared_utils.ts").get_all_symbols_and_roots()

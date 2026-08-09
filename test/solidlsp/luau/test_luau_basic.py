@@ -8,7 +8,7 @@ and cross-file reference capabilities for Luau modules and functions.
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
@@ -16,7 +16,7 @@ from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name,
 class TestLuauLanguageServer:
     """Test Luau language server symbol finding and cross-file references."""
 
-    @pytest.mark.parametrize("language_server", [Language.LUAU], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LUAU], indirect=True)
     def test_find_symbols_in_init(self, language_server: SolidLanguageServer) -> None:
         """Test finding specific functions in init.luau."""
         symbols = language_server.request_document_symbols("src/init.luau").get_all_symbols_and_roots()
@@ -34,7 +34,7 @@ class TestLuauLanguageServer:
         assert "createConfig" in symbol_names, f"createConfig not found in symbols: {symbol_names}"
         assert "main" in symbol_names, f"main not found in symbols: {symbol_names}"
 
-    @pytest.mark.parametrize("language_server", [Language.LUAU], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LUAU], indirect=True)
     def test_find_symbols_in_module(self, language_server: SolidLanguageServer) -> None:
         """Test finding specific functions in module.luau."""
         symbols = language_server.request_document_symbols("src/module.luau").get_all_symbols_and_roots()
@@ -52,7 +52,7 @@ class TestLuauLanguageServer:
         assert "process" in symbol_names, f"process not found in symbols: {symbol_names}"
         assert "helper" in symbol_names, f"helper not found in symbols: {symbol_names}"
 
-    @pytest.mark.parametrize("language_server", [Language.LUAU], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LUAU], indirect=True)
     def test_find_references_within_file(self, language_server: SolidLanguageServer) -> None:
         """Test finding within-file references to createConfig in init.luau.
 
@@ -92,7 +92,7 @@ class TestLuauLanguageServer:
 
         assert "init.luau" in ref_files, f"Expected references in init.luau, found in: {ref_files}"
 
-    @pytest.mark.parametrize("language_server", [Language.LUAU], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LUAU], indirect=True)
     def test_find_references_across_files(self, language_server: SolidLanguageServer) -> None:
         """Test finding cross-file references to process function.
 
@@ -134,7 +134,7 @@ class TestLuauLanguageServer:
         # We expect at least the reference in module.luau return table (line 9)
         assert "module.luau" in ref_info, f"Expected references in module.luau, found in: {set(ref_info.keys())}"
 
-    @pytest.mark.parametrize("language_server", [Language.LUAU], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LUAU], indirect=True)
     def test_find_definition(self, language_server: SolidLanguageServer) -> None:
         """Test finding definition of createConfig from its usage in main().
 
@@ -153,7 +153,7 @@ class TestLuauLanguageServer:
         # createConfig is defined at line 8 (0-indexed): `local function createConfig(...)`
         assert definition["range"]["start"]["line"] == 8, f"Definition should be at line 8, got line {definition['range']['start']['line']}"
 
-    @pytest.mark.parametrize("language_server", [Language.LUAU], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.LUAU], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

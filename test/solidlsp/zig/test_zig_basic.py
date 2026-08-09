@@ -11,7 +11,7 @@ import sys
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
@@ -28,7 +28,7 @@ class TestZigLanguageServer:
     due to unreliable cross-file reference functionality. Reason unknown.
     """
 
-    @pytest.mark.parametrize("language_server", [Language.ZIG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ZIG], indirect=True)
     def test_find_symbols_in_main(self, language_server: SolidLanguageServer) -> None:
         """Test finding specific symbols in main.zig."""
         file_path = os.path.join("src", "main.zig")
@@ -45,7 +45,7 @@ class TestZigLanguageServer:
         assert "main" in symbol_names, "main function not found"
         assert "greeting" in symbol_names, "greeting function not found"
 
-    @pytest.mark.parametrize("language_server", [Language.ZIG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ZIG], indirect=True)
     def test_find_symbols_in_calculator(self, language_server: SolidLanguageServer) -> None:
         """Test finding Calculator struct and its methods."""
         file_path = os.path.join("src", "calculator.zig")
@@ -88,7 +88,7 @@ class TestZigLanguageServer:
         found_methods = set(all_symbols) & expected_methods
         assert found_methods == expected_methods, f"Expected exactly {expected_methods}, found: {found_methods}"
 
-    @pytest.mark.parametrize("language_server", [Language.ZIG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ZIG], indirect=True)
     def test_find_symbols_in_math_utils(self, language_server: SolidLanguageServer) -> None:
         """Test finding functions in math_utils.zig."""
         file_path = os.path.join("src", "math_utils.zig")
@@ -104,7 +104,7 @@ class TestZigLanguageServer:
         assert "factorial" in symbol_names, "factorial function not found"
         assert "isPrime" in symbol_names, "isPrime function not found"
 
-    @pytest.mark.parametrize("language_server", [Language.ZIG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ZIG], indirect=True)
     def test_find_references_within_file(self, language_server: SolidLanguageServer) -> None:
         """Test finding references within the same file."""
         file_path = os.path.join("src", "calculator.zig")
@@ -141,7 +141,7 @@ class TestZigLanguageServer:
         for line in test_lines:
             assert line in ref_lines, f"Should find Calculator reference at line {line + 1}, found at lines {[l + 1 for l in ref_lines]}"
 
-    @pytest.mark.parametrize("language_server", [Language.ZIG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ZIG], indirect=True)
     @pytest.mark.skipif(
         sys.platform == "win32", reason="ZLS cross-file references don't work reliably on Windows - URI path handling issues"
     )
@@ -204,7 +204,7 @@ class TestZigLanguageServer:
                         f"Calculator reference in main.zig should be at line 8 (0-indexed: 7), found at line {main_ref_line + 1}"
                     )
 
-    @pytest.mark.parametrize("language_server", [Language.ZIG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ZIG], indirect=True)
     def test_cross_file_references_within_file(self, language_server: SolidLanguageServer) -> None:
         """
         Test that ZLS finds references within the same file.
@@ -245,7 +245,7 @@ class TestZigLanguageServer:
         for line in test_lines:
             assert line in ref_lines, f"Should find Calculator reference at line {line + 1}, found at lines {[l + 1 for l in ref_lines]}"
 
-    @pytest.mark.parametrize("language_server", [Language.ZIG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ZIG], indirect=True)
     @pytest.mark.skipif(
         sys.platform == "win32", reason="ZLS cross-file references don't work reliably on Windows - URI path handling issues"
     )
@@ -273,7 +273,7 @@ class TestZigLanguageServer:
         calc_def = definitions[0]
         assert "calculator.zig" in calc_def.get("uri", ""), "Definition should be in calculator.zig"
 
-    @pytest.mark.parametrize("language_server", [Language.ZIG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ZIG], indirect=True)
     @pytest.mark.skipif(
         sys.platform == "win32", reason="ZLS cross-file references don't work reliably on Windows - URI path handling issues"
     )
@@ -294,7 +294,7 @@ class TestZigLanguageServer:
             math_def = [d for d in definitions if "math_utils.zig" in d.get("uri", "")]
             assert len(math_def) > 0, "Should find factorial definition in math_utils.zig"
 
-    @pytest.mark.parametrize("language_server", [Language.ZIG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ZIG], indirect=True)
     def test_verify_cross_file_imports(self, language_server: SolidLanguageServer) -> None:
         """Verify that our test files have proper cross-file imports."""
         # Verify main.zig imports
@@ -322,7 +322,7 @@ class TestZigLanguageServer:
         assert "factorial" in math_names, "factorial function should be in math_utils.zig"
         assert "isPrime" in math_names, "isPrime function should be in math_utils.zig"
 
-    @pytest.mark.parametrize("language_server", [Language.ZIG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ZIG], indirect=True)
     def test_hover_information(self, language_server: SolidLanguageServer) -> None:
         """Test hover information for symbols."""
         file_path = os.path.join("src", "main.zig")
@@ -336,7 +336,7 @@ class TestZigLanguageServer:
         if isinstance(hover_info, dict):
             assert "contents" in hover_info or "value" in hover_info, "Hover should have contents"
 
-    @pytest.mark.parametrize("language_server", [Language.ZIG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ZIG], indirect=True)
     def test_full_symbol_tree(self, language_server: SolidLanguageServer) -> None:
         """Test that full symbol tree is not empty."""
         symbols = language_server.request_full_symbol_tree()
@@ -349,7 +349,7 @@ class TestZigLanguageServer:
         assert isinstance(root, dict), "Root should be a dict"
         assert "name" in root, "Root should have a name"
 
-    @pytest.mark.parametrize("language_server", [Language.ZIG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ZIG], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []
@@ -362,7 +362,7 @@ class TestZigLanguageServer:
                 pytrace=False,
             )
 
-    @pytest.mark.parametrize("language_server", [Language.ZIG], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ZIG], indirect=True)
     def test_file_diagnostics(self, language_server: SolidLanguageServer) -> None:
         assert_file_diagnostics(
             language_server,

@@ -1,16 +1,16 @@
 import pytest
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import Language
-from test.conftest import language_tests_enabled
+from solidlsp.ls_config import LanguageServerId
+from test.conftest import language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
 
-@pytest.mark.skipif(not language_tests_enabled(Language.JULIA), reason="Julia tests are disabled (julia not available)")
+@pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.JULIA), reason="Julia tests are disabled (julia not available)")
 @pytest.mark.julia
 class TestJuliaLanguageServer:
-    @pytest.mark.parametrize("language_server", [Language.JULIA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.JULIA], indirect=True)
     def test_julia_symbols(self, language_server: SolidLanguageServer):
         """
         Test if we can find the top-level symbols in the main.jl file.
@@ -20,7 +20,7 @@ class TestJuliaLanguageServer:
         assert "calculate_sum" in symbol_names
         assert "main" in symbol_names
 
-    @pytest.mark.parametrize("language_server", [Language.JULIA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.JULIA], indirect=True)
     def test_julia_within_file_references(self, language_server: SolidLanguageServer):
         """
         Test finding references to a function within the same file.
@@ -36,7 +36,7 @@ class TestJuliaLanguageServer:
         reference_paths = [ref["relativePath"] for ref in references]
         assert "main.jl" in reference_paths
 
-    @pytest.mark.parametrize("language_server", [Language.JULIA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.JULIA], indirect=True)
     def test_julia_cross_file_references(self, language_server: SolidLanguageServer):
         """
         Test finding references to a function defined in another file.
@@ -53,7 +53,7 @@ class TestJuliaLanguageServer:
         # The reference might be in either file (definition or usage)
         assert "main.jl" in reference_paths or "lib/helper.jl" in reference_paths
 
-    @pytest.mark.parametrize("language_server", [Language.JULIA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.JULIA], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []
@@ -66,7 +66,7 @@ class TestJuliaLanguageServer:
                 pytrace=False,
             )
 
-    @pytest.mark.parametrize("language_server", [Language.JULIA], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.JULIA], indirect=True)
     def test_file_diagnostics(self, language_server: SolidLanguageServer) -> None:
         assert_file_diagnostics(
             language_server,

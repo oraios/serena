@@ -33,6 +33,7 @@ Some of the configurable settings include:
   * logging settings
   * the set of trusted project paths
   * advanced settings specific to individual language servers (see [below](ls-specific-settings))
+  * priorities of language servers, which affect auto-detection 
 
 The global configuration settings apply to all projects.
 Some of the settings it contains can, however, be *extended* or *overridden* in project-specific settings, contexts and modes.
@@ -73,6 +74,7 @@ Serena comes with pre-defined contexts:
   The full set of Serena's tools is provided, as the application is assumed to have no prior coding-specific capabilities.
 * `claude-code`: Optimized for use with Claude Code, it disables tools that would duplicate Claude Code's built-in capabilities.
 * `codex`: Optimized for use with OpenAI Codex.
+* `grok`: Optimized for use with xAI's Grok Build CLI.
 * `ide`: Generic context for IDE assistants/coding agents, e.g. VSCode, Cursor, or Cline, focusing on augmenting existing capabilities.
   Basic file operations and shell execution are assumed to be handled by the assistant's own capabilities.
 * `agent`: Designed for scenarios where Serena acts as a more autonomous agent, for example, when used with Agno.
@@ -81,7 +83,7 @@ Choose the context that best matches the type of integration you are using.
 
 Find the concrete definitions of the above contexts [here](https://github.com/oraios/serena/tree/main/src/serena/resources/config/contexts).
 
-Note that the contexts `ide` and `claude-code` are **single-project contexts** (defining `single_project: true`).
+Note that the contexts `ide`, `claude-code`, and `grok` are **single-project contexts** (defining `single_project: true`).
 For such contexts, if a project is provided at startup, the set of tools is limited to those required by the project's
 concrete configuration, and other tools are excluded completely, allowing the set of tools to be minimal.
 Tools explicitly disabled by the project will not be available at all. Since changing the active project
@@ -152,6 +154,43 @@ You can manage modes using the `mode` command,
     serena mode create <mode-name>
     serena mode edit <mode-name>
     serena mode delete <mode-name>
+
+(prompt-templates)=
+## Prompt Templates
+
+All prompts that Serena provides to the LLM are [Jinja2](https://jinja.palletsprojects.com/) templates.
+Templating applies to
+
+ * **Serena's system prompt** (the "Serena Instructions Manual"), which is defined in the prompt template `system_prompt`
+   (see [Custom Prompts](custom-prompts) for how to override it),
+ * **context and mode prompts**, i.e. the `prompt` field in context and mode definition files, and
+ * **the project prompt**, i.e. `initial_prompt` in `project.yml`, which is provided to the LLM upon project activation.
+
+Templating allows prompts to adapt to the active configuration; for instance, a mode prompt can mention a tool
+only if that tool is actually available in the current session.
+
+### Variables and Functions
+
+The following variables can be used in all of the above templates:
+
+| Variable            | Description                                                                                                                                                                                                                                                                                                                                                |
+|---------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `available_tools`   | the list of names of the tools that are currently exposed to the LLM. Use it to include content conditionally, e.g. `{% if 'replace_content' in available_tools %}…{% endif %}`.                                                                                                                                                                           |
+| `available_markers` | the list of names of the tool markers (tool categories, e.g. `ToolMarkerSymbolicRead`) for which at least one tool is exposed; useful for conditioning on entire groups of tools.                                                                                                                                                                          |
+| `tool_names`        | a mapping from canonical tool names to effective tool names, which accounts for legacy tool renames as well as for tools being functionally replaced due to the active language backend (e.g. `find_symbol` being replaced by `jet_brains_find_symbol` when the JetBrains backend is active). Prefer `{{ tool_names['find_symbol'] }}` over hard-coded names. |
+
+Context, mode and project prompts (but not Serena's system prompt) additionally support the following function:
+
+| Function             | Description                                                                                                                                                                                                                                                                       |
+|----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `embed_memory(name)` | embeds the content of the memory with the given name, wrapped in a tag `<memory name="...">`. Use this to inline knowledge that shall always be provided to the LLM rather than being loaded on demand. If the memory cannot be loaded, an error is logged and nothing is rendered. |
+
+For example, a project can inline its coding conventions from a memory into the project prompt:
+
+```yaml
+initial_prompt: |
+  {{ embed_memory("coding_conventions") }}
+```
 
 ## Advanced Configuration
 
@@ -245,7 +284,7 @@ ls_specific_settings:
 These settings are supported by all language servers whose dependency provider derives from
 `LanguageServerDependencyProviderBaseCommand`, and `ls_path` is additionally exposed by some implementations explicitly.
 Common examples include: `ansible`, `bash`, `bsl`, `clojure`, `cpp`, `cpp_ccls`, `hlsl`, `html`, `kotlin`, `lean4`, `luau`, `markdown`, `php`,
-`php_phpactor`, `python`, `rust`, `scss`, `solidity`, `systemverilog`, `toml`, `typescript`, and `yaml`.
+`nix`, `php_phpactor`, `python`, `rust`, `scss`, `solidity`, `systemverilog`, `toml`, `typescript`, and `yaml`.
 
 If `ls_path` is set, Serena's managed download or install is bypassed for that language server.
 In that case, any server-specific version or registry settings do not apply.
@@ -664,8 +703,7 @@ Supported settings:
 Java support has two installation modes:
 
 1. **Default vscode-java VSIX mode** (no extra config required): Serena downloads the platform-specific
-   vscode-java VSIX (~500 MB: JDTLS + bundled JRE 21 + Lombok + IntelliCode), Gradle distribution and
-   IntelliCode VSIX from public hosts on first use.
+   vscode-java VSIX (JDTLS + bundled JRE 21 + Lombok) and a Gradle distribution from public hosts on first use.
 2. **Upstream JDTLS mode** (offline-friendly): Activated by setting both `jdtls_path` and `lombok_path`.
    Uses an existing JDTLS installation (~100 MB) and the system JDK 21+. Nothing is downloaded.
    Recommended for restricted-network/corporate environments.
@@ -675,9 +713,8 @@ Java support has two installation modes:
 - **Default vscode-java VSIX mode** — recommended for most users. No setup required;
   Serena downloads everything on first use.
 - **Upstream JDTLS mode** — recommended when:
-  - you cannot reach `github.com`, `services.gradle.org` or `marketplace.visualstudio.com`
-    from the host (corporate proxy, air-gapped network);
-  - you want a smaller on-disk footprint (~100 MB vs ~500 MB);
+  - you cannot reach `github.com` or `services.gradle.org` from the host (corporate proxy, air-gapped network);
+  - you want a smaller on-disk footprint;
   - you already maintain a JDTLS installation (e.g. for `nvim-jdtls` or another editor);
   - your security policy prohibits per-project runtime downloads.
 
@@ -697,25 +734,26 @@ The following settings are supported for the Java language server:
 | `gradle_wrapper_enabled` | `false` | Use the project's Gradle wrapper (`gradlew`) instead of the bundled Gradle distribution. Enable this for projects with custom plugins or repositories. |
 | `gradle_java_home` | `null` | Path to the JDK used by Gradle. When unset, Gradle uses `JAVA_HOME` if `use_system_java_home` is enabled and `JAVA_HOME` is set; otherwise it falls back to Serena's bundled JRE. |
 | `use_system_java_home` | `false` | Use the system's `JAVA_HOME` environment variable for JDTLS itself and, when `gradle_java_home` is unset, Gradle import. Enable this if your project requires a specific JDK vendor or version for Gradle's JDK checks. |
+| `runtimes` | `[]` | Extra JRE/JDK entries registered with JDT-LS via `java.configuration.runtimes`. Use this when a project's source/target level exceeds the JDK JDT-LS itself runs on (currently JDK 21 in default vscode-java VSIX mode). Each entry is a mapping with required `name` (e.g. `JavaSE-25`, matching the `JavaSE-NN` container the build tool requests) and `path` (JDK/JRE home directory; must exist), plus optional `default`, `sources`, and `javadoc` (passed through to JDT-LS). Entries extend rather than replace the bundled `JavaSE-21` runtime; an entry that reuses the `JavaSE-21` name overrides the bundled one. Changing this setting invalidates the JDTLS workspace hash so a fresh import is performed. |
 | `gradle_version` | `8.14.2` | (vscode-java mode only) Override the Gradle distribution version Serena downloads by default. |
 | `vscode_java_version` | `1.54.0-923` | (vscode-java mode only) Override the bundled `vscode-java` runtime bundle version Serena downloads by default. |
-| `intellicode_version` | `1.2.30` | (vscode-java mode only) Override the IntelliCode VSIX version Serena downloads by default. |
 | `lombok_show_generated` | `true` | Show Lombok-generated methods (`getX/setX`, `builder()`, `equals/hashCode/toString`, `withX`, fluent accessors) in `find_symbol`, `get_symbols_overview` and the symbol-edit tools. Set to `false` to restore the previous JDTLS default and hide the synthetic methods (e.g. when `@Data` classes pollute the outline with too many getters/setters). Requires JDTLS commit `b2d8952` / `vscode-java >= 1.53.0`; the bundled default already meets this. |
 | `jdtls_xmx` | `3G` | Maximum heap size for the JDTLS server JVM. |
 | `jdtls_xms` | `100m` | Initial heap size for the JDTLS server JVM. |
-| `intellicode_xmx` | `1G` | (vscode-java mode only) Maximum heap size for the IntelliCode embedded JVM. |
-| `intellicode_xms` | `100m` | (vscode-java mode only) Initial heap size for the IntelliCode embedded JVM. |
 
 Notes:
 - When overriding `vscode_java_version`, Serena still assumes that the downloaded runtime bundle keeps the same internal
   directory layout and file names as the bundled default version.
-- In upstream-jdtls mode, IntelliCode is not loaded (it's an ML completions ranker that is irrelevant to Serena's
-  symbol-tools workflow), and Serena does not ship a Gradle distribution. Maven projects work via JDTLS's bundled m2e.
+- Serena does not download or load IntelliCode because its completion ranking is not used by Serena's tools. The retired
+  `intellicode_version`, `intellicode_xmx` and `intellicode_xms` keys remain accepted and ignored so existing
+  configurations continue to load; they can be removed.
+- In upstream-jdtls mode Serena does not ship a Gradle distribution. Maven projects work via JDTLS's bundled m2e.
   Gradle projects must have `./gradlew` in the project, or rely on a system-installed Gradle through Buildship's
-  default discovery rules.
-- In upstream-jdtls mode the `gradle_version`, `vscode_java_version`, `intellicode_version`,
-  `intellicode_xmx`, `intellicode_xms` settings are silently ignored — they only apply to the
-  vscode-java VSIX mode.
+  default discovery rules. The `gradle_version` and `vscode_java_version` settings are silently ignored in this mode.
+- Without `runtimes`, JDT-LS only knows about the bundled `JavaSE-21` JRE. Projects that request a newer
+  container (e.g. `sourceCompatibility = JavaVersion.VERSION_25`) then fail to resolve JDK types such as
+  `java.lang.Object`. Register the matching installed JDK via `runtimes` instead of symlinking over Serena's
+  bundled JRE directory.
 
 Example: upstream-jdtls mode (offline / corporate network):
 
@@ -736,6 +774,19 @@ ls_specific_settings:
     use_system_java_home: true
 ```
 
+Example: register an additional JDK for a project targeting a newer Java version:
+
+```yaml
+ls_specific_settings:
+  java:
+    runtimes:
+      - name: JavaSE-21
+        path: /usr/lib/jvm/java-21-openjdk
+      - name: JavaSE-25
+        path: /home/user/Java/jdk25
+        default: true
+```
+
 #### Kotlin
 
 Serena uses [JetBrains' Kotlin Language Server](https://github.com/Kotlin/kotlin-lsp) for Kotlin support.
@@ -745,15 +796,20 @@ Supported settings:
 | Setting | Default | Description |
 |---|---|---|
 | `ls_path` | managed download | Override the Kotlin Language Server executable path. |
-| `kotlin_lsp_version` | `261.13587.0` | Override the Kotlin Language Server version Serena downloads when `ls_path` is not set. |
+| `kotlin_lsp_version` | `262.9593.0` | Override the Kotlin Language Server version Serena downloads when `ls_path` is not set. |
 | `jvm_options` | `-Xmx2G` | Value assigned to `JAVA_TOOL_OPTIONS` for the Kotlin LS process. Set to `""` to disable JVM options entirely. |
+
+The managed `262.9593.0` packages include a bundled JBR. For a custom `ls_path`, point directly to
+`bin/intellij-server` (`bin/intellij-server.exe` on Windows). Serena also retains the legacy download
+layout for custom Kotlin LSP versions older than `262.4739.0`. The pinned current and frozen initial
+releases are checksum-verified; arbitrary custom versions are downloaded without checksum verification.
 
 Example:
 
 ```yaml
 ls_specific_settings:
   kotlin:
-    kotlin_lsp_version: "261.13587.0"
+    kotlin_lsp_version: "262.9593.0"
     jvm_options: "-Xmx4G -XX:+UseG1GC"
 ```
 
@@ -823,6 +879,44 @@ Supported settings:
 |---|---|---|
 | `matlab_path` | auto-detected | Path to the MATLAB installation. This overrides `MATLAB_PATH` and auto-detection, but not Serena's managed extension download. |
 | `matlab_extension_version` | `1.3.9` | Override the MathWorks VS Code extension version Serena downloads. |
+
+#### Nix
+
+Serena uses [nixd](https://github.com/nix-community/nixd) for Nix support.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | PATH/common-path discovery followed by managed installation | Absolute path to a nixd executable or launcher. When set, Serena bypasses its nixd discovery, installation, and version check. |
+| `config_path` | `null` | Absolute path to a UTF-8 JSON file containing the value of the `nixd` settings section. A leading `~` is expanded. |
+
+Example:
+
+```yaml
+ls_specific_settings:
+  nix:
+    ls_path: /absolute/path/to/nixd-project
+    config_path: /absolute/path/to/nixd-settings.json
+```
+
+The JSON document contains the settings object directly, without an outer `nixd` key:
+
+```json
+{
+  "formatting": {
+    "command": ["alejandra"]
+  },
+  "nixpkgs": {
+    "expr": "import <nixpkgs> { }"
+  },
+  "options": {}
+}
+```
+
+Serena loads this file once when creating the language server, uses it as nixd's `initializationOptions`, and serves the same effective
+settings through LSP `workspace/configuration` requests. Existing `initializationOptions` configured under `ls_specific_settings.nix`
+remain top-level overrides and are reflected in both paths. Restart Serena after changing the JSON file.
 
 
 #### Pascal (`pasls`)
@@ -913,6 +1007,19 @@ Supported settings:
 | `ignore_vendor` | `true` | Ignore directories named `vendor` while indexing the project. |
 | `maxFileSize` | unset | Forwarded as `intelephense.files.maxSize` in `initializationOptions`. |
 | `maxMemory` | unset | Forwarded as `intelephense.maxMemory` in `initializationOptions`. |
+| `file_filter` | unset | Additional file extensions (with leading dot) to treat as PHP sources, e.g. `[".module", ".install"]`; added to the defaults `.php` / `.phtml` (#1710). |
+
+Example configuration making Drupal source files visible to the symbol tools:
+
+```yaml
+ls_specific_settings:
+  php:
+    file_filter: [".module", ".install", ".inc", ".theme", ".profile", ".engine"]
+```
+
+Notes:
+- Extensions added via `file_filter` are synced into Serena's PHP source-file matcher and pushed to Intelephense as `intelephense.files.associations` globs at startup, so `find_symbol` and the language server treat the same files as PHP sources.
+- The matcher is reset on every language server activation, so one project's `file_filter` does not leak into another.
 
 #### PHP (`Phpactor`)
 
@@ -938,16 +1045,43 @@ Supported settings:
 
 #### Python
 
-Serena uses Pyright for the `python` language key.
+Serena supports several Python language servers through separate language keys.
+
+##### Pyright (`python`)
+
+Pyright is the default Python language server.
 
 Supported settings:
 
 | Setting | Default | Description |
 |---|---|---|
-| `ls_path` | current Python executable | Override the Python interpreter Serena uses to run `-m pyright.langserver`. |
+| `pyright_version` | `1.1.403` | Override the exact Pyright package version Serena launches through `uvx` / `uv tool run`. |
+| `ls_path` | managed executable | Override `pyright-langserver` and bypass the managed `uvx` / `uv tool run` invocation. The default `--stdio` argument is still applied. |
 
-Note:
-- There is currently no separate `python_ty` language key in Serena's current SolidLSP implementation.
+##### BasedPyright (`python_basedpyright`)
+
+To use [BasedPyright](https://github.com/DetachHead/basedpyright), select its separate experimental
+language key:
+
+```yaml
+languages: [python_basedpyright]
+ls_specific_settings:
+  python_basedpyright:
+    basedpyright_version: "1.39.9"
+```
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `basedpyright_version` | `1.39.9` | Override the exact BasedPyright package version Serena launches through `uvx` / `uv tool run`. |
+| `ls_path` | managed executable | Override `basedpyright-langserver` and bypass the managed `uvx` / `uv tool run` invocation. The default `--stdio` argument is still applied. |
+
+The generic [language-server launch settings](override-ls-path), including `ls_base_cmd`, `ls_args`,
+and `ls_extra_args`, apply to both servers. `ls_args` replaces the default arguments, while
+`ls_extra_args` appends to them.
+
+Other alternative Python language keys are `python_ty`, `python_pyrefly`, and `python_jedi`.
 
 #### Ruby
 
@@ -1058,8 +1192,9 @@ Supported settings:
 | `typescript_version` | `5.9.3` | Override the bundled `typescript` npm package version Serena installs when `ls_path` is not set. |
 | `typescript_language_server_version` | `5.1.3` | Override the bundled `typescript-language-server` npm package version Serena installs when `ls_path` is not set. |
 | `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
-| `indexing_timeout` | `30.0` | Timeout in seconds for waiting on tsserver's `$/progress` project-indexing signal (both at startup and before the first cross-file reference query). If indexing does not complete within this window, Serena logs a warning and proceeds anyway. Increase it for very large projects. |
+| `indexing_timeout` | `30.0` | Timeout in seconds for waiting on tsserver's `$/progress` project-indexing signal to *drain* once it has started (both at startup and before the first cross-file reference query). If indexing does not complete within this window, Serena logs a warning and proceeds anyway. Increase it for very large projects. |
 | `server_ready_timeout` | `10.0` | Timeout in seconds for waiting on the server-ready signal after initialization. If the signal does not arrive within this window, Serena logs a message and proceeds anyway. |
+| `indexing_start_grace` | `5.0` | Timeout in seconds to wait for tsserver to *start* reporting `$/progress` before the first cross-file reference query. tsserver must resolve the project graph before it can emit the first progress token, and that can take longer than the default on a very large project; if it takes longer than this window, Serena assumes no indexing was needed and may return incomplete cross-file references. Raising `indexing_timeout` alone does not help here, since this grace elapses first. Increase this for very large projects if `find_referencing_symbols`/`request_references` returns incomplete results shortly after project load. |
 
 #### Svelte
 
@@ -1149,6 +1284,7 @@ Supported settings:
 | `yaml_language_server_version` | `1.19.2` | Override the npm package version Serena installs when `ls_path` is not set. |
 | `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
 
+(custom-prompts)=
 ### Custom Prompts
 
 All of Serena's prompts can be fully customized.

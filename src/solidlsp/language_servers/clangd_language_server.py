@@ -78,7 +78,7 @@ class ClangdLanguageServer(SolidLanguageServer):
         self.resolve_main_method_available = threading.Event()
 
     @override
-    def _document_symbols_cache_fingerprint(self) -> Hashable:
+    def _raw_document_symbols_cache_fingerprint(self) -> Hashable:
         cache_format_version = 1
         cpp_settings = self._custom_settings or {}
         return (

@@ -1,10 +1,16 @@
+import json
 import logging
 import os
 import shutil
+import tempfile
+import threading
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from os import PathLike
 
-from solidlsp.settings import SolidLSPSettings
+from solidlsp.ls_utils import FileUtils, is_running_in_ci
+from solidlsp.settings import SOLIDLSP_RESOURCES_DIR, SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
@@ -214,12 +220,7 @@ class LanguageServerDependencyProviderUvx(LanguageServerDependencyProviderBaseCo
         entrypoint: str,
         python_version: str = DEFAULT_UVX_PYTHON_VERSION,
     ) -> list[str]:
-        """Build a command that runs a pinned PyPI package's console script on demand via ``uvx`` / ``uv x``.
-
-        Resolution order:
-          1. Prefer ``uvx`` (env var ``UVX`` or PATH lookup).
-          2. Fall back to ``uv x`` if only ``uv`` is on PATH.
-          3. Raise ``RuntimeError`` if neither is available.
+        """Build a command that runs a pinned PyPI package's console script on demand via ``uvx`` / ``uv tool run``.
 
         :param package: PyPI package name (e.g. ``"pyright"``).
         :param version: Pinned package version.
@@ -234,7 +235,7 @@ class LanguageServerDependencyProviderUvx(LanguageServerDependencyProviderBaseCo
 
         uv_path = shutil.which("uv")
         if uv_path is not None:
-            return [uv_path, "x", *base_args]
+            return [uv_path, "tool", "run", *base_args]  # `uv tool run` is the same as `uvx`
 
         raise RuntimeError("Could not find 'uvx' or 'uv' in PATH. Install uv (https://docs.astral.sh/uv/).")
 
@@ -244,3 +245,125 @@ class LanguageServerDependencyProviderUvx(LanguageServerDependencyProviderBaseCo
 
     def _create_launch_command_from_base_command(self, base_command: list[str]) -> list[str]:
         return base_command + list(self._extra_args)
+
+
+class DownloadedDependencyHashDatabase:
+    RESOURCE_FILE_NAME = "downloaded_dependency_hashes.json"
+    _instance: "DownloadedDependencyHashDatabase | None" = None
+    _instance_lock: threading.Lock = threading.Lock()
+
+    def __init__(self, _singleton: bool):
+        self._json_file = os.path.join(SOLIDLSP_RESOURCES_DIR, self.RESOURCE_FILE_NAME)
+        self._hashes = {}
+        if os.path.exists(self._json_file):
+            try:
+                with open(self._json_file, encoding="utf-8") as f:
+                    self._hashes = json.load(f)
+            except:
+                log.warning("Error loading %s", self._json_file, exc_info=True)
+
+    @classmethod
+    def get_instance(cls) -> "DownloadedDependencyHashDatabase":
+        if cls._instance is None:
+            with cls._instance_lock:
+                if cls._instance is None:
+                    cls._instance = DownloadedDependencyHashDatabase(True)
+        return cls._instance
+
+    def get_sha256(self, dep: "DownloadedDependency") -> str | None:
+        return self._hashes.get(dep.get_url())
+
+    class Updater:
+        def __init__(self, db: "DownloadedDependencyHashDatabase"):
+            self._db = db
+
+        def update(self, dep: "DownloadedDependency", force: bool = False) -> None:
+            """
+            :param dep: the dependency to update the hash for
+            :param force: whether to force an update even if the hash already exists
+            """
+            self._db._update(dep, force)
+
+    @contextmanager
+    def update_context(self) -> Iterator[Updater]:
+        try:
+            yield self.Updater(self)
+        finally:
+            self._save()
+
+    def _update(self, dep: "DownloadedDependency", force: bool = False) -> None:
+        if not force and dep.get_url() in self._hashes:
+            log.info("SHA256 for %s already exists, skipping update", dep.get_url())
+            return
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                path = os.path.join(temp_dir, "downloaded_dependency")
+                log.info("Downloading %s for hash calculation", dep.get_url())
+                FileUtils.download_file(dep.get_url(), path)
+                sha = FileUtils.calculate_sha256(path)
+                log.info("SHA256 for %s: %s", dep.get_url(), sha)
+                self._hashes[dep.get_url()] = sha
+        except:
+            log.warning("Error updating hash for %s", dep.get_url(), exc_info=True)
+
+    def _save(self) -> None:
+        try:
+            with open(self._json_file, "w", encoding="utf-8") as f:
+                json.dump(self._hashes, f, indent=2)
+        except:
+            log.warning("Error saving %s", self._json_file, exc_info=True)
+
+
+class DownloadedDependency:
+    """
+    Represents a dependency that can be downloaded from a URL, optionally verified against a known SHA256 hash,
+    and optionally extracted if it is an archive.
+    """
+
+    def __init__(
+        self,
+        url: str,
+        archive_type: FileUtils.ArchiveType | None = None,
+        allowed_hosts: Sequence[str] | None = None,
+        verified: bool = True,
+    ):
+        """
+        :param url: the URL of the file to be downloaded
+        :param archive_type: optional type of archive for the case where `url` points to an archive.
+            Use `None` or "binary" for a binary file (no extraction).
+        :param allowed_hosts: optional list of allowed hosts for the download URL
+        :param verified: whether to verify the downloaded file against a known SHA256 hash (if available).
+            If enabled and the hash for the URL is not known, will raise an exception in CI and issue a warning
+            in non-CI environments.
+        """
+        self._url = url
+        self._allowed_hosts = allowed_hosts
+        self._archive_type = archive_type if archive_type is not None else "binary"
+        self._verified = verified
+
+    def get_url(self) -> str:
+        return self._url
+
+    def download_to(self, target_path: str | PathLike) -> None:
+        """
+        Downloads the dependency to the specified target path.
+        If defined at construction, will apply hash verification and archive extraction.
+
+        :param target_path: the path to which the dependency should be downloaded (or extracted if applicable)
+        """
+        if not isinstance(target_path, str):
+            target_path = str(target_path)
+        if self._verified:
+            sha256 = DownloadedDependencyHashDatabase.get_instance().get_sha256(self)
+            if sha256 is None:
+                if is_running_in_ci():
+                    raise RuntimeError(
+                        f"No SHA256 hash found for {self._url}. "
+                        "Please update the hash database by running 'scripts/update_downloaded_dependency_hashes.py'."
+                    )
+                log.warning("No SHA256 hash found for %s. The downloaded file will not be verified.", self._url)
+        else:
+            sha256 = None
+        FileUtils.download_and_extract_archive_verified(
+            self._url, target_path, archive_type=self._archive_type, expected_sha256=sha256, allowed_hosts=self._allowed_hosts
+        )

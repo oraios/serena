@@ -10,7 +10,7 @@ import os
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 pytestmark = [pytest.mark.msl]
@@ -19,12 +19,12 @@ pytestmark = [pytest.mark.msl]
 class TestMslDocumentSymbols:
     """Test document symbol retrieval for mSL constructs."""
 
-    @pytest.mark.parametrize("language_server", [Language.MSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MSL], indirect=True)
     def test_ls_is_running(self, language_server: SolidLanguageServer) -> None:
         """Test that the language server starts successfully."""
         assert language_server.is_running()
 
-    @pytest.mark.parametrize("language_server", [Language.MSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MSL], indirect=True)
     def test_document_symbols_main(self, language_server: SolidLanguageServer) -> None:
         """Test that document symbols are returned for the main file."""
         doc_symbols = language_server.request_document_symbols("main.mrc")
@@ -35,7 +35,7 @@ class TestMslDocumentSymbols:
         assert "calculate.doubloons" in symbol_names, f"calculate.doubloons alias not found. Found: {symbol_names}"
         assert "show.player.info" in symbol_names, f"show.player.info alias not found. Found: {symbol_names}"
 
-    @pytest.mark.parametrize("language_server", [Language.MSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MSL], indirect=True)
     def test_document_symbols_events(self, language_server: SolidLanguageServer) -> None:
         """Test that event handlers, raw events, and menus are detected in the main file."""
         doc_symbols = language_server.request_document_symbols("main.mrc")
@@ -52,7 +52,7 @@ class TestMslDocumentSymbols:
         menus = [n for n in symbol_names if n.startswith("menu ")]
         assert len(menus) >= 1, f"Expected at least 1 menu. Found: {menus}"
 
-    @pytest.mark.parametrize("language_server", [Language.MSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MSL], indirect=True)
     def test_document_symbols_utils(self, language_server: SolidLanguageServer) -> None:
         """Test that document symbols are returned for the utils file."""
         doc_symbols = language_server.request_document_symbols("utils.mrc")
@@ -63,7 +63,7 @@ class TestMslDocumentSymbols:
         assert "is.admin" in symbol_names, f"is.admin alias not found. Found: {symbol_names}"
         assert "welcome.message" in symbol_names, f"welcome.message alias not found. Found: {symbol_names}"
 
-    @pytest.mark.parametrize("language_server", [Language.MSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MSL], indirect=True)
     def test_document_symbols_dialog_and_ctcp(self, language_server: SolidLanguageServer) -> None:
         """Test that dialog and CTCP handler definitions are detected."""
         doc_symbols = language_server.request_document_symbols("utils.mrc")
@@ -75,7 +75,7 @@ class TestMslDocumentSymbols:
         ctcp_events = [n for n in symbol_names if n.startswith("ctcp ")]
         assert len(ctcp_events) >= 1, f"Expected at least 1 ctcp handler. Found: {ctcp_events}"
 
-    @pytest.mark.parametrize("language_server", [Language.MSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MSL], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
         """Test that the full symbol tree contains expected symbols from both files."""
         from solidlsp.ls_utils import SymbolUtils
@@ -85,7 +85,7 @@ class TestMslDocumentSymbols:
         assert SymbolUtils.symbol_tree_contains_name(symbols, "format.coins"), "format.coins not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "show.player.info"), "show.player.info not found in symbol tree"
 
-    @pytest.mark.parametrize("language_server", [Language.MSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MSL], indirect=True)
     def test_bare_symbol_names(self, language_server: SolidLanguageServer) -> None:
         """Test that symbol names do not contain unexpected formatting characters."""
         all_symbols = request_all_symbols(language_server)
@@ -101,7 +101,7 @@ class TestMslDocumentSymbols:
                 pytrace=False,
             )
 
-    @pytest.mark.parametrize("language_server", [Language.MSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MSL], indirect=True)
     def test_find_references_within_file(self, language_server: SolidLanguageServer) -> None:
         """Test that references to 'greet' are found within main.mrc."""
         file_path = "main.mrc"
@@ -126,7 +126,7 @@ class TestMslDocumentSymbols:
         call_site = {"uri_suffix": "main.mrc", "line": 13}
         assert call_site in actual_locations, f"Expected reference to greet at line 13 in main.mrc, got {actual_locations}"
 
-    @pytest.mark.parametrize("language_server", [Language.MSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MSL], indirect=True)
     def test_find_references_across_files(self, language_server: SolidLanguageServer) -> None:
         """Test that references to 'format.coins' are found across main.mrc and utils.mrc."""
         # format.coins is defined in utils.mrc but called in both main.mrc and utils.mrc
@@ -152,7 +152,7 @@ class TestMslDocumentSymbols:
         main_refs = [loc for loc in actual_locations if loc["uri_suffix"] == "main.mrc"]
         assert len(main_refs) >= 1, f"Expected at least 1 reference in main.mrc, got {main_refs}"
 
-    @pytest.mark.parametrize("language_server", [Language.MSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MSL], indirect=True)
     def test_workspace_symbol(self, language_server: SolidLanguageServer) -> None:
         """Test that workspace symbol search returns results."""
         result = language_server.request_workspace_symbol("greet")

@@ -2,20 +2,30 @@
 
 import logging
 import os
-import pathlib
 import shutil
 import subprocess
 import threading
 import time
+from collections.abc import Hashable
 
 from overrides import override
 
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.ls import RawDocumentSymbol, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_utils import is_running_in_ci
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
+
+ARITY_SEPARATOR = "#"
+"""
+The character that replaces the `/` in the `name/arity` identifiers reported by Erlang LS.
+
+`#` was chosen because it cannot occur in an unquoted Erlang atom, so it can never collide with a
+real function, type or macro name (unlike `@`, which is a legal atom character).
+"""
 
 
 class ErlangLanguageServer(SolidLanguageServer):
@@ -47,10 +57,30 @@ class ErlangLanguageServer(SolidLanguageServer):
         # Set generous timeout for Erlang LS initialization
         self.set_request_timeout(120.0)
 
+    @override
+    def _document_symbols_cache_fingerprint(self) -> Hashable:
+        normalize_symbol_name_version = 1
+        return normalize_symbol_name_version
+
+    @override
+    def _normalize_symbol_name(self, symbol: RawDocumentSymbol, relative_file_path: str) -> str:
+        """
+        Replaces the `/` in Erlang's `name/arity` identifiers, which would otherwise be interpreted
+        as Serena's name path separator.
+
+        Erlang LS names functions, types and parameterised macros `name/arity` (e.g. `create_user/2`).
+        Since `/` separates name path components, such a name is parsed as "symbol `2` nested inside
+        `create_user`" and can never be matched, not even by the very name path that Serena itself
+        reports for the symbol. The arity is not simply dropped because it is part of a function's
+        identity in Erlang: `create_user/2` and `create_user/3` are different functions which may
+        both be defined in the same module.
+        """
+        return symbol["name"].replace("/", ARITY_SEPARATOR)
+
     def _check_erlang_installation(self) -> bool:
         """Check if Erlang/OTP is available."""
         try:
-            result = subprocess.run(["erl", "-version"], check=False, capture_output=True, text=True, timeout=10)
+            result = subprocess_run(["erl", "-version"], check=False, capture_output=True, text=True, timeout=10)
             return result.returncode == 0
         except (subprocess.SubprocessError, FileNotFoundError):
             return False
@@ -59,7 +89,7 @@ class ErlangLanguageServer(SolidLanguageServer):
     def _get_erlang_version(cls) -> str | None:
         """Get the installed Erlang/OTP version or None if not found."""
         try:
-            result = subprocess.run(["erl", "-version"], check=False, capture_output=True, text=True, timeout=10)
+            result = subprocess_run(["erl", "-version"], check=False, capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
                 return result.stderr.strip()  # erl -version outputs to stderr
         except (subprocess.SubprocessError, FileNotFoundError):
@@ -70,10 +100,29 @@ class ErlangLanguageServer(SolidLanguageServer):
     def _check_rebar3_available(cls) -> bool:
         """Check if rebar3 build tool is available."""
         try:
-            result = subprocess.run(["rebar3", "version"], check=False, capture_output=True, text=True, timeout=10)
+            result = subprocess_run(["rebar3", "version"], check=False, capture_output=True, text=True, timeout=10)
             return result.returncode == 0
         except (subprocess.SubprocessError, FileNotFoundError):
             return False
+
+    def _create_base_initialize_params(self) -> dict:
+        """
+        Returns the base initialize params for Erlang LS.
+
+        processId, rootPath, rootUri, clientInfo and workspaceFolders are added by the builder.
+        """
+        return {
+            "capabilities": {
+                "textDocument": {
+                    "synchronization": {"didSave": True},
+                    "completion": {"dynamicRegistration": True},
+                    "definition": {"dynamicRegistration": True},
+                    "references": {"dynamicRegistration": True},
+                    "documentSymbol": {"dynamicRegistration": True},
+                    "hover": {"dynamicRegistration": True},
+                }
+            },
+        }
 
     def _start_server(self) -> None:
         """Start Erlang LS server process with proper initialization waiting."""
@@ -131,25 +180,8 @@ class ErlangLanguageServer(SolidLanguageServer):
         log.info("Starting Erlang LS server process")
         self.server.start()
 
-        # Send initialize request
-        initialize_params = {
-            "processId": None,
-            "rootPath": self.repository_root_path,
-            "rootUri": pathlib.Path(self.repository_root_path).as_uri(),
-            "capabilities": {
-                "textDocument": {
-                    "synchronization": {"didSave": True},
-                    "completion": {"dynamicRegistration": True},
-                    "definition": {"dynamicRegistration": True},
-                    "references": {"dynamicRegistration": True},
-                    "documentSymbol": {"dynamicRegistration": True},
-                    "hover": {"dynamicRegistration": True},
-                }
-            },
-        }
-
         log.info("Sending initialize request to Erlang LS")
-        init_response = self.server.send.initialize(initialize_params)  # type: ignore[arg-type]
+        init_response = self.server.send.initialize(self._create_initialize_params())
 
         # Verify server capabilities
         if "capabilities" in init_response:
@@ -158,7 +190,7 @@ class ErlangLanguageServer(SolidLanguageServer):
         self.server.notify.initialized({})
 
         # Wait for Erlang LS to be ready - adjust timeout based on environment
-        is_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
+        is_ci = is_running_in_ci()
         is_macos = os.uname().sysname == "Darwin" if hasattr(os, "uname") else False
 
         # macOS in CI can be particularly slow for language server startup

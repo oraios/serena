@@ -5,13 +5,13 @@ import pytest
 from serena.symbol import LanguageServerSymbol
 from solidlsp import SolidLanguageServer
 from solidlsp.language_servers.al_language_server import ALLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
-from test.conftest import language_tests_enabled
+from test.conftest import language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
-pytestmark = [pytest.mark.al, pytest.mark.skipif(not language_tests_enabled(Language.AL), reason="AL tests are disabled")]
+pytestmark = [pytest.mark.al, pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.AL), reason="AL tests are disabled")]
 
 
 class TestExtractALDisplayName:
@@ -62,7 +62,7 @@ class TestExtractALDisplayName:
 
 @pytest.mark.al
 class TestALLanguageServer:
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_symbol_names_are_normalized(self, language_server: SolidLanguageServer) -> None:
         """Test that AL symbol names are normalized (metadata stripped)."""
         file_path = os.path.join("src", "Tables", "Customer.Table.al")
@@ -79,7 +79,7 @@ class TestALLanguageServer:
         # Name should be just "TEST Customer", not "Table 50000 'TEST Customer'"
         assert customer_table["name"] == "TEST Customer", f"Expected normalized name 'TEST Customer', got '{customer_table['name']}'"
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_find_symbol_exact_match(self, language_server: SolidLanguageServer) -> None:
         """Test that find_symbol can match AL symbols by normalized name without substring_matching."""
         file_path = os.path.join("src", "Tables", "Customer.Table.al")
@@ -96,7 +96,7 @@ class TestALLanguageServer:
 
         pytest.fail("Could not find 'TEST Customer' symbol by exact name match")
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_find_codeunit_exact_match(self, language_server: SolidLanguageServer) -> None:
         """Test finding a codeunit by its normalized name."""
         file_path = os.path.join("src", "Codeunits", "CustomerMgt.Codeunit.al")
@@ -112,7 +112,7 @@ class TestALLanguageServer:
 
         pytest.fail("Could not find 'CustomerMgt' symbol by exact name match")
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
         """Test that AL Language Server can find symbols in the test repository with normalized names."""
         symbols = language_server.request_full_symbol_tree()
@@ -136,7 +136,7 @@ class TestALLanguageServer:
         # Check for interface symbol
         assert SymbolUtils.symbol_tree_contains_name(symbols, "IPaymentProcessor"), "IPaymentProcessor interface not found in symbol tree"
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_find_table_fields(self, language_server: SolidLanguageServer) -> None:
         """Test that AL Language Server can find fields within a table."""
         file_path = os.path.join("src", "Tables", "Customer.Table.al")
@@ -169,7 +169,7 @@ class TestALLanguageServer:
                 assert any("Name" in name for name in field_names), f"Name field not found. Fields: {field_names}"
                 assert any("Balance" in name for name in field_names), f"Balance field not found. Fields: {field_names}"
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_find_procedures(self, language_server: SolidLanguageServer) -> None:
         """Test that AL Language Server can find procedures in codeunits."""
         file_path = os.path.join("src", "Codeunits", "CustomerMgt.Codeunit.al")
@@ -191,7 +191,7 @@ class TestALLanguageServer:
             assert any("CreateCustomer" in name for name in procedure_names), "CreateCustomer procedure not found"
             assert any("TestNoSeries" in name for name in procedure_names), "TestNoSeries procedure not found"
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test that AL Language Server can find references to symbols."""
         # Find references to the Customer table from the CustomerMgt codeunit
@@ -220,7 +220,7 @@ class TestALLanguageServer:
                 "Customer table should be referenced in CustomerCard.Page.al"
             )
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_cross_file_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test that AL Language Server can handle cross-file symbol relationships."""
         # Get all symbols to verify cross-file visibility
@@ -290,7 +290,7 @@ class TestALHoverInjection:
                         return hover, None
         return None, None
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_hover_table_injects_full_name(self, language_server: SolidLanguageServer) -> None:
         """Test that hovering over a Table symbol shows the full object name with ID."""
         file_path = os.path.join("src", "Tables", "Customer.Table.al")
@@ -300,7 +300,7 @@ class TestALHoverInjection:
         assert value is not None, "Hover should have content"
         assert '**Table 50000 "TEST Customer"**' in value, f"Hover should contain full Table name with ID. Got: {value[:200]}"
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_hover_page_injects_full_name(self, language_server: SolidLanguageServer) -> None:
         """Test that hovering over a Page symbol shows the full object name with ID."""
         file_path = os.path.join("src", "Pages", "CustomerCard.Page.al")
@@ -310,7 +310,7 @@ class TestALHoverInjection:
         assert value is not None, "Hover should have content"
         assert '**Page 50001 "TEST Customer Card"**' in value, f"Hover should contain full Page name with ID. Got: {value[:200]}"
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_hover_codeunit_injects_full_name(self, language_server: SolidLanguageServer) -> None:
         """Test that hovering over a Codeunit symbol shows the full object name with ID."""
         file_path = os.path.join("src", "Codeunits", "CustomerMgt.Codeunit.al")
@@ -320,7 +320,7 @@ class TestALHoverInjection:
         assert value is not None, "Hover should have content"
         assert "**Codeunit 50000 CustomerMgt**" in value, f"Hover should contain full Codeunit name with ID. Got: {value[:200]}"
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_hover_enum_injects_full_name(self, language_server: SolidLanguageServer) -> None:
         """Test that hovering over an Enum symbol shows the full object name with ID."""
         file_path = os.path.join("src", "Enums", "CustomerType.Enum.al")
@@ -330,7 +330,7 @@ class TestALHoverInjection:
         assert value is not None, "Hover should have content"
         assert "**Enum 50000 CustomerType**" in value, f"Hover should contain full Enum name with ID. Got: {value[:200]}"
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_hover_interface_injects_full_name(self, language_server: SolidLanguageServer) -> None:
         """Test that hovering over an Interface symbol shows the full object name (no ID for interfaces)."""
         file_path = os.path.join("src", "Interfaces", "IPaymentProcessor.Interface.al")
@@ -340,7 +340,7 @@ class TestALHoverInjection:
         assert value is not None, "Hover should have content"
         assert "**Interface IPaymentProcessor**" in value, f"Hover should contain full Interface name. Got: {value[:200]}"
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_hover_procedure_no_injection(self, language_server: SolidLanguageServer) -> None:
         """Test that hovering over a procedure does NOT inject object name (procedures are not normalized)."""
         file_path = os.path.join("src", "Codeunits", "CustomerMgt.Codeunit.al")
@@ -353,7 +353,7 @@ class TestALHoverInjection:
         # But should contain procedure info
         assert "CreateCustomer" in value, f"Hover should contain procedure name. Got: {value[:200]}"
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_hover_field_no_injection(self, language_server: SolidLanguageServer) -> None:
         """Test that hovering over a field does NOT inject object name (fields are not normalized)."""
         file_path = os.path.join("src", "Tables", "Customer.Table.al")
@@ -380,7 +380,7 @@ class TestALHoverInjection:
 
         pytest.fail("Could not find a field to test hover on")
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_hover_multiple_objects_correct_injection(self, language_server: SolidLanguageServer) -> None:
         """Test that multiple AL objects each get their correct full name injected."""
         test_cases = [
@@ -398,7 +398,7 @@ class TestALHoverInjection:
                 f"Hover for {symbol_name} should contain '{expected_full_name}'. Got: {value[:200]}"
             )
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_hover_contains_separator_after_injection(self, language_server: SolidLanguageServer) -> None:
         """Test that injected hover has a separator between injected name and original content."""
         file_path = os.path.join("src", "Tables", "Customer.Table.al")
@@ -413,7 +413,7 @@ class TestALHoverInjection:
         separator_pos = value.find("---")
         assert separator_pos > bold_end, "Separator should come after the injected name"
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_hover_preserves_original_content(self, language_server: SolidLanguageServer) -> None:
         """Test that the original hover content is preserved after the injected name."""
         file_path = os.path.join("src", "Tables", "Customer.Table.al")
@@ -430,7 +430,7 @@ class TestALHoverInjection:
 class TestALPathNormalization:
     """Tests for path normalization in hover injection cache."""
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_hover_with_forward_slash_path(self, language_server: SolidLanguageServer) -> None:
         """Test that hover injection works with forward slash paths."""
         file_path = "src/Tables/Customer.Table.al"
@@ -451,7 +451,7 @@ class TestALPathNormalization:
 
         pytest.fail("Could not find TEST Customer symbol")
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_hover_with_backslash_path(self, language_server: SolidLanguageServer) -> None:
         """Test that hover injection works with backslash paths (Windows style)."""
         file_path = "src\\Tables\\Customer.Table.al"
@@ -472,7 +472,7 @@ class TestALPathNormalization:
 
         pytest.fail("Could not find TEST Customer symbol")
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_hover_with_mixed_path_formats_symbols_backslash_hover_forward(self, language_server: SolidLanguageServer) -> None:
         """Test hover works when symbols requested with backslash but hover with forward slash."""
         file_path_backslash = "src\\Tables\\Customer.Table.al"
@@ -499,7 +499,7 @@ class TestALPathNormalization:
 
         pytest.fail("Could not find TEST Customer symbol")
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_hover_with_mixed_path_formats_symbols_forward_hover_backslash(self, language_server: SolidLanguageServer) -> None:
         """Test hover works when symbols requested with forward slash but hover with backslash."""
         file_path_forward = "src/Tables/Customer.Table.al"
@@ -526,7 +526,7 @@ class TestALPathNormalization:
 
         pytest.fail("Could not find TEST Customer symbol")
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_hover_caching_multiple_files_different_path_formats(self, language_server: SolidLanguageServer) -> None:
         """Test that hover injection cache works correctly across multiple files with different path formats."""
         test_cases = [
@@ -559,7 +559,7 @@ class TestALPathNormalization:
                     )
                     break
 
-    @pytest.mark.parametrize("language_server", [Language.AL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.AL], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

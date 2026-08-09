@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 
 pytestmark = pytest.mark.toml
 
@@ -21,8 +21,8 @@ pytestmark = pytest.mark.toml
 class TestTomlSymbolRetrieval:
     """Test advanced symbol retrieval functionality for TOML files."""
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_request_containing_symbol_behavior(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test request_containing_symbol behavior for TOML files.
 
@@ -36,8 +36,8 @@ class TestTomlSymbolRetrieval:
         # This is expected behavior for a configuration file format
         assert containing_symbol is None, "TOML LSP doesn't support containing symbol lookup"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_request_document_overview_cargo(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test request_document_overview for Cargo.toml."""
         overview = language_server.request_document_overview("Cargo.toml")
@@ -52,8 +52,8 @@ class TestTomlSymbolRetrieval:
         expected_tables = {"package", "dependencies", "dev-dependencies", "features", "workspace"}
         assert expected_tables.issubset(symbol_names), f"Missing expected tables in overview: {expected_tables - symbol_names}"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_request_document_overview_pyproject(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test request_document_overview for pyproject.toml."""
         overview = language_server.request_document_overview("pyproject.toml")
@@ -68,8 +68,8 @@ class TestTomlSymbolRetrieval:
         assert "project" in symbol_names, "Should detect 'project' table"
         assert "build-system" in symbol_names, "Should detect 'build-system' table"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_request_full_symbol_tree(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test request_full_symbol_tree returns TOML files."""
         symbol_tree = language_server.request_full_symbol_tree()
@@ -89,8 +89,8 @@ class TestTomlSymbolRetrieval:
             f"Should find Cargo.toml in tree, got: {child_names}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_request_dir_overview(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test request_dir_overview returns symbols for TOML files."""
         overview = language_server.request_dir_overview(".")
@@ -103,8 +103,8 @@ class TestTomlSymbolRetrieval:
         assert any("Cargo.toml" in path for path in file_paths), f"Should find Cargo.toml in overview, got: {file_paths}"
         assert any("pyproject.toml" in path for path in file_paths), f"Should find pyproject.toml in overview, got: {file_paths}"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_symbol_hierarchy_in_cargo(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that symbol hierarchy is properly preserved in Cargo.toml."""
         all_symbols, root_symbols = language_server.request_document_symbols("Cargo.toml").get_all_symbols_and_roots()
@@ -122,8 +122,8 @@ class TestTomlSymbolRetrieval:
         assert "version" in child_names, "'package' should have 'version' child"
         assert "edition" in child_names, "'package' should have 'edition' child"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_symbol_hierarchy_in_pyproject(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that symbol hierarchy is properly preserved in pyproject.toml."""
         all_symbols, root_symbols = language_server.request_document_symbols("pyproject.toml").get_all_symbols_and_roots()
@@ -140,8 +140,8 @@ class TestTomlSymbolRetrieval:
         assert "name" in child_names, "'project' should have 'name' child"
         assert "version" in child_names, "'project' should have 'version' child"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_tool_section_hierarchy(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that tool sections in pyproject.toml are properly structured."""
         all_symbols, root_symbols = language_server.request_document_symbols("pyproject.toml").get_all_symbols_and_roots()
@@ -156,8 +156,8 @@ class TestTomlSymbolRetrieval:
 
         assert has_ruff or has_mypy or has_pytest, f"Should detect tool sections, got names: {all_names}"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_array_of_tables_symbol(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that [[bin]] array of tables is detected."""
         all_symbols, root_symbols = language_server.request_document_symbols("Cargo.toml").get_all_symbols_and_roots()

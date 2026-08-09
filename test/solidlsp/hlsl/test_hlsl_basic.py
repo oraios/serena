@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
@@ -30,19 +30,19 @@ def _find_symbol_by_name(language_server: SolidLanguageServer, file_path: str, n
 class TestHlslSymbols:
     """Tests for document symbol extraction."""
 
-    @pytest.mark.parametrize("language_server", [Language.HLSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HLSL], indirect=True)
     def test_find_struct(self, language_server: SolidLanguageServer) -> None:
         """VertexInput struct should appear in common.hlsl symbols."""
         symbol = _find_symbol_by_name(language_server, "common.hlsl", "VertexInput")
         assert symbol is not None, "Expected 'VertexInput' struct in document symbols"
 
-    @pytest.mark.parametrize("language_server", [Language.HLSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HLSL], indirect=True)
     def test_find_function(self, language_server: SolidLanguageServer) -> None:
         """SafeNormalize function should appear in common.hlsl."""
         symbol = _find_symbol_by_name(language_server, "common.hlsl", "SafeNormalize")
         assert symbol is not None, "Expected 'SafeNormalize' function in document symbols"
 
-    @pytest.mark.parametrize("language_server", [Language.HLSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HLSL], indirect=True)
     def test_find_cbuffer_members(self, language_server: SolidLanguageServer) -> None:
         """Cbuffer members should appear as variables in compute_test.hlsl.
 
@@ -52,13 +52,13 @@ class TestHlslSymbols:
         symbol = _find_symbol_by_name(language_server, "compute_test.hlsl", "TextureSize")
         assert symbol is not None, "Expected 'TextureSize' cbuffer member in document symbols"
 
-    @pytest.mark.parametrize("language_server", [Language.HLSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HLSL], indirect=True)
     def test_find_compute_kernel(self, language_server: SolidLanguageServer) -> None:
         """CSMain kernel should appear in compute_test.hlsl."""
         symbol = _find_symbol_by_name(language_server, "compute_test.hlsl", "CSMain")
         assert symbol is not None, "Expected 'CSMain' compute kernel in document symbols"
 
-    @pytest.mark.parametrize("language_server", [Language.HLSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HLSL], indirect=True)
     def test_full_symbol_tree(self, language_server: SolidLanguageServer) -> None:
         """Full symbol tree should contain symbols from multiple files."""
         symbols = language_server.request_full_symbol_tree()
@@ -73,7 +73,7 @@ class TestHlslSymbols:
 class TestHlslDefinition:
     """Tests for go-to-definition capability."""
 
-    @pytest.mark.parametrize("language_server", [Language.HLSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HLSL], indirect=True)
     def test_goto_definition_cross_file(self, language_server: SolidLanguageServer) -> None:
         """Navigating to SafeNormalize call in lighting.hlsl should resolve to common.hlsl.
 
@@ -85,7 +85,7 @@ class TestHlslDefinition:
         def_paths = [d.get("relativePath", d.get("uri", "")) for d in definitions]
         assert any("common.hlsl" in p for p in def_paths), f"Expected definition in common.hlsl, got: {def_paths}"
 
-    @pytest.mark.parametrize("language_server", [Language.HLSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HLSL], indirect=True)
     def test_goto_definition_cross_file_remap(self, language_server: SolidLanguageServer) -> None:
         """Navigating to Remap call in compute_test.hlsl should resolve to common.hlsl.
 
@@ -109,7 +109,7 @@ class TestHlslReferences:
     request_references is expected to return an empty list.
     """
 
-    @pytest.mark.parametrize("language_server", [Language.HLSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HLSL], indirect=True)
     def test_references_not_supported(self, language_server: SolidLanguageServer) -> None:
         """References request should raise because shader-language-server does not support it.
 
@@ -137,7 +137,7 @@ def _extract_hover_text(hover_info: dict[str, Any]) -> str:
 class TestHlslHover:
     """Tests for hover information."""
 
-    @pytest.mark.parametrize("language_server", [Language.HLSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HLSL], indirect=True)
     def test_hover_on_function(self, language_server: SolidLanguageServer) -> None:
         """Hovering over SafeNormalize definition should return info.
 
@@ -150,7 +150,7 @@ class TestHlslHover:
         hover_text = _extract_hover_text(hover_info)
         assert len(hover_text) > 0, "Hover text should not be empty"
 
-    @pytest.mark.parametrize("language_server", [Language.HLSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HLSL], indirect=True)
     def test_hover_on_struct(self, language_server: SolidLanguageServer) -> None:
         """Hovering over VertexInput should return struct info.
 
@@ -161,7 +161,7 @@ class TestHlslHover:
         assert hover_info is not None, "Hover should return information for VertexInput"
         assert "contents" in hover_info, "Hover should have contents"
 
-    @pytest.mark.parametrize("language_server", [Language.HLSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HLSL], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

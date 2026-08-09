@@ -1,0 +1,45 @@
+<div class="news-item">
+    <h3>Serena v1.6.0</h3>
+    <p class="date">July 16, 2026</p>
+    <p>
+        A lot has happened since the last news item for v1.3.0. Here are the highlights:
+    </p>
+    <p>
+        <b>Extended Memory System.</b>
+        Memories can now reference each other via the <code>mem:&lt;name&gt;</code> convention (renames propagate automatically),
+        and a new <code>serena memories</code> CLI command group supports listing, reading, writing and integrity checking.
+        See the <a target="_blank" href="https://oraios.github.io/serena/02-usage/045_memories.html">memories documentation</a> for details.
+    </p>
+    <p>
+        <b>Trusted Projects &amp; Activation Commands.</b>
+        The new global setting <code>trusted_project_path_patterns</code> introduces the notion of trusted projects,
+        which may define an <code>activation_command</code> that is run before the language backend initialises
+        (e.g. to generate sources a language server needs) as well as language server-specific settings.
+    </p>
+    <p>
+        <b>Expanded Language Support.</b>
+        New languages for the LSP backend: GDScript (Godot Engine), CUE, QML, and LaTeX (experimental);
+        PHPantom was added as an alternative PHP language server.
+    </p>
+    <p>
+        <b>New Tools &amp; Configurability.</b>
+        The new <code>replace_in_files</code> tool applies pattern replacements across multiple files in one call.
+        Language server launching and indexing became more configurable,
+        and the JetBrains backend can now auto-launch IDE instances upon project activation
+        via <code>jetbrains_launch_command</code>.
+    </p>
+    <p>
+        <b>Robustness &amp; Fixes.</b>
+        A multitude of fixes and improvements across the board, including many language servers
+        (Java, TypeScript, Svelte, C#, Julia, Perl, and more), the dashboard,
+        the CLI (git worktree handling), and general token efficiency.
+    </p>
+    <p>
+        See our <a target="_blank" href="https://github.com/oraios/serena/blob/main/CHANGELOG.md">change log</a> for the full list of changes.
+    </p>
+    <p>
+        <b>Update Now.</b>
+        If you are using the uv tool installation of Serena, upgrade as follows:<br>
+        uv tool upgrade serena-agent
+    </p>
+</div>

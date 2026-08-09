@@ -10,8 +10,8 @@ services:
       dockerfile: Dockerfile
       target: production
     ports:
-      - "${SERENA_PORT:-9121}:9121"  # MCP server port
-      - "${SERENA_DASHBOARD_PORT:-24282}:24282"  # Dashboard port (default 0x5EDA = 24282)
+      - "127.0.0.1:${SERENA_PORT:-9121}:9121"
+      - "127.0.0.1:${SERENA_DASHBOARD_PORT:-24282}:24282"
     environment:
       - SERENA_DOCKER=1
     command:

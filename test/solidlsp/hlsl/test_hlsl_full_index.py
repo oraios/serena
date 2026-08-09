@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
 
@@ -36,7 +36,7 @@ TERRAIN_SDF_UNIQUE_SYMBOLS = {"SampleSDF", "CalculateGradient", "SDFBrickData"}
 class TestHlslFullIndex:
     """Tests for full symbol tree indexing completeness."""
 
-    @pytest.mark.parametrize("language_server", [Language.HLSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HLSL], indirect=True)
     def test_all_files_indexed_in_symbol_tree(self, language_server: SolidLanguageServer) -> None:
         """Every .hlsl file in the test repo must appear as a File symbol in the tree."""
         symbols = language_server.request_full_symbol_tree()
@@ -44,7 +44,7 @@ class TestHlslFullIndex:
         missing = EXPECTED_FILES - file_names
         assert not missing, f"Files missing from full symbol tree: {missing}. Found: {file_names}"
 
-    @pytest.mark.parametrize("language_server", [Language.HLSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HLSL], indirect=True)
     def test_subdirectory_file_symbols_present(self, language_server: SolidLanguageServer) -> None:
         """Symbols unique to terrain/terrain_sdf.hlsl must appear in the full tree."""
         symbols = language_server.request_full_symbol_tree()
@@ -53,7 +53,7 @@ class TestHlslFullIndex:
                 f"Expected '{name}' from terrain/terrain_sdf.hlsl in full symbol tree"
             )
 
-    @pytest.mark.parametrize("language_server", [Language.HLSL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.HLSL], indirect=True)
     def test_include_file_document_symbols_directly(self, language_server: SolidLanguageServer) -> None:
         """request_document_symbols on terrain/terrain_sdf.hlsl should return its symbols."""
         doc_symbols = language_server.request_document_symbols("terrain/terrain_sdf.hlsl")

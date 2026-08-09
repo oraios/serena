@@ -3,13 +3,13 @@ import os
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 
 pytestmark = pytest.mark.vue
 
 
 class TestVueRename:
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_rename_function_within_single_file(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "components", "CalculatorInput.vue")
 
@@ -75,7 +75,7 @@ class TestVueRename:
                     assert "line" in edit["range"]["start"], "Start position should have line number"
                     assert "character" in edit["range"]["start"], "Start position should have character offset"
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_rename_composable_function_cross_file(self, language_server: SolidLanguageServer) -> None:
         composable_file = os.path.join("src", "composables", "useFormatter.ts")
 
@@ -140,7 +140,7 @@ class TestVueRename:
                     assert "start" in edit["range"], f"Range in {uri} should have start position"
                     assert "end" in edit["range"], f"Range in {uri} should have end position"
 
-    @pytest.mark.parametrize("language_server", [Language.VUE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_rename_verifies_correct_file_paths_and_ranges(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "App.vue")
 

@@ -24,7 +24,7 @@ class RuntimeDependency:
     url: str | None = None
     sha256: str | None = None
     allowed_hosts: tuple[str, ...] | list[str] | None = None
-    archive_type: str | None = None
+    archive_type: FileUtils.ArchiveType | None = None
     binary_name: str | None = None
     command: str | list[str] | None = None
     package_name: str | None = None
@@ -110,12 +110,13 @@ class RuntimeDependencyCollection:
         command = subprocess_util.convert_shell_cmd(command)
         log.info("Running command %s in '%s'", f"'{command}'" if isinstance(command, str) else command, cwd)
 
-        completed_process = subprocess.run(
+        completed_process = subprocess_util.subprocess_run(
             command,
             shell=True,
             check=False,
             cwd=cwd,
-            stdin=subprocess.DEVNULL,
+            capture_output=False,
+            text=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             **kwargs,

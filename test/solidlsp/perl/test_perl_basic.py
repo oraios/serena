@@ -3,13 +3,13 @@ from pathlib import Path
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
-from test.conftest import language_tests_enabled
+from solidlsp.ls_config import LanguageServerId
+from test.conftest import language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
 pytestmark = pytest.mark.skipif(
-    not language_tests_enabled(Language.PERL), reason="Perl tests are disabled (Perl::LanguageServer not available)"
+    not language_server_tests_enabled(LanguageServerId.PERL), reason="Perl tests are disabled (Perl::LanguageServer not available)"
 )
 
 
@@ -24,15 +24,15 @@ class TestPerlLanguageServer:
     - Find references (including cross-file) - this was not available in PLS
     """
 
-    @pytest.mark.parametrize("language_server", [Language.PERL], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.PERL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.PERL], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.PERL], indirect=True)
     def test_ls_is_running(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that the language server starts and stops successfully."""
         # The fixture already handles start and stop
         assert language_server.is_running()
         assert Path(language_server.language_server.repository_root_path).resolve() == repo_path.resolve()
 
-    @pytest.mark.parametrize("language_server", [Language.PERL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.PERL], indirect=True)
     def test_document_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test that document symbols are correctly identified."""
         # Request document symbols
@@ -56,7 +56,7 @@ class TestPerlLanguageServer:
         assert "use_helper_function" in function_names, f"Expected 'use_helper_function' in symbols, found: {function_names}"
 
     # @pytest.mark.skip(reason="Perl::LanguageServer cross-file definition tracking needs configuration")
-    @pytest.mark.parametrize("language_server", [Language.PERL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.PERL], indirect=True)
     def test_find_definition_across_files(self, language_server: SolidLanguageServer) -> None:
         definition_location_list = language_server.request_definition("main.pl", 17, 0)
 
@@ -66,7 +66,7 @@ class TestPerlLanguageServer:
         assert definition_location["uri"].endswith("helper.pl")
         assert definition_location["range"]["start"]["line"] == 4  # add method on line 2 (0-indexed 1)
 
-    @pytest.mark.parametrize("language_server", [Language.PERL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.PERL], indirect=True)
     def test_find_references_across_files(self, language_server: SolidLanguageServer) -> None:
         """Test finding references to a function across multiple files."""
         reference_locations = language_server.request_references("helper.pl", 4, 5)
@@ -80,7 +80,7 @@ class TestPerlLanguageServer:
         assert 17 in main_pl_lines, f"Expected reference at line 18 (0-indexed 17), found: {main_pl_lines}"
         assert 20 in main_pl_lines, f"Expected reference at line 21 (0-indexed 20), found: {main_pl_lines}"
 
-    @pytest.mark.parametrize("language_server", [Language.PERL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.PERL], indirect=True)
     def test_find_references_includes_t_files(self, language_server: SolidLanguageServer) -> None:
         """References to a .pm/.pl sub must surface callers in .t test files (fileFilter includes .t)."""
         reference_locations = language_server.request_references("helper.pl", 4, 5)
@@ -88,7 +88,7 @@ class TestPerlLanguageServer:
         t_refs = [ref for ref in reference_locations if ref["uri"].endswith(".t")]
         assert t_refs, f"Expected at least one reference in a .t file, got: {[r['uri'] for r in reference_locations]}"
 
-    @pytest.mark.parametrize("language_server", [Language.PERL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.PERL], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []
@@ -101,7 +101,7 @@ class TestPerlLanguageServer:
                 pytrace=False,
             )
 
-    @pytest.mark.parametrize("language_server", [Language.PERL], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.PERL], indirect=True)
     def test_file_diagnostics(self, language_server: SolidLanguageServer) -> None:
         assert_file_diagnostics(
             language_server,

@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from test.conftest import start_ls_context
 
 
@@ -22,7 +22,7 @@ class TestClangdLanguages:
         ],
     )
     def test_get_document_symbols(self, lang: str, unit: str, names: set[str]) -> None:
-        with start_ls_context(Language.CPP) as clangd:
+        with start_ls_context(LanguageServerId.CPP) as clangd:
             path = os.path.join(lang, unit)
             symbols = clangd.request_document_symbols(path).get_all_symbols_and_roots()
             symbols = symbols[0] if symbols and isinstance(symbols[0], list) else symbols

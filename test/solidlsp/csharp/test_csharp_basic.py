@@ -10,16 +10,16 @@ from solidlsp.language_servers.csharp_language_server import (
     breadth_first_file_scan,
     find_solution_or_project_file,
 )
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
-from test.conftest import find_identifier_position, get_repo_path, language_has_verified_implementation_support
+from test.conftest import find_identifier_position, get_repo_path, ls_has_verified_implementation_support
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
 @pytest.mark.csharp
 class TestCSharpLanguageServer:
-    @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CSHARP], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
         """Test finding symbols in the full symbol tree."""
         symbols = language_server.request_full_symbol_tree()
@@ -27,7 +27,7 @@ class TestCSharpLanguageServer:
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Calculator"), "Calculator class not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Add"), "Add method not found in symbol tree"
 
-    @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CSHARP], indirect=True)
     def test_get_document_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test getting document symbols from a C# file."""
         file_path = os.path.join("Program.cs")
@@ -45,7 +45,7 @@ class TestCSharpLanguageServer:
         assert "Program" in class_names
         assert "Calculator" in class_names
 
-    @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CSHARP], indirect=True)
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test finding references using symbol selection range."""
         file_path = os.path.join("Program.cs")
@@ -65,7 +65,7 @@ class TestCSharpLanguageServer:
             "Program.cs should reference Add method (tried all positions in selectionRange)"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CSHARP], indirect=True)
     def test_nested_namespace_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test getting symbols from nested namespace."""
         file_path = os.path.join("Models", "Person.cs")
@@ -89,7 +89,7 @@ class TestCSharpLanguageServer:
         assert "ToString" in symbol_names, "ToString method not found"
         assert "IsAdult" in symbol_names, "IsAdult method not found"
 
-    @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CSHARP], indirect=True)
     def test_find_referencing_symbols_across_files(self, language_server: SolidLanguageServer) -> None:
         """Test finding references to Calculator.Subtract method across files."""
         # First, find the Subtract method in Program.cs
@@ -128,7 +128,7 @@ class TestCSharpLanguageServer:
         refs_second_call = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
         assert refs_second_call == refs, "Second call to request_references should return the same results"
 
-    @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CSHARP], indirect=True)
     def test_hover_includes_type_information(self, language_server: SolidLanguageServer) -> None:
         """Test that hover information is available and includes type information."""
         file_path = os.path.join("Models", "Person.cs")
@@ -172,11 +172,11 @@ class TestCSharpLanguageServer:
         assert "bool" in method_hover_text, f"Hover should include 'bool' return type, got: {method_hover_text}"
         assert "IsAdult" in method_hover_text, f"Hover should include 'IsAdult' method name, got: {method_hover_text}"
 
-    if language_has_verified_implementation_support(Language.CSHARP):
+    if ls_has_verified_implementation_support(LanguageServerId.CSHARP):
 
-        @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
+        @pytest.mark.parametrize("language_server", [LanguageServerId.CSHARP], indirect=True)
         def test_find_implementations(self, language_server: SolidLanguageServer) -> None:
-            repo_path = get_repo_path(Language.CSHARP)
+            repo_path = get_repo_path(LanguageServerId.CSHARP)
             pos = find_identifier_position(repo_path / "Services" / "IGreeter.cs", "FormatGreeting")
             assert pos is not None, "Could not find IGreeter.FormatGreeting in fixture"
 
@@ -186,9 +186,9 @@ class TestCSharpLanguageServer:
                 f"Expected ConsoleGreeter.FormatGreeting in implementations, got: {implementations}"
             )
 
-        @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
+        @pytest.mark.parametrize("language_server", [LanguageServerId.CSHARP], indirect=True)
         def test_request_implementing_symbols(self, language_server: SolidLanguageServer) -> None:
-            repo_path = get_repo_path(Language.CSHARP)
+            repo_path = get_repo_path(LanguageServerId.CSHARP)
             pos = find_identifier_position(repo_path / "Services" / "IGreeter.cs", "FormatGreeting")
             assert pos is not None, "Could not find IGreeter.FormatGreeting in fixture"
 
@@ -327,7 +327,7 @@ class TestCSharpSolutionProjectOpening:
         # Verify the file actually exists
         assert os.path.exists(result)
 
-    @pytest.mark.parametrize("language_server", [Language.CSHARP], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CSHARP], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

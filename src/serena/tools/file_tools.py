@@ -16,11 +16,11 @@ from serena.tools import SUCCESS_RESULT, EditedFileContext, EditingToolWithDiagn
 from serena.util.file_system import scan_directory
 from serena.util.text_utils import (
     ContentReplacer,
+    GlobMatcher,
     MultiFileContentReplacer,
     ReplacementOccurrence,
-    expand_braces,
-    glob_match,
 )
+from solidlsp.ls_utils import TextUtils
 
 
 class ReadFileTool(Tool):
@@ -33,17 +33,19 @@ class ReadFileTool(Tool):
         Reads the given file or a chunk of it.
 
         :param relative_path: the relative path to the file to read
-        :param start_line: the 0-based index of the first line to be retrieved.
+        :param start_line: the 0-based index of the first line to be retrieved, negative values count from the end of the file.
         :param end_line: the 0-based index of the last line to be retrieved (inclusive). If None, read until the end of the file.
         :param max_answer_chars: if the file (chunk) is longer than this number of characters,
             no content will be returned. Don't adjust unless there is really no other way to get the content
             required for the task.
         :return: the full text of the file at the given relative path
         """
-        self.project.validate_relative_path(relative_path, require_not_ignored=True)
+        self.project.validate_relative_path(relative_path)
 
+        # read lines, using the same (LSP-compliant) notion of line breaks as the line-based editing tools
         result = self.project.read_file(relative_path)
-        result_lines = result.splitlines()
+        result_lines = TextUtils.split_lines(result)
+
         if end_line is None:
             result_lines = result_lines[start_line:]
         else:
@@ -60,7 +62,7 @@ class CreateTextFileTool(EditingToolWithDiagnostics):
 
     def apply(self, relative_path: str, content: str) -> str:
         """
-        Write a new file or overwrite an existing file.
+        Write a new file or overwrite an existing file with the given content.
 
         :param relative_path: the relative path to the file to create
         :param content: the (appropriately encoded) content to write to the file
@@ -73,7 +75,7 @@ class CreateTextFileTool(EditingToolWithDiagnostics):
             will_overwrite_existing = abs_path.exists()
 
             if will_overwrite_existing:
-                self.project.validate_relative_path(relative_path, require_not_ignored=True)
+                self.project.validate_relative_path(relative_path)
             else:
                 assert abs_path.is_relative_to(self.get_project_root()), (
                     f"Cannot create file outside of the project directory, got {relative_path=}"
@@ -115,14 +117,15 @@ class ListDirTool(Tool):
             }
             return self._to_json(error_info)
 
-        self.project.validate_relative_path(relative_path, require_not_ignored=skip_ignored_files)
+        self.project.validate_relative_path(relative_path)
 
+        is_ignored_path_fn = self.project.get_is_ignored_path_fn(relative_path, skip_ignored_files)
         dirs, files = scan_directory(
             os.path.join(self.get_project_root(), relative_path),
             relative_to=self.get_project_root(),
             recursive=recursive,
-            is_ignored_dir=self.project.is_ignored_path if skip_ignored_files else None,
-            is_ignored_file=self.project.is_ignored_path if skip_ignored_files else None,
+            is_ignored_dir=is_ignored_path_fn,
+            is_ignored_file=is_ignored_path_fn,
         )
 
         result = self._to_json({"dirs": dirs, "files": files})
@@ -136,19 +139,21 @@ class FindFileTool(Tool):
 
     def apply(self, file_mask: str, relative_path: str) -> str:
         """
-        Finds non-gitignored files matching the given file mask within the given relative path
+        Finds files matching the given file mask within the given relative path
 
         :param file_mask: the filename or file mask (using the wildcards * or ?) to search for
         :param relative_path: the relative path to the directory to search in; pass "." to scan the project root
+        :param skip_ignored_files: whether to skip ignored files/directories
         :return: a JSON object with the list of matching files
         """
-        self.project.validate_relative_path(relative_path, require_not_ignored=True)
+        self.project.validate_relative_path(relative_path)
 
+        is_ignored_path_fn = self.project.get_is_ignored_path_fn(relative_path, skip_ignored_paths=False)
         dir_to_scan = os.path.join(self.get_project_root(), relative_path)
 
         # find the files by ignoring everything that doesn't match
         def is_ignored_file(abs_path: str) -> bool:
-            if self.project.is_ignored_path(abs_path):
+            if is_ignored_path_fn(abs_path):
                 return True
             filename = os.path.basename(abs_path)
             return not fnmatch(filename, file_mask)
@@ -156,7 +161,7 @@ class FindFileTool(Tool):
         _dirs, files = scan_directory(
             path=dir_to_scan,
             recursive=True,
-            is_ignored_dir=self.project.is_ignored_path,
+            is_ignored_dir=is_ignored_path_fn,
             is_ignored_file=is_ignored_file,
             relative_to=self.get_project_root(),
         )
@@ -181,16 +186,12 @@ class ReplaceContentTool(EditingToolWithDiagnostics):
         r"""
         Replaces one or more occurrences of a given pattern in a file with new content.
 
-        This is the preferred way to replace content in a file whenever the symbol-level
-        tools are not appropriate.
-
-        VERY IMPORTANT: The "regex" mode allows very large sections of code to be replaced without fully quoting them!
-        Use a regex of the form "beginning.*?end-of-text-to-be-replaced" to be faster and more economical!
-        ALWAYS try to use wildcards to avoid specifying the exact content to be replaced,
-        especially if it spans several lines. Note that you cannot make mistakes, because if the regex should match
-        multiple occurrences while you disabled `allow_multiple_occurrences`, an error will be returned, and you can retry
-        with a revised regex.
-        Therefore, using regex mode with suitable wildcards is usually the best choice!
+        VERY IMPORTANT: The "regex" mode allows very large sections of code to be replaced WITHOUT
+        quoting them fully: use a needle of the form "beginning.*?end-of-text-to-be-replaced" with
+        wildcards instead of pasting the exact original text — shorter, cheaper, and you cannot make
+        mistakes, because an ambiguous match returns an error you can refine, so wildcards are safe.
+        Prefer regex mode with suitable wildcards for long multi-line replacements; use the
+        symbol-level editors when replacing a whole method/class.
 
         :param relative_path: the relative path to the file
         :param needle: the string or regex pattern to search for.
@@ -204,25 +205,8 @@ class ReplaceContentTool(EditingToolWithDiagnostics):
         :param allow_multiple_occurrences: whether to allow matching and replacing multiple occurrences.
             If false and multiple occurrences are found, an error will be returned
         """
-        return self.replace_content(
-            relative_path, needle, repl, mode=mode, allow_multiple_occurrences=allow_multiple_occurrences, require_not_ignored=True
-        )
-
-    def replace_content(
-        self,
-        relative_path: str,
-        needle: str,
-        repl: str,
-        mode: Literal["literal", "regex"],
-        allow_multiple_occurrences: bool = False,
-        require_not_ignored: bool = True,
-    ) -> str:
-        """
-        Performs the replacement, with additional options not exposed in the tool.
-        This function can be used internally by other tools.
-        """
         with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
-            self.project.validate_relative_path(relative_path, require_not_ignored=require_not_ignored)
+            self.project.validate_relative_path(relative_path)
             with EditedFileContext(relative_path, self.create_code_editor()) as context:
                 original_content = context.get_original_content()
                 replacer = ContentReplacer(mode=mode, allow_multiple_occurrences=allow_multiple_occurrences)
@@ -351,13 +335,13 @@ class ReplaceInFilesTool(EditingToolWithDiagnostics):
                 is_ignored_file=self.project.is_ignored_path,
                 relative_to=self.get_project_root(),
             )
-        include_patterns = expand_braces(paths_include_glob.strip()) if paths_include_glob.strip() else None
-        exclude_patterns = expand_braces(paths_exclude_glob.strip()) if paths_exclude_glob.strip() else None
+        include_glob_matcher = GlobMatcher(paths_include_glob.strip()) if paths_include_glob.strip() else None
+        exclude_glob_matcher = GlobMatcher(paths_exclude_glob.strip()) if paths_exclude_glob.strip() else None
         files: list[tuple[str, str]] = []
         for path in sorted(rel_paths):
-            if include_patterns and not any(glob_match(p, path) for p in include_patterns):
+            if include_glob_matcher and not include_glob_matcher.matches(path):
                 continue
-            if exclude_patterns and any(glob_match(p, path) for p in exclude_patterns):
+            if exclude_glob_matcher and exclude_glob_matcher.matches(path):
                 continue
             try:
                 files.append((path, self.project.read_file(path)))
@@ -557,10 +541,6 @@ class InsertAtLineTool(EditingToolWithDiagnostics, ToolMarkerOptional):
 
 
 class SearchForPatternTool(Tool):
-    """
-    Performs a search for a pattern in the project.
-    """
-
     def apply(
         self,
         substring_pattern: str,
@@ -570,6 +550,7 @@ class SearchForPatternTool(Tool):
         paths_exclude_glob: str = "",
         relative_path: str = "",
         restrict_search_to_code_files: bool = False,
+        skip_ignored_files: bool = True,
         multiline: bool = True,
         max_answer_chars: int = -1,
     ) -> str:
@@ -583,8 +564,9 @@ class SearchForPatternTool(Tool):
         :param paths_include_glob: optional glob (relative to project root, e.g. ``"src/**/*.ts"``) restricting which files are searched.
         :param paths_exclude_glob: optional glob to exclude files; takes precedence over `paths_include_glob`.
         :param relative_path: restricts the search to this file or subdirectory of the project root
-        :param restrict_search_to_code_files: whether to search only files containing analyzable code symbols
+        :param restrict_search_to_code_files: whether to search only (non-ignored) files containing analyzable code symbols
             (useful when looking for class/method definitions); otherwise also search non-code files.
+        :param skip_ignored_files: whether to skip ignored sub-paths (default: True)
         :param multiline: whether to apply multi-line matching (default: True), enabling the flags re.DOTALL and re.MULTILINE
         :param max_answer_chars: if the output exceeds this many characters, a progressively shortened summary is returned instead.
             ``-1`` uses the configured default.
@@ -592,11 +574,7 @@ class SearchForPatternTool(Tool):
         """
         relative_path = relative_path.strip()
         if relative_path:
-            self.project.validate_relative_path(relative_path, require_not_ignored=True)
-
-        abs_path = os.path.join(self.get_project_root(), relative_path)
-        if not os.path.exists(abs_path):
-            raise FileNotFoundError(f"Relative path {relative_path} does not exist.")
+            self.project.validate_relative_path(relative_path)
 
         matches = self.project.search_project_files_for_pattern(
             pattern=substring_pattern,
@@ -607,6 +585,7 @@ class SearchForPatternTool(Tool):
             paths_exclude_glob=paths_exclude_glob.strip(),
             multiline=multiline,
             code_files_only=restrict_search_to_code_files,
+            skip_ignored_files=skip_ignored_files,
         )
 
         # group matches by file
@@ -616,15 +595,48 @@ class SearchForPatternTool(Tool):
             file_to_matches[match.source_file_path].append(match.to_display_string())
 
         # capture lightweight match data for shortening before serialization
-        match_lines_by_file: dict[str, list[int]] = defaultdict(list)
+        match_lines_by_file: dict[str, list[dict[str, int | str]]] = defaultdict(list)
         for match in matches:
             assert match.source_file_path is not None
-            match_lines_by_file[match.source_file_path].append(match.matched_lines[0].line_number)
+            first = match.matched_lines[0]
+            match_lines_by_file[match.source_file_path].append({"line": first.line_number, "text": first.line_content.strip()})
 
         # shortened result closures, from least to most aggressive shortening
-        def make_lines_only() -> str:
-            """Match locations without surrounding context"""
-            return f"Match lines per file:\n{self._to_json(match_lines_by_file)}"
+        _TEXT_TRUNCATE = 60
+
+        def render_first_lines(truncate: bool) -> str:
+            """Render each match's first line, either in full or truncated to a fixed length."""
+
+            def entry_text(text: str) -> str:
+                if truncate and len(text) > _TEXT_TRUNCATE:
+                    return text[:_TEXT_TRUNCATE] + "..."
+                return text
+
+            compact = {
+                path: [{"line": m["line"], "text": entry_text(str(m["text"]))} for m in lines]
+                for path, lines in match_lines_by_file.items()
+            }
+            if truncate:
+                header = (
+                    f"Matched lines (text over {_TEXT_TRUNCATE} chars is truncated, marked with a trailing '...'); "
+                    "use read_file with the line numbers for full content:"
+                )
+            else:
+                header = "Matched lines per file; use read_file with the line numbers for surrounding context:"
+            return f"{header}\n{self._to_json(compact)}"
+
+        def make_first_lines_full() -> str:
+            """Match locations with each match's full first line."""
+            return render_first_lines(truncate=False)
+
+        def make_first_lines_truncated() -> str:
+            """Match locations with each match's first line truncated to a fixed length."""
+            return render_first_lines(truncate=True)
+
+        def make_line_numbers_only() -> str:
+            """Match locations as bare line numbers (no text)."""
+            numbers = {path: [m["line"] for m in lines] for path, lines in match_lines_by_file.items()}
+            return f"Match lines per file:\n{self._to_json(numbers)}"
 
         def make_per_file_counts() -> str:
             counts = {path: len(lines) for path, lines in match_lines_by_file.items()}
@@ -635,5 +647,17 @@ class SearchForPatternTool(Tool):
 
         result = self._to_json(file_to_matches)
         return self._limit_length(
-            result, max_answer_chars, shortened_result_factories=[make_lines_only, make_per_file_counts, make_summary]
+            result,
+            max_answer_chars,
+            shortened_result_factories=[
+                make_first_lines_full,
+                make_first_lines_truncated,
+                make_line_numbers_only,
+                make_per_file_counts,
+                make_summary,
+            ],
         )
+
+    """
+    Performs a search for a pattern in the project.
+    """

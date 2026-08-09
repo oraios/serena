@@ -5,7 +5,7 @@ import pytest
 
 from serena.code_editor import LanguageServerCodeEditor
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from src.serena.symbol import LanguageServerSymbolRetriever
 from test.conftest import project_with_ls_context, start_ls_context
 
@@ -22,7 +22,7 @@ def _extract_changes(workspace_edit: dict) -> dict[str, list[dict]]:
 def _copy_php_fixture(tmp_path: Path) -> Path:
     from test.conftest import get_repo_path
 
-    fixture_path = get_repo_path(Language.PHP)
+    fixture_path = get_repo_path(LanguageServerId.PHP)
     target_path = tmp_path / "test_repo"
     shutil.copytree(fixture_path, target_path)
     return target_path
@@ -126,8 +126,8 @@ def _find_child_symbol(parent_symbol: dict, child_name: str) -> dict:
 
 @pytest.mark.php
 class TestPHPantom:
-    @pytest.mark.parametrize("language_server", [Language.PHP_PHPANTOM], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.PHP], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.PHP_PHPANTOM], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.PHP], indirect=True)
     def test_rename_local_variable(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         workspace_edit = language_server.request_rename_symbol_edit(str(Path("index.php")), 9, 1, "welcomeMessage")
         assert workspace_edit is not None, "Rename should be supported for local PHP variables"
@@ -145,7 +145,7 @@ class TestPHPantom:
         repo_path = _copy_php_fixture(tmp_path)
         _write_psr4_fixture(repo_path)
 
-        with start_ls_context(Language.PHP_PHPANTOM, repo_path=str(repo_path), solidlsp_dir=tmp_path) as language_server:
+        with start_ls_context(LanguageServerId.PHP_PHPANTOM, repo_path=str(repo_path), solidlsp_dir=tmp_path) as language_server:
             welcome_symbol = _find_root_symbol(language_server, "src/Welcome.php", "Welcome")
             greet_symbol = _find_child_symbol(welcome_symbol, "greet")
             selection = greet_symbol["selectionRange"]["start"]
@@ -164,7 +164,7 @@ class TestPHPantom:
         repo_path = _copy_php_fixture(tmp_path)
         _write_psr4_fixture(repo_path)
 
-        with start_ls_context(Language.PHP_PHPANTOM, repo_path=str(repo_path), solidlsp_dir=tmp_path) as language_server:
+        with start_ls_context(LanguageServerId.PHP_PHPANTOM, repo_path=str(repo_path), solidlsp_dir=tmp_path) as language_server:
             welcome_symbol = _find_root_symbol(language_server, "src/Welcome.php", "Welcome")
             selection = welcome_symbol["selectionRange"]["start"]
             workspace_edit = language_server.request_rename_symbol_edit(
@@ -182,7 +182,7 @@ class TestPHPantom:
         repo_path = _copy_php_fixture(tmp_path)
         _write_psr4_fixture(repo_path)
 
-        with project_with_ls_context(Language.PHP_PHPANTOM, str(repo_path)) as project:
+        with project_with_ls_context(LanguageServerId.PHP_PHPANTOM, str(repo_path)) as project:
             symbol_retriever = LanguageServerSymbolRetriever(project)
             code_editor = LanguageServerCodeEditor(symbol_retriever)
             status_message = code_editor.rename_symbol("Welcome", relative_path="src/Welcome.php", new_name="GreetingService")
@@ -200,7 +200,7 @@ class TestPHPantom:
         repo_path = _copy_php_fixture(tmp_path)
         _write_psr4_fixture(repo_path)
 
-        with project_with_ls_context(Language.PHP_PHPANTOM, str(repo_path)) as project:
+        with project_with_ls_context(LanguageServerId.PHP_PHPANTOM, str(repo_path)) as project:
             symbol_retriever = LanguageServerSymbolRetriever(project)
             symbols = symbol_retriever.find("Welcome", within_relative_path="src/Welcome.php")
             info_by_symbol = symbol_retriever.request_info_for_symbol_batch(symbols)
@@ -213,7 +213,7 @@ class TestPHPantom:
         repo_path = _copy_php_fixture(tmp_path)
         _write_psr4_fixture(repo_path)
 
-        with start_ls_context(Language.PHP_PHPANTOM, repo_path=str(repo_path), solidlsp_dir=tmp_path) as language_server:
+        with start_ls_context(LanguageServerId.PHP_PHPANTOM, repo_path=str(repo_path), solidlsp_dir=tmp_path) as language_server:
             class_symbols = language_server.request_workspace_symbol("Welcome") or []
             function_symbols = language_server.request_workspace_symbol("format_name") or []
             constant_symbols = language_server.request_workspace_symbol("MAX_GREETING_LENGTH") or []

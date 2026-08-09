@@ -5,23 +5,26 @@ from typing import Any
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_utils import SymbolUtils
 from test.conftest import (
     find_identifier_position,
     get_repo_path,
-    language_has_verified_implementation_support,
-    language_tests_enabled,
+    language_server_tests_enabled,
+    ls_has_verified_implementation_support,
 )
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
 # Currently, most F# tests fail (regression/instability), so the suite is disabled on CI.
-pytestmark = [pytest.mark.fsharp, pytest.mark.skipif(not language_tests_enabled(Language.FSHARP), reason="F# tests are disabled")]
+pytestmark = [
+    pytest.mark.fsharp,
+    pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.FSHARP), reason="F# tests are disabled"),
+]
 
 
 class TestFSharpLanguageServer:
-    @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.FSHARP], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
         """Test finding symbols in the full symbol tree."""
         symbols = language_server.request_full_symbol_tree()
@@ -35,7 +38,7 @@ class TestFSharpLanguageServer:
         assert SymbolUtils.symbol_tree_contains_name(symbols, "add"), "add function not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "CalculatorClass"), "CalculatorClass not found in symbol tree"
 
-    @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.FSHARP], indirect=True)
     def test_get_document_symbols_program(self, language_server: SolidLanguageServer) -> None:
         """Test getting document symbols from the main Program.fs file."""
         file_path = os.path.join("Program.fs")
@@ -45,11 +48,11 @@ class TestFSharpLanguageServer:
         symbol_names = [s.get("name") for s in symbols]
         assert "main" in symbol_names, "main function not found in Program.fs symbols"
 
-    if language_has_verified_implementation_support(Language.FSHARP):
+    if ls_has_verified_implementation_support(LanguageServerId.FSHARP):
 
-        @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
+        @pytest.mark.parametrize("language_server", [LanguageServerId.FSHARP], indirect=True)
         def test_find_implementations(self, language_server: SolidLanguageServer) -> None:
-            repo_path = get_repo_path(Language.FSHARP)
+            repo_path = get_repo_path(LanguageServerId.FSHARP)
             pos = find_identifier_position(repo_path / "Formatter.fs", "FormatGreeting")
             assert pos is not None, "Could not find IGreeter.FormatGreeting in fixture"
 
@@ -59,9 +62,9 @@ class TestFSharpLanguageServer:
                 f"Expected ConsoleGreeter.FormatGreeting in implementations, got: {implementations}"
             )
 
-        @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
+        @pytest.mark.parametrize("language_server", [LanguageServerId.FSHARP], indirect=True)
         def test_request_implementing_symbols(self, language_server: SolidLanguageServer) -> None:
-            repo_path = get_repo_path(Language.FSHARP)
+            repo_path = get_repo_path(LanguageServerId.FSHARP)
             pos = find_identifier_position(repo_path / "Formatter.fs", "FormatGreeting")
             assert pos is not None, "Could not find IGreeter.FormatGreeting in fixture"
 
@@ -72,7 +75,7 @@ class TestFSharpLanguageServer:
                 for symbol in implementing_symbols
             ), f"Expected ConsoleGreeter.FormatGreeting symbol, got: {implementing_symbols}"
 
-    @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.FSHARP], indirect=True)
     def test_get_document_symbols_calculator(self, language_server: SolidLanguageServer) -> None:
         """Test getting document symbols from Calculator.fs file."""
         file_path = os.path.join("Calculator.fs")
@@ -85,7 +88,7 @@ class TestFSharpLanguageServer:
         for expected in expected_symbols:
             assert expected in symbol_names, f"{expected} function not found in Calculator.fs symbols"
 
-    @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.FSHARP], indirect=True)
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test finding references using symbol selection range."""
         file_path = os.path.join("Calculator.fs")
@@ -108,7 +111,7 @@ class TestFSharpLanguageServer:
         # The add function should be referenced in Program.fs
         assert any("Program.fs" in ref.get("relativePath", "") for ref in refs), "Program.fs should reference add function"
 
-    @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.FSHARP], indirect=True)
     def test_nested_module_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test getting symbols from nested Models namespace."""
         file_path = os.path.join("Models", "Person.fs")
@@ -121,7 +124,7 @@ class TestFSharpLanguageServer:
         for expected in expected_symbols:
             assert expected in symbol_names, f"{expected} not found in Person.fs symbols"
 
-    @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.FSHARP], indirect=True)
     def test_find_referencing_symbols_across_files(self, language_server: SolidLanguageServer) -> None:
         """Test finding references to Calculator functions across files."""
         # Find the subtract function in Calculator.fs
@@ -143,7 +146,7 @@ class TestFSharpLanguageServer:
         # The subtract function should be referenced in Program.fs
         assert any("Program.fs" in ref.get("relativePath", "") for ref in refs), "Program.fs should reference subtract function"
 
-    @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.FSHARP], indirect=True)
     def test_go_to_definition(self, language_server: SolidLanguageServer) -> None:
         """Test go-to-definition functionality."""
         # Test going to definition of 'add' function from Program.fs
@@ -156,7 +159,7 @@ class TestFSharpLanguageServer:
         # We should get at least some definitions
         assert len(definitions) >= 0, "Should get definitions (even if empty for complex cases)"
 
-    @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.FSHARP], indirect=True)
     def test_hover_information(self, language_server: SolidLanguageServer) -> None:
         """Test hover information functionality."""
         file_path = os.path.join("Calculator.fs")
@@ -168,7 +171,7 @@ class TestFSharpLanguageServer:
         # This is acceptable as it depends on the LSP server's capabilities and timing
         assert hover_info is None or isinstance(hover_info, dict), "Hover info should be None or dict"
 
-    @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.FSHARP], indirect=True)
     def test_completion(self, language_server: SolidLanguageServer) -> None:
         """Test code completion functionality."""
         file_path = os.path.join("Program.fs")
@@ -197,7 +200,7 @@ class TestFSharpLanguageServer:
 
         assert isinstance(result["value"], list), "Completions should be a list"
 
-    @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.FSHARP], indirect=True)
     def test_file_diagnostics(self, language_server: SolidLanguageServer) -> None:
         assert_file_diagnostics(
             language_server,
@@ -206,7 +209,7 @@ class TestFSharpLanguageServer:
             min_count=1,
         )
 
-    @pytest.mark.parametrize("language_server", [Language.FSHARP], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.FSHARP], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

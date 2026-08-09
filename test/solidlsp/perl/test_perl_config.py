@@ -18,7 +18,7 @@ from solidlsp.language_servers.perl_language_server import (
     _DEFAULT_IGNORE_DIRS,
     PerlLanguageServer,
 )
-from solidlsp.ls_config import FilenameMatcher, Language
+from solidlsp.ls_config import FilenameMatcher, LanguageServerId
 from solidlsp.settings import SolidLSPSettings
 
 
@@ -40,7 +40,7 @@ class TestResolveFilterSettings:
 
     def test_defaults_when_perl_key_absent(self, tmp_path: Path) -> None:
         # ls_specific_settings configured for another language must not leak into Perl.
-        settings = _settings(tmp_path, {Language.PYTHON: {"something": "unrelated"}})
+        settings = _settings(tmp_path, {LanguageServerId.PYTHON: {"something": "unrelated"}})
 
         file_filter, ignore_dirs = PerlLanguageServer._resolve_filter_settings(settings)
 
@@ -50,7 +50,7 @@ class TestResolveFilterSettings:
     def test_custom_file_filter_makes_extra_extensions_visible(self, tmp_path: Path) -> None:
         # #1449: a Perl web backend must be able to surface .cgi / .psgi handlers.
         custom = [".pm", ".pl", ".t", ".cgi", ".psgi"]
-        settings = _settings(tmp_path, {Language.PERL: {"file_filter": custom}})
+        settings = _settings(tmp_path, {LanguageServerId.PERL: {"file_filter": custom}})
 
         file_filter, _ = PerlLanguageServer._resolve_filter_settings(settings)
 
@@ -59,7 +59,7 @@ class TestResolveFilterSettings:
 
     def test_custom_ignore_dirs(self, tmp_path: Path) -> None:
         custom = [".git", "blib", "local", "cover_db", "t"]
-        settings = _settings(tmp_path, {Language.PERL: {"ignore_dirs": custom}})
+        settings = _settings(tmp_path, {LanguageServerId.PERL: {"ignore_dirs": custom}})
 
         _, ignore_dirs = PerlLanguageServer._resolve_filter_settings(settings)
 
@@ -70,7 +70,7 @@ class TestResolveFilterSettings:
         ignore_dirs = [".git", "vendor"]
         settings = _settings(
             tmp_path,
-            {Language.PERL: {"file_filter": file_filter, "ignore_dirs": ignore_dirs}},
+            {LanguageServerId.PERL: {"file_filter": file_filter, "ignore_dirs": ignore_dirs}},
         )
 
         resolved_filter, resolved_dirs = PerlLanguageServer._resolve_filter_settings(settings)
@@ -165,12 +165,12 @@ class TestSourceFnMatcherSync:
         # #1449: find_symbol relies on Language.PERL.get_source_fn_matcher(); unless the configured
         # extensions are synced into it, symbols in .cgi/.psgi files stay invisible even though the
         # LS indexes them. get_source_fn_matcher() is a @cache singleton, so reset() afterwards.
-        matcher = Language.PERL.get_source_fn_matcher()
+        matcher = LanguageServerId.PERL.get_source_fn_matcher()
         try:
             assert not matcher.is_relevant_filename("handler.cgi")  # guard: not matched by default
 
             file_filter, _ = PerlLanguageServer._resolve_filter_settings(
-                _settings(tmp_path, {Language.PERL: {"file_filter": [".pm", ".pl", ".t", ".cgi", ".psgi"]}})
+                _settings(tmp_path, {LanguageServerId.PERL: {"file_filter": [".pm", ".pl", ".t", ".cgi", ".psgi"]}})
             )
             PerlLanguageServer._sync_source_fn_matcher(file_filter)
 
@@ -183,7 +183,7 @@ class TestSourceFnMatcherSync:
     def test_default_file_filter_leaves_matcher_unchanged(self, tmp_path: Path) -> None:
         # The default file_filter matches the existing Perl matcher extensions, so syncing it must
         # be a no-op (no duplicate entries, no new matches).
-        matcher = Language.PERL.get_source_fn_matcher()
+        matcher = LanguageServerId.PERL.get_source_fn_matcher()
         try:
             initial = list(matcher._file_extensions)
             file_filter, _ = PerlLanguageServer._resolve_filter_settings(_settings(tmp_path))
@@ -198,11 +198,11 @@ class TestSourceFnMatcherSync:
         # file_filter (adds .cgi); when project B is activated, SolidLanguageServer.__init__ resets
         # the matcher first, so project B must NOT see .cgi even though project A added it.
         # Mirrors the reset-then-sync ordering of PerlLanguageServer.__init__.
-        matcher = Language.PERL.get_source_fn_matcher()
+        matcher = LanguageServerId.PERL.get_source_fn_matcher()
         try:
             # project A: custom file_filter with .cgi
             filter_a, _ = PerlLanguageServer._resolve_filter_settings(
-                _settings(tmp_path, {Language.PERL: {"file_filter": [".pm", ".pl", ".t", ".cgi"]}})
+                _settings(tmp_path, {LanguageServerId.PERL: {"file_filter": [".pm", ".pl", ".t", ".cgi"]}})
             )
             PerlLanguageServer._sync_source_fn_matcher(filter_a)
             assert matcher.is_relevant_filename("handler.cgi")

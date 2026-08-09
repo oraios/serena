@@ -5,13 +5,13 @@ Uses the built-in Lean 4 language server (lean --server).
 
 import logging
 import shutil
-import subprocess
 
 from overrides import override
 
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class Lean4LanguageServer(SolidLanguageServer):
                 log.warning("lake not found on PATH; cross-file references may not work")
                 return env
             try:
-                result = subprocess.run(
+                result = subprocess_run(
                     [lake_path, "env"],
                     check=False,
                     cwd=self._repository_root_path,

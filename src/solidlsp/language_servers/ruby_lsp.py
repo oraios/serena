@@ -18,10 +18,11 @@ import threading
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeResult
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
 
@@ -107,7 +108,7 @@ class RubyLsp(SolidLanguageServer):
         Setup runtime dependencies for ruby-lsp and return the command list to start the server.
         Installation strategy: Bundler project > global ruby-lsp > gem install ruby-lsp at the pinned version
         """
-        ls_specific_settings = solidlsp_settings.get_ls_specific_settings(Language.RUBY)
+        ls_specific_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.RUBY)
         ruby_lsp_version = ls_specific_settings.get("ruby_lsp_version", RUBY_LSP_VERSION)
         # Detect Ruby version manager environment
         # Using the version manager's exec wrapper ensures commands run with the correct Ruby version
@@ -163,7 +164,7 @@ class RubyLsp(SolidLanguageServer):
 
         # Check if Ruby is installed
         try:
-            result = subprocess.run(ruby_cmd + ["--version"], check=True, capture_output=True, cwd=repository_root_path, text=True)
+            result = subprocess_run(ruby_cmd + ["--version"], check=True, capture_output=True, cwd=repository_root_path, text=True)
             ruby_version = result.stdout.strip()
             log.info(f"Ruby version: {ruby_version}")
 
@@ -246,7 +247,7 @@ class RubyLsp(SolidLanguageServer):
         # Try to install ruby-lsp globally
         log.info("ruby-lsp not found, attempting to install globally...")
         try:
-            subprocess.run(
+            subprocess_run(
                 ["gem", "install", "ruby-lsp", "-v", ruby_lsp_version],
                 check=True,
                 capture_output=True,

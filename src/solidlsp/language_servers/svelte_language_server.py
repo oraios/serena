@@ -27,7 +27,7 @@ from solidlsp.ls import (
     LSPFileBuffer,
     SolidLanguageServer,
 )
-from solidlsp.ls_config import FilenameMatcher, Language, LanguageServerConfig
+from solidlsp.ls_config import FilenameMatcher, LanguageServerConfig, LanguageServerId
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -100,14 +100,14 @@ class SvelteTypeScriptServer(TypeScriptLanguageServer):
 
     @classmethod
     @override
-    def get_language_enum_instance(cls) -> Language:
+    def get_language_server_id(cls) -> LanguageServerId:
         """Return TYPESCRIPT; companion uses the TypeScript LS infrastructure."""
-        return Language.TYPESCRIPT
+        return LanguageServerId.TYPESCRIPT
 
     @override
     def get_source_fn_matcher(self) -> FilenameMatcher:
         # include .svelte so references returned by the plugin are not filtered out
-        return Language.SVELTE.get_source_fn_matcher()
+        return LanguageServerId.SVELTE.get_source_fn_matcher()
 
     @override
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
@@ -273,7 +273,7 @@ class SvelteLanguageServer(SolidLanguageServer):
 
     @override
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
-        ts_settings = self._solidlsp_settings.get_ls_specific_settings(Language.TYPESCRIPT)
+        ts_settings = self._solidlsp_settings.get_ls_specific_settings(LanguageServerId.TYPESCRIPT)
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir, ts_settings)
 
     def __init__(self, config: LanguageServerConfig, repo_path: str, solidlsp_settings: SolidLSPSettings):
@@ -337,7 +337,7 @@ class SvelteLanguageServer(SolidLanguageServer):
 
     def _get_companion_indexing_timeout(self) -> float:
         """:return: maximum seconds to wait for companion TS indexing after opening Svelte files."""
-        ts_settings = self._solidlsp_settings.get_ls_specific_settings(Language.TYPESCRIPT)
+        ts_settings = self._solidlsp_settings.get_ls_specific_settings(LanguageServerId.TYPESCRIPT)
         timeout = self._custom_settings.get(
             "indexing_timeout",
             ts_settings.get("indexing_timeout", SvelteTypeScriptServer.INDEXING_PROGRESS_TIMEOUT),
@@ -417,7 +417,7 @@ class SvelteLanguageServer(SolidLanguageServer):
         """Spawn the companion :class:`SvelteTypeScriptServer`, wait for ready, then index .svelte files."""
         try:
             ts_config = LanguageServerConfig(
-                code_language=Language.TYPESCRIPT,
+                ls_id=LanguageServerId.TYPESCRIPT,
                 trace_lsp_communication=False,
             )
             log.info("Creating companion SvelteTypeScriptServer")
@@ -592,7 +592,9 @@ class SvelteLanguageServer(SolidLanguageServer):
         self.server.on_request("workspace/applyEdit", workspace_apply_edit_handler)
         self.server.on_request("workspace/configuration", configuration_handler)
         self.server.on_request("workspace/diagnostic/refresh", do_nothing)
-        self.server.on_request("workspace/inlayHints/refresh", do_nothing)
+        # `inlayHint` is singular per the LSP spec; the previous `inlayHints`
+        # spelling matched no real request and was therefore never invoked.
+        self.server.on_request("workspace/inlayHint/refresh", do_nothing)
         self.server.on_request("workspace/semanticTokens/refresh", do_nothing)
         self._wrap_notify_send_for_ts_js_mirror()
         self.server.start()

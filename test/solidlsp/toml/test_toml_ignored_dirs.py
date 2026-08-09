@@ -8,12 +8,12 @@ TOML-specific directories like target, .cargo, and node_modules.
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 
 pytestmark = pytest.mark.toml
 
 
-@pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
+@pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
 class TestTomlIgnoredDirectories:
     """Test TOML-specific directory ignoring behavior."""
 

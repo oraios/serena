@@ -19,8 +19,8 @@ import pytest
 
 from serena.util.text_utils import find_text_coordinates
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import Language
-from test.conftest import language_tests_enabled
+from solidlsp.ls_config import LanguageServerId
+from test.conftest import language_server_tests_enabled
 from test.solidlsp.conftest import read_repo_file
 
 from . import CORE_PATH, TEST_APP_PATH
@@ -29,7 +29,7 @@ EXTRA_PATH = str(TEST_APP_PATH / "extra.clj")
 SUBMODULE_CONSUMER_PATH = str(Path("sub_module") / "src" / "sub_module_app" / "consumer.clj")
 
 
-@pytest.mark.skipif(not language_tests_enabled(Language.CLOJURE), reason="Clojure tests are disabled")
+@pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.CLOJURE), reason="Clojure tests are disabled")
 @pytest.mark.clojure
 class TestClojureProjectIndexing:
     """Covers the "indexing leaks through results" bug for clojure-lsp.
@@ -41,7 +41,7 @@ class TestClojureProjectIndexing:
     indexing of those calls.
     """
 
-    @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CLOJURE], indirect=True)
     def test_request_references_includes_unopened_file(self, language_server: SolidLanguageServer) -> None:
         # locate the definition of `multiply` in core.clj without hardcoding coords
         core_content = read_repo_file(language_server, CORE_PATH)
@@ -65,7 +65,7 @@ class TestClojureProjectIndexing:
             f"Expected at least 2 references in extra.clj (double-product and triple-product), got {len(extra_refs)}: {extra_refs}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CLOJURE], indirect=True)
     def test_request_references_includes_unopened_sibling_module_file(self, language_server: SolidLanguageServer) -> None:
         """Mirrors the real-world penpot bug repro: ``multiply`` is defined in one
         module (root ``src/``) and consumed from a sibling module that has its
@@ -92,7 +92,7 @@ class TestClojureProjectIndexing:
             "get_symbols_overview, so reference search returns silently incomplete results."
         )
 
-    @pytest.mark.parametrize("language_server", [Language.CLOJURE], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.CLOJURE], indirect=True)
     def test_request_referencing_symbols_includes_unopened_file(self, language_server: SolidLanguageServer) -> None:
         core_content = read_repo_file(language_server, CORE_PATH)
         coords = find_text_coordinates(core_content, r"\(defn (multiply)\b", require_unique=True)

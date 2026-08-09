@@ -5,7 +5,7 @@ from pathlib import Path
 
 from serena.config.serena_config import ProjectConfig, RegisteredProject, SerenaConfig
 from serena.project import Project
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 
 
 def _create_test_project(
@@ -16,7 +16,7 @@ def _create_test_project(
     """Helper to create a Project with the given ignored paths configuration."""
     config = ProjectConfig(
         project_name="test_project",
-        languages=[Language.PYTHON],
+        language_servers=[LanguageServerId.PYTHON],
         ignored_paths=project_ignored_paths or [],
         ignore_all_files_in_gitignore=False,
     )
@@ -145,7 +145,7 @@ class TestRegisteredProjectGlobalIgnoredPaths:
         """RegisteredProject.get_project_instance() passes global_ignored_paths to Project."""
         config = ProjectConfig(
             project_name="test_project",
-            languages=[Language.PYTHON],
+            language_servers=[LanguageServerId.PYTHON],
             ignored_paths=[],
             ignore_all_files_in_gitignore=False,
         )
@@ -161,7 +161,7 @@ class TestRegisteredProjectGlobalIgnoredPaths:
         """RegisteredProject without global_ignored_paths defaults to empty."""
         config = ProjectConfig(
             project_name="test_project",
-            languages=[Language.PYTHON],
+            language_servers=[LanguageServerId.PYTHON],
             ignored_paths=[],
             ignore_all_files_in_gitignore=False,
         )
@@ -193,7 +193,7 @@ class TestRegisteredProjectGlobalIgnoredPaths:
         """RegisteredProject.from_project_instance() threads global_ignored_paths to Project."""
         config = ProjectConfig(
             project_name="test_project",
-            languages=[Language.PYTHON],
+            language_servers=[LanguageServerId.PYTHON],
             ignored_paths=[],
             ignore_all_files_in_gitignore=False,
         )
@@ -233,7 +233,7 @@ class TestGlobalIgnoredPathsWithGitignore:
         """Global patterns, project patterns, and .gitignore patterns are all applied together."""
         config = ProjectConfig(
             project_name="test_project",
-            languages=[Language.PYTHON],
+            language_servers=[LanguageServerId.PYTHON],
             ignored_paths=["build"],
             ignore_all_files_in_gitignore=True,
         )

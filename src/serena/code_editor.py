@@ -10,9 +10,10 @@ from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
 from serena.symbol import JetBrainsSymbol, LanguageServerSymbol, LanguageServerSymbolRetriever, PositionInFile, Symbol
 from solidlsp import SolidLanguageServer, ls_types
 from solidlsp.ls import LSPFileBuffer
-from solidlsp.ls_utils import PathUtils, TextUtils
+from solidlsp.ls_utils import PathUtils, TextStepper, TextUtils
 
 from .project import Project
+from .util.file_proxy import FileProxy
 
 log = logging.getLogger(__name__)
 TSymbol = TypeVar("TSymbol", bound=Symbol)
@@ -78,6 +79,8 @@ class CodeEditor(Generic[TSymbol], ABC):
         """
         Context manager for editing a file.
         """
+        if FileProxy.is_external_path(relative_path):
+            raise ValueError(f"Cannot edit external file: {relative_path}")
         with self._open_file_context(relative_path) as edited_file:
             yield edited_file
             # save the file
@@ -239,8 +242,30 @@ class CodeEditor(Generic[TSymbol], ABC):
         symbol = self._find_unique_symbol(name_path, relative_file_path)
         start_pos = symbol.get_body_start_position_or_raise()
         end_pos = symbol.get_body_end_position_or_raise()
+
         with self.edited_file_context(relative_file_path) as edited_file:
+            # do the actual deletion
             edited_file.delete_text_between_positions(start_pos, end_pos)
+
+            # empty line removal heuristic:
+            # After the deletion, go to the line where the deleted symbol started,
+            # check whether it and any subsequent lines are empty, and if so, delete them.
+            # The empty lines preceding the deleted symbol's body should normally suffice as a separator
+            # between the symbols before and after the deleted symbol.
+            start_pos.col = 0
+            stepper = TextStepper(edited_file.get_contents())
+            stepper.step_to(start_pos.line, start_pos.col)
+            apply_empty_line_deletion = False
+            while stepper.step_line():
+                line = stepper.get_last_line(with_end=False)
+                if line.strip() == "":
+                    end_pos.line = stepper.line
+                    end_pos.col = stepper.col
+                    apply_empty_line_deletion = True
+                else:
+                    break
+            if apply_empty_line_deletion:
+                edited_file.delete_text_between_positions(start_pos, end_pos)
 
     @abstractmethod
     def rename_symbol(self, name_path: str, relative_path: str, new_name: str) -> str:
@@ -400,8 +425,7 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
             super().__init__(relative_path)
             path = os.path.join(project.project_root, relative_path)
             log.info("Editing file: %s", path)
-            with open(path, encoding=project.project_config.encoding) as f:
-                self._content = f.read()
+            self._content = FileProxy.from_project_relative_path(project, relative_path).get_contents()
 
         def get_contents(self) -> str:
             return self._content

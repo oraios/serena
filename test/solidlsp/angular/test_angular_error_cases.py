@@ -21,7 +21,7 @@ import time
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_exceptions import SolidLSPException
 from test.conftest import _create_ls
 
@@ -37,7 +37,7 @@ TEMPLATE_FILE = os.path.join("src", "app", "app.component.html")
 class TestAngularInvalidPositionsOnTs:
     """Negative / out-of-bounds line and column on .ts files (TS-companion route)."""
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_negative_line_number_containing_symbol(self, language_server: SolidLanguageServer) -> None:
         """``request_containing_symbol`` short-circuits before reaching the LS:
         a negative line returns None.
@@ -45,19 +45,19 @@ class TestAngularInvalidPositionsOnTs:
         result = language_server.request_containing_symbol(TS_FILE, -1, 0)
         assert result is None, f"Expected None for negative line, got: {result!r}"
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_negative_character_number_containing_symbol(self, language_server: SolidLanguageServer) -> None:
         result = language_server.request_containing_symbol(TS_FILE, 5, -1)
         assert result is None, f"Expected None for negative character, got: {result!r}"
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_line_number_beyond_file_length(self, language_server: SolidLanguageServer) -> None:
         """The wrapper code raises ``IndexError`` before reaching the LS."""
         with pytest.raises(IndexError) as exc_info:
             language_server.request_containing_symbol(TS_FILE, 99999, 0)
         assert "list index out of range" in str(exc_info.value), f"Expected 'list index out of range' error, got: {exc_info.value}"
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_character_beyond_line_length_returns_enclosing_class(self, language_server: SolidLanguageServer) -> None:
         """Character far beyond end-of-line is clamped by the LSP. Line 5 of
         app.component.ts is inside ``export class AppComponent { ... }``, so the
@@ -69,7 +69,7 @@ class TestAngularInvalidPositionsOnTs:
         assert isinstance(result, dict), f"Expected dict (containing class), got: {result!r}"
         assert result.get("name") == "AppComponent", f"Expected containing symbol 'AppComponent', got: {result.get('name')!r}"
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_references_at_negative_line_returns_empty(self, language_server: SolidLanguageServer) -> None:
         """The Angular LS's TS companion returns ``[]`` for negative-line
         ``request_references`` — it does **not** raise. (Plain Vue tests
@@ -79,7 +79,7 @@ class TestAngularInvalidPositionsOnTs:
         result = language_server.request_references(TS_FILE, -1, 0)
         assert result == [], f"Expected [], got: {result!r}"
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_definition_at_negative_position_returns_empty(self, language_server: SolidLanguageServer) -> None:
         """Same as references: TS companion returns ``[]``, does not raise."""
         result = language_server.request_definition(TS_FILE, -1, 0)
@@ -93,7 +93,7 @@ class TestAngularInvalidPositionsOnTs:
 class TestAngularInvalidPositionsOnTemplate:
     """Negative / out-of-bounds positions on .html files (ngserver route)."""
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_negative_line_definition_raises(self, language_server: SolidLanguageServer) -> None:
         """Ngserver does **not** swallow malformed positions: it surfaces a
         ``Debug Failure. False expression.`` error from its underlying
@@ -105,7 +105,7 @@ class TestAngularInvalidPositionsOnTemplate:
             f"Unexpected exception message: {exc_info.value}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_character_beyond_line_definition_raises(self, language_server: SolidLanguageServer) -> None:
         """Same path as negative line — ngserver raises Debug Failure."""
         with pytest.raises(SolidLSPException) as exc_info:
@@ -118,7 +118,7 @@ class TestAngularInvalidPositionsOnTemplate:
 class TestAngularNonExistentFiles:
     """Requests against files that don't exist must raise FileNotFoundError consistently."""
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_nonexistent_ts_file_raises(self, language_server: SolidLanguageServer) -> None:
         nonexistent = os.path.join("src", "app", "does-not-exist.component.ts")
         with pytest.raises(FileNotFoundError):
@@ -128,7 +128,7 @@ class TestAngularNonExistentFiles:
         with pytest.raises(FileNotFoundError):
             language_server.request_document_symbols(nonexistent)
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_nonexistent_html_file_raises(self, language_server: SolidLanguageServer) -> None:
         nonexistent = os.path.join("src", "app", "does-not-exist.component.html")
         with pytest.raises(FileNotFoundError):
@@ -140,7 +140,7 @@ class TestAngularNonExistentFiles:
 class TestAngularUndefinedSymbols:
     """Symbols that have no callers / definitions / referencing positions."""
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_definition_at_keyword_position_returns_empty(self, language_server: SolidLanguageServer) -> None:
         """Cursor on the ``import`` keyword (line 0, col 0 of app.component.ts)
         has no definition target — the TS companion returns ``[]``.
@@ -148,7 +148,7 @@ class TestAngularUndefinedSymbols:
         result = language_server.request_definition(TS_FILE, 0, 0)
         assert result == [], f"Expected [] for keyword position, got: {result!r}"
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_references_for_local_const_have_few_callers(self, language_server: SolidLanguageServer) -> None:
         """A locally-scoped private field has at most its declaration plus its
         in-method use as references. ``defaultName`` on GreetingService is
@@ -168,7 +168,7 @@ class TestAngularUndefinedSymbols:
 class TestAngularEdgeCasePositions:
     """Position (0,0), whitespace lines, and other boundary conditions."""
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_containing_symbol_at_file_start_is_none(self, language_server: SolidLanguageServer) -> None:
         """Line 0 of app.component.ts is an ``import`` statement, outside any
         class or function — the TS companion returns ``None`` for containing
@@ -177,19 +177,19 @@ class TestAngularEdgeCasePositions:
         result = language_server.request_containing_symbol(TS_FILE, 0, 0)
         assert result is None, f"Expected None at (0,0), got: {result!r}"
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_references_at_file_start_returns_empty(self, language_server: SolidLanguageServer) -> None:
         """Position (0, 0) is on the ``import`` keyword — no references."""
         result = language_server.request_references(TS_FILE, 0, 0)
         assert result == [], f"Expected [] at (0,0), got: {result!r}"
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_definition_at_file_start_returns_empty(self, language_server: SolidLanguageServer) -> None:
         """Position (0, 0) is on the ``import`` keyword — no definition."""
         result = language_server.request_definition(TS_FILE, 0, 0)
         assert result == [], f"Expected [] at (0,0), got: {result!r}"
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_template_position_no_containing_symbol(self, language_server: SolidLanguageServer) -> None:
         """An Angular template has no class/function containers; the HTML
         companion's documentSymbol provides element symbols only.
@@ -198,7 +198,7 @@ class TestAngularEdgeCasePositions:
         result = language_server.request_containing_symbol(TEMPLATE_FILE, 1, 4)
         assert result is None, f"Expected None inside template, got: {result!r}"
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_containing_symbol_inside_class_body_returns_class(self, language_server: SolidLanguageServer) -> None:
         """Lines 5 and 10 of app.component.ts are inside the AppComponent class
         body. The TS companion correctly reports AppComponent as the
@@ -209,7 +209,7 @@ class TestAngularEdgeCasePositions:
             assert isinstance(result, dict), f"Line {line}: expected dict, got {result!r}"
             assert result.get("name") == "AppComponent", f"Line {line}: expected 'AppComponent', got {result.get('name')!r}"
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_containing_symbol_outside_class_body_is_none(self, language_server: SolidLanguageServer) -> None:
         """Line 0 (import) and line 15 (blank/whitespace inside file but
         outside any symbol's range, depending on file structure) report no
@@ -223,7 +223,7 @@ class TestAngularEdgeCasePositions:
 class TestAngularReferenceEdgeCases:
     """Edge cases for the SolidLanguageServer reference helpers (built on top of LSP)."""
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_referencing_symbols_at_invalid_position_raises(self, language_server: SolidLanguageServer) -> None:
         """Unlike ``request_references`` (which returns ``[]``),
         ``request_referencing_symbols`` validates more strictly and surfaces
@@ -241,7 +241,7 @@ class TestAngularReferenceEdgeCases:
             f"Unexpected exception message: {exc_info.value}"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.ANGULAR], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_defining_symbol_at_invalid_position_returns_none(self, language_server: SolidLanguageServer) -> None:
         """``request_defining_symbol`` short-circuits when no definition is
         found and returns None — no exception, even for negative positions.
@@ -328,7 +328,7 @@ class TestAngularStartupCleanup:
 
         import psutil
 
-        ls = _create_ls(Language.ANGULAR)
+        ls = _create_ls(LanguageServerId.ANGULAR)
         my_proc = psutil.Process(os.getpid())
         children_before = {p.pid for p in my_proc.children(recursive=True)}
 

@@ -8,18 +8,20 @@ like request_references using the test repository.
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
-from test.conftest import language_tests_enabled
+from test.conftest import language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
-@pytest.mark.skipif(not language_tests_enabled(Language.TERRAFORM), reason="Terraform tests are disabled (terraform CLI not available)")
+@pytest.mark.skipif(
+    not language_server_tests_enabled(LanguageServerId.TERRAFORM), reason="Terraform tests are disabled (terraform CLI not available)"
+)
 @pytest.mark.terraform
 class TestLanguageServerBasics:
     """Test basic functionality of the Terraform language server."""
 
-    @pytest.mark.parametrize("language_server", [Language.TERRAFORM], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TERRAFORM], indirect=True)
     def test_basic_definition(self, language_server: SolidLanguageServer) -> None:
         """Test basic definition lookup functionality."""
         # Simple test to verify the language server is working
@@ -28,7 +30,7 @@ class TestLanguageServerBasics:
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
         assert len(symbols) > 0, "Should find at least some symbols in main.tf"
 
-    @pytest.mark.parametrize("language_server", [Language.TERRAFORM], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TERRAFORM], indirect=True)
     def test_request_references_aws_instance(self, language_server: SolidLanguageServer) -> None:
         """Test request_references on an aws_instance resource."""
         # Get references to an aws_instance resource in main.tf
@@ -42,7 +44,7 @@ class TestLanguageServerBasics:
         references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         assert len(references) >= 1, "aws_instance should be referenced at least once"
 
-    @pytest.mark.parametrize("language_server", [Language.TERRAFORM], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TERRAFORM], indirect=True)
     def test_request_references_variable(self, language_server: SolidLanguageServer) -> None:
         """Test request_references on a variable."""
         # Get references to a variable in variables.tf
@@ -56,7 +58,7 @@ class TestLanguageServerBasics:
         references = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         assert len(references) >= 1, "variable should be referenced at least once"
 
-    @pytest.mark.parametrize("language_server", [Language.TERRAFORM], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TERRAFORM], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

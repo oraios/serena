@@ -419,13 +419,19 @@ class Tool(Component):
             return result
 
         # execute the tool in the agent's task executor, with timeout
+        # (task timeout bounds task execution in the dispatcher once it runs, result timeout limits the time we wait)
         tool_call_error: ToolCallError
+        timeout = self.agent.serena_config.tool_timeout
         try:
-            task_exec = self.agent.issue_task(task, name=self.__class__.__name__)
-            return task_exec.result(timeout=self.agent.serena_config.tool_timeout)
+            task_exec = self.agent.issue_task(task, name=self.__class__.__name__, timeout=timeout)
+            return task_exec.result(timeout=timeout)
         except ToolCallError as e:
             tool_call_error = e
-        except Exception as e:  # typically TimeoutError (other exceptions caught and forwarded as ToolCallError in the task)
+        except TimeoutError:
+            msg = f"Tool execution timed out after {timeout} seconds. "
+            log.error(msg)
+            tool_call_error = ToolCallError(msg)
+        except Exception as e:  # unexpected errors (exceptions in the task itself are caught and forwarded as ToolCallError)
             msg = f"{e.__class__.__name__}: {e}"
             log.error(msg)
             tool_call_error = ToolCallError(msg)
@@ -437,6 +443,24 @@ class Tool(Component):
     @staticmethod
     def _to_json(x: Any) -> str:
         return json.dumps(x, ensure_ascii=False)
+
+    def _wrapped_tool_response(self, response: Any, message: str) -> str:
+        """
+        Wraps an existing tool response in an object with a message and the original response, i.e. returns
+        `{"message": message, "response": response}` stringified.
+        If the original response is a JSON string, it will be parsed and included as an object.
+
+        :param response: the original response (if it is a string, it will be parsed as JSON if possible)
+        :param message: the message to attach
+        :return: stringified JSON response with the message and the original response
+        """
+        response_obj = response
+        if isinstance(response, str):
+            try:
+                response_obj = json.loads(response)
+            except json.JSONDecodeError:
+                pass
+        return self._to_json({"message": message, "response": response_obj})
 
 
 class EditingToolWithDiagnostics(Tool, ToolMarkerCanEdit):

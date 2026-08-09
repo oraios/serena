@@ -4,13 +4,13 @@ from pathlib import Path
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
-from test.conftest import language_tests_enabled, start_ls_context
+from solidlsp.ls_config import LanguageServerId
+from test.conftest import language_server_tests_enabled, start_ls_context
 
 # These marks will be applied to all tests in this module
 pytestmark = [
     pytest.mark.erlang,
-    pytest.mark.skipif(not language_tests_enabled(Language.ERLANG), reason="Erlang tests are disabled"),
+    pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.ERLANG), reason="Erlang tests are disabled"),
 ]
 
 
@@ -18,13 +18,13 @@ pytestmark = [
 def ls_with_ignored_dirs() -> Generator[SolidLanguageServer, None, None]:
     """Fixture to set up an LS for the erlang test repo with the 'ignored_dir' directory ignored."""
     ignored_paths = ["_build", "ignored_dir"]
-    with start_ls_context(language=Language.ERLANG, ignored_paths=ignored_paths) as ls:
+    with start_ls_context(ls_id=LanguageServerId.ERLANG, ignored_paths=ignored_paths) as ls:
         yield ls
 
 
 @pytest.mark.timeout(60)  # Add 60 second timeout
 @pytest.mark.xfail(reason="Known timeout issue on Ubuntu CI with Erlang LS server startup", strict=False)
-@pytest.mark.parametrize("ls_with_ignored_dirs", [Language.ERLANG], indirect=True)
+@pytest.mark.parametrize("ls_with_ignored_dirs", [LanguageServerId.ERLANG], indirect=True)
 def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     """Tests that request_full_symbol_tree ignores the configured directory."""
     root = ls_with_ignored_dirs.request_full_symbol_tree()[0]
@@ -41,7 +41,7 @@ def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
 
 @pytest.mark.timeout(60)  # Add 60 second timeout
 @pytest.mark.xfail(reason="Known timeout issue on Ubuntu CI with Erlang LS server startup", strict=False)
-@pytest.mark.parametrize("ls_with_ignored_dirs", [Language.ERLANG], indirect=True)
+@pytest.mark.parametrize("ls_with_ignored_dirs", [LanguageServerId.ERLANG], indirect=True)
 def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     """Tests that find_references ignores the configured directory."""
     # Location of user record, which might be referenced in ignored_dir
@@ -68,11 +68,11 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
 
 @pytest.mark.timeout(60)  # Add 60 second timeout
 @pytest.mark.xfail(reason="Known timeout issue on Ubuntu CI with Erlang LS server startup", strict=False)
-@pytest.mark.parametrize("repo_path", [Language.ERLANG], indirect=True)
+@pytest.mark.parametrize("repo_path", [LanguageServerId.ERLANG], indirect=True)
 def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
     """Tests that refs and symbols with glob patterns are ignored."""
     ignored_paths = ["_build*", "ignored_*", "*.tmp"]
-    with start_ls_context(language=Language.ERLANG, repo_path=str(repo_path), ignored_paths=ignored_paths) as ls:
+    with start_ls_context(ls_id=LanguageServerId.ERLANG, repo_path=str(repo_path), ignored_paths=ignored_paths) as ls:
         # Same as in the above tests
         root = ls.request_full_symbol_tree()[0]
         root_children = root["children"]
@@ -105,7 +105,7 @@ def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
             assert not any("ignored_dir" in ref["relativePath"] for ref in references), "ignored_dir should be ignored (glob)"
 
 
-@pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+@pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
 def test_default_ignored_directories(language_server: SolidLanguageServer):
     """Test that default Erlang directories are ignored."""
     # Test that Erlang-specific directories are ignored by default
@@ -123,7 +123,7 @@ def test_default_ignored_directories(language_server: SolidLanguageServer):
     assert not language_server.is_ignored_dirname("priv"), "priv should not be ignored"
 
 
-@pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+@pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
 def test_symbol_tree_excludes_build_dirs(language_server: SolidLanguageServer):
     """Test that symbol tree excludes build and dependency directories."""
     symbol_tree = language_server.request_full_symbol_tree()
@@ -143,7 +143,7 @@ def test_symbol_tree_excludes_build_dirs(language_server: SolidLanguageServer):
         assert len(found_important) > 0, f"Expected to find important directories: {important_dirs}, got: {children_names}"
 
 
-@pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+@pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
 def test_ignore_compiled_files(language_server: SolidLanguageServer):
     """Test that compiled Erlang files are ignored."""
     # Test that beam files are ignored
@@ -155,7 +155,7 @@ def test_ignore_compiled_files(language_server: SolidLanguageServer):
     assert not language_server.is_ignored_filename("records.hrl"), "Header files should not be ignored"
 
 
-@pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+@pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
 def test_rebar_directories_ignored(language_server: SolidLanguageServer):
     """Test that rebar-specific directories are ignored."""
     # Test rebar3-specific directories
@@ -168,7 +168,7 @@ def test_rebar_directories_ignored(language_server: SolidLanguageServer):
     assert not language_server.is_ignored_filename("rebar.lock"), "rebar.lock should not be ignored"
 
 
-@pytest.mark.parametrize("ls_with_ignored_dirs", [Language.ERLANG], indirect=True)
+@pytest.mark.parametrize("ls_with_ignored_dirs", [LanguageServerId.ERLANG], indirect=True)
 def test_document_symbols_ignores_dirs(ls_with_ignored_dirs: SolidLanguageServer):
     """Test that document symbols from ignored directories are not included."""
     # Try to get symbols from a file in ignored directory (should not find it)
@@ -183,7 +183,7 @@ def test_document_symbols_ignores_dirs(ls_with_ignored_dirs: SolidLanguageServer
         pass
 
 
-@pytest.mark.parametrize("language_server", [Language.ERLANG], indirect=True)
+@pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
 def test_erlang_specific_ignore_patterns(language_server: SolidLanguageServer):
     """Test Erlang-specific ignore patterns work correctly."""
     erlang_ignored_dirs = ["_build", "ebin", ".rebar3", "_checkouts", "cover"]

@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
@@ -18,17 +18,17 @@ from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name,
 class TestTomlLanguageServerBasics:
     """Test basic functionality of the TOML language server (Taplo)."""
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_toml_language_server_initialization(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that TOML language server can be initialized successfully."""
         assert language_server is not None
-        assert language_server.language == Language.TOML
+        assert language_server.ls_id == LanguageServerId.TOML
         assert language_server.is_running()
         assert Path(language_server.language_server.repository_root_path).resolve() == repo_path.resolve()
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_toml_cargo_file_symbols(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test document symbols detection in Cargo.toml with specific symbol verification."""
         all_symbols, root_symbols = language_server.request_document_symbols("Cargo.toml").get_all_symbols_and_roots()
@@ -58,8 +58,8 @@ class TestTomlLanguageServerBasics:
         assert dependencies_symbol is not None, "Should find 'dependencies' symbol"
         assert dependencies_symbol.get("kind") == 19, "'dependencies' table should have kind 19 (object)"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_toml_pyproject_file_symbols(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test document symbols detection in pyproject.toml."""
         all_symbols, root_symbols = language_server.request_document_symbols("pyproject.toml").get_all_symbols_and_roots()
@@ -87,8 +87,8 @@ class TestTomlLanguageServerBasics:
         assert project_symbol is not None, "Should find 'project' symbol"
         assert project_symbol.get("kind") == 19, "'project' table should have kind 19 (object)"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_toml_symbol_kinds(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that TOML symbols have appropriate LSP kinds for different value types."""
         all_symbols, root_symbols = language_server.request_document_symbols("Cargo.toml").get_all_symbols_and_roots()
@@ -122,8 +122,8 @@ class TestTomlLanguageServerBasics:
         assert default_symbol is not None, "Should find 'default' array symbol"
         assert default_symbol.get("kind") == 18, "'default' should have kind 18 (array)"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_toml_symbols_with_body(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test request_document_symbols with body extraction."""
         all_symbols, root_symbols = language_server.request_document_symbols("Cargo.toml").get_all_symbols_and_roots()
@@ -164,8 +164,8 @@ class TestTomlLanguageServerBasics:
         features_body = features_symbol["body"].get_text()
         assert "default" in features_body, "Body should contain 'default' feature"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_toml_symbol_ranges(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that symbols have proper range information."""
         all_symbols, root_symbols = language_server.request_document_symbols("Cargo.toml").get_all_symbols_and_roots()
@@ -205,8 +205,8 @@ class TestTomlLanguageServerBasics:
         assert "line" in package_range["end"], "End should have line"
         assert "character" in package_range["end"], "End should have character"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_toml_nested_table_symbols(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test detection of nested table symbols like profile.release and tool.ruff."""
         # Test Cargo.toml for profile.release
@@ -235,7 +235,7 @@ class TestTomlLanguageServerBasics:
         if strict_symbol:
             assert strict_symbol.get("kind") == 17, "'strict' should have kind 17 (boolean)"
 
-    @pytest.mark.parametrize("language_server", [Language.TOML], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []

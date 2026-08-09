@@ -62,7 +62,7 @@ import zipfile
 
 from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection, quote_windows_path
 from solidlsp.ls import SolidLanguageServer
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -131,9 +131,9 @@ class PascalLanguageServer(SolidLanguageServer):
         proc_env: dict[str, str] = {}
 
         # Read from ls_specific_settings["pascal"]
-        from solidlsp.ls_config import Language
+        from solidlsp.ls_config import LanguageServerId
 
-        pascal_settings = solidlsp_settings.get_ls_specific_settings(Language.PASCAL)
+        pascal_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.PASCAL)
 
         # pp: Path to FPC compiler driver (must be fpc.exe, NOT ppc386.exe/ppcx64.exe)
         # CodeTools queries fpc.exe for configuration via "fpc -iV", "fpc -iTO", etc.
@@ -638,7 +638,7 @@ class PascalLanguageServer(SolidLanguageServer):
             str: The command to start the pasls server
 
         """
-        pascal_settings = solidlsp_settings.get_ls_specific_settings(Language.PASCAL)
+        pascal_settings = solidlsp_settings.get_ls_specific_settings(LanguageServerId.PASCAL)
         pasls_version = pascal_settings.get("pasls_version", PASLS_VERSION)
         cls.PASLS_VERSION = pasls_version
         cls.PASLS_RELEASES_URL = f"https://github.com/zen010101/pascal-language-server/releases/download/{pasls_version}"

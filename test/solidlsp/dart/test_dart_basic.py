@@ -5,7 +5,7 @@ import pytest
 
 from serena.util.text_utils import find_text_coordinates
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
@@ -13,16 +13,16 @@ from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name,
 
 @pytest.mark.dart
 class TestDartLanguageServer:
-    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.DART], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.DART], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.DART], indirect=True)
     def test_ls_is_running(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test that the language server starts and stops successfully."""
         # The fixture already handles start and stop
         assert language_server.is_running()
         assert Path(language_server.language_server.repository_root_path).resolve() == repo_path.resolve()
 
-    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.DART], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.DART], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.DART], indirect=True)
     def test_find_definition_within_file(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test finding definition of a method within the same file."""
         # In lib/main.dart:
@@ -43,8 +43,8 @@ class TestDartLanguageServer:
         # But language server may return different positions
         assert definition_location["range"]["start"]["line"] >= 0
 
-    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.DART], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.DART], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.DART], indirect=True)
     def test_find_definition_across_files(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test finding definition across different files."""
         # Test finding definition of MathHelper class which is in helper.dart
@@ -65,8 +65,8 @@ class TestDartLanguageServer:
         assert definition_location["uri"].endswith("helper.dart")
         assert definition_location["range"]["start"]["line"] >= 0
 
-    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.DART], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.DART], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.DART], indirect=True)
     def test_find_definition_class_method(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test finding definition of a class method."""
         # In lib/main.dart:
@@ -86,8 +86,8 @@ class TestDartLanguageServer:
         # Definition of power method should be around line 13 (0-indexed)
         assert 12 <= definition_location["range"]["start"]["line"] <= 16
 
-    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.DART], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.DART], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.DART], indirect=True)
     def test_find_references_within_file(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test finding references to a method within the same file."""
         main_dart_path = str(repo_path / "lib" / "main.dart")
@@ -105,8 +105,8 @@ class TestDartLanguageServer:
         main_dart_references = [ref for ref in references if ref["uri"].endswith("main.dart")]
         assert len(main_dart_references) >= 1
 
-    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.DART], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.DART], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.DART], indirect=True)
     def test_find_references_across_files(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test finding references across different files."""
         helper_dart_path = str(repo_path / "lib" / "helper.dart")
@@ -121,8 +121,8 @@ class TestDartLanguageServer:
         main_dart_references = [ref for ref in references if ref["uri"].endswith("main.dart")]
         assert len(main_dart_references) >= 1
 
-    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.DART], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.DART], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.DART], indirect=True)
     def test_find_definition_constructor(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test finding definition of a constructor call."""
         main_dart_path = str(repo_path / "lib" / "main.dart")
@@ -139,8 +139,8 @@ class TestDartLanguageServer:
         # Definition of Calculator class should be around line 3 (0-indexed)
         assert 3 <= definition_location["range"]["start"]["line"] <= 7
 
-    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
-    @pytest.mark.parametrize("repo_path", [Language.DART], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.DART], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.DART], indirect=True)
     def test_find_definition_import(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """Test finding definition through imports."""
         models_dart_path = str(repo_path / "lib" / "models.dart")
@@ -159,7 +159,7 @@ class TestDartLanguageServer:
         # This is acceptable behavior - the important thing is that it found a definition
         assert "dart" in definition_location["uri"].lower()
 
-    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.DART], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
         """Test finding symbols in the full symbol tree."""
         symbols = language_server.request_full_symbol_tree()
@@ -169,7 +169,7 @@ class TestDartLanguageServer:
         assert SymbolUtils.symbol_tree_contains_name(symbols, "MathHelper"), "MathHelper class not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "User"), "User class not found in symbol tree"
 
-    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.DART], indirect=True)
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test finding references using symbol selection range."""
         file_path = os.path.join("lib", "main.dart")
@@ -202,7 +202,7 @@ class TestDartLanguageServer:
             "main.dart should reference add method (tried all positions in selectionRange)"
         )
 
-    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.DART], indirect=True)
     def test_request_containing_symbol_method(self, language_server: SolidLanguageServer) -> None:
         """Test request_containing_symbol for a method."""
         file_path = os.path.join("lib", "main.dart")
@@ -217,7 +217,7 @@ class TestDartLanguageServer:
                 body = containing_symbol["body"].get_text()
                 assert "add" in body or "final result" in body
 
-    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.DART], indirect=True)
     def test_request_containing_symbol_class(self, language_server: SolidLanguageServer) -> None:
         """Test request_containing_symbol for a class."""
         file_path = os.path.join("lib", "main.dart")
@@ -229,7 +229,7 @@ class TestDartLanguageServer:
             assert containing_symbol["name"] == "Calculator"
             assert containing_symbol["kind"] == SymbolKind.Class
 
-    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.DART], indirect=True)
     def test_request_containing_symbol_nested(self, language_server: SolidLanguageServer) -> None:
         """Test request_containing_symbol with nested scopes."""
         file_path = os.path.join("lib", "main.dart")
@@ -241,7 +241,7 @@ class TestDartLanguageServer:
             assert containing_symbol["name"] == "add"
             assert containing_symbol["kind"] == SymbolKind.Method
 
-    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.DART], indirect=True)
     def test_request_defining_symbol_variable(self, language_server: SolidLanguageServer) -> None:
         """Test request_defining_symbol for a variable usage."""
         file_path = os.path.join("lib", "main.dart")
@@ -259,7 +259,7 @@ class TestDartLanguageServer:
             if defining_symbol.get("name") == "add":
                 assert defining_symbol.get("kind") == SymbolKind.Method.value
 
-    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.DART], indirect=True)
     def test_request_defining_symbol_imported_class(self, language_server: SolidLanguageServer) -> None:
         """Test request_defining_symbol for an imported class/function."""
         file_path = os.path.join("lib", "main.dart")
@@ -272,7 +272,7 @@ class TestDartLanguageServer:
             # Could be Function or Method depending on language server interpretation
             assert defining_symbol.get("kind") in [SymbolKind.Function.value, SymbolKind.Method.value]
 
-    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.DART], indirect=True)
     def test_request_defining_symbol_class_method(self, language_server: SolidLanguageServer) -> None:
         """Test request_defining_symbol for a static class method."""
         file_path = os.path.join("lib", "main.dart")
@@ -284,7 +284,7 @@ class TestDartLanguageServer:
             assert defining_symbol.get("name") == "power"
             assert defining_symbol.get("kind") == SymbolKind.Method.value
 
-    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.DART], indirect=True)
     def test_request_document_symbols(self, language_server: SolidLanguageServer) -> None:
         """Test getting document symbols from a Dart file."""
         file_path = os.path.join("lib", "main.dart")
@@ -311,7 +311,7 @@ class TestDartLanguageServer:
             # This is acceptable behavior - the important thing is we found the class
             pass
 
-    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.DART], indirect=True)
     def test_request_referencing_symbols_comprehensive(self, language_server: SolidLanguageServer) -> None:
         """Test comprehensive referencing symbols functionality."""
         file_path = os.path.join("lib", "main.dart")
@@ -340,7 +340,7 @@ class TestDartLanguageServer:
                         assert "start" in ref["range"]
                         assert "end" in ref["range"]
 
-    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.DART], indirect=True)
     def test_cross_file_symbol_resolution(self, language_server: SolidLanguageServer) -> None:
         """Test symbol resolution across multiple files."""
         helper_file_path = os.path.join("lib", "helper.dart")
@@ -363,7 +363,7 @@ class TestDartLanguageServer:
                 for ref in main_dart_refs:
                     assert "range" in ref or "location" in ref
 
-    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.DART], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []
@@ -376,7 +376,7 @@ class TestDartLanguageServer:
                 pytrace=False,
             )
 
-    @pytest.mark.parametrize("language_server", [Language.DART], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.DART], indirect=True)
     def test_symbol_body_contains_full_method(self, language_server: SolidLanguageServer) -> None:
         """Test that document symbols return the full method body range, not just the identifier.
 

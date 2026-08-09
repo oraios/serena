@@ -12,18 +12,21 @@ import pytest
 from serena.project import Project
 from serena.util.text_utils import LineType
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import Language
-from test.conftest import is_ci, language_tests_enabled
+from solidlsp.ls_config import LanguageServerId
+from test.conftest import is_ci, language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
-pytestmark = [pytest.mark.swift, pytest.mark.skipif(not language_tests_enabled(Language.SWIFT), reason="Swift tests are disabled")]
+pytestmark = [
+    pytest.mark.swift,
+    pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.SWIFT), reason="Swift tests are disabled"),
+]
 
 
 class TestSwiftLanguageServerBasics:
     """Test basic functionality of the Swift language server."""
 
-    @pytest.mark.parametrize("language_server", [Language.SWIFT], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SWIFT], indirect=True)
     def test_goto_definition_calculator_class(self, language_server: SolidLanguageServer) -> None:
         """Test goto_definition on Calculator class usage."""
         file_path = os.path.join("src", "main.swift")
@@ -42,7 +45,7 @@ class TestSwiftLanguageServerBasics:
         start_line = calculator_def.get("range", {}).get("start", {}).get("line")
         assert start_line == 15, f"Calculator class definition should be at line 16, got {start_line + 1}"
 
-    @pytest.mark.parametrize("language_server", [Language.SWIFT], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SWIFT], indirect=True)
     def test_goto_definition_user_struct(self, language_server: SolidLanguageServer) -> None:
         """Test goto_definition on User struct usage."""
         file_path = os.path.join("src", "main.swift")
@@ -61,7 +64,7 @@ class TestSwiftLanguageServerBasics:
         start_line = user_def.get("range", {}).get("start", {}).get("line")
         assert start_line == 25, f"User struct definition should be at line 26, got {start_line + 1}"
 
-    @pytest.mark.parametrize("language_server", [Language.SWIFT], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SWIFT], indirect=True)
     def test_goto_definition_calculator_method(self, language_server: SolidLanguageServer) -> None:
         """Test goto_definition on Calculator method usage."""
         file_path = os.path.join("src", "main.swift")
@@ -79,7 +82,7 @@ class TestSwiftLanguageServerBasics:
         start_line = add_def.get("range", {}).get("start", {}).get("line")
         assert start_line == 16, f"add method definition should be at line 17, got {start_line + 1}"
 
-    @pytest.mark.parametrize("language_server", [Language.SWIFT], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SWIFT], indirect=True)
     def test_goto_definition_cross_file(self, language_server: SolidLanguageServer) -> None:
         """Test goto_definition across files - Utils struct."""
         utils_file = os.path.join("src", "utils.swift")
@@ -98,7 +101,7 @@ class TestSwiftLanguageServerBasics:
         assert utils_def.get("uri", "").endswith("utils.swift"), "Definition should be in utils.swift"
 
     @pytest.mark.xfail(is_ci, reason="Test is flaky in CI")  # See #1040
-    @pytest.mark.parametrize("language_server", [Language.SWIFT], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SWIFT], indirect=True)
     def test_request_references_calculator_class(self, language_server: SolidLanguageServer) -> None:
         """Test request_references on the Calculator class."""
         # Get references to the Calculator class in main.swift
@@ -121,7 +124,7 @@ class TestSwiftLanguageServerBasics:
         assert len(line_5_refs) > 0, "Calculator should be referenced at line 5"
 
     @pytest.mark.xfail(is_ci, reason="Test is flaky in CI")  # See #1040
-    @pytest.mark.parametrize("language_server", [Language.SWIFT], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SWIFT], indirect=True)
     def test_request_references_user_struct(self, language_server: SolidLanguageServer) -> None:
         """Test request_references on the User struct."""
         # Get references to the User struct in main.swift
@@ -143,7 +146,7 @@ class TestSwiftLanguageServerBasics:
         assert len(line_9_refs) > 0, "User should be referenced at line 9"
 
     @pytest.mark.xfail(is_ci, reason="Test is flaky in CI")  # See #1040
-    @pytest.mark.parametrize("language_server", [Language.SWIFT], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SWIFT], indirect=True)
     def test_request_references_utils_struct(self, language_server: SolidLanguageServer) -> None:
         """Test request_references on the Utils struct."""
         # Get references to the Utils struct in utils.swift
@@ -167,7 +170,7 @@ class TestSwiftLanguageServerBasics:
 
 
 class TestSwiftProjectBasics:
-    @pytest.mark.parametrize("project", [Language.SWIFT], indirect=True)
+    @pytest.mark.parametrize("project", [LanguageServerId.SWIFT], indirect=True)
     def test_retrieve_content_around_line(self, project: Project) -> None:
         """Test retrieve_content_around_line functionality with various scenarios."""
         file_path = os.path.join("src", "main.swift")
@@ -222,7 +225,7 @@ class TestSwiftProjectBasics:
         status_matches = [m for m in matches if "Status" in str(m)]
         assert len(status_matches) > 0, "Should find Status enum"
 
-    @pytest.mark.parametrize("language_server", [Language.SWIFT], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SWIFT], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)
         malformed_symbols = []
@@ -235,7 +238,7 @@ class TestSwiftProjectBasics:
                 pytrace=False,
             )
 
-    @pytest.mark.parametrize("language_server", [Language.SWIFT], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SWIFT], indirect=True)
     def test_file_diagnostics(self, language_server: SolidLanguageServer) -> None:
         assert_file_diagnostics(
             language_server,

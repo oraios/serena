@@ -11,13 +11,13 @@ from serena.config.serena_config import LanguageBackend, ProjectConfig, Register
 from serena.constants import REPO_ROOT
 from serena.project import Project
 from serena.tools import FindImplementationsTool
-from solidlsp.ls_config import Language
+from solidlsp.ls_config import LanguageServerId
 
 SEPARATOR = "=" * 80
 GO_TEST_REPO = Path(REPO_ROOT) / "test" / "resources" / "repos" / "go" / "test_repo"
 
 
-def make_agent(project_root: Path, language: Language, project_name: str) -> SerenaAgent:
+def make_agent(project_root: Path, language: LanguageServerId, project_name: str) -> SerenaAgent:
     """Create an LSP-backed Serena agent for a single explicit project."""
     serena_config = SerenaConfig.from_config_file()
     serena_config.web_dashboard = False
@@ -27,7 +27,7 @@ def make_agent(project_root: Path, language: Language, project_name: str) -> Ser
         project_root=str(project_root),
         project_config=ProjectConfig(
             project_name=project_name,
-            languages=[language],
+            language_servers=[language],
             ignored_paths=[],
             excluded_tools=[],
             read_only=False,
@@ -49,7 +49,7 @@ def print_section(title: str) -> None:
 
 
 if __name__ == "__main__":
-    agent = make_agent(GO_TEST_REPO, Language.GO, "demo_go_test_repo")
+    agent = make_agent(GO_TEST_REPO, LanguageServerId.GO, "demo_go_test_repo")
 
     try:
         # letting the language server finish startup
