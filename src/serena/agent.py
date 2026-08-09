@@ -956,13 +956,42 @@ class SerenaAgent:
             result[tool_class.get_name_from_cls()] = new_tool_class.get_name_from_cls()
         return result
 
-    def _format_prompt(self, prompt_template: str) -> str:
+    @staticmethod
+    def _format_prompt_tag(text: str, tag: str, tag_name_attr: str | None = None) -> str:
+        open_tag = f"<{tag}" + (f' name="{tag_name_attr}"' if tag_name_attr is not None else "") + ">"
+        close_tag = f"</{tag}>"
+        return f"{open_tag}\n{text.strip()}\n{close_tag}"
+
+    def _render_prompt(self, prompt_template: str, tag: str | None = None, tag_name_attr: str | None = None) -> str:
+        """
+        Renders the given prompt template, providing the necessary variables and functions
+
+        :param prompt_template: the template text (jinja2) to render
+        :param tag: if not None, wraps the rendered prompt text in a tag
+        :param tag_name_attr: for the case where tag is not None, specifies the value of the "name" attribute of the tag
+        :return: the rendered prompt
+        """
+
+        def embed_memory(memory_name: str) -> str:
+            try:
+                memory_manager = self._get_memory_manager()
+                return self._format_prompt_tag(memory_manager.load_memory(memory_name), tag="memory", tag_name_attr=memory_name)
+            except Exception as e:
+                log.error("Tried to embed memory '%s' but failed to load it: %s", memory_name, e)
+                return ""
+
         template = JinjaTemplate(prompt_template)
-        return template.render(
+        text = template.render(
             available_tools=self._exposed_tools.tool_names,
             available_markers=self._exposed_tools.tool_marker_names,
             tool_names=self._prompt_tool_names_mapping,
+            embed_memory=embed_memory,
         )
+
+        if tag is not None:
+            text = self._format_prompt_tag(text, tag=tag, tag_name_attr=tag_name_attr)
+
+        return text
 
     def create_connection_prompt(self) -> str:
         """
@@ -971,6 +1000,21 @@ class SerenaAgent:
         :return: the prompt
         """
         return self.prompt_factory.create_connection_prompt()
+
+    def _create_global_memory_manager(self) -> MemoryManager:
+        """
+        :return: a memory manager for global memories only (no project memories)
+        """
+        return MemoryManager(serena_data_folder=None, read_only_memory_patterns=self.serena_config.read_only_memory_patterns)
+
+    def _get_memory_manager(self) -> MemoryManager:
+        """
+        :return: the memory manager for the active project (if any) or a global memory manager if no project is active
+        """
+        if self._active_project is not None:
+            return self._active_project.memory_manager
+        else:
+            return self._create_global_memory_manager()
 
     def create_system_prompt(self, session_id: str = "global") -> str:
         """
@@ -981,9 +1025,7 @@ class SerenaAgent:
         """
         available_tools = self._active_tools
         available_markers = available_tools.tool_marker_names
-        global_memories = MemoryManager(
-            serena_data_folder=None, read_only_memory_patterns=self.serena_config.read_only_memory_patterns
-        ).list_global_memories()
+        global_memories = self._create_global_memory_manager().list_global_memories()
         global_memories_str = dict_string(global_memories.to_dict()) if len(global_memories) > 0 else ""
         log.info("Generating system prompt with available_tools=(see active tools), available_markers=%s", available_markers)
 
@@ -997,8 +1039,8 @@ class SerenaAgent:
         self._project_prompt_status.mark_mode_prompts_as_provided(session_id)
 
         system_prompt = self.prompt_factory.create_system_prompt(
-            context_system_prompt=self._format_prompt(self._context.prompt),
-            mode_system_prompts=[self._format_prompt(mode.prompt) for mode in relevant_modes],
+            context_system_prompt=self._render_prompt(self._context.prompt, tag="context"),
+            mode_system_prompts=[self._render_prompt(mode.prompt, tag="mode", tag_name_attr=mode.name) for mode in relevant_modes],
             available_tools=available_tools.tool_names,
             available_markers=available_markers,
             global_memories_list=global_memories_str,
@@ -1007,11 +1049,11 @@ class SerenaAgent:
 
         # provide the project activation message if it hasn't yet been provided
         if self._active_project is not None and not self._project_prompt_status.is_project_activation_message_already_provided(session_id):
-            system_prompt += "\n\n" + self.get_project_activation_message(session_id)
+            system_prompt += "\n\n" + self._format_prompt_tag(self.get_project_activation_message(session_id), tag="active-project")
         elif self._project_activation_error:
             system_prompt += f"\n\nNo project is active ({self._project_activation_error})."
 
-        return system_prompt
+        return self._format_prompt_tag(system_prompt, tag="serena")
 
     def get_project_activation_message(self, session_id: str) -> str:
         """
@@ -1031,13 +1073,13 @@ class SerenaAgent:
 
         # provide basic project information (name, location, languages, encoding)
         if proj.is_newly_created:
-            msg = f"Created and activated a new project with name '{proj.project_name}' at {proj.project_root}. "
+            msg = f"Created and activated a new project with name '{proj.project_name}' at {proj.project_root}.\n"
         else:
-            msg = f"The project with name '{proj.project_name}' at {proj.project_root} is activated."
+            msg = f"The project with name '{proj.project_name}' at {proj.project_root} is activated.\n"
         if self._language_backend == LanguageBackend.LSP:
-            languages_str = ", ".join([lang.value for lang in proj.project_config.language_servers])
-            msg += f"\nProgramming languages: {languages_str}."
-        msg += f"File encoding: {proj.project_config.encoding}."
+            language_servers_str = ", ".join([ls.value for ls in proj.project_config.language_servers])
+            msg += f"Active language servers: {language_servers_str}.\n"
+        msg += f"File encoding: {proj.project_config.encoding}.\n"
 
         # add list of memories (if memories are enabled)
         include_memories = self._active_tools.contains_tool_class(ReadMemoryTool)
@@ -1045,27 +1087,26 @@ class SerenaAgent:
             project_memories = proj.memory_manager.list_project_memories()
             if project_memories:
                 msg += (
-                    f"\n{json.dumps(project_memories.to_dict())}\n"
-                    + "Use the `read_memory` tool to read these memories later if they are relevant to the task."
+                    f"{json.dumps(project_memories.to_dict())}\n"
+                    + f"Use the `{ReadMemoryTool.get_name_from_cls()}` tool to read these memories later if they are relevant to the task.\n"
                 )
             elif self._active_tools.contains_tool_class(OnboardingTool):
-                msg += "Onboarding has not been performed yet, you should call Serena's `onboarding` tool now to set up project memories."
+                msg += f"Onboarding has not been performed yet. Ask the user whether to perform onboarding via the `{OnboardingTool.get_name_from_cls()}` tool.\n"
 
         # add prompts for modes that were dynamically activated by the project
         modes_with_prompts = self._project_prompt_status.get_modes_with_prompts_to_be_provided_for_project_activation(session_id)
         if modes_with_prompts:
-            msg += "\nNewly applicable mode instructions:"
             for mode in modes_with_prompts:
-                msg += f"\n{mode.prompt}"
+                msg += self._render_prompt(mode.prompt, tag="mode", tag_name_attr=mode.name) + "\n"
         self._project_prompt_status.mark_mode_prompts_as_provided(session_id)
 
         # add project-specific prompt
         if proj.project_config.initial_prompt:
-            msg += f"\nProject-specific instructions:\n {proj.project_config.initial_prompt}"
+            msg += "\n" + self._render_prompt(proj.project_config.initial_prompt, tag="project-instructions")
 
         self._project_prompt_status.mark_project_activation_message_as_provided(session_id)
 
-        return self._format_prompt(msg)
+        return msg
 
     def _update_active_modes(self, log_message: bool = True) -> None:
         """
@@ -1431,10 +1472,7 @@ class SerenaAgent:
         Shutdown handler of the agent, freeing resources and stopping background tasks.
         """
         log.info("SerenaAgent is shutting down ...")
-        if self._active_project is not None:
-            log.info(f"Shutting down active project '{self._active_project.project_name}' ...")
-            self._active_project.shutdown(timeout=timeout)
-            self._active_project = None
+        # apply shutdown depending on allocated resources, handling quick ones first (dashboard manager & GUI viewer)
         if self._gui_log_viewer:
             log.info("Stopping the GUI log window ...")
             self._gui_log_viewer.stop()
@@ -1442,6 +1480,10 @@ class SerenaAgent:
         if self._dashboard_manager:
             self._dashboard_manager.shutdown()
             self._dashboard_manager = None
+        if self._active_project is not None:
+            log.info(f"Shutting down active project '{self._active_project.project_name}' ...")
+            self._active_project.shutdown(timeout=timeout)
+            self._active_project = None
 
     def shutdown(self) -> None:
         """

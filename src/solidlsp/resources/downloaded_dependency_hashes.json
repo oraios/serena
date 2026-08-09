@@ -1,9 +1,20 @@
 {
   "https://services.gradle.org/distributions/gradle-8.14.2-bin.zip": "7197a12f450794931532469d4ff21a59ea2c1cd59a3ec3f89c035c3c420a6999",
-  "https://VisualStudioExptTeam.gallery.vsassets.io/_apis/public/gallery/publisher/VisualStudioExptTeam/extension/vscodeintellicode/1.2.30/assetbyname/Microsoft.VisualStudio.Services.VSIXPackage": "7f61a7f96d101cdf230f96821be3fddd8f890ebfefb3695d18beee43004ae251",
   "https://github.com/redhat-developer/vscode-java/releases/download/v1.54.0/java-darwin-arm64-1.54.0-923.vsix": "c54c45cb0d2579d8e0a4ddeb24d4a9dd0b460d07d9366adea2b38a1da22a463c",
   "https://github.com/redhat-developer/vscode-java/releases/download/v1.54.0/java-darwin-x64-1.54.0-923.vsix": "dfc98abc4e54165a78372e280242a039671729b1b03420608df3b10c6b629fb6",
   "https://github.com/redhat-developer/vscode-java/releases/download/v1.54.0/java-linux-arm64-1.54.0-923.vsix": "e2bb22c427d90da8dbb1afff72ff1e2dce38d50b76deb02d7bc313a330a1330c",
   "https://github.com/redhat-developer/vscode-java/releases/download/v1.54.0/java-linux-x64-1.54.0-923.vsix": "9d4b15da54e25a0192f9bac073f086c015397d3676623b68dbf83a5dbaf5132b",
-  "https://github.com/redhat-developer/vscode-java/releases/download/v1.54.0/java-win32-x64-1.54.0-923.vsix": "66f3914987edeccfee8a2558470e0fde4f8c4154232ff4baa5d73373ebc819d4"
+  "https://github.com/redhat-developer/vscode-java/releases/download/v1.54.0/java-win32-x64-1.54.0-923.vsix": "66f3914987edeccfee8a2558470e0fde4f8c4154232ff4baa5d73373ebc819d4",
+  "https://github.com/nextflow-io/language-server/releases/download/v26.04.3/language-server-all.jar": "20cfa34f6e202d6b8babd8d786202ce00e0d39b70ccec3290e2ab3fbd02bc016",
+  "https://download-cdn.jetbrains.com/kotlin-lsp/261.13587.0/kotlin-lsp-261.13587.0-win-x64.zip": "2806c2bd4810bd8e7ccc27d8c0ca4a5232a1c4f26ea1f4ba40e578b60860ccad",
+  "https://download-cdn.jetbrains.com/kotlin-lsp/261.13587.0/kotlin-lsp-261.13587.0-linux-x64.zip": "dc0ed2e70cb0d61fdabb26aefce8299b7a75c0dcfffb9413715e92caec6e83ec",
+  "https://download-cdn.jetbrains.com/kotlin-lsp/261.13587.0/kotlin-lsp-261.13587.0-linux-aarch64.zip": "d1dceb000fe06c5e2c30b95e7f4ab01d05101bd03ed448167feeb544a9f1d651",
+  "https://download-cdn.jetbrains.com/kotlin-lsp/261.13587.0/kotlin-lsp-261.13587.0-mac-x64.zip": "a3972f27229eba2c226060e54baea1c958c82c326dfc971bf53f72a74d0564a3",
+  "https://download-cdn.jetbrains.com/kotlin-lsp/261.13587.0/kotlin-lsp-261.13587.0-mac-aarch64.zip": "d4ea28b22b29cf906fe16d23698a8468f11646a6a66dcb15584f306aaefbee6c",
+  "https://download-cdn.jetbrains.com/language-server/kotlin-server/262.9593.0/kotlin-server-262.9593.0.win.zip": "f2daaa476f26d99301b406f76de6d87c437d04dc72f06845154619d8f991c51f",
+  "https://download-cdn.jetbrains.com/language-server/kotlin-server/262.9593.0/kotlin-server-262.9593.0-aarch64.win.zip": "73a552a6a420158622e5ad8d96b53da8aa8ced3f88a24fded01575927a2fd8e7",
+  "https://download-cdn.jetbrains.com/language-server/kotlin-server/262.9593.0/kotlin-server-262.9593.0.tar.gz": "2d99d8e198fbe4aa8f4481e37799724ce94803b4ea12a60b416040e3fcd7cc5e",
+  "https://download-cdn.jetbrains.com/language-server/kotlin-server/262.9593.0/kotlin-server-262.9593.0-aarch64.tar.gz": "2317831c6e5607d05b7ebc1da655330125ce0e3d66fbf24517dfce442debc14e",
+  "https://download-cdn.jetbrains.com/language-server/kotlin-server/262.9593.0/kotlin-server-262.9593.0.sit": "17369fda97c85418ac24ab38a9df56b21522a3468dfe193832fe455c13920745",
+  "https://download-cdn.jetbrains.com/language-server/kotlin-server/262.9593.0/kotlin-server-262.9593.0-aarch64.sit": "6ba6021a706b21e64cef33f7e2b79f187c0910320722bb2d3ed05ad1115ec43f"
 }

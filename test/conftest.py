@@ -286,6 +286,7 @@ _LANGUAGE_PYTEST_MARKERS: dict[LanguageServerId, list[MarkDecorator | Mark]] = {
     LanguageServerId.CPP_CCLS: [pytest.mark.cpp],
     LanguageServerId.CUE: [pytest.mark.cue],
     LanguageServerId.CSHARP: [pytest.mark.csharp],
+    LanguageServerId.DENO: [pytest.mark.deno],
     LanguageServerId.FSHARP: [pytest.mark.fsharp],
     LanguageServerId.GO: [pytest.mark.go],
     LanguageServerId.HAXE: [pytest.mark.haxe],
@@ -436,6 +437,11 @@ def _determine_disabled_language_servers() -> list[LanguageServerId]:
     # catching a CI setup regression. On Windows/macOS CI (never installed) and off-CI without the binary it skips.
     if (_sh.which("qmlls6") is None and _sh.which("qmlls") is None) and not (is_ci and is_linux):
         result.append(LanguageServerId.QML)
+    # gleam is installed (see pytest.yml) on the Ubuntu other-langs CI batch. Same rationale as
+    # qmlls: a missing binary on Linux CI is NOT skipped (fails loudly on a CI setup regression);
+    # Windows/macOS CI and off-CI without the binary skip.
+    if _sh.which("gleam") is None and not (is_ci and is_linux):
+        result.append(LanguageServerId.GLEAM)
 
     # === 3. Disabled wherever the precondition is missing (including on CI) ===
     # 3a. Platform precondition: these language servers have no native Windows support.
@@ -477,6 +483,8 @@ def _determine_disabled_language_servers() -> list[LanguageServerId]:
         result.append(LanguageServerId.OCAML)
     if not _is_perl_language_server_available():  # perl ships with the OS; the LS module is the real signal
         result.append(LanguageServerId.PERL)
+    if _sh.which("deno") is None:  # deno bundles the language server (`deno lsp`); skip where the CLI is absent
+        result.append(LanguageServerId.DENO)
 
     # === 4. Enabled everywhere: every language NOT listed in this function (python, go, java, ...) ===
 

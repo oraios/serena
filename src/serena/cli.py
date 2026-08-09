@@ -489,11 +489,8 @@ class TopLevelCommands(AutoRegisteringGroup):
         log.info("Starting Serena project server")
         log.info("Storing logs in %s", log_path)
 
-        server = ProjectServer()
-        run_kwargs: dict[str, Any] = {"host": host}
-        if port is not None:
-            run_kwargs["port"] = port
-        server.run(**run_kwargs)
+        server = ProjectServer(host=host, port=port)
+        server.run()
 
     @staticmethod
     @click.command(

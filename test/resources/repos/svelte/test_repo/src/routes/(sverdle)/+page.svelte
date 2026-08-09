@@ -1,14 +1,10 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
-	import { confetti } from '@neoconfetti/svelte';
-	import { MediaQuery } from 'svelte/reactivity';
 	import { words } from '$lib/components/Words.svelte';
 	import { GAME_VERSION } from '$lib/game';
 
 	let { data } = $props();
-
-	const reducedMotion = new MediaQuery('(prefers-reduced-motion: reduce)');
 
 	let shake = $state(false);
 
@@ -165,19 +161,6 @@
 		{/if}
 	</div>
 </form>
-
-{#if won}
-	<div
-		style="position: absolute; left: 50%; top: 30%"
-		use:confetti={{
-			particleCount: reducedMotion.current ? 0 : undefined,
-			force: 0.7,
-			stageWidth: window.innerWidth,
-			stageHeight: window.innerHeight,
-			colors: ['#ff3e00', '#40b3ff', '#676778']
-		}}
-	></div>
-{/if}
 
 <style>
 	form {
