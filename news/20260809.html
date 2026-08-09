@@ -10,12 +10,13 @@
         and hooks (<code>serena-hooks --client=grok</code>) with Grok-native PreToolUse allow/deny output.
     </p>
     <p>
-        <b>Expanded Language Support.</b>
-        New language servers: Gleam (via <code>gleam lsp</code>), Nextflow (official language server, JAR downloaded
-        automatically, Java 17+ required), Deno (experimental; understands <code>npm:</code>/<code>jsr:</code>/<code>https:</code>
-        imports and the <code>Deno.*</code> globals, must be selected explicitly), and
-        <code>python_basedpyright</code> as an alternative Python language server.
-        The managed Kotlin language server was updated, now including Windows ARM64 builds.
+        <b>Expanded Language Server Support.</b>
+        Added: Gleam (via <code>gleam lsp</code>), Nextflow (official language server, JAR downloaded
+        automatically, Java 17+ required), Deno and Wolfram (both experimental) as well as
+        <code>python_basedpyright</code> as an alternative Python language server.<br>
+        The managed Java and Kotlin language server were updated.<br>
+        Furthermore, you now have the option of specifying language server priorities, which affect auto-detection during
+        project creation, allowing you to change the default language server for a given language.
     </p>
     <p>
         <b>Renamed Project Setting.</b>
