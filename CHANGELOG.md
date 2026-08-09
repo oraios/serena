@@ -4,6 +4,14 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * General:
   - Fix: Race conditions in ProjectServer when used by multiple clients in parallel   
+  - Fix: `GitignoreParser` interpolated a directory's name unescaped into gitignore pattern position;
+    a directory named with pattern metacharacters (e.g. a stray `***`) could turn a scoped pattern
+    into one matching far more than intended, silently excluding most or all of the project from
+    indexing #1806
+  - Fix: cleanup of an independently-started LSP process and its children required enumerating the
+    system process table (`psutil`), which can be denied even for processes Serena owns in a
+    sandboxed environment; cleanup now signals the known process group directly (#1818)
+  - Fix: the README, the Language Support docs page and the project template omitted several already-supported language servers
   - Fix: a tool call exceeding the timeout blocked the task executor indefinitely; the executor now
     recovers without user-induced cancellation
   - Add Grok Build support (context `grok`, setup CLI, hooks)
@@ -27,9 +35,11 @@ Status of the `main` branch. Changes prior to the next official version change w
 * CLI:
   - Fix: `start-mcp-server` help text for `--project-from-cwd` falsely promised a fallback to the CWD, which was 
     removed in v1.0.0 #1773
-  - Fix: `project health-check` always exited with code 0, even when the check failed, so callers 
-    (CI, scripts) could not act on its verdict; it now exits with code 1 on failure. A `find_symbol` 
-    result without any matches is now reported as a failure rather than as a warning.
+  - Improve `project health-check`:
+    - Fix: Process always exited with code 0, even when the check failed, so callers 
+      (CI, scripts) could not act on its verdict; it now exits with code 1 on failure. A `find_symbol` 
+      result without any matches is now reported as a failure rather than as a warning.
+    - Disable symbol groupers, remove flawed pattern search test
 
 * Tools:
   - `find_symbol`, `jet_brains_find_symbol`: Change tool description to improve tool search results in clients that load tools dynamically
@@ -55,6 +65,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     `intellicode_version`, `intellicode_xmx` and `intellicode_xms` settings remain accepted but are ignored #1821
   - Kotlin: update the managed Kotlin LSP from `261.13587.0` to `262.9593.0`, including support for the
     new platform-specific archive layout and Windows ARM64 builds
+  - Add support for Wolfram Language via the official [WolframResearch LSPServer](https://github.com/WolframResearch/LSPServer) paclet.
+    Requires Wolfram Mathematica 13.0+ or Wolfram Engine 12.1+. Set `WOLFRAM_PATH` environment variable or configure
+    `ls_path` in `ls_specific_settings`. Supports .wl and .wls files with diagnostics, document symbols,
+    within-file references, hover documentation, and formatting.
   - Nix/nixd: support custom `ls_path` launchers and external JSON settings through `config_path` #1737
   - Fix: Nix/nixd diagnostics now use published diagnostics instead of the unsupported
     `textDocument/diagnostic` request, which terminated nixd #1802
@@ -86,6 +100,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     `Deno.*` globals, which the plain TypeScript language server does not. Overlaps TypeScript on
     file extensions, so it is not auto-detected and must be selected explicitly; requires the
     `deno` CLI on PATH
+  - Fix: `find_referencing_symbols` reported file-level containers for references located inside Go
+    struct bodies, interface bodies and `const` groups, because containing-symbol detection admitted
+    only Python's container kinds; `Struct`, `Interface` and `Constant` symbols are now admitted as
+    containers
 
 * JetBrains:
   - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file

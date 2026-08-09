@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,6 +11,18 @@ from pathspec import PathSpec
 from sensai.util.logging import LogTime
 
 log = logging.getLogger(__name__)
+
+# Characters meaningful to pathspec's gitignore grammar: glob wildcards, bracket expressions,
+# the escape character itself, and '!'/'#' which change a whole pattern's meaning when they
+# are its first character. Backslash-escaping them makes a literal name safe to interpolate.
+_GITIGNORE_PATTERN_SPECIAL_CHARS_RE = re.compile(r"([\\*?\[\]!#])")
+
+
+def _escape_gitignore_path_component(component: str) -> str:
+    """Escape gitignore/pathspec pattern metacharacters in a single path component (no
+    separators) so it is matched as a literal name rather than as glob syntax.
+    """
+    return _GITIGNORE_PATTERN_SPECIAL_CHARS_RE.sub(r"\\\1", component)
 
 
 class ScanResult(NamedTuple):
@@ -223,10 +236,20 @@ class GitignoreParser:
         """
         patterns = []
 
-        # Get the relative path from repo root to the gitignore directory
-        rel_dir = os.path.relpath(gitignore_dir, self.repo_root)
+        # Get the relative path from repo root to the gitignore directory. Normalize to
+        # forward slashes immediately: os.path.relpath returns native separators, but
+        # gitignore/pathspec patterns are always POSIX-style, and on Windows os.sep is
+        # backslash -- the same character pathspec uses as its escape character. Building
+        # the pattern with any raw os.sep would make a later blanket backslash->slash
+        # normalization indistinguishable from the escape backslashes below.
+        rel_dir = os.path.relpath(gitignore_dir, self.repo_root).replace(os.sep, "/")
         if rel_dir == ".":
             rel_dir = ""
+
+        # rel_dir is a filesystem path, but the code below interpolates it into pattern
+        # position; escape each of its components so a directory name containing pattern
+        # metacharacters (e.g. "***") is matched literally instead of as glob syntax.
+        rel_dir_pattern = "/".join(_escape_gitignore_path_component(part) for part in rel_dir.split("/")) if rel_dir else rel_dir
 
         for line in content.splitlines():
             # Strip trailing whitespace (but preserve leading whitespace for now)
@@ -256,20 +279,23 @@ class GitignoreParser:
             if is_anchored:
                 line = line[1:]
 
-            # Adjust pattern based on gitignore file location
+            # Adjust pattern based on gitignore file location. Joined with a literal "/",
+            # never os.path.join/os.sep: gitignore patterns are always POSIX-style, and on
+            # Windows os.sep is backslash, indistinguishable from the escape backslashes
+            # rel_dir_pattern may already contain.
             if rel_dir:
                 if is_anchored:
                     # Anchored patterns are relative to the gitignore directory
-                    adjusted_pattern = os.path.join(rel_dir, line)
+                    adjusted_pattern = f"{rel_dir_pattern}/{line}"
                 else:
                     # Non-anchored patterns can match anywhere below the gitignore directory
                     # We need to preserve this behavior
                     if line.startswith("**/"):
                         # Even if pattern starts with **, it should still be scoped to the subdirectory
-                        adjusted_pattern = os.path.join(rel_dir, line)
+                        adjusted_pattern = f"{rel_dir_pattern}/{line}"
                     else:
                         # Add the directory prefix but also allow matching in subdirectories
-                        adjusted_pattern = os.path.join(rel_dir, "**", line)
+                        adjusted_pattern = f"{rel_dir_pattern}/**/{line}"
             else:
                 if is_anchored:
                     # Anchored patterns in root should only match at root level
@@ -282,9 +308,6 @@ class GitignoreParser:
             # Re-add negation if needed
             if is_negation:
                 adjusted_pattern = "!" + adjusted_pattern
-
-            # Normalize path separators to forward slashes (gitignore uses forward slashes)
-            adjusted_pattern = adjusted_pattern.replace(os.sep, "/")
 
             patterns.append(adjusted_pattern)
 

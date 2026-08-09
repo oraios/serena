@@ -921,14 +921,14 @@ class ProjectCommands(AutoRegisteringGroup):
     @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
     def health_check(project: str) -> None:
         """
-        Perform a comprehensive health check of the project's tools and language server.
+        Perform a basic health check which checks whether language server tools are functional for the project.
 
         :param project: path to the project directory, defaults to the current working directory.
         """
         # NOTE: completely written by Claude Code, only functionality was reviewed, not implementation
         from serena.agent import SerenaAgent
         from serena.project import Project
-        from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, GetSymbolsOverviewTool, SearchForPatternTool
+        from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, GetSymbolsOverviewTool
 
         logging.configure(level=logging.INFO)
         project_path = os.path.abspath(project)
@@ -977,7 +977,6 @@ class ProjectCommands(AutoRegisteringGroup):
                 overview_tool = agent.get_tool(GetSymbolsOverviewTool)
                 find_symbol_tool = agent.get_tool(FindSymbolTool)
                 find_refs_tool = agent.get_tool(FindReferencingSymbolsTool)
-                search_pattern_tool = agent.get_tool(SearchForPatternTool)
 
                 # Test 1: Get symbols overview
                 log.info("Testing GetSymbolsOverviewTool on file: %s", target_file)
@@ -1006,41 +1005,26 @@ class ProjectCommands(AutoRegisteringGroup):
 
                 # Test 2: FindSymbolTool
                 log.info("Testing FindSymbolTool for symbol: %s", symbol_name)
-                find_symbol_result = agent.execute_task(
-                    lambda: find_symbol_tool.apply(symbol_name, relative_path=target_file, include_body=True)
-                )
+                with find_symbol_tool.symbol_dict_grouper.disabled_context():
+                    find_symbol_result = agent.execute_task(
+                        lambda: find_symbol_tool.apply(symbol_name, relative_path=target_file, include_body=True)
+                    )
                 find_symbol_data = json.loads(find_symbol_result)
                 log.info("FindSymbolTool found %d matches for symbol %s", len(find_symbol_data), symbol_name)
 
                 # Test 3: FindReferencingSymbolsTool
                 log.info("Testing FindReferencingSymbolsTool for symbol: %s", symbol_name)
                 try:
-                    find_refs_result = agent.execute_task(lambda: find_refs_tool.apply(symbol_name, relative_path=target_file))
-                    find_refs_data = json.loads(find_refs_result)
-                    log.info("FindReferencingSymbolsTool found %d references for symbol %s", len(find_refs_data), symbol_name)
+                    with find_refs_tool.symbol_dict_grouper.disabled_context():
+                        find_refs_result = agent.execute_task(lambda: find_refs_tool.apply(symbol_name, relative_path=target_file))
+                        find_refs_data = json.loads(find_refs_result)
+                        log.info("FindReferencingSymbolsTool found %d references for symbol %s", len(find_refs_data), symbol_name)
                 except Exception as e:
                     log.warning("FindReferencingSymbolsTool failed for symbol %s: %s", symbol_name, str(e))
-                    find_refs_data = []
-
-                # Test 4: SearchForPatternTool to verify references
-                log.info("Testing SearchForPatternTool for pattern: %s", symbol_name)
-                try:
-                    search_result = agent.execute_task(
-                        lambda: search_pattern_tool.apply(substring_pattern=symbol_name, restrict_search_to_code_files=True)
-                    )
-                    search_data = json.loads(search_result)
-                    pattern_matches = sum(len(matches) for matches in search_data.values())
-                    log.info("SearchForPatternTool found %d pattern matches for %s", pattern_matches, symbol_name)
-                except Exception as e:
-                    log.warning("SearchForPatternTool failed for pattern %s: %s", symbol_name, str(e))
-                    pattern_matches = 0
 
                 # Verify tools worked as expected
                 if not find_symbol_data:
                     raise ProjectCommands._HealthCheckFailure("FindSymbolTool returned no results")
-
-                if len(find_refs_data) == 0 and pattern_matches == 0:
-                    log.warning("Both FindReferencingSymbolsTool and SearchForPatternTool found no matches - this might indicate an issue")
 
                 log.info("Health check completed successfully")
 
