@@ -88,6 +88,10 @@ class NextflowLanguageServer(SolidLanguageServer):
         self._active_progress_tokens: set[str] = set()
         self._progress_lock = threading.Lock()
 
+        # Whether the server's deferred workspace scan has been observed to complete
+        # (see _flush_deferred_workspace_scan).
+        self._workspace_scan_flushed = False
+
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
@@ -297,6 +301,32 @@ class NextflowLanguageServer(SolidLanguageServer):
         else:
             log.warning("Nextflow LS did not signal scan completion within %.0fs; proceeding anyway", _WORKSPACE_SCAN_TIMEOUT)
 
+    def _flush_deferred_workspace_scan(self, relative_file_path: str) -> None:
+        """
+        Forces the workspace scan, which the server defers past the first request of a session.
+
+        The scan runs in ``LanguageService.update0`` behind a 1s debounce, and only on a round with no
+        pending file change; the session's first ``didOpen`` re-defers it, leaving references to be
+        answered from an AST cache holding just that one file.
+
+        ``completion`` calls ``updateNow``, which runs the update synchronously before replying, so two
+        such requests force the scan whatever the workspace size: the first drains the pending change,
+        the second finds none and scans. Their results are discarded.
+        """
+        if self._workspace_scan_flushed:
+            return
+
+        params: lsp_types.CompletionParams = {
+            "textDocument": {"uri": self._resolve_file_uri(relative_file_path)},
+            "position": {"line": 0, "character": 0},
+        }
+        for _ in range(2):
+            try:
+                self.server.send.completion(params)
+            except Exception as e:
+                log.debug("Completion request used to flush the Nextflow workspace scan failed: %s", e)
+        self._workspace_scan_flushed = True
+
     @override
     def _send_references_request(self, relative_file_path: str, line: int, column: int) -> list[lsp_types.Location] | None:
         """
@@ -309,13 +339,14 @@ class NextflowLanguageServer(SolidLanguageServer):
         come back empty. Sending a ``documentSymbol`` request for the same file first is a cheap way to
         block until the update has been applied.
         """
+        self._flush_deferred_workspace_scan(relative_file_path)
         self.server.send.document_symbol({"textDocument": {"uri": self._resolve_file_uri(relative_file_path)}})
         return super()._send_references_request(relative_file_path, line, column)
 
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
-        """Small safety buffer; the actual synchronisation happens in _send_references_request."""
-        return 1.0
+        """No blind wait is needed: _send_references_request synchronises with the server explicitly."""
+        return 0.0
 
     @override
     def _document_symbols_cache_fingerprint(self) -> Hashable:
