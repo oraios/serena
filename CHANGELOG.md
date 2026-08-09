@@ -46,12 +46,6 @@ Status of the `main` branch. Changes prior to the next official version change w
   - **Add support for Nextflow** (language server `nextflow`), using the official
     [Nextflow language server](https://github.com/nextflow-io/language-server); the JAR is downloaded
     automatically, a Java 17+ runtime is required
-  - `nextflow`: Fix: `find_referencing_symbols`/`request_references` returned an empty list for any
-    symbol during the first seconds of a session. The server defers its workspace scan behind a 1s
-    debounce and re-defers it whenever a file change is pending, so the very first `didOpen` pushed the
-    scan out past the reference request, which then saw an AST cache holding only the file it had just
-    opened. Cross-file requests now force the scan via the server's own synchronous update path, so they
-    are correct regardless of workspace size.
   - Add `python_basedpyright` as an alternative Python language server
   - Java/JDTLS: stop downloading and loading the unused IntelliCode completion-ranking bundle; the retired
     `intellicode_version`, `intellicode_xmx` and `intellicode_xms` settings remain accepted but are ignored #1821

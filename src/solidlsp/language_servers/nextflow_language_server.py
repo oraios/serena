@@ -303,29 +303,15 @@ class NextflowLanguageServer(SolidLanguageServer):
 
     def _flush_deferred_workspace_scan(self, relative_file_path: str) -> None:
         """
-        Forces the server to scan the workspace, which it does not do when it appears to.
+        Forces the workspace scan, which the server defers past the first request of a session.
 
-        ``LanguageService.initialize`` (which the "Initializing" progress notification wraps) only marks
-        the workspace as unscanned; the scan itself happens in ``LanguageService.update0``, behind a 1s
-        debounce, and *only* on a round where no file change is pending -- a round that finds pending
-        changes re-defers it via ``updateLater``. The first ``didOpen`` of a session therefore pushes the
-        scan out by at least one further round, so a references request issued right after it sees an AST
-        cache holding nothing but the file it just opened, and answers with an empty list.
+        The scan runs in ``LanguageService.update0`` behind a 1s debounce, and only on a round with no
+        pending file change; the session's first ``didOpen`` re-defers it, leaving references to be
+        answered from an AST cache holding just that one file.
 
-        ``completion`` is one of the two requests that call ``updateNow`` before consulting their provider,
-        and ``DebouncingExecutor.executeNow`` cancels the pending debounce and runs the update synchronously
-        on the request thread, so the response is not sent until that round has finished. Two rounds suffice
-        whatever the workspace size: the first drains the pending file changes -- which is what re-defers
-        the scan -- and the second finds nothing pending, so it takes the ``getWorkspaceFiles`` branch and
-        compiles the whole workspace before replying.
-
-        Waiting on the workspace symbol index instead would be unsound: ``LanguageService.symbol`` neither
-        awaits the update nor holds the monitor that ``update`` synchronises on, so once a workspace is big
-        enough for the scan to outlast a poll interval, a poll can observe a half-populated cache and
-        conclude the scan is done while files are still being compiled.
-
-        The completion results are discarded; only the barrier matters, and it is reached before the
-        provider runs, so even a provider-side failure leaves the workspace scanned.
+        ``completion`` calls ``updateNow``, which runs the update synchronously before replying, so two
+        such requests force the scan whatever the workspace size: the first drains the pending change,
+        the second finds none and scans. Their results are discarded.
         """
         if self._workspace_scan_flushed:
             return
