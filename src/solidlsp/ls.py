@@ -2533,8 +2533,9 @@ class SolidLanguageServer(ABC):
     ) -> ls_types.UnifiedSymbolInformation | None:
         """
         Finds the first symbol containing the position for the given file.
-        For Python, container symbols are considered to be those with kinds corresponding to
-        functions, methods, or classes (typically: Function (12), Method (6), Class (5)).
+        Container symbols are those with kinds corresponding to functions, methods, classes, structs
+        and interfaces, as well as variables and constants (which may be one-liners, e.g. members
+        of a Go ``const`` group).
 
         The method operates as follows:
           - Request the document symbols for the file.
@@ -2546,7 +2547,7 @@ class SolidLanguageServer(ABC):
             among those above the given line.
           - If no container candidates are found, return None.
 
-        :param relative_file_path: The relative path to the Python file.
+        :param relative_file_path: The relative path to the file.
         :param line: The 0-indexed line number.
         :param column: The 0-indexed column (also called character). If not passed, the lookup will be based
             only on the line.
@@ -2589,8 +2590,15 @@ class SolidLanguageServer(ABC):
                 location["relativePath"] = relative_file_path
                 location["uri"] = Path(absolute_file_path).as_uri()
 
-        # Allowed container kinds, currently only for Python
-        container_symbol_kinds = {ls_types.SymbolKind.Method, ls_types.SymbolKind.Function, ls_types.SymbolKind.Class}
+        # allowed container kinds; Struct and Interface cover languages (e.g. Go, Rust, C) whose
+        # containers are not reported as classes
+        container_symbol_kinds = {
+            ls_types.SymbolKind.Method,
+            ls_types.SymbolKind.Function,
+            ls_types.SymbolKind.Class,
+            ls_types.SymbolKind.Struct,
+            ls_types.SymbolKind.Interface,
+        }
 
         def is_position_in_range(line: int, range_d: ls_types.Range) -> bool:
             start = range_d["start"]
@@ -2613,7 +2621,10 @@ class SolidLanguageServer(ABC):
             for s in document_symbols.iter_symbols()
             if s["kind"] in container_symbol_kinds and s["location"]["range"]["start"]["line"] != s["location"]["range"]["end"]["line"]
         ]
-        var_containers = [s for s in document_symbols.iter_symbols() if s["kind"] == ls_types.SymbolKind.Variable]
+        # variables and constants are admitted even as one-liners (e.g. members of a Go const group)
+        var_containers = [
+            s for s in document_symbols.iter_symbols() if s["kind"] in {ls_types.SymbolKind.Variable, ls_types.SymbolKind.Constant}
+        ]
         candidate_containers.extend(var_containers)
 
         if not candidate_containers:
