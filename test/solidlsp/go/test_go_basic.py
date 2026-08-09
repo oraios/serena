@@ -4,11 +4,13 @@ from pathlib import Path
 import pytest
 
 from serena.symbol import LanguageServerSymbol
+from serena.util.text_utils import find_text_coordinates
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerId
+from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
 from test.conftest import find_identifier_position, get_repo_path, ls_has_verified_implementation_support
-from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, read_repo_file, request_all_symbols
 
 
 @pytest.mark.go
@@ -87,6 +89,62 @@ class TestGoLanguageServer:
             body = sym["body"].get_text()
             assert body.startswith(name), f"Expected grouped var {name} body to start with the identifier, got {body[:24]!r}"
             assert not body.startswith("var"), f"Grouped var {name} body must not include the 'var' keyword"
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.GO], indirect=True)
+    def test_request_containing_symbol_const_group_member(self, language_server: SolidLanguageServer) -> None:
+        """A reference inside a ``const`` group must be attributed to the enclosing constant."""
+        file_path = os.path.join("containment_sample.go")
+        file_content = read_repo_file(language_server, file_path)
+        coords = find_text_coordinates(file_content, r"SevLow (Severity) = iota")
+        assert coords is not None, "Could not find the Severity reference in the const group"
+        containing_symbol = language_server.request_containing_symbol(file_path, coords.line, coords.col)
+        assert containing_symbol is not None, "Expected a containing symbol for a reference inside a const group"
+        assert containing_symbol["name"] == "SevLow"
+        assert containing_symbol["kind"] == SymbolKind.Constant
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.GO], indirect=True)
+    def test_request_containing_symbol_struct_field(self, language_server: SolidLanguageServer) -> None:
+        """A reference in a struct field declaration must be attributed to the enclosing struct."""
+        file_path = os.path.join("containment_sample.go")
+        file_content = read_repo_file(language_server, file_path)
+        coords = find_text_coordinates(file_content, r"Level (Severity)")
+        assert coords is not None, "Could not find the Severity reference in the struct field"
+        containing_symbol = language_server.request_containing_symbol(file_path, coords.line, coords.col)
+        assert containing_symbol is not None, "Expected a containing symbol for a reference inside a struct body"
+        assert containing_symbol["name"] == "Alert"
+        assert containing_symbol["kind"] == SymbolKind.Struct
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.GO], indirect=True)
+    def test_request_containing_symbol_interface_method(self, language_server: SolidLanguageServer) -> None:
+        """A reference in an interface method signature must be attributed to the enclosing interface."""
+        file_path = os.path.join("containment_sample.go")
+        file_content = read_repo_file(language_server, file_path)
+        coords = find_text_coordinates(file_content, r"Notify\(level (Severity)\)")
+        assert coords is not None, "Could not find the Severity reference in the interface method"
+        containing_symbol = language_server.request_containing_symbol(file_path, coords.line, coords.col)
+        assert containing_symbol is not None, "Expected a containing symbol for a reference inside an interface body"
+        assert containing_symbol["name"] == "Notifier"
+        assert containing_symbol["kind"] == SymbolKind.Interface
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.GO], indirect=True)
+    def test_request_referencing_symbols_attributes_containers(self, language_server: SolidLanguageServer) -> None:
+        """References to a type used in a const group, a struct field and an interface method must
+        be attributed to the constant, the struct and the interface respectively, not to the file.
+        """
+        file_path = os.path.join("containment_sample.go")
+        all_symbols, _ = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
+        severity_symbol = next((sym for sym in all_symbols if sym.get("name") == "Severity"), None)
+        assert severity_symbol is not None, "Could not find the 'Severity' type symbol in containment_sample.go"
+        sel_start = severity_symbol["selectionRange"]["start"]
+        ref_symbols = [
+            ref.symbol for ref in language_server.request_referencing_symbols(file_path, sel_start["line"], sel_start["character"])
+        ]
+        assert ref_symbols, "Expected references to the Severity type"
+        ref_names = {ref["name"] for ref in ref_symbols}
+        assert "SevLow" in ref_names
+        assert "Alert" in ref_names
+        assert "Notifier" in ref_names
+        assert all(ref["kind"] != SymbolKind.File for ref in ref_symbols), f"File-level fallback attribution in {ref_names}"
 
     if ls_has_verified_implementation_support(LanguageServerId.GO):
 

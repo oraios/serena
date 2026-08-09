@@ -82,6 +82,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     `Deno.*` globals, which the plain TypeScript language server does not. Overlaps TypeScript on
     file extensions, so it is not auto-detected and must be selected explicitly; requires the
     `deno` CLI on PATH
+  - Fix: `find_referencing_symbols` reported file-level containers for references located inside Go
+    struct bodies, interface bodies and `const` groups, because containing-symbol detection admitted
+    only Python's container kinds; `Struct`, `Interface` and `Constant` symbols are now admitted as
+    containers
 
 * JetBrains:
   - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file
