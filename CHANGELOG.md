@@ -4,6 +4,11 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * General:
   - Fix: Race conditions in ProjectServer when used by multiple clients in parallel   
+  - Fix: `GitignoreParser` interpolated a directory's name unescaped into gitignore pattern position;
+    a directory named with pattern metacharacters (e.g. a stray `***`) could turn a scoped pattern
+    into one matching far more than intended, silently excluding most or all of the project from
+    indexing #1806
+  - Fix: the README, the Language Support docs page and the project template omitted several already-supported language servers
   - Fix: a tool call exceeding the timeout blocked the task executor indefinitely; the executor now
     recovers without user-induced cancellation
   - Add Grok Build support (context `grok`, setup CLI, hooks)
