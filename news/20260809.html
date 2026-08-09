@@ -1,0 +1,67 @@
+<div class="news-item">
+    <h3>Serena v1.7.0</h3>
+    <p class="date">August 9, 2026</p>
+    <p>
+        Here are the highlights of the v1.7.0 release:
+    </p>
+    <p>
+        <b>Grok Support.</b>
+        Serena now supports Grok Build as a client, including the <code>grok</code> context, setup via the CLI,
+        and hooks (<code>serena-hooks --client=grok</code>) with Grok-native PreToolUse allow/deny output.
+    </p>
+    <p>
+        <b>Expanded Language Support.</b>
+        New language servers: Gleam (via <code>gleam lsp</code>), Nextflow (official language server, JAR downloaded
+        automatically, Java 17+ required), Deno (experimental; understands <code>npm:</code>/<code>jsr:</code>/<code>https:</code>
+        imports and the <code>Deno.*</code> globals, must be selected explicitly), and
+        <code>python_basedpyright</code> as an alternative Python language server.
+        The managed Kotlin language server was updated, now including Windows ARM64 builds.
+    </p>
+    <p>
+        <b>Renamed Project Setting.</b>
+        The <code>languages</code> key in project configurations is now called <code>language_servers</code>,
+        which better reflects its actual semantics. Existing configurations are migrated automatically.
+    </p>
+    <p>
+        <b>Security Hardening.</b>
+        The project server and the dashboard tray manager now configure trusted hosts (local hosts only) when
+        listening on localhost, and prompt templating runs in a sandboxed environment, preventing attackers from
+        using custom prompts to execute commands in an uncontrolled manner.
+    </p>
+    <p>
+        <b>Prompts &amp; Templating.</b>
+        Initial project prompts and project-specific newly activated modes can now use templating, and the new
+        <code>embed_memory</code> function inlines a memory's contents into a prompt template.
+        Sub-prompts are enclosed in XML-like tags to make scopes explicit.
+    </p>
+    <p>
+        <b>More Liberal Handling of Ignored Paths.</b>
+        Tools that explicitly target a single file (<code>create_text_file</code>, <code>read_file</code>,
+        <code>replace_content</code>) no longer consider ignored paths at all &ndash; when a path is explicitly
+        accessed, the agent is assumed to have a good reason for doing so.
+        Tools that traverse a subtree (<code>list_dir</code>, <code>find_file</code>, <code>search_for_pattern</code>)
+        now uniformly offer a <code>skip_ignored_files</code> option.
+    </p>
+    <p>
+        <b>Better Diagnosability.</b>
+        Project activation errors are now reported to the client in Serena's system prompt instead of being visible
+        only in the log, <code>get_current_config</code> includes the language server status, and
+        <code>project health-check</code> exits with a non-zero code when the check fails.
+    </p>
+    <p>
+        <b>Robustness &amp; Fixes.</b>
+        A multitude of fixes across the board, including Scala/Metals (build import and monorepos with several build
+        roots), TypeScript (incomplete reference results on large projects), Erlang (name paths for functions),
+        F#, Nix, Ansible, Rust memory usage, orphaned language server processes on Linux,
+        race conditions in the project server, blocked tool call timeouts, and the dashboard,
+        which now uses the <code>tray_manager</code> interface by default on macOS.
+    </p>
+    <p>
+        See our <a target="_blank" href="https://github.com/oraios/serena/blob/main/CHANGELOG.md">change log</a> for the full list of changes.
+    </p>
+    <p>
+        <b>Update Now.</b>
+        If you are using the uv tool installation of Serena, upgrade as follows:<br>
+        <code>uv tool upgrade serena-agent</code>
+    </p>
+</div>
