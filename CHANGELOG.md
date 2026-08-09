@@ -56,6 +56,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     `intellicode_version`, `intellicode_xmx` and `intellicode_xms` settings remain accepted but are ignored #1821
   - Kotlin: update the managed Kotlin LSP from `261.13587.0` to `262.9593.0`, including support for the
     new platform-specific archive layout and Windows ARM64 builds
+  - Add support for Wolfram Language via the official [WolframResearch LSPServer](https://github.com/WolframResearch/LSPServer) paclet.
+    Requires Wolfram Mathematica 13.0+ or Wolfram Engine 12.1+. Set `WOLFRAM_PATH` environment variable or configure
+    `ls_path` in `ls_specific_settings`. Supports .wl and .wls files with diagnostics, document symbols,
+    within-file references, hover documentation, and formatting.
   - Nix/nixd: support custom `ls_path` launchers and external JSON settings through `config_path` #1737
   - Fix: Nix/nixd diagnostics now use published diagnostics instead of the unsupported
     `textDocument/diagnostic` request, which terminated nixd #1802
