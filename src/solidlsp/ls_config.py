@@ -5,7 +5,7 @@ Configuration objects for language servers
 import logging
 import os
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cache
@@ -19,12 +19,15 @@ log = logging.getLogger(__name__)
 
 
 class FilenameMatcher:
-    def __init__(self, *file_extensions: str, case_sensitive: bool = True) -> None:
+    def __init__(self, *file_extensions: str, filenames: Sequence[str] = (), case_sensitive: bool = True) -> None:
         """
-        :param file_extensions: file extensions, e.g., `.py, .yml`
-        :param case_sensitive: whether the file extensions are case-sensitive.
+        :param file_extensions: file extensions, e.g., `.py, .yml` (matched as suffixes)
+        :param filenames: exact filenames (typically extensionless ones like `BUILD`), matched against
+            the basename of the checked path — so `PREBUILD` does not match `BUILD`.
+        :param case_sensitive: whether the file extensions and filenames are case-sensitive.
         """
         self._file_extensions = list(set(file_extensions)) if case_sensitive else list(set(ext.lower() for ext in file_extensions))
+        self._filenames = frozenset(filenames) if case_sensitive else frozenset(n.lower() for n in filenames)
         self._case_sensitive = case_sensitive
         # Snapshot of the initial configuration, used by ``reset``. Relevant for matchers that are
         # per-language singletons (``Language.get_source_fn_matcher`` is ``@cache``d): extensions added
@@ -49,6 +52,11 @@ class FilenameMatcher:
         """
         return list(self._file_extensions)
 
+    @property
+    def filenames(self) -> frozenset[str]:
+        """The exact filenames matched by this matcher, compared against the path basename."""
+        return self._filenames
+
     def add_extensions(self, *file_extensions: str) -> None:
         """
         Add further file extensions to this matcher (idempotent).
@@ -69,6 +77,8 @@ class FilenameMatcher:
     def is_relevant_filename(self, fn: str) -> bool:
         if not self._case_sensitive:
             fn = fn.lower()
+        if self._filenames and os.path.basename(fn) in self._filenames:
+            return True
         for ext in self._file_extensions:
             if fn.endswith(ext):
                 return True
@@ -77,10 +87,15 @@ class FilenameMatcher:
     def string_contains_relevant_filename(self, string: str) -> bool:
         """:return: whether ``string`` contains an occurrence of any registered extension as
         a *complete* extension — i.e. the extension must either end the string or be followed
-        by a non-extension-character (anything other than a letter, digit, or underscore).
+        by a non-extension-character (anything other than a letter, digit, or underscore) —
+        or an occurrence of any registered exact filename as a complete filename (not preceded
+        or followed by a filename character, treating `.` as part of a filename).
         """
         if not self._case_sensitive:
             string = string.lower()
+        for name in self._filenames:
+            if re.search(rf"(?<![\w.]){re.escape(name)}(?![\w.])", string):
+                return True
         for ext in self._file_extensions:
             if re.search(rf"{re.escape(ext)}(?:\W|$)", string):
                 return True
@@ -200,6 +215,15 @@ class LanguageServerId(str, Enum):
     """Wolfram Language server using the official WolframResearch LSPServer paclet.
     Requires Wolfram Mathematica 13.0+ or Wolfram Engine 12.1+.
     Set WOLFRAM_PATH environment variable or configure ls_path in ls_specific_settings.
+    """
+    STARLARK = "starlark"
+    """Starlark/Bazel language server using starpls (https://github.com/withered-magic/starpls).
+    Automatically downloads the single static starpls binary from GitHub releases and runs
+    `starpls server` over stdio. Matches Bazel build files (BUILD, BUILD.bazel, WORKSPACE,
+    WORKSPACE.bazel, WORKSPACE.bzlmod, MODULE.bazel, REPO.bazel, VENDOR.bazel), .bzl
+    macros/rules, and generic .star Starlark files. Having `bazel` on PATH (or configuring
+    `bazel_path` in ls_specific_settings) enables external-repository (`@repo//...`) label
+    resolution but is not required.
     """
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
@@ -605,6 +629,11 @@ class LanguageServerId(str, Enum):
                 return FilenameMatcher(".nf")
             case self.WOLFRAM:
                 return FilenameMatcher(".wl", ".wls")
+            case self.STARLARK:
+                # .bazel covers BUILD.bazel, MODULE.bazel, WORKSPACE.bazel, REPO.bazel, VENDOR.bazel
+                # and *.MODULE.bazel; .bzlmod covers WORKSPACE.bzlmod. The extensionless BUILD and
+                # WORKSPACE files are matched exactly by basename.
+                return FilenameMatcher(".bzl", ".star", ".bazel", ".bzlmod", filenames=("BUILD", "WORKSPACE"))
             case self.HTML:
                 return FilenameMatcher(".html", ".htm")
             case self.SCSS:
@@ -912,6 +941,10 @@ class LanguageServerId(str, Enum):
                 from solidlsp.language_servers.wolfram_language_server import WolframLanguageServer
 
                 return WolframLanguageServer
+            case self.STARLARK:
+                from solidlsp.language_servers.starpls_language_server import StarplsLanguageServer
+
+                return StarplsLanguageServer
             case self.HTML:
                 from solidlsp.language_servers.vscode_html_language_server import VsCodeHtmlLanguageServer
 

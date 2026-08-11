@@ -7,6 +7,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     project list in `serena_config.yml`
 
 * Language Servers:
+  - Add Bazel/Starlark support (language server `starlark`), using [starpls](https://github.com/withered-magic/starpls);
+    the binary is downloaded automatically. Covers `BUILD`, `BUILD.bazel`, `MODULE.bazel`, `WORKSPACE` and
+    `.bzl`/`.star` files.
   - Fix: Scala cross-file queries waited a fixed 5s after the first file was opened, which on a cold
     Metals is long before its build import, indexing and compilation have finished; the first
     `find_referencing_symbols` of a session could return a fraction of the references with nothing to

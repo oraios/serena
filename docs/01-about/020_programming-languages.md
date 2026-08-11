@@ -161,6 +161,11 @@ Some languages require additional installations or setup steps, as noted.
 * **Solidity**  
   (experimental; requires Node.js and npm; automatically installs `@nomicfoundation/solidity-language-server`;
   works best with a `foundry.toml` or `hardhat.config.js` in the project root)
+* **Starlark / Bazel**  
+  (uses [starpls](https://github.com/withered-magic/starpls), downloaded automatically; covers `BUILD`, `BUILD.bazel`,
+  `MODULE.bazel`, `WORKSPACE` and `.bzl`/`.star` files; having `bazel` on PATH — or configuring `bazel_path` in
+  `ls_specific_settings` — enables external-repository (`@repo//...`) label resolution but is not required;
+  find-references is limited to the current file; no rename or workspace-symbol support)
 * **Svelte**
   (requires Node.js v18+ and npm; supports `.svelte` Single File Components plus TypeScript/JavaScript files via `svelte-language-server`; a companion `typescript-language-server` + `typescript-svelte-plugin` is spawned automatically for cross-file rename, go-to-definition, and references across `.ts`/`.js` and `.svelte` files; use language `svelte` for Svelte projects instead of also enabling `typescript`)
 * **Swift**
