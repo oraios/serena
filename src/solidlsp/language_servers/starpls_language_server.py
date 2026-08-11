@@ -47,6 +47,16 @@ STARPLS_ALLOWED_HOSTS = (
     "objects.githubusercontent.com",
 )
 
+# GitHub release asset name per Serena PlatformId. Upstream publishes no win-arm64 asset;
+# win-arm64 users must provide ls_path (get_single_dep_for_current_platform raises otherwise).
+_ASSET_BY_PLATFORM = {
+    "osx-arm64": "starpls-darwin-arm64",
+    "osx-x64": "starpls-darwin-amd64",
+    "linux-arm64": "starpls-linux-aarch64",
+    "linux-x64": "starpls-linux-amd64",
+    "win-x64": "starpls-windows-amd64.exe",
+}
+
 
 class StarplsLanguageServer(SolidLanguageServer):
     """
@@ -64,14 +74,12 @@ class StarplsLanguageServer(SolidLanguageServer):
           SHA256 verification.
         - ``bazel_path``: Path to the ``bazel`` (or bazelisk) executable that starpls uses to
           resolve external repositories (``@repo//...`` labels). If unset, starpls probes
-          ``bazel`` on PATH; if that fails, startup continues gracefully — main-workspace
-          label resolution (``//...``) works without bazel.
+          ``bazel`` on PATH; if that fails, startup continues gracefully and main-workspace
+          label resolution (``//...``) still works.
 
     Note: starpls (as of v0.1.22) resolves ``textDocument/references`` only within the file
     the request is made in; go-to-definition works across files (including through ``load()``).
     """
-
-    STARPLS_ALLOWED_HOSTS = STARPLS_ALLOWED_HOSTS
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -88,51 +96,14 @@ class StarplsLanguageServer(SolidLanguageServer):
             [
                 RuntimeDependency(
                     id="starpls",
-                    url=f"{starpls_releases}/starpls-darwin-arm64",
-                    platform_id="osx-arm64",
+                    url=f"{starpls_releases}/{asset}",
+                    platform_id=platform_id,
                     archive_type="binary",
-                    binary_name="starpls",
-                    sha256=_starpls_sha(version, "osx-arm64"),
+                    binary_name="starpls.exe" if platform_id == "win-x64" else "starpls",
+                    sha256=_starpls_sha(version, platform_id),
                     allowed_hosts=STARPLS_ALLOWED_HOSTS,
-                ),
-                RuntimeDependency(
-                    id="starpls",
-                    url=f"{starpls_releases}/starpls-darwin-amd64",
-                    platform_id="osx-x64",
-                    archive_type="binary",
-                    binary_name="starpls",
-                    sha256=_starpls_sha(version, "osx-x64"),
-                    allowed_hosts=STARPLS_ALLOWED_HOSTS,
-                ),
-                RuntimeDependency(
-                    id="starpls",
-                    url=f"{starpls_releases}/starpls-linux-aarch64",
-                    platform_id="linux-arm64",
-                    archive_type="binary",
-                    binary_name="starpls",
-                    sha256=_starpls_sha(version, "linux-arm64"),
-                    allowed_hosts=STARPLS_ALLOWED_HOSTS,
-                ),
-                RuntimeDependency(
-                    id="starpls",
-                    url=f"{starpls_releases}/starpls-linux-amd64",
-                    platform_id="linux-x64",
-                    archive_type="binary",
-                    binary_name="starpls",
-                    sha256=_starpls_sha(version, "linux-x64"),
-                    allowed_hosts=STARPLS_ALLOWED_HOSTS,
-                ),
-                # NOTE: upstream publishes no windows-arm64 asset; win-arm64 users must
-                # provide ls_path (get_single_dep_for_current_platform raises otherwise).
-                RuntimeDependency(
-                    id="starpls",
-                    url=f"{starpls_releases}/starpls-windows-amd64.exe",
-                    platform_id="win-x64",
-                    archive_type="binary",
-                    binary_name="starpls.exe",
-                    sha256=_starpls_sha(version, "win-x64"),
-                    allowed_hosts=STARPLS_ALLOWED_HOSTS,
-                ),
+                )
+                for platform_id, asset in _ASSET_BY_PLATFORM.items()
             ]
         )
 

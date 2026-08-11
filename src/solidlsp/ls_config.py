@@ -23,7 +23,7 @@ class FilenameMatcher:
         """
         :param file_extensions: file extensions, e.g., `.py, .yml` (matched as suffixes)
         :param filenames: exact filenames (typically extensionless ones like `BUILD`), matched against
-            the basename of the checked path — so `PREBUILD` does not match `BUILD`.
+            the basename of the checked path, so `PREBUILD` does not match `BUILD`.
         :param case_sensitive: whether the file extensions and filenames are case-sensitive.
         """
         self._file_extensions = list(set(file_extensions)) if case_sensitive else list(set(ext.lower() for ext in file_extensions))
@@ -51,11 +51,6 @@ class FilenameMatcher:
         :meth:`add_extensions`. Returned as a copy.
         """
         return list(self._file_extensions)
-
-    @property
-    def filenames(self) -> frozenset[str]:
-        """The exact filenames matched by this matcher, compared against the path basename."""
-        return self._filenames
 
     def add_extensions(self, *file_extensions: str) -> None:
         """
@@ -87,9 +82,9 @@ class FilenameMatcher:
     def string_contains_relevant_filename(self, string: str) -> bool:
         """:return: whether ``string`` contains an occurrence of any registered extension as
         a *complete* extension — i.e. the extension must either end the string or be followed
-        by a non-extension-character (anything other than a letter, digit, or underscore) —
-        or an occurrence of any registered exact filename as a complete filename (not preceded
-        or followed by a filename character, treating `.` as part of a filename).
+        by a non-extension-character (anything other than a letter, digit, or underscore).
+        Registered exact filenames count as well when they appear as a complete filename,
+        i.e. not preceded or followed by a filename character (`.` counts as one).
         """
         if not self._case_sensitive:
             string = string.lower()
@@ -217,13 +212,10 @@ class LanguageServerId(str, Enum):
     Set WOLFRAM_PATH environment variable or configure ls_path in ls_specific_settings.
     """
     STARLARK = "starlark"
-    """Starlark/Bazel language server using starpls (https://github.com/withered-magic/starpls).
-    Automatically downloads the single static starpls binary from GitHub releases and runs
-    `starpls server` over stdio. Matches Bazel build files (BUILD, BUILD.bazel, WORKSPACE,
-    WORKSPACE.bazel, WORKSPACE.bzlmod, MODULE.bazel, REPO.bazel, VENDOR.bazel), .bzl
-    macros/rules, and generic .star Starlark files. Having `bazel` on PATH (or configuring
-    `bazel_path` in ls_specific_settings) enables external-repository (`@repo//...`) label
-    resolution but is not required.
+    """Starlark/Bazel language server using starpls (https://github.com/withered-magic/starpls),
+    downloaded automatically. Matches Bazel build files (BUILD, MODULE.bazel, WORKSPACE and
+    variants) as well as .bzl and .star files. Works without bazel installed; having `bazel`
+    available additionally enables external-repository (`@repo//...`) label resolution.
     """
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
@@ -630,9 +622,8 @@ class LanguageServerId(str, Enum):
             case self.WOLFRAM:
                 return FilenameMatcher(".wl", ".wls")
             case self.STARLARK:
-                # .bazel covers BUILD.bazel, MODULE.bazel, WORKSPACE.bazel, REPO.bazel, VENDOR.bazel
-                # and *.MODULE.bazel; .bzlmod covers WORKSPACE.bzlmod. The extensionless BUILD and
-                # WORKSPACE files are matched exactly by basename.
+                # .bazel/.bzlmod catch BUILD.bazel, MODULE.bazel etc; bare BUILD and WORKSPACE
+                # have no extension, hence the exact-name matching
                 return FilenameMatcher(".bzl", ".star", ".bazel", ".bzlmod", filenames=("BUILD", "WORKSPACE"))
             case self.HTML:
                 return FilenameMatcher(".html", ".htm")
