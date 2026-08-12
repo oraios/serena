@@ -37,6 +37,7 @@ from serena.constants import (
     SERENAS_OWN_MODE_YAMLS_DIR,
 )
 from serena.prompt_factory import SerenaPromptFactory
+from serena.tools import ActivateProjectTool
 from serena.util.cli_util import AutoRegisteringGroup
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import LanguageServerId
@@ -312,7 +313,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         "--project-from-cwd",
         is_flag=True,
         default=False,
-        help="Auto-detect project from current working directory (searches for .serena/project.yml or .git, falls back to CWD). Intended for CLI-based agents like Claude Code, Gemini and Codex.",
+        help="Auto-detect project from current working directory (nearest ancestor containing .serena/project.yml or .git). If none is found, no project is activated. Intended for CLI-based agents like Claude Code, Gemini and Codex.",
     )
     def start_mcp_server(
         project: str | None,
@@ -355,6 +356,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         log.info("Storing logs in %s", log_path)
 
         # Handle --project-from-cwd flag
+        project_activation_error: str | None = None
         if project_from_cwd:
             if project is not None or project_file_arg is not None:
                 raise click.UsageError("--project-from-cwd cannot be used with --project or positional project argument")
@@ -362,7 +364,12 @@ class TopLevelCommands(AutoRegisteringGroup):
             if project is not None:
                 log.info("Auto-detected project root: %s", project)
             else:
-                log.warning("No project root found from %s; not activating any project", os.getcwd())
+                project_activation_error = (
+                    f"No project root found from cwd={os.getcwd()} (no .serena/project.yml or .git found); "
+                    "no project activated. If the folder is a coding project folder to be worked on, "
+                    f"activate the folder explicitly using the {ActivateProjectTool.get_name_from_cls()} tool."
+                )
+                log.warning(project_activation_error)
 
         project_file = project_file_arg or project
 
@@ -380,6 +387,7 @@ class TopLevelCommands(AutoRegisteringGroup):
             log_level=log_level,
             trace_lsp_communication=trace_lsp_communication,
             tool_timeout=tool_timeout,
+            project_activation_error=project_activation_error,
         )
         if project_file_arg:
             log.warning(
@@ -485,11 +493,8 @@ class TopLevelCommands(AutoRegisteringGroup):
         log.info("Starting Serena project server")
         log.info("Storing logs in %s", log_path)
 
-        server = ProjectServer()
-        run_kwargs: dict[str, Any] = {"host": host}
-        if port is not None:
-            run_kwargs["port"] = port
-        server.run(**run_kwargs)
+        server = ProjectServer(host=host, port=port)
+        server.run()
 
     @staticmethod
     @click.command(
@@ -905,6 +910,12 @@ class ProjectCommands(AutoRegisteringGroup):
         finally:
             ls_mgr.stop_all()
 
+    class _HealthCheckFailure(Exception):
+        """
+        A condition under which the health check is to be considered failed.
+        The exception message is the explanation presented to the user.
+        """
+
     @staticmethod
     @click.command(
         "health-check",
@@ -914,14 +925,14 @@ class ProjectCommands(AutoRegisteringGroup):
     @click.argument("project", type=click.Path(exists=True, file_okay=False, dir_okay=True), default=os.getcwd())
     def health_check(project: str) -> None:
         """
-        Perform a comprehensive health check of the project's tools and language server.
+        Perform a basic health check which checks whether language server tools are functional for the project.
 
         :param project: path to the project directory, defaults to the current working directory.
         """
         # NOTE: completely written by Claude Code, only functionality was reviewed, not implementation
         from serena.agent import SerenaAgent
         from serena.project import Project
-        from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, GetSymbolsOverviewTool, SearchForPatternTool
+        from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, GetSymbolsOverviewTool
 
         logging.configure(level=logging.INFO)
         project_path = os.path.abspath(project)
@@ -934,6 +945,9 @@ class ProjectCommands(AutoRegisteringGroup):
         log_dir = os.path.join(project_path, ".serena", "logs", "health-checks")
         os.makedirs(log_dir, exist_ok=True)
         log_file = os.path.join(log_dir, f"health_check_{timestamp}.log")
+
+        # the check's verdict: the explanation of the failure, or None if the check passed (see below)
+        failure_reason: str | None = None
 
         with FileLoggerContext(log_file, append=False, enabled=True):
             log.info("Starting health check for project: %s", project_path)
@@ -953,7 +967,7 @@ class ProjectCommands(AutoRegisteringGroup):
                 for file_path in files:
                     try:
                         full_path = os.path.join(project_path, file_path)
-                        if os.path.getsize(full_path) > 0:
+                        if os.path.getsize(full_path) > 1000:
                             target_file = file_path
                             log.info("Found analyzable file: %s", target_file)
                             break
@@ -961,16 +975,12 @@ class ProjectCommands(AutoRegisteringGroup):
                         continue
 
                 if not target_file:
-                    log.error("No analyzable files found in project")
-                    click.echo("❌ Health check failed: No analyzable files found")
-                    click.echo(f"Log saved to: {log_file}")
-                    return
+                    raise ProjectCommands._HealthCheckFailure("No analyzable files found")
 
                 # Get tools from agent
                 overview_tool = agent.get_tool(GetSymbolsOverviewTool)
                 find_symbol_tool = agent.get_tool(FindSymbolTool)
                 find_refs_tool = agent.get_tool(FindReferencingSymbolsTool)
-                search_pattern_tool = agent.get_tool(SearchForPatternTool)
 
                 # Test 1: Get symbols overview
                 log.info("Testing GetSymbolsOverviewTool on file: %s", target_file)
@@ -978,10 +988,7 @@ class ProjectCommands(AutoRegisteringGroup):
                 log.info(f"GetSymbolsOverviewTool returned: {overview_data}")
 
                 if not overview_data:
-                    log.error("No symbols found in file %s", target_file)
-                    click.echo("❌ Health check failed: No symbols found in target file")
-                    click.echo(f"Log saved to: {log_file}")
-                    return
+                    raise ProjectCommands._HealthCheckFailure(f"No symbols found in target file {target_file}")
 
                 # Extract suitable symbol (prefer class or function over variables)
                 preferred_kinds = {SymbolKind.Class.name, SymbolKind.Function.name, SymbolKind.Method.name, SymbolKind.Constructor.name}
@@ -1002,57 +1009,46 @@ class ProjectCommands(AutoRegisteringGroup):
 
                 # Test 2: FindSymbolTool
                 log.info("Testing FindSymbolTool for symbol: %s", symbol_name)
-                find_symbol_result = agent.execute_task(
-                    lambda: find_symbol_tool.apply(symbol_name, relative_path=target_file, include_body=True)
-                )
+                with find_symbol_tool.symbol_dict_grouper.disabled_context():
+                    find_symbol_result = agent.execute_task(
+                        lambda: find_symbol_tool.apply(symbol_name, relative_path=target_file, include_body=True)
+                    )
                 find_symbol_data = json.loads(find_symbol_result)
                 log.info("FindSymbolTool found %d matches for symbol %s", len(find_symbol_data), symbol_name)
 
                 # Test 3: FindReferencingSymbolsTool
                 log.info("Testing FindReferencingSymbolsTool for symbol: %s", symbol_name)
                 try:
-                    find_refs_result = agent.execute_task(lambda: find_refs_tool.apply(symbol_name, relative_path=target_file))
-                    find_refs_data = json.loads(find_refs_result)
-                    log.info("FindReferencingSymbolsTool found %d references for symbol %s", len(find_refs_data), symbol_name)
+                    with find_refs_tool.symbol_dict_grouper.disabled_context():
+                        find_refs_result = agent.execute_task(lambda: find_refs_tool.apply(symbol_name, relative_path=target_file))
+                        find_refs_data = json.loads(find_refs_result)
+                        log.info("FindReferencingSymbolsTool found %d references for symbol %s", len(find_refs_data), symbol_name)
                 except Exception as e:
                     log.warning("FindReferencingSymbolsTool failed for symbol %s: %s", symbol_name, str(e))
-                    find_refs_data = []
-
-                # Test 4: SearchForPatternTool to verify references
-                log.info("Testing SearchForPatternTool for pattern: %s", symbol_name)
-                try:
-                    search_result = agent.execute_task(
-                        lambda: search_pattern_tool.apply(substring_pattern=symbol_name, restrict_search_to_code_files=True)
-                    )
-                    search_data = json.loads(search_result)
-                    pattern_matches = sum(len(matches) for matches in search_data.values())
-                    log.info("SearchForPatternTool found %d pattern matches for %s", pattern_matches, symbol_name)
-                except Exception as e:
-                    log.warning("SearchForPatternTool failed for pattern %s: %s", symbol_name, str(e))
-                    pattern_matches = 0
 
                 # Verify tools worked as expected
-                tools_working = True
                 if not find_symbol_data:
-                    log.error("FindSymbolTool returned no results")
-                    tools_working = False
-
-                if len(find_refs_data) == 0 and pattern_matches == 0:
-                    log.warning("Both FindReferencingSymbolsTool and SearchForPatternTool found no matches - this might indicate an issue")
+                    raise ProjectCommands._HealthCheckFailure("FindSymbolTool returned no results")
 
                 log.info("Health check completed successfully")
 
-                if tools_working:
-                    click.echo("✅ Health check passed - All tools working correctly")
-                else:
-                    click.echo("⚠️  Health check completed with warnings - Check log for details")
-
+            # expected failures and unexpected exceptions are reported alike: both mean the project's
+            # tooling is not functional, which is the single thing this command is asked to determine
             except Exception as e:
                 log.exception("Health check failed with exception: %s", str(e))
-                click.echo(f"❌ Health check failed: {e!s}")
+                failure_reason = str(e)
 
             finally:
                 click.echo(f"Log saved to: {log_file}")
+
+        # the verdict is reported outside the checked region, so that a failure to write the report
+        # cannot be mistaken for a failure of the check itself; the exit code lets callers
+        # (CI, scripts) act on the verdict
+        if failure_reason is None:
+            click.echo("✅ Health check passed - All tools working correctly")
+        else:
+            click.echo(f"❌ Health check failed: {failure_reason}")
+            raise SystemExit(1)
 
 
 class ToolCommands(AutoRegisteringGroup):

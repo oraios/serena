@@ -16,6 +16,9 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+SOLIDLSP_RESOURCES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources")
+
+
 @dataclass
 class SolidLSPSettings:
     """

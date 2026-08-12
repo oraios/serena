@@ -24,17 +24,13 @@ class TestTomlSymbolRetrieval:
     @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
     @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)
     def test_request_containing_symbol_behavior(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
-        """Test request_containing_symbol behavior for TOML files.
-
-        Note: Taplo LSP doesn't support definition/containing symbol lookups for TOML files
-        since TOML is a configuration format, not code. This test verifies the behavior.
+        """
+        Test request_containing_symbol behavior for TOML files.
         """
         # Line 2 (0-indexed: 1) is inside the [package] table
         containing_symbol = language_server.request_containing_symbol("Cargo.toml", 1, 5)
 
-        # Taplo doesn't support containing symbol lookup - returns None
-        # This is expected behavior for a configuration file format
-        assert containing_symbol is None, "TOML LSP doesn't support containing symbol lookup"
+        assert "[package]" in containing_symbol["body"].get_text()
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.TOML], indirect=True)
     @pytest.mark.parametrize("repo_path", [LanguageServerId.TOML], indirect=True)

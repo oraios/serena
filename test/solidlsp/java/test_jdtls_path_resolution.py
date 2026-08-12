@@ -455,7 +455,7 @@ class TestSetupFromExistingInstall:
         (jdk / "bin" / "java").touch()
         return jdk
 
-    def test_happy_path_returns_runtime_paths_with_no_gradle_and_no_intellicode(
+    def test_happy_path_returns_runtime_paths_with_no_gradle(
         self, tmp_path: Path, jdtls_root: Path, lombok_jar: Path, custom_settings: SolidLSPSettings.CustomLSSettings
     ) -> None:
         jdk = self._fake_jdk(tmp_path)
@@ -465,8 +465,6 @@ class TestSetupFromExistingInstall:
                 result = EclipseJDTLS.DependencyProvider._setup_from_existing_install(str(jdtls_root), str(lombok_jar), custom_settings)
 
         assert result.gradle_path is None
-        assert result.intellicode_jar_path is None
-        assert result.intellisense_members_path is None
         assert result.lombok_jar_path == str(lombok_jar)
         assert result.jre_home_path == str(jdk)
         assert Path(result.jdtls_launcher_jar_path).name.startswith("org.eclipse.equinox.launcher_")
@@ -545,9 +543,7 @@ class TestComputeWorkspaceHash:
     UPSTREAM_LAUNCHER = "/opt/homebrew/Cellar/jdtls/1.50.0/libexec/plugins/org.eclipse.equinox.launcher_1.7.0.jar"
 
     def _initial_settings(self) -> "SolidLSPSettings.CustomLSSettings":
-        from solidlsp.language_servers.eclipse_jdtls import INITIAL_VSCODE_JAVA_VERSION
-
-        return SolidLSPSettings.CustomLSSettings({"vscode_java_version": INITIAL_VSCODE_JAVA_VERSION})
+        return SolidLSPSettings.CustomLSSettings({"vscode_java_version": EclipseJDTLS.DependencyProvider.INITIAL_VSCODE_JAVA_VERSION})
 
     def test_initial_default_mode_matches_pre_upstream_format(self) -> None:
         """Legacy carve-out: INITIAL default-mode hash MUST equal md5(repository_root_path)."""

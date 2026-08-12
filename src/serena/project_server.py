@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 from typing import TYPE_CHECKING
 
 import requests as requests_lib
@@ -44,19 +45,33 @@ class ProjectServer:
 
     PORT = SerenaPorts.PROJECT_SERVER_PORT
 
-    def __init__(self) -> None:
+    def __init__(self, host: str = "127.0.0.1", port: int | None = None) -> None:
+        """
+        :param host: the host address to listen on.
+        :param port: the port to listen on; if None, use default
+        """
         from serena.agent import SerenaAgent
 
-        serena_config = SerenaConfig.from_config_file()
-        serena_config.gui_log_window = False
-        serena_config.web_dashboard = False
+        if port is None:
+            port = self.PORT
+
+        serena_config = SerenaConfig.from_config_file().with_headless_mode_overrides()
         serena_config.language_backend = LanguageBackend.LSP
 
         self._agent = SerenaAgent(serena_config=serena_config)
         self._loaded_projects_by_root: dict[str, "Project"] = {}
+        self._project_load_locks_by_root: dict[str, threading.Lock] = {}
+        self._active_project_lock = threading.Lock()
+        self._loaded_projects_lock = threading.Lock()
+        self._port = port
+        self._host = host
 
-        # create the Flask application
+        # create the Flask application, limiting trusted hosts for the case where the server is running on localhost
         self._app = Flask(__name__)
+        local_hosts = ["localhost", "127.0.0.1"]
+        if self._host in local_hosts:
+            self._app.config["TRUSTED_HOSTS"] = local_hosts
+
         self._setup_routes()
 
     def _setup_routes(self) -> None:
@@ -78,31 +93,50 @@ class ProjectServer:
 
         key = str(registered_project.project_root)
 
-        if key in self._loaded_projects_by_root:
-            return self._loaded_projects_by_root[key]
+        # find or publish the per-project load lock while holding the shared dictionaries
+        with self._loaded_projects_lock:
+            project = self._loaded_projects_by_root.get(key)
+            if project is not None:
+                return project
+            project_load_lock = self._project_load_locks_by_root.get(key)
+            if project_load_lock is None:
+                project_load_lock = threading.Lock()
+                self._project_load_locks_by_root[key] = project_load_lock
 
-        with LogTime(f"Loading project '{project_root_or_name}'"):
-            project = registered_project.get_project_instance(serena_config)
-            project.create_language_server_manager()
-        self._loaded_projects_by_root[key] = project
-        return project
+        # initialize only this project; another project's cached lookup or cold load can proceed
+        with project_load_lock:
+            with self._loaded_projects_lock:
+                project = self._loaded_projects_by_root.get(key)
+                if project is not None:
+                    return project
+
+            with LogTime(f"Loading project '{project_root_or_name}'"):
+                project = registered_project.get_project_instance(serena_config)
+                project.create_language_server_manager()
+
+            with self._loaded_projects_lock:
+                self._loaded_projects_by_root[key] = project
+            return project
 
     def _query_project(self, req: QueryProjectRequest) -> str:
-        """Handle a /query_project request by invoking the agent on the specified project and tool."""
+        """Handle a /query_project request by invoking the agent on the specified project and tool.
+
+        The active project is process-wide state, whereas ``apply_ex`` runs the tool on the
+        agent's task executor thread. Without the lock, a second request entering
+        ``active_project_context`` while the first request's tool is still executing would
+        redirect that tool to the wrong project (and restore the wrong project afterwards).
+        """
         project = self._get_project(req.project_name)
-        with self._agent.active_project_context(project):
+        with self._active_project_lock, self._agent.active_project_context(project):
             tool = self._agent.get_tool_by_name(req.tool_name)
             if not tool.is_readonly():
                 raise ValueError(f"Tool '{req.tool_name}' is not read-only and cannot be executed via the query_project route")
             params = json.loads(req.tool_params_json)
             return tool.apply_ex(**params)
 
-    def run(self, host: str = "127.0.0.1", port: int = PORT) -> int:
-        """Run the server on the given host and port.
-
-        :param host: the host address to listen on.
-        :param port: the port to listen on.
-        :return: the port number the server is running on.
+    def run(self) -> None:
+        """
+        Run the server on the given host and port.
         """
         from flask import cli
 
@@ -111,8 +145,7 @@ class ProjectServer:
         # replacement, even one with an identical signature), so the monkeypatch is suppressed here
         cli.show_server_banner = lambda *args, **kwargs: None  # ty: ignore[invalid-assignment]
 
-        self._app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
-        return port
+        self._app.run(host=self._host, port=self._port, debug=False, use_reloader=False, threaded=True)
 
 
 class ProjectServerClient:

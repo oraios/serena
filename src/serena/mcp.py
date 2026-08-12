@@ -21,10 +21,9 @@ from sensai.util import logging
 
 from serena.agent import (
     SerenaAgent,
-    SerenaConfig,
 )
 from serena.config.context_mode import SerenaAgentContext
-from serena.config.serena_config import LanguageBackend, ModeSelectionDefinition
+from serena.config.serena_config import LanguageBackend, ModeSelectionDefinition, SerenaConfig
 from serena.constants import DEFAULT_CONTEXT, SERENA_LOG_FORMAT
 from serena.tools import Tool, ToolCallError
 from serena.util.exception import show_fatal_exception_safe
@@ -306,13 +305,17 @@ class SerenaMCPFactory:
                 mcp._tool_manager._tools[tool.get_name()] = mcp_tool
             log.info(f"Starting MCP server with {len(mcp._tool_manager._tools)} tools: {list(mcp._tool_manager._tools.keys())}")
 
-    def _create_serena_agent(self, serena_config: SerenaConfig, modes: ModeSelectionDefinition | None = None) -> SerenaAgent:
+    def _create_serena_agent(
+        self, serena_config: SerenaConfig, modes: ModeSelectionDefinition | None = None, project_activation_error: str | None = None
+    ) -> SerenaAgent:
         return SerenaAgent(
-            project=self.project, serena_config=serena_config, context=self.context, modes=modes, memory_log_handler=self.memory_log_handler
+            project=self.project,
+            serena_config=serena_config,
+            context=self.context,
+            modes=modes,
+            memory_log_handler=self.memory_log_handler,
+            project_activation_error=project_activation_error,
         )
-
-    def _create_default_serena_config(self) -> SerenaConfig:
-        return SerenaConfig.from_config_file()
 
     def create_mcp_server(
         self,
@@ -324,6 +327,7 @@ class SerenaMCPFactory:
         log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None,
         trace_lsp_communication: bool | None = None,
         tool_timeout: float | None = None,
+        project_activation_error: str | None = None,
     ) -> FastMCP:
         """
         Create an MCP server with process-isolated SerenaAgent to prevent asyncio contamination.
@@ -342,9 +346,10 @@ class SerenaMCPFactory:
         :param trace_lsp_communication: Whether to trace the communication between Serena and the language servers.
             This is useful for debugging language server issues.
         :param tool_timeout: Timeout in seconds for tool execution. If not specified, will take the value from the serena configuration.
+        :param project_activation_error: an initial project activation error to report back to the client
         """
         try:
-            config = self._create_default_serena_config()
+            config = SerenaConfig.from_config_file()
 
             # update configuration with the provided parameters
             if enable_web_dashboard is not None:
@@ -363,7 +368,7 @@ class SerenaMCPFactory:
             if language_backend is not None:
                 config.language_backend = language_backend
 
-            self.agent = self._create_serena_agent(config, mode_selection_def)
+            self.agent = self._create_serena_agent(config, modes=mode_selection_def, project_activation_error=project_activation_error)
 
         except Exception as e:
             show_fatal_exception_safe(e)

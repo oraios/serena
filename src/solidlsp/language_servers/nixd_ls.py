@@ -378,6 +378,12 @@ class NixLanguageServer(SolidLanguageServer):
         }
         return initialize_params
 
+    @override
+    def _supports_pull_diagnostics(self) -> bool:
+        # nixd publishes diagnostics after textDocument/didOpen but terminates when it receives
+        # textDocument/diagnostic. Force the published-diagnostics path instead.
+        return False
+
     def _start_server(self):
         """Start nixd server process"""
         initialize_params = self._create_initialize_params()

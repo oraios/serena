@@ -182,6 +182,24 @@ class SymbolKind(IntEnum):
     def _missing_(cls, value: Any) -> "SymbolKind":
         return cls.Unknown
 
+    @staticmethod
+    def is_container(kind: "SymbolKind") -> bool:
+        """Returns True if the symbol kind is a container (i.e. can have children)."""
+        return kind in {
+            SymbolKind.File,
+            SymbolKind.Module,
+            SymbolKind.Namespace,
+            SymbolKind.Package,
+            SymbolKind.Class,
+            SymbolKind.Method,
+            SymbolKind.Constructor,
+            SymbolKind.Enum,
+            SymbolKind.Interface,
+            SymbolKind.Function,
+            SymbolKind.Object,
+            SymbolKind.Struct,
+        }
+
 
 class SymbolTag(IntEnum):
     """Symbol tags are extra annotations that tweak the rendering of a symbol.

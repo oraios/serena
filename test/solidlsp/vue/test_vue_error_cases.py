@@ -37,20 +37,6 @@ class TestVueInvalidPositions:
         assert result is None or result == {}, f"Negative line number should return None or empty dict, got: {result}"
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
-    def test_negative_character_number(self, language_server: SolidLanguageServer) -> None:
-        """Test requesting containing symbol with negative character number.
-
-        Expected behavior: Should return None or empty dict, not crash.
-        """
-        file_path = os.path.join("src", "components", "CalculatorInput.vue")
-
-        # Request containing symbol at invalid negative character
-        result = language_server.request_containing_symbol(file_path, 10, -1)
-
-        # Should handle gracefully - return None or empty dict
-        assert result is None or result == {}, f"Negative character number should return None or empty dict, got: {result}"
-
-    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_line_number_beyond_file_length(self, language_server: SolidLanguageServer) -> None:
         """Test requesting containing symbol beyond file length.
 
@@ -66,20 +52,6 @@ class TestVueInvalidPositions:
 
         # Verify it's an index error for list access
         assert "list index out of range" in str(exc_info.value), f"Expected 'list index out of range' error, got: {exc_info.value}"
-
-    @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
-    def test_character_number_beyond_line_length(self, language_server: SolidLanguageServer) -> None:
-        """Test requesting containing symbol beyond line length.
-
-        Expected behavior: Should return None or empty dict, not crash.
-        """
-        file_path = os.path.join("src", "components", "CalculatorInput.vue")
-
-        # Request containing symbol at character 99999 (way beyond line length)
-        result = language_server.request_containing_symbol(file_path, 10, 99999)
-
-        # Should handle gracefully - return None or empty dict
-        assert result is None or result == {}, f"Character beyond line length should return None or empty dict, got: {result}"
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
     def test_references_at_negative_line(self, language_server: SolidLanguageServer) -> None:

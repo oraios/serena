@@ -1,10 +1,27 @@
-# See Serena's documentation for more details on concept of contexts.
-description: Description of the context, not used in the code.
-prompt: Prompt that will form part of the system prompt/initial instructions for agents started in this context.
+# See Serena's documentation for more details on concept of contexts:
+# https://oraios.github.io/serena/02-usage/050_configuration.html#contexts
+description: Description of the context (meta-information only)
+
+# define a prompt which will be included in the system prompt when agents are started in this context.
+# See:  https://oraios.github.io/serena/02-usage/050_configuration.html#prompt-templates
+prompt: |
+  This prompt will form part of the system prompt/initial instructions for agents started in this context.
+  Add as much content as needed.
+  Leave it undefined if no prompt is needed, i.e.
+     prompt: null
+
+# tools to be excluded in this context.
+# Find the list of tools here: https://oraios.github.io/serena/01-about/035_tools.html
 excluded_tools: []
 
-# several tools are excluded by default and have to be explicitly included by the user
+# included tools that would otherwise be excluded (particularly optional tools that are disabled by default).
+# Find the list of tools here: https://oraios.github.io/serena/01-about/035_tools.html
 included_optional_tools: []
+
+# fixed set of tools to use as the base tool set (if non-empty), replacing Serena's default set of tools.
+# This cannot be combined with non-empty excluded_tools or included_optional_tools.
+# Find the list of tools here: https://oraios.github.io/serena/01-about/035_tools.html
+fixed_tools: []
 
 # mapping of tool names to an override of their descriptions (the default description is the docstring of the Tool's apply method).
 # Sometimes, tool descriptions are too long (e.g., for ChatGPT), or users may want to override them for another reason.

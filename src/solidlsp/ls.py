@@ -33,7 +33,7 @@ from solidlsp.dependency_provider import (
 from solidlsp.initialize_params import DefaultInitializeParamsBuilder, InitializeParamsBuilder
 from solidlsp.ls_config import FilenameMatcher, LanguageServerConfig, LanguageServerId
 from solidlsp.ls_exceptions import InvalidTextLocationError, SolidLSPException
-from solidlsp.ls_process import LanguageServerInterface, StdioLanguageServer
+from solidlsp.ls_process import DEFAULT_LS_REQUEST_TIMEOUT, LanguageServerInterface, StdioLanguageServer
 from solidlsp.ls_types import UnifiedSymbolInformation
 from solidlsp.ls_utils import FileUtils, PathUtils, TextUtils
 from solidlsp.lsp_protocol_handler import lsp_types
@@ -48,6 +48,7 @@ from solidlsp.lsp_protocol_handler.lsp_types import (
     LocationLink,
     RenameParams,
     SymbolInformation,
+    SymbolKind,
 )
 from solidlsp.lsp_protocol_handler.server import (
     LSPError,
@@ -107,6 +108,7 @@ class LSPFileBuffer:
         self.language_server = language_server
         self.uri = uri
         self._read_file_modified_date: float | None = None
+        self._read_file_modified_date_passed_to_ls: float | None = None
         self._contents: str | None = None
         self.version = version
         self.language_id = language_id
@@ -120,20 +122,40 @@ class LSPFileBuffer:
     def _open_in_ls(self) -> None:
         """
         Open the file in the language server if it is not already open.
+        If it is already open, make sure the language server has the latest contents of the file.
         """
-        if self._is_open_in_ls:
-            return
-        self._is_open_in_ls = True
-        self.language_server.server.notify.did_open_text_document(
-            {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
-                LSPConstants.TEXT_DOCUMENT: {
-                    LSPConstants.URI: self.uri,
-                    LSPConstants.LANGUAGE_ID: self.language_id,
-                    LSPConstants.VERSION: 0,
-                    LSPConstants.TEXT: self.contents,
+        if not self._is_open_in_ls:
+            self._is_open_in_ls = True
+            current_contents = self.contents
+            self._read_file_modified_date_passed_to_ls = self._read_file_modified_date
+            self.language_server.server.notify.did_open_text_document(
+                {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                    LSPConstants.TEXT_DOCUMENT: {
+                        LSPConstants.URI: self.uri,
+                        LSPConstants.LANGUAGE_ID: self.language_id,
+                        LSPConstants.VERSION: self.version,
+                        LSPConstants.TEXT: current_contents,
+                    }
                 }
-            }
-        )
+            )
+        else:
+            # file already open: check if contents have changed and notify if so
+            current_contents = self.contents
+            if self._read_file_modified_date != self._read_file_modified_date_passed_to_ls:
+                self._read_file_modified_date_passed_to_ls = self._read_file_modified_date
+                self.language_server.server.notify.did_change_text_document(
+                    {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                        LSPConstants.TEXT_DOCUMENT: {
+                            LSPConstants.URI: self.uri,
+                            LSPConstants.VERSION: self.version,
+                        },
+                        LSPConstants.CONTENT_CHANGES: [
+                            {
+                                LSPConstants.TEXT: current_contents,
+                            }
+                        ],
+                    }
+                )
 
     def close(self) -> None:
         if self._is_open_in_ls:
@@ -146,24 +168,34 @@ class LSPFileBuffer:
             )
 
     def ensure_open_in_ls(self) -> None:
-        """Ensure that the file is opened in the language server."""
+        """
+        Ensure that the file is opened in the language server (or, if it is already open,
+        that the language server is made aware of the file's updated contents in case it
+        has changed on disk).
+        """
         self._open_in_ls()
+
+    def _invalidate_cached_data(self, mtime: float | None = None) -> float | None:
+        """
+        Invalidates cached data (file contents, hash) if the file was modified since it was read
+
+        :param: the current modification time if it was already read
+        """
+        if self._read_file_modified_date is not None:
+            if mtime is None:
+                mtime = self.abs_path.stat().st_mtime
+            if mtime > self._read_file_modified_date:
+                self._contents = None
+                self._content_hash = None
 
     @property
     def contents(self) -> str:
         file_modified_date = self.abs_path.stat().st_mtime
-
-        # if contents are cached, check if they are stale (file modification since last read) and invalidate if so
-        if self._contents is not None:
-            assert self._read_file_modified_date is not None
-            if file_modified_date > self._read_file_modified_date:
-                self._contents = None
-
+        self._invalidate_cached_data(file_modified_date)
         if self._contents is None:
             self._read_file_modified_date = file_modified_date
             self._contents = FileUtils.read_file(str(self.abs_path), self.encoding)
             self._content_hash = None
-
         return self._contents
 
     @contents.setter
@@ -179,6 +211,7 @@ class LSPFileBuffer:
 
     @property
     def content_hash(self) -> str:
+        self._invalidate_cached_data()
         if self._content_hash is None:
             self._content_hash = hashlib.md5(self.contents.encode(self.encoding)).hexdigest()
         return self._content_hash
@@ -419,7 +452,7 @@ class SolidLanguageServer(ABC):
         cls,
         config: LanguageServerConfig,
         repository_root_path: str,
-        timeout: float | None = None,
+        timeout: float | None = DEFAULT_LS_REQUEST_TIMEOUT,
         solidlsp_settings: SolidLSPSettings | None = None,
     ) -> "SolidLanguageServer":
         """
@@ -431,7 +464,7 @@ class SolidLanguageServer(ABC):
         :param repository_root_path: The root path of the repository.
         :param config: language server configuration.
         :param logger: The logger to use.
-        :param timeout: the timeout for requests to the language server. If None, no timeout will be used.
+        :param timeout: the timeout, in seconds, for requests to the language server; if None, use no timeout
         :param solidlsp_settings: additional settings
         :return LanguageServer: A language specific LanguageServer instance.
         """
@@ -966,6 +999,11 @@ class SolidLanguageServer(ABC):
                         }
                     )
                 except SolidLSPException as ex:
+                    # Termination must propagate so tools_base can restart the LS and retry.
+                    # Other pull-diagnostics failures (e.g. unsupported method without crash)
+                    # still fall back to published diagnostics.
+                    if ex.is_language_server_terminated():
+                        raise
                     log.debug("Falling back to published diagnostics for %s due to pull-diagnostics error: %s", relative_file_path, ex)
                     response = None
                     pull_diagnostics_failed = True
@@ -1242,10 +1280,15 @@ class SolidLanguageServer(ABC):
     @contextmanager
     def open_file(self, relative_file_path: str, open_in_ls: bool = True) -> Iterator[LSPFileBuffer]:
         """
-        Open a file in the Language Server. This is required before making any requests to the Language Server.
+        Opens a file.
+
+        Note: Opening a file in the language server is typically a precondition for further requests
+        pertaining to the respective file.
 
         :param relative_file_path: The relative path of the file to open.
         :param open_in_ls: whether to open the file in the language server, sending the didOpen notification.
+            If the file is already open but file contents has changed since the original notification,
+            an update notification is sent instead.
             Set this to False to read the local file buffer without notifying the LS; the file can
             be opened in the LS later by calling the `ensure_open_in_ls` method on the returned LSPFileBuffer.
         """
@@ -1867,6 +1910,12 @@ class SolidLanguageServer(ABC):
         NOTE: When changing the override of this method after the initial LS implementation,
               be sure to also override `_document_symbols_cache_fingerprint` in order to ensure that
               the caches are invalidated appropriately.
+        NOTE: The returned name must not contain '/', which separates the components of a name path
+              (see :class:`serena.symbol.NamePathMatcher`). A symbol whose name contains it cannot be
+              addressed by any tool taking an exact name path, not even via the name path that is
+              reported for the symbol itself. Language servers that identify symbols in such a way
+              (e.g. Erlang LS, which reports functions as `name/arity`) must substitute another
+              character here.
 
         :param symbol: the symbol
         :param relative_file_path: the relative path of the file the symbol is located in
@@ -1899,16 +1948,13 @@ class SolidLanguageServer(ABC):
             file_hash_and_result = self._document_symbols_cache.get(cache_key)
             if file_hash_and_result is None:
                 log.debug("No cache hit for document symbols in %s", relative_file_path)
-                log.debug("perf: document_symbols_cache MISS path=%s", relative_file_path)
             else:
                 file_hash, document_symbols = file_hash_and_result
                 if file_hash == file_data.content_hash:
-                    log.debug("Returning cached document symbols for %s", relative_file_path)
-                    log.debug("perf: document_symbols_cache HIT path=%s", relative_file_path)
+                    log.debug("Returning cached document symbols for %s (hash=%s)", relative_file_path, file_hash)
                     return document_symbols
 
-                log.debug("Cached document symbol content for %s has changed", relative_file_path)
-                log.debug("perf: document_symbols_cache STALE path=%s", relative_file_path)
+                log.debug("Cached document symbol content for %s has changed (old hash=%s)", relative_file_path, file_hash)
 
             # no cached result: request the root symbols from the language server
             root_symbols = self._request_document_symbols(relative_file_path, file_data)
@@ -2003,8 +2049,9 @@ class SolidLanguageServer(ABC):
             document_symbols = DocumentSymbols(unified_root_symbols)
 
             # update cache
-            log.debug("Updating cached document symbols for %s", relative_file_path)
-            self._document_symbols_cache[cache_key] = (file_data.content_hash, document_symbols)
+            content_hash = file_data.content_hash
+            log.debug("Updating cached document symbols for %s (hash=%s)", relative_file_path, content_hash)
+            self._document_symbols_cache[cache_key] = (content_hash, document_symbols)
             self._document_symbols_cache_is_modified = True
 
             return document_symbols
@@ -2487,8 +2534,9 @@ class SolidLanguageServer(ABC):
     ) -> ls_types.UnifiedSymbolInformation | None:
         """
         Finds the first symbol containing the position for the given file.
-        For Python, container symbols are considered to be those with kinds corresponding to
-        functions, methods, or classes (typically: Function (12), Method (6), Class (5)).
+        Container symbols are those with kinds corresponding to functions, methods, classes, structs
+        and interfaces, as well as variables and constants (which may be one-liners, e.g. members
+        of a Go ``const`` group).
 
         The method operates as follows:
           - Request the document symbols for the file.
@@ -2500,7 +2548,7 @@ class SolidLanguageServer(ABC):
             among those above the given line.
           - If no container candidates are found, return None.
 
-        :param relative_file_path: The relative path to the Python file.
+        :param relative_file_path: The relative path to the file.
         :param line: The 0-indexed line number.
         :param column: The 0-indexed column (also called character). If not passed, the lookup will be based
             only on the line.
@@ -2543,9 +2591,6 @@ class SolidLanguageServer(ABC):
                 location["relativePath"] = relative_file_path
                 location["uri"] = Path(absolute_file_path).as_uri()
 
-        # Allowed container kinds, currently only for Python
-        container_symbol_kinds = {ls_types.SymbolKind.Method, ls_types.SymbolKind.Function, ls_types.SymbolKind.Class}
-
         def is_position_in_range(line: int, range_d: ls_types.Range) -> bool:
             start = range_d["start"]
             end = range_d["end"]
@@ -2561,14 +2606,15 @@ class SolidLanguageServer(ABC):
                     column_condition = column >= start["character"]
             return line_condition and column_condition
 
+        def is_multiline_container(s):
+            return SymbolKind.is_container(s["kind"]) and s["location"]["range"]["start"]["line"] != s["location"]["range"]["end"]["line"]
+
+        def is_variable_or_constant(s):
+            return s["kind"] in {ls_types.SymbolKind.Variable, ls_types.SymbolKind.Constant}
+
         # Only consider containers that are not one-liners (otherwise we may get imports)
-        candidate_containers = [
-            s
-            for s in document_symbols.iter_symbols()
-            if s["kind"] in container_symbol_kinds and s["location"]["range"]["start"]["line"] != s["location"]["range"]["end"]["line"]
-        ]
-        var_containers = [s for s in document_symbols.iter_symbols() if s["kind"] == ls_types.SymbolKind.Variable]
-        candidate_containers.extend(var_containers)
+        # variables and constants are admitted even as one-liners (e.g. members of a Go const group)
+        candidate_containers = [s for s in document_symbols.iter_symbols() if is_multiline_container(s) or is_variable_or_constant(s)]
 
         if not candidate_containers:
             return None

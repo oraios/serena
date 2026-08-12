@@ -40,7 +40,7 @@ class ReadFileTool(Tool):
             required for the task.
         :return: the full text of the file at the given relative path
         """
-        self.project.validate_relative_path(relative_path, require_not_ignored=True)
+        self.project.validate_relative_path(relative_path)
 
         # read lines, using the same (LSP-compliant) notion of line breaks as the line-based editing tools
         result = self.project.read_file(relative_path)
@@ -75,7 +75,7 @@ class CreateTextFileTool(EditingToolWithDiagnostics):
             will_overwrite_existing = abs_path.exists()
 
             if will_overwrite_existing:
-                self.project.validate_relative_path(relative_path, require_not_ignored=True)
+                self.project.validate_relative_path(relative_path)
             else:
                 assert abs_path.is_relative_to(self.get_project_root()), (
                     f"Cannot create file outside of the project directory, got {relative_path=}"
@@ -117,14 +117,15 @@ class ListDirTool(Tool):
             }
             return self._to_json(error_info)
 
-        self.project.validate_relative_path(relative_path, require_not_ignored=skip_ignored_files)
+        self.project.validate_relative_path(relative_path)
 
+        is_ignored_path_fn = self.project.get_is_ignored_path_fn(relative_path, skip_ignored_files)
         dirs, files = scan_directory(
             os.path.join(self.get_project_root(), relative_path),
             relative_to=self.get_project_root(),
             recursive=recursive,
-            is_ignored_dir=self.project.is_ignored_path if skip_ignored_files else None,
-            is_ignored_file=self.project.is_ignored_path if skip_ignored_files else None,
+            is_ignored_dir=is_ignored_path_fn,
+            is_ignored_file=is_ignored_path_fn,
         )
 
         result = self._to_json({"dirs": dirs, "files": files})
@@ -138,19 +139,21 @@ class FindFileTool(Tool):
 
     def apply(self, file_mask: str, relative_path: str) -> str:
         """
-        Finds non-gitignored files matching the given file mask within the given relative path
+        Finds files matching the given file mask within the given relative path
 
         :param file_mask: the filename or file mask (using the wildcards * or ?) to search for
         :param relative_path: the relative path to the directory to search in; pass "." to scan the project root
+        :param skip_ignored_files: whether to skip ignored files/directories
         :return: a JSON object with the list of matching files
         """
-        self.project.validate_relative_path(relative_path, require_not_ignored=True)
+        self.project.validate_relative_path(relative_path)
 
+        is_ignored_path_fn = self.project.get_is_ignored_path_fn(relative_path, skip_ignored_paths=False)
         dir_to_scan = os.path.join(self.get_project_root(), relative_path)
 
         # find the files by ignoring everything that doesn't match
         def is_ignored_file(abs_path: str) -> bool:
-            if self.project.is_ignored_path(abs_path):
+            if is_ignored_path_fn(abs_path):
                 return True
             filename = os.path.basename(abs_path)
             return not fnmatch(filename, file_mask)
@@ -158,7 +161,7 @@ class FindFileTool(Tool):
         _dirs, files = scan_directory(
             path=dir_to_scan,
             recursive=True,
-            is_ignored_dir=self.project.is_ignored_path,
+            is_ignored_dir=is_ignored_path_fn,
             is_ignored_file=is_ignored_file,
             relative_to=self.get_project_root(),
         )
@@ -202,25 +205,8 @@ class ReplaceContentTool(EditingToolWithDiagnostics):
         :param allow_multiple_occurrences: whether to allow matching and replacing multiple occurrences.
             If false and multiple occurrences are found, an error will be returned
         """
-        return self.replace_content(
-            relative_path, needle, repl, mode=mode, allow_multiple_occurrences=allow_multiple_occurrences, require_not_ignored=True
-        )
-
-    def replace_content(
-        self,
-        relative_path: str,
-        needle: str,
-        repl: str,
-        mode: Literal["literal", "regex"],
-        allow_multiple_occurrences: bool = False,
-        require_not_ignored: bool = True,
-    ) -> str:
-        """
-        Performs the replacement, with additional options not exposed in the tool.
-        This function can be used internally by other tools.
-        """
         with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
-            self.project.validate_relative_path(relative_path, require_not_ignored=require_not_ignored)
+            self.project.validate_relative_path(relative_path)
             with EditedFileContext(relative_path, self.create_code_editor()) as context:
                 original_content = context.get_original_content()
                 replacer = ContentReplacer(mode=mode, allow_multiple_occurrences=allow_multiple_occurrences)
@@ -555,10 +541,6 @@ class InsertAtLineTool(EditingToolWithDiagnostics, ToolMarkerOptional):
 
 
 class SearchForPatternTool(Tool):
-    """
-    Performs a search for a pattern in the project.
-    """
-
     def apply(
         self,
         substring_pattern: str,
@@ -568,6 +550,7 @@ class SearchForPatternTool(Tool):
         paths_exclude_glob: str = "",
         relative_path: str = "",
         restrict_search_to_code_files: bool = False,
+        skip_ignored_files: bool = True,
         multiline: bool = True,
         max_answer_chars: int = -1,
     ) -> str:
@@ -581,8 +564,9 @@ class SearchForPatternTool(Tool):
         :param paths_include_glob: optional glob (relative to project root, e.g. ``"src/**/*.ts"``) restricting which files are searched.
         :param paths_exclude_glob: optional glob to exclude files; takes precedence over `paths_include_glob`.
         :param relative_path: restricts the search to this file or subdirectory of the project root
-        :param restrict_search_to_code_files: whether to search only files containing analyzable code symbols
+        :param restrict_search_to_code_files: whether to search only (non-ignored) files containing analyzable code symbols
             (useful when looking for class/method definitions); otherwise also search non-code files.
+        :param skip_ignored_files: whether to skip ignored sub-paths (default: True)
         :param multiline: whether to apply multi-line matching (default: True), enabling the flags re.DOTALL and re.MULTILINE
         :param max_answer_chars: if the output exceeds this many characters, a progressively shortened summary is returned instead.
             ``-1`` uses the configured default.
@@ -590,7 +574,7 @@ class SearchForPatternTool(Tool):
         """
         relative_path = relative_path.strip()
         if relative_path:
-            self.project.validate_relative_path(relative_path, require_not_ignored=True)
+            self.project.validate_relative_path(relative_path)
 
         matches = self.project.search_project_files_for_pattern(
             pattern=substring_pattern,
@@ -601,6 +585,7 @@ class SearchForPatternTool(Tool):
             paths_exclude_glob=paths_exclude_glob.strip(),
             multiline=multiline,
             code_files_only=restrict_search_to_code_files,
+            skip_ignored_files=skip_ignored_files,
         )
 
         # group matches by file
@@ -672,3 +657,7 @@ class SearchForPatternTool(Tool):
                 make_summary,
             ],
         )
+
+    """
+    Performs a search for a pattern in the project.
+    """

@@ -12,7 +12,13 @@ import threading
 
 from overrides import override
 
-from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
+from solidlsp import ls_types
+from solidlsp.ls import (
+    LanguageServerDependencyProvider,
+    LanguageServerDependencyProviderSinglePath,
+    LSPConstants,
+    SolidLanguageServer,
+)
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
 from solidlsp.util.subprocess_util import subprocess_run
@@ -505,7 +511,10 @@ class RustAnalyzer(SolidLanguageServer):
                 "showUnlinkedFileNotification": True,
                 "showDependenciesExplorer": True,
                 "assist": {"emitMustUse": False, "expressionFillDefault": "todo"},
-                "cachePriming": {"enable": True, "numThreads": 0},
+                # Eager cache priming and automatic Cargo reloads can repeatedly
+                # index large, actively-built workspaces. Keep checkOnSave enabled
+                # because Rust diagnostics rely on flycheck.
+                "cachePriming": {"enable": False, "numThreads": 0},
                 "cargo": {
                     "autoreload": True,
                     "buildScripts": {
@@ -674,6 +683,36 @@ class RustAnalyzer(SolidLanguageServer):
             "trace": "verbose",
         }
         return initialize_params
+
+    @override
+    def _get_published_diagnostics_wait_timeout(self, pull_diagnostics_failed: bool) -> float:
+        timeout = super()._get_published_diagnostics_wait_timeout(pull_diagnostics_failed)
+        # Rust diagnostics are often published asynchronously after the pull-diagnostics request,
+        # so keep a wider fallback wait window across all platforms.
+        return max(timeout, 8.0)
+
+    @override
+    def request_text_document_diagnostics(
+        self,
+        relative_file_path: str,
+        start_line: int = 0,
+        end_line: int = -1,
+        min_severity: int = 4,
+    ) -> list[ls_types.Diagnostic]:
+        uri = self._validate_text_document_diagnostics_request(relative_file_path, start_line, end_line, min_severity)
+
+        # With cache priming disabled, startup can finish before rust-analyzer
+        # schedules its initial flycheck. Trigger the retained checkOnSave path
+        # explicitly whenever diagnostics are requested.
+        with self.open_file(relative_file_path):
+            self.server.notify.did_save_text_document(
+                {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                    LSPConstants.TEXT_DOCUMENT: {
+                        LSPConstants.URI: uri,
+                    }
+                }
+            )
+            return super().request_text_document_diagnostics(relative_file_path, start_line, end_line, min_severity)
 
     def _start_server(self) -> None:
         """

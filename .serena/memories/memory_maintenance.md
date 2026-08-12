@@ -4,7 +4,7 @@
 
 - Core principle: progressive discovery through references, building a graph of memories.
 - Initially, agents are provided with the list of all memories (names only).
-- Agents should read `mem:core` as the top-level entry point (graph root).
+- Agents should read `mem:critical_info` as the top-level entry point (graph root).
   This memory should contain references to other memories covering major project domains.
   The referenced memories shall, in turn, shall contain references to even more specific memories, and so on.
   The depth of the graph shall depend on the project complexity.

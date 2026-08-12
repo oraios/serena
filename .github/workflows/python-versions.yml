@@ -1,0 +1,94 @@
+# =============================================================================
+# Python version compatibility -- strategy & rationale
+# =============================================================================
+# WHY THIS EXISTS
+#   `pyproject.toml` declares support for the whole range `>=3.11, <3.15`, but the
+#   test suite (see pytest.yml) runs on a single interpreter. This workflow is the
+#   cheap backstop for the rest of the range: it does not run the test suite, it only
+#   checks that the locked dependency set can be *installed* on each supported
+#   interpreter and that Serena is then functional there (via `project health-check`).
+#   That catches the failure mode a single-version test matrix structurally cannot
+#   see -- a dependency with no wheel (or no support) for a given Python version,
+#   e.g. right after a new CPython release.
+#
+# WHY A SEPARATE WORKFLOW
+#   The check depends only on `pyproject.toml` + `uv.lock` + the import graph, not on
+#   any language toolchain, so it shares nothing with the test matrix's per-batch
+#   setup. Keeping it separate also gives it its own concurrency group and keeps the
+#   job count out of pytest.yml's (os x batch) cross-product.
+#
+# CONCURRENCY LIMITS (GitHub free tier)
+#   Hard cap of 20 concurrent jobs across the account. pytest.yml already uses 13,
+#   so this workflow is deliberately kept at 4 (Linux only) to stay inside the cap
+#   when both run on the same push; adding OSes here must respect that ceiling.
+#
+# DELIBERATELY NOT CACHED
+#   The `.venv` is intentionally NOT cached (unlike in pytest.yml): a restored venv
+#   would make `uv sync` a no-op and thereby skip the very thing under test. Only
+#   uv's own wheel cache (managed by setup-uv) is reused, which speeds up downloads
+#   without weakening the check.
+# =============================================================================
+name: Python Versions
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  uv-sync:
+    name: uv sync (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    # Backstop against hung jobs; a healthy run is ~2 minutes.
+    timeout-minutes: 20
+    strategy:
+      # Report every unsupported version in one run instead of stopping at the first.
+      fail-fast: false
+      matrix:
+        # The full range declared by `requires-python` in pyproject.toml. Keep in sync
+        # with it (and with the `Programming Language :: Python :: 3.x` classifiers).
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        # Required by the smoke test below, not by the sync: the default Python language
+        # server (Pyright) is auto-installed by Serena and runs on Node.
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Create virtual environment with Python ${{ matrix.python-version }}
+        # No actions/setup-python: uv fetches the interpreter itself, so the version under
+        # test is stated exactly once here and cannot drift from what uv would pick up
+        # from PATH. `-p` is what makes this job meaningful -- a bare `uv venv` would test
+        # whatever interpreter happens to be on the runner.
+        shell: bash
+        run: uv venv -p ${{ matrix.python-version }}
+      - name: Install Python environment
+        # --locked additionally asserts that uv.lock is up to date with pyproject.toml,
+        # i.e. that the resolution being installed is the one contributors and CI use.
+        shell: bash
+        run: uv sync --extra dev --locked
+      - name: List Python dependencies
+        shell: bash
+        run: uv pip list
+      - name: Smoke-test against the Python test repo
+        # Installability alone does not prove usability. The health check starts a real
+        # SerenaAgent on the Python test repo and exercises the symbolic tools end to end
+        # (symbols overview -> find symbol -> find references -> pattern search), so it
+        # covers the import graph, the agent's startup path and the language server
+        # integration -- the parts most likely to break on a new interpreter. Note that
+        # Pyright itself is launched via `uvx -p 3.13`, i.e. on its own interpreter: what
+        # varies across this matrix is Serena, not the language server. Exits non-zero on
+        # failure.
+        shell: bash
+        run: uv run serena project health-check test/resources/repos/python/test_repo
