@@ -166,9 +166,11 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
 
         To search for a symbol, you provide a name path pattern that is used to match against name paths.
         It can be
+
          * a simple name (e.g. "method"), which will match any symbol with that name
          * a relative path like "class/method", which will match any symbol with that name path suffix
          * an absolute name path "/class/method" (absolute name path), which requires an exact match of the full name path within the source file.
+
         Append an index `[i]` to match a specific overload only, e.g. "MyClass/my_method[1]".
 
         :param name_path_pattern: the name path matching pattern (see above)

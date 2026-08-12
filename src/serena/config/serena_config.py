@@ -144,6 +144,7 @@ class ToolInclusionDefinition:
     """
     Defines which tools to include/exclude in Serena's operation.
     This can mean either
+
       * defining exclusions/inclusions to apply to an existing set of tools [incremental mode], or
       * defining a fixed set of tools to use [fixed mode].
     """
@@ -867,7 +868,7 @@ class RegisteredProject(ToStringMixin):
 class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
     """
     Holds the Serena agent configuration, which is typically loaded from a YAML configuration file
-    (when instantiated via :method:`from_config_file`), which is updated when projects are added or removed.
+    (when instantiated via :meth:`from_config_file`), which is updated when projects are added or removed.
     For testing purposes, it can also be instantiated directly with the desired parameters.
     """
 
@@ -907,16 +908,19 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
     """
 
     ignored_paths: list[str] = field(default_factory=list)
-    """List of paths to ignore across all projects. Same syntax as gitignore, so you can use * and **.
+    """List of paths to ignore across all projects. Same syntax as gitignore, so you can use ``*`` and ``**``.
     These patterns are merged additively with each project's own ignored_paths."""
 
     project_serena_folder_location: str = DEFAULT_PROJECT_SERENA_FOLDER_LOCATION
     """
     Template for the location of the per-project .serena data folder (memories, caches, etc.).
     Supports the following placeholders:
+
       - $projectDir: the absolute path to the project root directory
       - $projectFolderName: the name of the project folder
+
     Examples:
+
       - "$projectDir/.serena" (default, stores data inside the project)
       - "/projects-metadata/$projectFolderName/.serena" (stores data in a central location)
     """

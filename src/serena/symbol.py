@@ -150,9 +150,11 @@ class NamePathMatcher(ToStringMixin):
     uniquely identify it.
 
     A matching pattern can be:
+
      * a simple name (e.g. "method"), which will match any symbol with that name
      * a relative path like "class/method", which will match any symbol with that name path suffix
      * an absolute name path "/class/method" (absolute name path), which requires an exact match of the full name path within the source file.
+
     Append an index `[i]` to match a specific overload only, e.g. "MyClass/my_method[1]".
     """
 

@@ -30,6 +30,12 @@ log = logging.getLogger(__name__)
 
 
 class Project(ToStringMixin):
+    """
+    Represents a project Serena operates on: the project root and its configuration, file access
+    with gitignore-aware ignore handling, and the connection to the language-server backend that
+    powers the symbolic operations.
+    """
+
     def __init__(
         self,
         *,

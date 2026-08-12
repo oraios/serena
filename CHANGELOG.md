@@ -2,6 +2,10 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - The documentation now includes an auto-generated API reference for the `serena` package
+    (the generator existed but had been disabled since the documentation build was introduced)
+
 # v1.7.0 (2026-08-09)
 
 * General:

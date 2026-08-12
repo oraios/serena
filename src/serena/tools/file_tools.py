@@ -241,6 +241,7 @@ class ReplaceInFilesTool(EditingToolWithDiagnostics):
         replaces many single-file replacements with long disambiguating needles.
 
         Recommended protocol whenever there is ANY risk of unintended replacements:
+
         1. Call with dry_run=True: every prospective change is returned as a minimal line diff with an
            occurrence id; nothing is modified.
         2. Call again with dry_run=False, passing the ids you want in occurrence_ids (omit it to apply
@@ -256,7 +257,7 @@ class ReplaceInFilesTool(EditingToolWithDiagnostics):
             specified as $!1, $!2, etc.
         :param mode: either "literal" or "regex", specifying how `needle` is to be interpreted
         :param relative_path: only consider this file or directory (default: the whole project)
-        :param paths_include_glob: optional glob (relative to the project root, e.g. "src/**/*.java")
+        :param paths_include_glob: optional glob (relative to the project root, e.g. ``"src/**/*.java"``)
             restricting which files are considered
         :param paths_exclude_glob: optional glob of files to exclude; takes precedence over the include glob
         :param dry_run: if True, do not modify anything; return the prospective changes as a list of

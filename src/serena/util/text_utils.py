@@ -190,18 +190,20 @@ class GlobMatcher(ToStringMixin):
     Supports matching a file path against a glob pattern.
 
     Supports standard glob patterns:
-    - * matches any number of characters except /
-    - ** matches any number of directories (zero or more)
-    - ? matches a single character except /
-    - [seq] matches any character in seq
+
+    - ``*`` matches any number of characters except /
+    - ``**`` matches any number of directories (zero or more)
+    - ``?`` matches a single character except /
+    - ``[seq]`` matches any character in seq
 
     Supports brace expansion:
-    - {a,b,c} expands to multiple patterns (including nesting)
+
+    - ``{a,b,c}`` expands to multiple patterns (including nesting)
     """
 
     def __init__(self, expr: str):
         """
-        :param expr: a glob pattern which may make use of brace expansion (e.g., "src/**/*.{js,jsx,ts,tsx}")
+        :param expr: a glob pattern which may make use of brace expansion (e.g., ``"src/**/*.{js,jsx,ts,tsx}"``)
         """
         expr = expr.replace("\\", "/")  # normalise backslashes to forward slashes
         self._glob_expr = expr

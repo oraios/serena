@@ -138,6 +138,8 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+# generated API-reference sources (docs/autogen_docs.py)
+docs/05-api/serena/
 
 # PyBuilder
 target/
