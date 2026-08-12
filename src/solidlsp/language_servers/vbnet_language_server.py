@@ -6,19 +6,19 @@ import logging
 import os
 import platform
 import threading
-from collections.abc import Iterable
+from collections.abc import Hashable, Iterable
 from pathlib import Path
 from typing import Any, cast
 
 from overrides import override
 
 from serena.util.dotnet import DotNETUtil
-from solidlsp.ls import DocumentSymbols, LanguageServerDependencyProvider, LSPFileBuffer, SolidLanguageServer
+from solidlsp.ls import LanguageServerDependencyProvider, LSPFileBuffer, RawDocumentSymbol, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
-from solidlsp.ls_types import Hover, UnifiedSymbolInformation
+from solidlsp.ls_types import Hover
 from solidlsp.ls_utils import FileUtils, PathUtils
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams, InitializeResult
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeResult
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
@@ -175,15 +175,6 @@ class VBNetLanguageServer(SolidLanguageServer):
         return super().is_ignored_dirname(dirname) or dirname in ["bin", "obj", "packages", ".vs"]
 
     @override
-    def request_document_symbols(self, relative_file_path: str, file_buffer: Any = None) -> DocumentSymbols:
-        symbols = super().request_document_symbols(relative_file_path, file_buffer)
-
-        for symbol in symbols.iter_symbols():
-            self._normalize_symbol_name(symbol, relative_file_path)
-
-        return symbols
-
-    @override
     def request_hover(self, relative_file_path: str, line: int, column: int, file_buffer: LSPFileBuffer | None = None) -> Hover | None:
         hover = super().request_hover(relative_file_path, line, column, file_buffer=file_buffer)
 
@@ -200,8 +191,12 @@ class VBNetLanguageServer(SolidLanguageServer):
 
         return hover
 
-    def _normalize_symbol_name(self, symbol: UnifiedSymbolInformation, relative_file_path: str) -> None:
-        original_name = symbol.get("name", "")
+    def _document_symbols_cache_fingerprint(self) -> Hashable | None:
+        normalize_symbol_name_version = 1
+        return normalize_symbol_name_version
+
+    def _normalize_symbol_name(self, symbol: RawDocumentSymbol, relative_file_path: str) -> str:
+        original_name = symbol.get("name") or ""
 
         normalized_name, type_info = self._extract_base_name_and_type(original_name)
 
@@ -216,13 +211,9 @@ class VBNetLanguageServer(SolidLanguageServer):
                     self._original_symbol_names[cache_key] = original_name
 
             if type_info and "detail" not in symbol:
-                symbol["detail"] = type_info
+                symbol["detail"] = type_info  # type: ignore
 
-        symbol["name"] = normalized_name
-
-        children = symbol.get("children", [])
-        for child in children:
-            self._normalize_symbol_name(child, relative_file_path)
+        return normalized_name
 
     @staticmethod
     def _extract_base_name_and_type(roslyn_name: str) -> tuple[str, str]:
@@ -315,57 +306,48 @@ class VBNetLanguageServer(SolidLanguageServer):
             log.info(f"Successfully installed VB.NET Language Server to {server_dll}")
             return str(server_dll)
 
-    def _get_initialize_params(self) -> InitializeParams:
-        root_uri = PathUtils.path_to_uri(self.repository_root_path)
-        root_name = os.path.basename(self.repository_root_path)
-        return cast(
-            InitializeParams,
-            {
-                "workspaceFolders": [{"uri": root_uri, "name": root_name}],
-                "processId": os.getpid(),
-                "rootPath": self.repository_root_path,
-                "rootUri": root_uri,
-                "capabilities": {
-                    "window": {
-                        "workDoneProgress": True,
-                        "showMessage": {"messageActionItem": {"additionalPropertiesSupport": True}},
-                        "showDocument": {"support": True},
+    def _create_base_initialize_params(self) -> dict:
+        return {
+            "capabilities": {
+                "window": {
+                    "workDoneProgress": True,
+                    "showMessage": {"messageActionItem": {"additionalPropertiesSupport": True}},
+                    "showDocument": {"support": True},
+                },
+                "workspace": {
+                    "applyEdit": True,
+                    "workspaceEdit": {"documentChanges": True},
+                    "didChangeConfiguration": {"dynamicRegistration": True},
+                    "didChangeWatchedFiles": {"dynamicRegistration": True},
+                    "symbol": {
+                        "dynamicRegistration": True,
+                        "symbolKind": {"valueSet": list(range(1, 27))},
                     },
-                    "workspace": {
-                        "applyEdit": True,
-                        "workspaceEdit": {"documentChanges": True},
-                        "didChangeConfiguration": {"dynamicRegistration": True},
-                        "didChangeWatchedFiles": {"dynamicRegistration": True},
-                        "symbol": {
-                            "dynamicRegistration": True,
-                            "symbolKind": {"valueSet": list(range(1, 27))},
+                    "executeCommand": {"dynamicRegistration": True},
+                    "configuration": True,
+                    "workspaceFolders": True,
+                    "workDoneProgress": True,
+                },
+                "textDocument": {
+                    "synchronization": {"dynamicRegistration": True, "willSave": True, "willSaveWaitUntil": True, "didSave": True},
+                    "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
+                    "signatureHelp": {
+                        "dynamicRegistration": True,
+                        "signatureInformation": {
+                            "documentationFormat": ["markdown", "plaintext"],
+                            "parameterInformation": {"labelOffsetSupport": True},
                         },
-                        "executeCommand": {"dynamicRegistration": True},
-                        "configuration": True,
-                        "workspaceFolders": True,
-                        "workDoneProgress": True,
                     },
-                    "textDocument": {
-                        "synchronization": {"dynamicRegistration": True, "willSave": True, "willSaveWaitUntil": True, "didSave": True},
-                        "hover": {"dynamicRegistration": True, "contentFormat": ["markdown", "plaintext"]},
-                        "signatureHelp": {
-                            "dynamicRegistration": True,
-                            "signatureInformation": {
-                                "documentationFormat": ["markdown", "plaintext"],
-                                "parameterInformation": {"labelOffsetSupport": True},
-                            },
-                        },
-                        "definition": {"dynamicRegistration": True},
-                        "references": {"dynamicRegistration": True},
-                        "documentSymbol": {
-                            "dynamicRegistration": True,
-                            "symbolKind": {"valueSet": list(range(1, 27))},
-                            "hierarchicalDocumentSymbolSupport": True,
-                        },
+                    "definition": {"dynamicRegistration": True},
+                    "references": {"dynamicRegistration": True},
+                    "documentSymbol": {
+                        "dynamicRegistration": True,
+                        "symbolKind": {"valueSet": list(range(1, 27))},
+                        "hierarchicalDocumentSymbolSupport": True,
                     },
                 },
             },
-        )
+        }
 
     def _start_server(self) -> None:
         indexing_complete = threading.Event()
@@ -475,7 +457,7 @@ class VBNetLanguageServer(SolidLanguageServer):
             log.info(f"Failed to start language server process: {e}", logging.ERROR)
             raise SolidLSPException(f"Failed to start VB.NET language server: {e}")
 
-        initialize_params = self._get_initialize_params()
+        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request to language server")
         try:
