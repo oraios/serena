@@ -2,6 +2,9 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
+
 # v1.7.0 (2026-08-09)
 
 * General:
