@@ -75,6 +75,7 @@ dev = [
   # In version 1.0.4 we get a NoneType error related to some config conversion (yml_analytics is None and should be a list)
   "ty==0.0.24",
   "poethepoet==0.36.0",
+  "hypothesis==6.165.3",
   "pytest==8.4.1",
   "pytest-xdist==3.8.0",
   "ruff==0.12.5",
