@@ -2,6 +2,10 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Language Servers:
+  - Add VB.NET language server support (via the Roslyn-based `Microsoft.CodeAnalysis.LanguageServer`,
+    also shared with the C# language server)
+
 # v1.7.0 (2026-08-09)
 
 * General:
