@@ -276,3 +276,5 @@ zz-misc/
 vue-implementation/
 
 news/news.json
+test/resources/repos/vbnet/test_repo/obj/
+test/resources/repos/vbnet/test_repo/bin/

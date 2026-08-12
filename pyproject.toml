@@ -334,6 +334,7 @@ markers = [
   "php: language server running for PHP",
   "perl: language server running for Perl",
   "csharp: language server running for C#",
+  "vbnet: language server running for VB.NET",
   "elixir: language server running for Elixir",
   "elm: language server running for Elm",
   "terraform: language server running for Terraform",
