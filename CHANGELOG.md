@@ -2,6 +2,11 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Fix: `TextUtils.insert_text_at_position` returned a wrong position when the inserted text merged
+    with an adjacent character into a single newline sequence (e.g. a `\n` inserted directly after an
+    existing `\r`); the position is now determined from the resulting text
+
 # v1.7.0 (2026-08-09)
 
 * General:
