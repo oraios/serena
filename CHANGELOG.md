@@ -2,6 +2,10 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Docs: fix stale model references (example agent script, README quote label) and date the
+    April 2026 evaluation statements
+
 # v1.7.0 (2026-08-09)
 
 * General:

@@ -43,9 +43,9 @@ We crafted an unbiased evaluation prompt that leads the agent to perform ~20 rou
 representative of everyday development work, 
 in order to estimate the value added by Serena's tools when used alongside its own built-ins. 
 
-Here's a one-sentence summary of what the agents had to say:
+Here's a one-sentence summary of what the agents had to say in our April 2026 evaluation:
 
-**Opus 4.6 (high) in Claude Code on a large Python codebase:**
+**Opus 4.6 (medium) in Claude Code on a large Python codebase:**
 > "Serena's IDE-backed semantic tools are the single most impactful addition to my toolkit – cross-file renames, moves, and reference lookups that
 would cost me 8–12 careful, error-prone steps collapse into one atomic call, and I would absolutely ask any developer I work with to set them up."
 

@@ -2,7 +2,7 @@
 
 This section presents the results of the evaluation.
 
-We performed evaluations using popular AI coding agents in representative scenarios — different
+In April 2026, we performed evaluations using popular AI coding agents in representative scenarios — different
 agents, different programming languages, and different codebases — to show that the results are
 not specific to a single setup.
 
