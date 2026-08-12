@@ -1107,6 +1107,11 @@ Supported settings:
 
 Serena uses Metals for Scala support.
 
+Metals serves one build per workspace folder, so in a repository holding several builds — or a single
+build below the repository root — it is the build roots, not the repository root, that Metals must be
+given. Serena detects them automatically; `project_roots` overrides that detection where it guesses
+wrong, and `project_root_scan_depth` bounds how far it looks.
+
 Supported settings:
 
 | Setting | Default | Description |
@@ -1115,6 +1120,9 @@ Supported settings:
 | `client_name` | `Serena` | Client identifier sent to Metals. |
 | `on_stale_lock` | `auto-clean` | How Serena handles stale Metals H2 database locks. Supported values: `auto-clean`, `warn`, `fail`. |
 | `log_multi_instance_notice` | `true` | Log a notice when another Metals instance is detected. |
+| `auto_import_build` | `true` | Answer Metals' build-import prompts affirmatively, which lets it run the project's build tool (e.g. `sbt bloopInstall`). Set to `false` to leave the build un-imported; Metals then has no build server, and every cross-file query is served by the fallback presentation compiler. |
+| `project_roots` | auto-detected | The build roots to serve, as paths relative to the repository root. A path that does not exist is skipped with a warning; if none of them exists, the build roots are detected instead. |
+| `project_root_scan_depth` | `3` | How many directory levels below the repository root the detection searches. Applies whenever the roots are detected — that is, when `project_roots` is unset, or when it names nothing that exists. |
 
 #### SCSS / Sass / CSS
 
