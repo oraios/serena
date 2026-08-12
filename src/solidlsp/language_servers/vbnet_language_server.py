@@ -405,9 +405,7 @@ class VBNetLanguageServer(SolidLanguageServer):
                     if "enable" in section or "show" in section or "suppress" in section or "navigate" in section:
                         result.append(False)
                     elif "scope" in section:
-                        if "analyzer_diagnostics_scope" in section:
-                            result.append("openFiles")
-                        elif "compiler_diagnostics_scope" in section:
+                        if "analyzer_diagnostics_scope" in section or "compiler_diagnostics_scope" in section:
                             result.append("openFiles")
                         else:
                             result.append("openFiles")

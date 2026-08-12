@@ -93,9 +93,9 @@ class TestVBNetLanguageServer:
 
         ref_files = cast(list[str], [ref.get("relativePath", "") for ref in refs])
 
-        assert any(
-            os.path.join("Models", "Person.vb") in ref_file for ref_file in ref_files
-        ), "Should find reference in Models/Person.vb where Calculator.Subtract is called"
+        assert any(os.path.join("Models", "Person.vb") in ref_file for ref_file in ref_files), (
+            "Should find reference in Models/Person.vb where Calculator.Subtract is called"
+        )
         assert len(refs) > 0, "Should find at least one reference"
 
         refs_second_call = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
