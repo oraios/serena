@@ -12,21 +12,21 @@ from solidlsp.language_servers.vbnet_language_server import (
     breadth_first_file_scan,
     find_solution_or_project_file,
 )
-from solidlsp.ls_config import Language, LanguageServerConfig
+from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.ls_utils import SymbolUtils
 from solidlsp.settings import SolidLSPSettings
 
 
 @pytest.mark.vbnet
 class TestVBNetLanguageServer:
-    @pytest.mark.parametrize("language_server", [Language.VBNET], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VBNET], indirect=True)
     def test_find_symbol(self, language_server: SolidLanguageServer) -> None:
         symbols = language_server.request_full_symbol_tree()
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Module1"), "Module1 not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Calculator"), "Calculator class not found in symbol tree"
         assert SymbolUtils.symbol_tree_contains_name(symbols, "Add"), "Add method not found in symbol tree"
 
-    @pytest.mark.parametrize("language_server", [Language.VBNET], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VBNET], indirect=True)
     def test_get_document_symbols(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("Module1.vb")
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
@@ -39,7 +39,7 @@ class TestVBNetLanguageServer:
         names = [s.get("name") for s in symbols]
         assert "Calculator" in names
 
-    @pytest.mark.parametrize("language_server", [Language.VBNET], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VBNET], indirect=True)
     def test_find_referencing_symbols(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("Module1.vb")
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
@@ -54,7 +54,7 @@ class TestVBNetLanguageServer:
         refs = language_server.request_references(file_path, sel_start["line"], sel_start["character"] + 1)
         assert any("Module1.vb" in ref.get("relativePath", "") for ref in refs), "Module1.vb should reference Add method"
 
-    @pytest.mark.parametrize("language_server", [Language.VBNET], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VBNET], indirect=True)
     def test_nested_namespace_symbols(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("Models", "Person.vb")
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
@@ -73,7 +73,7 @@ class TestVBNetLanguageServer:
         assert "ToString" in symbol_names, "ToString method not found"
         assert "IsAdult" in symbol_names, "IsAdult method not found"
 
-    @pytest.mark.parametrize("language_server", [Language.VBNET], indirect=True)
+    @pytest.mark.parametrize("language_server", [LanguageServerId.VBNET], indirect=True)
     def test_find_referencing_symbols_across_files(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("Module1.vb")
         symbols = language_server.request_document_symbols(file_path).get_all_symbols_and_roots()
@@ -196,6 +196,8 @@ class TestVBNetSolutionProjectOpening:
 
             mock_config = Mock(spec=LanguageServerConfig)
             mock_config.ignored_paths = []
+            mock_config.get_absolute_workspace_folders.return_value = []
+            mock_config.get_absolute_additional_workspace_folders.return_value = []
 
             mock_settings = Mock(spec=SolidLSPSettings)
             mock_settings.ls_resources_dir = "/tmp/test_ls_resources"
