@@ -1111,7 +1111,7 @@ Supported settings:
 
 | Setting | Default | Description |
 |---|---|---|
-| `metals_version` | `1.6.4` | Override the Metals version Serena bootstraps. |
+| `metals_version` | `1.6.8` | Override the Metals version Serena bootstraps. |
 | `client_name` | `Serena` | Client identifier sent to Metals. |
 | `on_stale_lock` | `auto-clean` | How Serena handles stale Metals H2 database locks. Supported values: `auto-clean`, `warn`, `fail`. |
 | `log_multi_instance_notice` | `true` | Log a notice when another Metals instance is detected. |
