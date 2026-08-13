@@ -5,6 +5,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
+  - Add ZCode support (context `zcode`, hooks) #1837
 
 * Language Servers:
   - Fix: Scala cross-file queries waited a fixed 5s after the first file was opened, which on a cold
