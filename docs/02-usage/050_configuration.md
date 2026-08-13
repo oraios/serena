@@ -1112,6 +1112,13 @@ build below the repository root — it is the build roots, not the repository ro
 given. Serena detects them automatically; `project_roots` overrides that detection where it guesses
 wrong, and `project_root_scan_depth` bounds how far it looks.
 
+Metals reports its build import, indexing and compilation as LSP work-done progress, and Serena waits
+for all of it before the first cross-file query of a session. This matters most for references, which
+Metals serves from SemanticDB — a file the build server only writes once it has compiled the sources,
+well after indexing ends — so a query made too early returns a fraction of the true result with
+nothing to say it is partial. The wait is bounded by `indexing_timeout`, after which the query
+proceeds against whatever Metals has so far and a warning is logged.
+
 Supported settings:
 
 | Setting | Default | Description |
@@ -1123,6 +1130,9 @@ Supported settings:
 | `auto_import_build` | `true` | Answer Metals' build-import prompts affirmatively, which lets it run the project's build tool (e.g. `sbt bloopInstall`). Set to `false` to leave the build un-imported; Metals then has no build server, and every cross-file query is served by the fallback presentation compiler. |
 | `project_roots` | auto-detected | The build roots to serve, as paths relative to the repository root. A path that does not exist is skipped with a warning; if none of them exists, the build roots are detected instead. |
 | `project_root_scan_depth` | `3` | How many directory levels below the repository root the detection searches. Applies whenever the roots are detected — that is, when `project_roots` is unset, or when it names nothing that exists. |
+| `indexing_timeout` | `180` | How long to wait, in seconds, for Metals to finish importing, indexing and compiling before the first cross-file query. On expiry the query proceeds and a warning names what was still outstanding. |
+| `indexing_start_grace` | `15` | How long to wait, in seconds, for Metals to report any work at all. A server that reports none within this window is taken to have nothing to do. |
+| `indexing_quiet_period` | `3` | How long, in seconds, Metals must report nothing for its work to count as finished. Metals hands off between its phases rather than overlapping them, so it reports nothing for a moment in between; a shorter period risks mistaking that gap for completion. |
 
 #### SCSS / Sass / CSS
 
