@@ -1,8 +1,12 @@
-# API Reference
+# Code Reference
 
 **If you want to *use* Serena** — connect it to your coding agent, configure languages, work with
 projects — this is not the page you need. Start with [Getting Started](../02-usage/000_intro) and
 come back only if you end up reading the source. Nothing here is required for using Serena.
+
+Serena is a server, not a library, and this is not an API reference: nothing below is a published
+interface, and any of it may change between releases without notice. What Serena does offer as an
+interface is its set of tools, which is documented in [Tools](../01-about/035_tools).
 
 This section is for reading and extending the code: your first contribution, embedding Serena in
 your own agent, or understanding what a tool actually does under the hood. It is generated from

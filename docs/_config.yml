@@ -115,7 +115,7 @@ sphinx:
     # keep type annotations out of the signature line; they merge into the Parameters list,
     # leaving signatures human-length
     autodoc_typehints: "description"
-    html_css_files: ["api-reference.css"]
+    html_css_files: ["code-reference.css"]
     # optional extras are not installed in the docs build environment
     autodoc_mock_imports: ["agno", "sqlalchemy"]
     # resolve MyST cross-references against document anchors only; without this, autodoc'd

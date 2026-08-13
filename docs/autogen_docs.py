@@ -340,6 +340,6 @@ if __name__ == "__main__":
 
     make_rst(
         docs_root / ".." / "src" / "serena",
-        docs_root / "05-api" / "serena",
+        docs_root / "05-code-reference" / "serena",
         clean=True,
     )
