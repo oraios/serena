@@ -68,6 +68,14 @@ def get_repo_path(language: LanguageServerId) -> Path:
     return Path(__file__).parent / "resources" / "repos" / repo_language / "test_repo"
 
 
+#: per-language ls_specific_settings defaults for test LS instances; caller-provided settings win
+_LANGUAGE_DEFAULT_LS_SETTINGS: dict[LanguageServerId, dict[str, Any]] = {
+    # fake bazel path so starpls' `bazel info` probe fails fast -- on CI runners bazelisk would
+    # otherwise download a whole Bazel release (60-90s, flaky). The tests don't need bazel.
+    LanguageServerId.STARLARK: {"bazel_path": "serena-starlark-tests-no-bazel"},
+}
+
+
 def _create_ls(
     ls_id: LanguageServerId,
     repo_path: str | None = None,
@@ -78,6 +86,9 @@ def _create_ls(
     additional_workspace_folders: list[str] | None = None,
     solidlsp_dir: Path | None = None,
 ) -> SolidLanguageServer:
+    ls_specific_settings = dict(ls_specific_settings or {})
+    if ls_id in _LANGUAGE_DEFAULT_LS_SETTINGS and ls_id not in ls_specific_settings:
+        ls_specific_settings[ls_id] = _LANGUAGE_DEFAULT_LS_SETTINGS[ls_id]
     ignored_paths = ignored_paths or []
     if repo_path is None:
         repo_path = str(get_repo_path(ls_id))
@@ -99,7 +110,7 @@ def _create_ls(
         solidlsp_settings=SolidLSPSettings(
             solidlsp_dir=effective_solidlsp_dir,
             project_data_path=project_data_path,
-            ls_specific_settings=ls_specific_settings or {},
+            ls_specific_settings=ls_specific_settings,
         ),
     )
 
@@ -311,6 +322,7 @@ _LANGUAGE_PYTEST_MARKERS: dict[LanguageServerId, list[MarkDecorator | Mark]] = {
     LanguageServerId.ANGULAR: [pytest.mark.angular],
     LanguageServerId.HTML: [pytest.mark.html],
     LanguageServerId.SCSS: [pytest.mark.scss],
+    LanguageServerId.STARLARK: [pytest.mark.starlark],
 }
 
 

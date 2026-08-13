@@ -1,0 +1,8 @@
+load("//:defs.bzl", "TOOL_VERSION", "gen_files")
+
+gen_files(
+    name = "docs",
+    srcs = ["readme"],
+)
+
+config_version = TOOL_VERSION

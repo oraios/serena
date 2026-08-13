@@ -73,7 +73,7 @@ jobs:
       # other-langs: grab-bag + scripting languages + haskell + qml. Haskell (GHC/HLS) and qml (qmlls) are
       # installed only on Linux -- too slow/expensive to build on the macOS runner (Haskell), or not worth
       # the cost of a cross-OS Qt pull (qmlls) -- and skip on Windows+macOS via the central conftest guard.
-      MARKERS_OTHER_LANGS: "ruby or php or lua or luau or bash or powershell or elixir or erlang or dart or deno or haxe or haskell or terraform or rego or ansible or yaml or toml or markdown or latex or crystal or cue or fortran or ada or matlab or systemverilog or hlsl or msl or al or qml or gleam"
+      MARKERS_OTHER_LANGS: "ruby or php or lua or luau or bash or powershell or elixir or erlang or dart or deno or haxe or haskell or terraform or rego or ansible or yaml or toml or markdown or latex or crystal or cue or fortran or ada or matlab or systemverilog or hlsl or msl or al or qml or gleam or starlark"
       # niche: slow, mostly-cached toolchains. ocaml + haskell are the two slowest -- kept in separate
       # batches (ocaml here, haskell in other-langs). nix + perl skip on Windows via the guard.
       MARKERS_NICHE: "julia or r or perl or lean4 or nix or ocaml"

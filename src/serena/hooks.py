@@ -290,6 +290,9 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         (
             ".al",
             ".bash",
+            ".bazel",
+            ".bzl",
+            ".bzlmod",
             ".c",
             ".clj",
             ".cljs",
@@ -335,6 +338,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             ".sh",
             ".sol",
             ".sql",
+            ".star",
             ".svelte",
             ".swift",
             ".tf",
@@ -348,6 +352,10 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             ".zig",
         )
     )
+
+    #: exact names of extensionless source-like files (matched case-sensitively against the
+    #: basename, complementing the suffix-based ``_CODE_FILE_EXTENSIONS``)
+    _CODE_FILENAMES: frozenset[str] = frozenset(("BUILD", "WORKSPACE"))
 
     def __init__(self, client: HookClient):
         super().__init__(client)
@@ -439,11 +447,12 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
 
     @classmethod
     def _is_code_file_path(cls, file_path: str) -> bool:
-        """:return: whether ``file_path`` has a source-like suffix."""
+        """:return: whether ``file_path`` has a source-like suffix or is a known extensionless source file."""
         cleaned_path = file_path.strip().strip("'\"")
         if not cleaned_path:
             return False
-        return Path(cleaned_path).suffix.lower() in cls._CODE_FILE_EXTENSIONS
+        path = Path(cleaned_path)
+        return path.suffix.lower() in cls._CODE_FILE_EXTENSIONS or path.name in cls._CODE_FILENAMES
 
     def execute(self) -> None:
         # gate the entire hook on the rate-limit window: while we are within

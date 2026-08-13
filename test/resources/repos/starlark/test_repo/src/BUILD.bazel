@@ -1,0 +1,6 @@
+load("//:defs.bzl", "gen_files")
+
+gen_files(
+    name = "src_docs",
+    srcs = ["main"],
+)
