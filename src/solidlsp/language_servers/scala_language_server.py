@@ -27,7 +27,7 @@ if not PlatformUtils.get_platform_id().value.startswith("win"):
 log = logging.getLogger(__name__)
 
 # Default configuration constants
-DEFAULT_METALS_VERSION = "1.6.4"
+DEFAULT_METALS_VERSION = "1.6.8"
 DEFAULT_CLIENT_NAME = "Serena"
 DEFAULT_ON_STALE_LOCK = "auto-clean"
 DEFAULT_LOG_MULTI_INSTANCE_NOTICE = True
@@ -464,7 +464,7 @@ class ScalaLanguageServer(SolidLanguageServer):
             # Log notice when another Metals instance is detected
             log_multi_instance_notice: true
             # Metals version to bootstrap (default: DEFAULT_METALS_VERSION)
-            metals_version: '1.6.4'
+            metals_version: '1.6.8'
             # Client identifier sent to Metals (default: DEFAULT_CLIENT_NAME)
             client_name: 'Serena'
             # Answer Metals' build-import prompts affirmatively, which lets it run the project's
