@@ -9,6 +9,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     indicate it was incomplete. Serena now declares work-done progress support and waits for the work
     Metals reports, bounded by the new `indexing_timeout`, `indexing_start_grace` and
     `indexing_quiet_period` settings
+  - Java (JDT-LS): add `null_analysis_mode` to `ls_specific_settings.java`, which controls
+    `java.compile.nullAnalysis.mode` (`automatic` | `interactive` | `disabled`) and was previously
+    hardcoded to `automatic`. The default is unchanged; set `disabled` to suppress nullability
+    diagnostics. An unrecognized value warns and falls back to `automatic`.
 
 # v1.7.0 (2026-08-09)
 

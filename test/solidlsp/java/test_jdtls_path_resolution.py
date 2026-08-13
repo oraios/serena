@@ -9,6 +9,7 @@ mocked.
 
 from __future__ import annotations
 
+import logging
 import platform
 from pathlib import Path
 from unittest.mock import patch
@@ -21,6 +22,7 @@ from solidlsp.language_servers.eclipse_jdtls import (
     JDTLS_CONFIG_DIR_BY_PLATFORM,
     JDTLS_MIN_JDK_VERSION,
     EclipseJDTLS,
+    NullAnalysisMode,
     RuntimeDependencyPaths,
 )
 from solidlsp.ls_exceptions import SolidLSPException
@@ -769,3 +771,103 @@ class TestConfiguredRuntimesInitializeSettings:
 
         with pytest.raises(ValueError, match="requires at least a 'name' and a 'path' key"):
             server._create_base_initialize_params()
+
+
+# ----------------------------------------------------------------------------
+# _resolve_null_analysis_mode / `null_analysis_mode` initialize settings
+# ----------------------------------------------------------------------------
+
+
+def _null_analysis(initialize_params: dict) -> dict:
+    """
+    Return the JDT-LS ``java.compile.nullAnalysis`` block from initialize parameters.
+
+    :param initialize_params: JDTLS initialize-parameter payload.
+    :return: The null-analysis configuration block.
+    """
+    return initialize_params["initializationOptions"]["settings"]["java"]["compile"]["nullAnalysis"]
+
+
+class TestResolveNullAnalysisMode:
+    def test_defaults_to_automatic_when_unset(self, custom_settings: SolidLSPSettings.CustomLSSettings) -> None:
+        server = object.__new__(EclipseJDTLS)
+        server._custom_settings = custom_settings
+        assert server._resolve_null_analysis_mode() is NullAnalysisMode.AUTOMATIC
+
+    @pytest.mark.parametrize("mode", list(NullAnalysisMode), ids=lambda mode: mode.value)
+    def test_each_supported_mode_is_accepted(self, mode: NullAnalysisMode) -> None:
+        server = object.__new__(EclipseJDTLS)
+        server._custom_settings = SolidLSPSettings.CustomLSSettings({"null_analysis_mode": mode.value})
+        assert server._resolve_null_analysis_mode() is mode
+
+    @pytest.mark.parametrize(
+        "value",
+        ["enabled", "Automatic", "", None, 42],
+        ids=["unknown-mode", "wrong-case", "empty-string", "null", "non-string"],
+    )
+    def test_falls_back_to_automatic_and_warns_for_invalid_value(self, value: object, caplog: pytest.LogCaptureFixture) -> None:
+        """An unusable value must not prevent the language server from starting (see the `on_stale_lock`
+        precedent in the Scala language server); it degrades to the default mode with a warning.
+        """
+        server = object.__new__(EclipseJDTLS)
+        server._custom_settings = SolidLSPSettings.CustomLSSettings({"null_analysis_mode": value})
+
+        with caplog.at_level(logging.WARNING, logger="solidlsp.language_servers.eclipse_jdtls"):
+            assert server._resolve_null_analysis_mode() is NullAnalysisMode.AUTOMATIC
+
+        assert "null_analysis_mode" in caplog.text
+        assert repr(value) in caplog.text
+        # the warning must tell the user which values are valid and what is used instead
+        for mode in NullAnalysisMode:
+            assert mode.value in caplog.text
+
+
+class TestNullAnalysisModeInitializeSettings:
+    def test_defaults_to_automatic_when_unset(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+
+        server = _make_uninitialized_jdtls(repo, {}, runtime_paths)
+
+        assert _null_analysis(server._create_base_initialize_params())["mode"] == "automatic"
+
+    @pytest.mark.parametrize("mode", list(NullAnalysisMode), ids=lambda mode: mode.value)
+    def test_configured_mode_is_sent_to_jdtls(self, tmp_path: Path, mode: NullAnalysisMode) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+
+        server = _make_uninitialized_jdtls(repo, {"null_analysis_mode": mode.value}, runtime_paths)
+
+        assert _null_analysis(server._create_base_initialize_params())["mode"] == mode.value
+
+    def test_invalid_mode_falls_back_to_automatic_without_failing_startup(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+
+        server = _make_uninitialized_jdtls(repo, {"null_analysis_mode": "enabled"}, runtime_paths)
+
+        assert _null_analysis(server._create_base_initialize_params())["mode"] == "automatic"
+
+    @pytest.mark.parametrize("mode", list(NullAnalysisMode), ids=lambda mode: mode.value)
+    def test_annotation_lists_are_unaffected_by_the_mode(self, tmp_path: Path, mode: NullAnalysisMode) -> None:
+        """Only `mode` is configurable; the recognized nullability annotations stay as Serena ships them."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        runtime_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+
+        server = _make_uninitialized_jdtls(repo, {"null_analysis_mode": mode.value}, runtime_paths)
+
+        null_analysis = _null_analysis(server._create_base_initialize_params())
+        assert null_analysis["nonnull"] == [
+            "javax.annotation.Nonnull",
+            "org.eclipse.jdt.annotation.NonNull",
+            "org.springframework.lang.NonNull",
+        ]
+        assert null_analysis["nullable"] == [
+            "javax.annotation.Nullable",
+            "org.eclipse.jdt.annotation.Nullable",
+            "org.springframework.lang.Nullable",
+        ]
