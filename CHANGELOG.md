@@ -14,6 +14,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     Metals reports, bounded by the new `indexing_timeout`, `indexing_start_grace` and
     `indexing_quiet_period` settings
 
+* Dependencies:
+  - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
+
 # v1.7.0 (2026-08-09)
 
 * General:
