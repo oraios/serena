@@ -3,6 +3,18 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
+    project list in `serena_config.yml`
+
+* Language Servers:
+  - Fix: Scala cross-file queries waited a fixed 5s after the first file was opened, which on a cold
+    Metals is long before its build import, indexing and compilation have finished; the first
+    `find_referencing_symbols` of a session could return a fraction of the references with nothing to
+    indicate it was incomplete. Serena now declares work-done progress support and waits for the work
+    Metals reports, bounded by the new `indexing_timeout`, `indexing_start_grace` and
+    `indexing_quiet_period` settings
+
+* Dependencies:
   - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
 
 # v1.7.0 (2026-08-09)
