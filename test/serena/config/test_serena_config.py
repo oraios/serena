@@ -503,14 +503,24 @@ class TestProjectConfigYamlValidation:
             shutil.rmtree(project_dir)
 
 
-class TestSerenaConfigFromConfigFileRobustness:
-    """Tests that ``SerenaConfig.from_config_file`` does not abort the whole
-    loader when a single registered project has a broken ``project.yml``.
+class TestSerenaConfigLoadSave:
+    """
+    Supports tests of loading/saving SerenaConfig,
+    allowing to set up a temporary directory with a master config and multiple project directories.
     """
 
-    def setup_method(self):
+    @pytest.fixture(autouse=True)
+    def setup(self, monkeypatch):
+        """
+        Sets up a temporary directory for testing, and monkeypatch SerenaConfig to use a test config file path.
+        """
         self.test_dir = Path(tempfile.mkdtemp())
         self.master_config_path = self.test_dir / "serena_config.yml"
+        monkeypatch.setattr(
+            SerenaConfig,
+            "_determine_config_file_path",
+            classmethod(lambda cls: str(self.master_config_path)),
+        )
 
     def teardown_method(self):
         shutil.rmtree(self.test_dir)
@@ -521,27 +531,19 @@ class TestSerenaConfigFromConfigFileRobustness:
         (project_dir / SERENA_MANAGED_DIR_NAME / "project.yml").write_text(project_yml_body)
         return project_dir
 
-    def _write_master_config(self, project_paths: list[Path]) -> None:
+    def _write_master_config(self, project_paths: list[Path | str]) -> None:
         body_lines = ["projects:"]
         for p in project_paths:
             body_lines.append(f"  - {p}")
         self.master_config_path.write_text("\n".join(body_lines) + "\n")
 
-    def test_empty_projects_key_is_treated_as_empty_list(self, monkeypatch):
+    def test_empty_projects_key_is_treated_as_empty_list(self):
         """A bare ``projects:`` key should not abort config loading."""
         self.master_config_path.write_text("projects:\n")
-
-        monkeypatch.setattr(
-            SerenaConfig,
-            "_determine_config_file_path",
-            classmethod(lambda cls: str(self.master_config_path)),
-        )
-
         config = SerenaConfig.from_config_file(generate_if_missing=False)
-
         assert config.projects == []
 
-    def test_malformed_project_is_skipped_with_warning(self, caplog, monkeypatch):
+    def test_malformed_project_is_skipped_with_warning(self, caplog):
         """A malformed project.yml must not abort loading of the others."""
         good_project = self._make_project_dir(
             "good_project",
@@ -554,15 +556,6 @@ class TestSerenaConfigFromConfigFileRobustness:
         )
         self._write_master_config([good_project, bad_project])
 
-        # SerenaPaths is a process-wide singleton, so we cannot reliably
-        # redirect it via SERENA_HOME after the fact. Instead, redirect the
-        # config-file-path resolver directly.
-        monkeypatch.setattr(
-            SerenaConfig,
-            "_determine_config_file_path",
-            classmethod(lambda cls: str(self.master_config_path)),
-        )
-
         with caplog.at_level(logging.ERROR):
             config = SerenaConfig.from_config_file(generate_if_missing=False)
 
@@ -572,7 +565,7 @@ class TestSerenaConfigFromConfigFileRobustness:
             f"Expected a warning naming {bad_project.resolve()}, got: {caplog.messages}"
         )
 
-    def test_alias_like_ignored_path_error_is_logged_with_hint(self, caplog, monkeypatch):
+    def test_alias_like_ignored_path_error_is_logged_with_hint(self, caplog):
         good_project = self._make_project_dir(
             "good_project",
             'project_name: "good_project"\nlanguages: ["python"]\n',
@@ -583,18 +576,33 @@ class TestSerenaConfigFromConfigFileRobustness:
         )
         self._write_master_config([good_project, bad_project])
 
-        monkeypatch.setattr(
-            SerenaConfig,
-            "_determine_config_file_path",
-            classmethod(lambda cls: str(self.master_config_path)),
-        )
-
         with caplog.at_level(logging.ERROR):
             config = SerenaConfig.from_config_file(generate_if_missing=False)
 
         registered_roots = {Path(p.project_root).resolve() for p in config.projects}
         assert registered_roots == {good_project.resolve()}
         assert any("must be quoted" in msg and str(bad_project.resolve()) in msg for msg in caplog.messages), caplog.messages
+
+    def test_parallel_agents_changing_project_lists(self):
+        """
+        Tests that agents changing SerenaConfig by adding projects in parallel do not lose each other's changes.
+        """
+        p1 = self._make_project_dir("project1", 'project_name: "project1"\nlanguages: ["python"]\n')
+        p2 = self._make_project_dir("project2", 'project_name: "project1"\nlanguages: ["python"]\n')
+        p3 = self._make_project_dir("project3", 'project_name: "project1"\nlanguages: ["python"]\n')
+        p4 = self._make_project_dir("project4", 'project_name: "project1"\nlanguages: ["python"]\n')
+
+        self._write_master_config([p1, p2])
+
+        config1 = SerenaConfig.from_config_file(generate_if_missing=False)
+        config2 = SerenaConfig.from_config_file(generate_if_missing=False)
+
+        config1.add_project_from_path(p3)
+        config2.add_project_from_path(p4)
+
+        resulting_config = SerenaConfig.from_config_file(generate_if_missing=False)
+
+        assert len(resulting_config.projects) == 4
 
 
 class TestGetRegisteredProjectWithDanglingProject:
