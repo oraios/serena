@@ -6,6 +6,12 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
 
+* Hooks:
+  - Fix: Codex's documented hook wiring only routes `remind` through `PreToolUse` on `Bash`, so its
+    reset-on-Serena-tool-use branch was unreachable there and reminder counters never cleared after a
+    successful Serena call. Add a `serena-hooks reset` command and a `PostToolUse` example matched to
+    Serena's own tools to close the gap (#1852)
+
 * Language Servers:
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: Scala cross-file queries waited a fixed 5s after the first file was opened, which on a cold
