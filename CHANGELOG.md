@@ -6,6 +6,12 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
 
+* JetBrains:
+  - Fix: Concurrent Serena sessions activating different projects at the same time with
+    `jetbrains_launch_command` set would each independently launch the IDE, racing each other for
+    the IDE's own config-directory lock; JetBrains IDE launches are now serialized per launch
+    command and Serena waits for the plugin server to become reachable before proceeding (#1864)
+
 * Language Servers:
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: Scala cross-file queries waited a fixed 5s after the first file was opened, which on a cold
