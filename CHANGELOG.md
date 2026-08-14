@@ -5,6 +5,9 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
+  - Fix: the `ANTHROPIC_CLAUDE_SONNET_4` token count estimator requested `claude-sonnet-4-20250514`,
+    which Anthropic retired on 2026-06-15, so the estimator failed for anyone who selected it; it now
+    requests `claude-sonnet-4-6`
 
 * Language Servers:
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
