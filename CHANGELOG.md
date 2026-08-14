@@ -70,6 +70,9 @@ Status of the `main` branch. Changes prior to the next official version change w
       option `skip_ignored_files` (whether to skip ignored sub-paths).
       Note that if the base path is itself ignored, ignored paths cannot be considered.
 
+* JetBrains:
+  - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file
+
 * Language Servers: 
   - Add Gleam language server support (via the `gleam lsp` server bundled with the Gleam compiler)
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
@@ -121,11 +124,6 @@ Status of the `main` branch. Changes prior to the next official version change w
     struct bodies, interface bodies and `const` groups; improve the logic for finding the nearest
     enclosing symbol, adding the helper function `SymbolKind.is_container` (which is now also
     applied to identify high-level symbols that should appear in symbol overiews).
-    
-* JetBrains:
-  - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file
-
-* Language Servers:
   - Rust: reduce rust-analyzer memory usage and reload churn by disabling cache priming and Cargo autoreload while preserving diagnostics.
   - `typescript`: Fix: on large projects, the first `find_referencing_symbols`/`request_references` call
     could silently race tsserver's project load and return incomplete results, because the fixed 2s
