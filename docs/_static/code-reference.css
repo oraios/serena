@@ -3,6 +3,17 @@
    documentation pages are unaffected. Colors come from the theme's design
    tokens, so light and dark mode both work. */
 
+/* A generated page is titled with its module path — serena.tools.symbol_tools — and
+   at heading size that does not fit a narrow screen, nor break, so it takes the page
+   sideways with it. This is the one rule here not scoped to autodoc's markup, because
+   the heading sits outside it; it is safe anyway, since a heading only breaks where it
+   has no other opportunity, which prose headings always do. */
+.bd-article h1,
+.bd-article h2,
+.bd-article h3 {
+    overflow-wrap: anywhere;
+}
+
 /* each documented object gets breathing room and a card-like signature */
 dl.py {
     margin-bottom: 2rem;
