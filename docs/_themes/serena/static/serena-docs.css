@@ -185,6 +185,28 @@
     padding: 1rem 2.5rem;
 }
 
+/* A page that carries a table gets a wider room. 52em suits prose and commands, but the
+   tool reference's parameter tables have four columns to share it: at 52em the browser
+   starves them — 87px of type column squeezes "string" into "stri/ng" — while a third of
+   the window sits empty. :has() keeps the wider measure away from pages that are only
+   text; a browser without it keeps the 52em measure and the scrolling wrapper. */
+@media (min-width: 992px) {
+    .bd-main .bd-content .bd-article-container:has(table) {
+        max-width: 72em;
+    }
+}
+
+/* Inside a table cell, the wrap-anywhere rule at the end of this file would let a column
+   be squeezed until identifiers break mid-name — relative_path arriving as two lines,
+   "relative_p / ath". In a cell an identifier stays whole: the column is then sized by
+   its longest name, and the description column takes the surplus. A table that still
+   cannot fit is the scrolling wrapper's problem, not the identifier's. */
+.bd-article table code,
+.bd-article table code .pre {
+    overflow-wrap: normal;
+    white-space: pre-wrap;
+}
+
 .bd-article {
     padding-left: 0;
     padding-right: 0;
