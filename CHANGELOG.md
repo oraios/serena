@@ -5,6 +5,11 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
+  - Docs: rework the documentation site's navigation and layout in a dedicated theme: a sidebar that
+    remembers which sections the reader opened, no secondary sidebar, left-aligned pages that scroll as a
+    single document, and inline navigation instead of an overlay on small screens
+  - Docs: the documentation site no longer loads its icon set twice over; one page's assets drop
+    from roughly 960 KB to 290 KB
 
 * Language Servers:
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)

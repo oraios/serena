@@ -1,0 +1,51 @@
+{#- The icon font in this theme's static directory is a cut-down copy of the parent
+    theme's, at the same path so that it simply replaces it: one face, one file, no
+    competing declarations. Twenty-four glyphs rather than some 1,400 — 2.5 KB rather
+    than 152.7 KB.
+
+    Counting them takes two passes. Thirteen appear as fa- classes in the markup; the
+    rest the theme sets from custom properties — admonition icons, version-modified
+    markers, the external-link mark — which no scan of the HTML can see. A glyph left
+    out does not fail visibly: the browser fetches a face that can draw it, which is how
+    the omission was caught. Regenerating it:
+
+      uv run --with "fonttools[woff]" fonttools subset <the parent theme's copy of
+        fa-solid-900.woff2> --flavor=woff2 --layout-features= --no-hinting
+        --desubroutinize --unicodes=F002,F010,F019,F03A,F042,F057,F058,F05A,F062,F064,
+        F06A,F071,F078,F09B,F0C9,F0EB,F0F3,F104,F105,F15B,F185,F186,F1C1,F296,F303,F35D
+        --output-file=docs/_themes/serena/static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2
+
+    Two of those, github and gitlab, live in the brands face and are absent from the
+    result; nothing here draws them.
+
+    Separately, the parent theme delivers FontAwesome twice over: as a stylesheet with
+    webfonts in the head, and again at the end of the body as the
+    SVG-with-JS kit, which is the larger of the two by an order of magnitude.
+    Either one draws every icon on this site, so the stylesheet is kept and
+    the kit dropped — along with the preloads for the two font faces no page
+    here uses a glyph from. The theme preloads all three unconditionally.
+
+    Both blocks are rendered by the parent and then filtered, rather than
+    reproduced here: the asset digests stay the parent's business, and
+    anything it adds to either block keeps arriving untouched. -#}
+{#- Named rather than "!layout.html": the exclamation mark only skips templates_path,
+    not this theme, so it would resolve straight back here. Themes chain by name, which
+    the loader resolves because it searches each theme directory's parent — the same way
+    sphinx-book-theme reaches pydata_sphinx_theme/layout.html. -#}
+{%- extends "sphinx_book_theme/layout.html" %}
+
+{%- macro without_duplicate_fontawesome(rendered) -%}
+  {%- for line in rendered.split("\n") -%}
+    {%- set is_duplicate = "all.min.js" in line
+                           or "fa-brands-400.woff2" in line
+                           or "fa-regular-400.woff2" in line
+                           -%}
+    {%- if not is_duplicate %}{{ line }}
+{% endif -%}
+  {%- endfor -%}
+{%- endmacro -%}
+
+{%- block css %}{{ without_duplicate_fontawesome(super()) }}
+{% endblock css %}
+
+{%- block scripts_end %}{{ without_duplicate_fontawesome(super()) }}{% endblock scripts_end %}
