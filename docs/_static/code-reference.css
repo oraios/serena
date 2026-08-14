@@ -20,6 +20,17 @@ dl.py > dt {
     overflow-wrap: break-word;
 }
 
+/* The line above is not enough on its own. docutils splits literal text into
+   <span class="pre"> chunks and the stylesheets keep each chunk on a single line;
+   white-space wins over both overflow-wrap and word-break, so neither can break
+   the chunk. One long method name — get_modes_with_prompts_to_be_provided_for_
+   project_activation is 59 characters — then pushes the whole page sideways on a
+   phone: 665px of content in a 320px viewport, with every other page scrolling
+   with it. Allowing these chunks to wrap is what makes the rule above work. */
+dl.py > dt .pre {
+    white-space: normal;
+}
+
 /* nested members (methods within a class) get a lighter accent */
 dl.py dl.py > dt {
     border-left-color: var(--pst-color-border, #d1d5db);
@@ -61,6 +72,12 @@ dl.py dl.field-list > dt {
 
 dl.py dl.field-list > dd {
     margin-bottom: 0.5rem;
+
+    /* The theme lays field lists out as a grid whose columns size themselves to their
+       content and cannot shrink below it, so one long parameter name sets the width of
+       the page. Letting the values break where they must is what keeps a phone from
+       scrolling sideways; the property inherits, so the descendants are covered. */
+    overflow-wrap: anywhere;
 }
 
 /* de-emphasize the "Bases: object" inheritance line for trivial cases */
