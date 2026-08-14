@@ -365,6 +365,26 @@
                 link.removeAttribute("target");
             });
 
+        /* A link that leaves the site opens in a new tab: these docs are a working
+           reference, and a reader mid-setup who follows a GitHub link should keep
+           their place here. Done at load rather than at build time because only .md
+           content passes through MyST — the generated reference's links and the
+           theme's own chrome never see its links_external_new_tab option. Origin is
+           the test, so same-site links (and the download button above, which is
+           same-origin) are never touched; an explicit target set by an author wins.
+           noopener, so the opened page holds no handle back into this one. */
+        document.querySelectorAll("a[href]").forEach(function (a) {
+            if (
+                (a.protocol === "http:" || a.protocol === "https:") &&
+                a.origin !== window.location.origin &&
+                !a.hasAttribute("target")
+            ) {
+                a.setAttribute("target", "_blank");
+                var rel = a.getAttribute("rel");
+                a.setAttribute("rel", rel ? rel + " noopener" : "noopener");
+            }
+        });
+
         /* The drawer is a pure-CSS checkbox in the theme; keep it in sync with the
            restored state, then hand control back to the theme's own rules. */
         var checkbox = document.getElementById("pst-primary-sidebar-checkbox");
