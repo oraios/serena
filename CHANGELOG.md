@@ -13,6 +13,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     the IDE's own config-directory lock; JetBrains IDE launches are now serialized per launch
     command and Serena waits for the plugin server to become reachable before proceeding (#1864)
 
+* Hooks:
+  - Fix: Codex's documented hook wiring only routes `remind` through `PreToolUse` on `Bash`, so its
+    reset-on-Serena-tool-use branch was unreachable there and reminder counters never cleared after a
+    successful Serena call. Add a `serena-hooks reset` command and a `PostToolUse` example matched to
+    Serena's own tools to close the gap (#1852)
+
 * Language Servers:
   - Fix: Exceptions raised during `LanguageServerManager.start` did not stop the language server subprocess if it was
     already started (#1949)
