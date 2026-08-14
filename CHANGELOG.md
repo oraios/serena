@@ -7,6 +7,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     project list in `serena_config.yml`
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
 
+* JetBrains:
+  - Fix: Concurrent Serena sessions activating different projects at the same time with
+    `jetbrains_launch_command` set would each independently launch the IDE, racing each other for
+    the IDE's own config-directory lock; JetBrains IDE launches are now serialized per launch
+    command and Serena waits for the plugin server to become reachable before proceeding (#1864)
+
 * Language Servers:
   - Fix: Exceptions raised during `LanguageServerManager.start` did not stop the language server subprocess if it was
     already started (#1949)
