@@ -601,16 +601,51 @@
        headings and reserved width whether or not it had anything to say; this is its
        replacement: a pill that costs the article nothing and expands into the page's
        heading tree only when asked. It renders solely where navigation earns its place —
-       five or more section headings — so short pages stay clean. The current section is
+       four or more entries, headings or API signatures — so short pages stay clean. The current section is
        marked as the reader moves, because "where am I" is half of why anyone opens a
        table of contents. */
     document.addEventListener("DOMContentLoaded", function () {
-        /* sphinx hangs the ids on the section wrappers, not the headings — so the
-           anchors come from each heading's parent section */
-        var headings = Array.prototype.slice.call(
-            document.querySelectorAll(".bd-article section[id] > h2, .bd-article section[id] > h3")
+        /* sphinx hangs the ids on the section wrappers, not the headings — so a
+           heading's anchor is its parent section. API pages speak a different markup:
+           autodoc renders every class and member as a <dt class="sig"> carrying its own
+           id, with no headings at all — so signatures are anchors too, members one level
+           in. One walk, document order, whichever structure the page has. The heading
+           text ends in the theme's headerlink anchor ("#"); the entry wants it bare. */
+        var entries = [];
+        Array.prototype.forEach.call(
+            document.querySelectorAll(
+                ".bd-article section[id] > h2, .bd-article section[id] > h3, " +
+                ".bd-article section[id] > h4, .bd-article dl > dt.sig[id]"
+            ),
+            function (el) {
+                if (el.tagName === "DT") {
+                    var depth = 0;
+                    for (var p = el.parentElement; p; p = p.parentElement) {
+                        if (p.tagName === "DL") {
+                            depth += 1;
+                        }
+                    }
+                    if (depth > 2) {
+                        return;
+                    }
+                    var name = el.querySelector(".sig-name");
+                    entries.push({
+                        target: el,
+                        id: el.id,
+                        label: name ? name.textContent : el.id.split(".").pop(),
+                        level: depth
+                    });
+                } else {
+                    entries.push({
+                        target: el.parentElement,
+                        id: el.parentElement.id,
+                        label: el.textContent.replace(/#\s*$/, "").trim(),
+                        level: { H2: 1, H3: 2, H4: 3 }[el.tagName]
+                    });
+                }
+            }
         );
-        if (headings.length < 5) {
+        if (entries.length < 4) {
             return;
         }
 
@@ -629,12 +664,11 @@
         title.textContent = "On this page";
         panel.appendChild(title);
 
-        /* headings end in the theme's headerlink anchor ("#"); the entry wants the text alone */
-        var links = headings.map(function (h) {
+        var links = entries.map(function (entry) {
             var a = document.createElement("a");
-            a.href = "#" + h.parentElement.id;
-            a.className = h.tagName === "H3" ? "l3" : "l2";
-            a.textContent = h.textContent.replace(/#\s*$/, "").trim();
+            a.href = "#" + entry.id;
+            a.className = "l" + (entry.level + 1);
+            a.textContent = entry.label;
             panel.appendChild(a);
             return a;
         });
@@ -650,14 +684,14 @@
         /* "current" is the last heading above the reading line, not the first one on
            screen: that is the section whose text the reader is actually inside. */
         function markCurrent() {
-            var current = headings[0];
-            for (var i = 0; i < headings.length; i++) {
-                if (headings[i].getBoundingClientRect().top < 120) {
-                    current = headings[i];
+            var current = 0;
+            for (var i = 0; i < entries.length; i++) {
+                if (entries[i].target.getBoundingClientRect().top < 120) {
+                    current = i;
                 }
             }
-            links.forEach(function (a) {
-                a.classList.toggle("current", a.getAttribute("href") === "#" + current.parentElement.id);
+            links.forEach(function (a, i) {
+                a.classList.toggle("current", i === current);
             });
         }
 
@@ -706,7 +740,9 @@
                 return;
             }
             setOpen(false);
-            var target = document.querySelector(entry.getAttribute("href"));
+            /* getElementById, not querySelector: autodoc ids contain dots, which a
+               selector would read as class separators */
+            var target = document.getElementById(entry.getAttribute("href").slice(1));
             if (target) {
                 jumpTo(target);
             }
@@ -759,7 +795,7 @@
         }
         var target;
         try {
-            target = document.querySelector(location.hash);
+            target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
         } catch (error) {
             return;
         }

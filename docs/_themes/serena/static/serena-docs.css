@@ -548,6 +548,10 @@ code.docutils > span.pre {
     padding-left: 2.1em;
 }
 
+.serena-toc-panel a.l4 {
+    padding-left: 3.2em;
+}
+
 .serena-toc-panel a:hover {
     background: var(--pst-color-surface);
     color: var(--pst-color-primary);
@@ -562,6 +566,10 @@ code.docutils > span.pre {
 
 .serena-toc-panel a.l3.current {
     padding-left: calc(2.1em - 3px);
+}
+
+.serena-toc-panel a.l4.current {
+    padding-left: calc(3.2em - 3px);
 }
 
 /* during a TOC jump, laziness is suspended for one frame so the landing is exact;
