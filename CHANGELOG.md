@@ -7,6 +7,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     project list in `serena_config.yml`
 
 * Language Servers:
+  - Fix: Nextflow's `_flush_deferred_workspace_scan` marked the workspace scan flushed even when both
+    of its `completion` probes failed, permanently skipping the flush (and silencing retries) for the
+    rest of the session (#1871)
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: Scala cross-file queries waited a fixed 5s after the first file was opened, which on a cold
     Metals is long before its build import, indexing and compilation have finished; the first
