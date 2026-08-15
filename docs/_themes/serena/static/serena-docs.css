@@ -177,23 +177,14 @@
    number of characters however large the type is. What is left over is margin, which
    is what it looked like all along.
 
-   52em is about 85 characters: wider than prose alone would want, and chosen because
-   these pages are largely commands and configuration, where a line that does not wrap
-   is worth more than a shorter one. */
+   72em — about 118 characters at body size — is wider than prose alone would ask for, and
+   deliberate: these pages are mostly commands, configuration and parameter tables, which
+   earn the room. It is also one measure for every page. An earlier version widened only
+   pages that carry a table, and the text edge then shifted between sections — read as a
+   glitch, not as typography. The tables set this width; the rest of the site follows. */
 .bd-main .bd-content .bd-article-container {
-    max-width: 52em;
+    max-width: 72em;
     padding: 1rem 2.5rem;
-}
-
-/* A page that carries a table gets a wider room. 52em suits prose and commands, but the
-   tool reference's parameter tables have four columns to share it: at 52em the browser
-   starves them — 87px of type column squeezes "string" into "stri/ng" — while a third of
-   the window sits empty. :has() keeps the wider measure away from pages that are only
-   text; a browser without it keeps the 52em measure and the scrolling wrapper. */
-@media (min-width: 992px) {
-    .bd-main .bd-content .bd-article-container:has(table) {
-        max-width: 72em;
-    }
 }
 
 /* Inside a table cell, the wrap-anywhere rule at the end of this file would let a column
