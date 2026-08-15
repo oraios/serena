@@ -596,4 +596,178 @@
         }
 
     });
+
+    /* The Contents rail, rebuilt on demand. The stock right rail repeated on-screen
+       headings and reserved width whether or not it had anything to say; this is its
+       replacement: a pill that costs the article nothing and expands into the page's
+       heading tree only when asked. It renders solely where navigation earns its place —
+       five or more section headings — so short pages stay clean. The current section is
+       marked as the reader moves, because "where am I" is half of why anyone opens a
+       table of contents. */
+    document.addEventListener("DOMContentLoaded", function () {
+        /* sphinx hangs the ids on the section wrappers, not the headings — so the
+           anchors come from each heading's parent section */
+        var headings = Array.prototype.slice.call(
+            document.querySelectorAll(".bd-article section[id] > h2, .bd-article section[id] > h3")
+        );
+        if (headings.length < 5) {
+            return;
+        }
+
+        var button = document.createElement("button");
+        button.className = "serena-toc-btn";
+        button.setAttribute("aria-expanded", "false");
+        button.innerHTML = '<span aria-hidden="true">☰</span> On this page';
+
+        var panel = document.createElement("nav");
+        panel.className = "serena-toc-panel";
+        panel.setAttribute("aria-label", "On this page");
+        panel.hidden = true;
+
+        var title = document.createElement("div");
+        title.className = "serena-toc-title";
+        title.textContent = "On this page";
+        panel.appendChild(title);
+
+        /* headings end in the theme's headerlink anchor ("#"); the entry wants the text alone */
+        var links = headings.map(function (h) {
+            var a = document.createElement("a");
+            a.href = "#" + h.parentElement.id;
+            a.className = h.tagName === "H3" ? "l3" : "l2";
+            a.textContent = h.textContent.replace(/#\s*$/, "").trim();
+            panel.appendChild(a);
+            return a;
+        });
+
+        document.body.appendChild(button);
+        document.body.appendChild(panel);
+
+        function setOpen(open) {
+            panel.hidden = !open;
+            button.setAttribute("aria-expanded", String(open));
+        }
+
+        /* "current" is the last heading above the reading line, not the first one on
+           screen: that is the section whose text the reader is actually inside. */
+        function markCurrent() {
+            var current = headings[0];
+            for (var i = 0; i < headings.length; i++) {
+                if (headings[i].getBoundingClientRect().top < 120) {
+                    current = headings[i];
+                }
+            }
+            links.forEach(function (a) {
+                a.classList.toggle("current", a.getAttribute("href") === "#" + current.parentElement.id);
+            });
+        }
+
+        /* On a pointer device the pointer arrives before the click, so a click that
+           follows a hover-open must not read as "close what I just asked for". */
+        var openedByHover = false;
+        button.addEventListener("click", function () {
+            if (panel.hidden) {
+                setOpen(true);
+                markCurrent();
+            } else if (openedByHover) {
+                openedByHover = false;
+            } else {
+                setOpen(false);
+            }
+        });
+
+        /* Where a real pointer exists, hovering is the natural ask — open on enter, close
+           a beat after the pointer has left both the pill and the panel, so the diagonal
+           move between them survives. Touch keeps tap-to-toggle; click and Escape work
+           everywhere, so keyboards lose nothing. */
+        if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+            var closeTimer = null;
+            var hoverOpen = function () {
+                clearTimeout(closeTimer);
+                if (panel.hidden) {
+                    openedByHover = true;
+                    setOpen(true);
+                    markCurrent();
+                }
+            };
+            var hoverClose = function () {
+                clearTimeout(closeTimer);
+                closeTimer = setTimeout(function () {
+                    setOpen(false);
+                }, 200);
+            };
+            [button, panel].forEach(function (el) {
+                el.addEventListener("mouseenter", hoverOpen);
+                el.addEventListener("mouseleave", hoverClose);
+            });
+        }
+        panel.addEventListener("click", function (event) {
+            var entry = event.target.closest("a");
+            if (!entry) {
+                return;
+            }
+            setOpen(false);
+            var target = document.querySelector(entry.getAttribute("href"));
+            if (target) {
+                jumpTo(target);
+            }
+        });
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape" && !panel.hidden) {
+                setOpen(false);
+                button.focus();
+            }
+        });
+        document.addEventListener("click", function (event) {
+            if (!panel.hidden && !panel.contains(event.target) && !button.contains(event.target)) {
+                setOpen(false);
+            }
+        });
+
+        var pending = false;
+        document.addEventListener("scroll", function () {
+            if (panel.hidden || pending) {
+                return;
+            }
+            pending = true;
+            requestAnimationFrame(function () {
+                pending = false;
+                markCurrent();
+            });
+        }, { passive: true });
+    });
+
+    /* content-visibility renders sections lazily, at estimated sizes — so any hash
+       navigation lands on an estimate and chases a target that moves as sections render.
+       The cure: force everything to render for one frame, jump on real geometry, then
+       hand laziness back — contain-intrinsic-size's `auto` keyword records each
+       section's true size once rendered, so positions stay put afterwards. This serves
+       the page TOC, arriving on a shared #link, and hash changes alike. */
+    function jumpTo(target) {
+        document.documentElement.classList.add("serena-toc-jumping");
+        requestAnimationFrame(function () {
+            target.scrollIntoView({ behavior: "instant", block: "start" });
+            requestAnimationFrame(function () {
+                target.scrollIntoView({ behavior: "instant", block: "start" });
+                document.documentElement.classList.remove("serena-toc-jumping");
+            });
+        });
+    }
+
+    function jumpToLocationHash() {
+        if (!location.hash) {
+            return;
+        }
+        var target;
+        try {
+            target = document.querySelector(location.hash);
+        } catch (error) {
+            return;
+        }
+        if (target) {
+            jumpTo(target);
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", jumpToLocationHash);
+    window.addEventListener("hashchange", jumpToLocationHash);
 })();
