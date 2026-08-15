@@ -187,6 +187,38 @@
     padding: 1rem 2.5rem;
 }
 
+/* Air. A wide measure needs room around the text as much as beside it: fuller leading on
+   paragraphs, clear separation between blocks, table cells that hold their content with
+   space to spare, and sections that announce themselves. Space, not size — the type stays
+   exactly as it is. */
+.bd-article p {
+    line-height: 1.75;
+}
+
+.bd-article p,
+.bd-article ul,
+.bd-article ol {
+    margin-bottom: 1.1rem;
+}
+
+.bd-article li {
+    margin-bottom: 0.35rem;
+}
+
+.bd-article h2 {
+    margin-top: 2.6rem;
+}
+
+.bd-article h3 {
+    margin-top: 1.8rem;
+}
+
+.bd-article table td,
+.bd-article table th {
+    padding: 0.6rem 0.9rem;
+    line-height: 1.55;
+}
+
 /* Inside a table cell, the wrap-anywhere rule at the end of this file would let a column
    be squeezed until identifiers break mid-name — relative_path arriving as two lines,
    "relative_p / ath". In a cell an identifier stays whole: the column is then sized by
