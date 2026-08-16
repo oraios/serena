@@ -91,6 +91,6 @@ build time. The machinery is `EditingToolWithDiagnostics` in
 
 ### See both in five minutes
 
-`scripts/demo_diagnostics.py` creates a temporary file in this repository, introduces a
+`scripts/demos/demo_diagnostics.py` creates a temporary file in this repository, introduces a
 warning, shows file- and symbol-level diagnostics, then makes a second flawed edit and
 demonstrates that only the new warning is reported.

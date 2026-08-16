@@ -60,7 +60,7 @@ Four small rules keep it honest:
 - build each dependency in a factory classmethod (`_create_dep_*`) that takes an optional
   version and falls back to a pinned `DEFAULT_*` constant;
 - add an `update_dep_hashes()` classmethod that refreshes the database, and hook it into
-  `scripts/update_downloaded_dependency_hashes.py`;
+  `scripts/dev/update_downloaded_dependency_hashes.py`;
 - after bumping a pinned version, re-run that script and commit the JSON — a stale database
   means unverified downloads locally and a red CI;
 - `verified=False` is only for hashes that cannot be pinned by design.
@@ -126,7 +126,7 @@ Four small updates and you are done:
 - **`docs/01-about/020_programming-languages.md`** — add it, with any special notes a user
   needs (required installations, compatibility);
 - **`src/serena/resources/project.template.yml`** — regenerate the commented list with
-  `uv run python scripts/print_language_list.py` and paste it over the old one (strip the
+  `uv run python scripts/dev/print_language_list.py` and paste it over the old one (strip the
   trailing spaces the script pads with);
 - **CHANGELOG.md** — one concise line to mark the occasion.
 

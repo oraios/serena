@@ -66,21 +66,21 @@ Some files in the tree are outputs, and hand edits to them are undone by the nex
 run:
 
 - `src/serena/generated/generated_prompt_factory.py` — after changing prompt templates,
-  regenerate with `uv run python scripts/gen_prompt_factory.py`, re-format, and commit the
+  regenerate with `uv run python scripts/dev/gen_prompt_factory.py`, re-format, and commit the
   result.
 - The commented language list in `src/serena/resources/project.template.yml` — regenerate with
-  `uv run python scripts/print_language_list.py`.
+  `uv run python scripts/dev/print_language_list.py`.
 - `docs/01-about/000_intro.md`, `025_features.md` and `035_tools.md` — written by
   `docs/autogen_docs.py` during `poe doc-build`: the first two from the README, the tool list
   from the tool registry.
 - The download-verification hashes in
   `src/solidlsp/resources/downloaded_dependency_hashes.json` — via
-  `uv run python scripts/update_downloaded_dependency_hashes.py` after a server version bump.
+  `uv run python scripts/dev/update_downloaded_dependency_hashes.py` after a server version bump.
 
 ## Running tools without an LLM
 
 A tool is an ordinary Python object and does not need an agent attached:
-`scripts/demo_run_tools.py` executes Serena's tools against this repository directly, and its
+`scripts/demos/demo_run_tools.py` executes Serena's tools against this repository directly, and its
 siblings do the same for narrower surfaces — the full map is in [Scripts](035_scripts).
 This is the fastest loop for tool work: no MCP client, no model, no waiting.
 
