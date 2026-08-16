@@ -331,7 +331,7 @@ class Tool(Component):
         """
         Applies the tool with logging and exception handling, using the given keyword arguments.
         This method either returns a string result or raises a ToolCallError in case of an error during tool application
-        (but if `catch_exception is enabled, it will return the error message as a string instead of raising the exception).
+        (but if ``catch_exceptions`` is enabled, it will return the error message as a string instead of raising the exception).
 
         :param log_call: whether to log the tool call and its result
         :param catch_exceptions: whether to catch exceptions and return their messages as strings, instead of raising a ToolCallError

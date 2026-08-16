@@ -100,21 +100,24 @@ class GroupedDiagnostics:
 
     def get_dict(self) -> dict[str, dict[str, dict[str, list[dict[str, Any]]]]]:
         """
-        Returns a nested dictionary of the form:
-        {
-            relative_file_path: {
-                severity_name: {
-                    name_path: [
-                        diagnostic_dict,
+        Returns a nested dictionary of the form::
+
+            {
+                relative_file_path: {
+                    severity_name: {
+                        name_path: [
+                            diagnostic_dict,
+                            ...
+                        ],
                         ...
-                    ],
+                    },
                     ...
                 },
                 ...
-            },
-            ...
-        }
+            }
+
         where:
+
         - relative_file_path is the relative path of the file containing the diagnostic
         - severity_name is the name of the diagnostic severity (e.g. "Warning", "Error")
         - name_path is the name path of the symbol that owns the diagnostic (or "<file>" if no owner symbol was found)
