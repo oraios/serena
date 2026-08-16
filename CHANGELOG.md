@@ -7,6 +7,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     project list in `serena_config.yml`
 
 * Hooks:
+  - Add Codex plan-mode context and enforcement hooks driven by each tool's edit-capability metadata. #1854
   - Document safer Codex hook defaults, timeouts, status messages, event mappings and troubleshooting guidance.
 
 * Language Servers:

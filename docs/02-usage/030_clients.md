@@ -337,6 +337,17 @@ Current Codex versions enable lifecycle hooks by default, so no feature flag is 
                         "timeout": 5
                     }
                 ]
+            },
+            {
+                "matcher": "^mcp__serena__",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "serena-hooks plan-guard --client=codex",
+                        "statusMessage": "Checking Serena plan-mode permissions",
+                        "timeout": 5
+                    }
+                ]
             }
         ],
         "SessionStart": [
@@ -347,6 +358,18 @@ Current Codex versions enable lifecycle hooks by default, so no feature flag is 
                         "type": "command",
                         "command": "serena-hooks activate --client=codex",
                         "statusMessage": "Activating Serena project",
+                        "timeout": 5
+                    }
+                ]
+            }
+        ],
+        "UserPromptSubmit": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "serena-hooks plan-context --client=codex",
+                        "statusMessage": "Applying Serena plan context",
                         "timeout": 5
                     }
                 ]
@@ -386,14 +409,21 @@ Each Codex event maps to one Serena hook command:
 | Codex event | Serena command | When it runs |
 | --- | --- | --- |
 | `PreToolUse` with matcher `Bash` | `serena-hooks remind` | Before a shell command, to detect drift from Serena's symbolic tools |
+| `PreToolUse` with matcher `^mcp__serena__` | `serena-hooks plan-guard` | Before a Serena MCP tool call, to block edit-capable tools in plan mode |
 | `SessionStart` with matcher `startup\|resume` | `serena-hooks activate` | When a session starts or resumes, to prompt project activation |
+| `UserPromptSubmit` | `serena-hooks plan-context` | Before each prompt, to add read-only Serena guidance in plan mode |
 | `SessionEnd` | `serena-hooks cleanup` | When Codex tears down the root thread, to clean up hook session data |
 
-The distinct `statusMessage` values make the three kinds of hook activity distinguishable while
+The distinct `statusMessage` values make the five kinds of hook activity distinguishable while
 they run.
 
-The `PreToolUse` matcher is intentionally restricted to `Bash`. The Serena reminder hook for Codex
-tracks shell-based grep and code-file reads, so running it for every tool call is unnecessary.
+The reminder hook's `PreToolUse` matcher is intentionally restricted to `Bash`. It tracks
+shell-based grep and code-file reads, so running it for every tool call is unnecessary. The separate
+plan guard targets Serena MCP calls. While Codex reports `permission_mode: "plan"`, it blocks every
+Serena tool marked as edit-capable, including memory-writing and shell-command tools, while leaving
+read-only tools available. Both plan hooks evaluate the current event without retaining mode state,
+so they become silent and editing is available again as soon as Codex leaves plan mode; Serena's MCP
+server does not need to restart.
 
 ### Diagnosing opaque Codex hook failures
 
