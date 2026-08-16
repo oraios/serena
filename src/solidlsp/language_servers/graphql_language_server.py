@@ -25,10 +25,12 @@ Caveats:
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import shutil
 import threading
+from collections.abc import Hashable
 
 from overrides import override
 
@@ -44,6 +46,23 @@ DEFAULT_PACKAGE_VERSION = "3.5.0"
 # `graphql` is a peer dependency of graphql-language-service-cli and must be installed alongside it.
 DEFAULT_GRAPHQL_VERSION = "16.9.0"
 LS_BIN_NAME = "graphql-lsp"
+
+# graphql-config resolution order at the workspace root (mirrors what graphql-language-service-server
+# looks for; see module docstring). Checked in this order and the first match wins, same as cosmiconfig.
+_GRAPHQL_CONFIG_FILENAMES = (
+    ".graphqlrc",
+    ".graphqlrc.yml",
+    ".graphqlrc.yaml",
+    ".graphqlrc.json",
+    ".graphqlrc.js",
+    ".graphqlrc.ts",
+    "graphql.config.yml",
+    "graphql.config.yaml",
+    "graphql.config.json",
+    "graphql.config.js",
+    "graphql.config.ts",
+    "package.json",
+)
 
 
 class GraphQLLanguageServer(SolidLanguageServer):
@@ -77,6 +96,29 @@ class GraphQLLanguageServer(SolidLanguageServer):
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["node_modules"]
+
+    @override
+    def _raw_document_symbols_cache_fingerprint(self) -> Hashable | None:
+        # Whether (and how) a graphql-config file resolves at the workspace root changes every
+        # request handler's behavior (see module docstring) without changing the content of any
+        # single *.graphql file. The default content-hash-keyed cache has no way to see that, so
+        # adding, editing or removing the config would otherwise keep serving results computed
+        # before the change indefinitely -- across restarts -- until an affected file's own
+        # content happens to change. Fingerprint the resolved config file's content so the cache
+        # invalidates whenever it appears, changes or disappears.
+        for filename in _GRAPHQL_CONFIG_FILENAMES:
+            path = os.path.join(self.repository_root_path, filename)
+            try:
+                with open(path, "rb") as f:
+                    content = f.read()
+            except OSError:
+                continue
+            if filename == "package.json" and b'"graphql"' not in content:
+                # package.json is only a graphql-config if it has a "graphql" key; otherwise it's
+                # not a match and we keep looking (cosmiconfig's own resolution behaves the same way).
+                continue
+            return (filename, hashlib.sha256(content).hexdigest())
+        return None
 
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
         def _get_or_install_core_dependency(self) -> str:
