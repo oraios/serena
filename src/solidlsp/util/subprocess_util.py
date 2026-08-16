@@ -81,6 +81,7 @@ class ManagedSubprocess(Generic[TStream], ToStringMixin):
     def __init__(self, popen: subprocess.Popen[TStream], name: str, start_new_session: bool) -> None:
         """
         :param popen: the subprocess.Popen instance representing the launched process
+        :param name: the name of the process (used for logging purposes); should start with a capital letter
         :param start_new_session: whether the process was launched in its own session, i.e. whether it is the
             leader of its own process group
         """
@@ -125,8 +126,7 @@ class ManagedSubprocess(Generic[TStream], ToStringMixin):
         """
         Terminates the process and its children, forcefully killing them if they do not exit in time.
 
-        :param timeout: the time to wait for the process to terminate gracefully before killing it
-        :param process_name: the name of the process (used for logging purposes); should start with a capital letter
+        :param timeout: the time, in seconds, to wait for the process to terminate gracefully before killing it
         """
         terminate_process_tree_with_kill_fallback(
             self._popen,

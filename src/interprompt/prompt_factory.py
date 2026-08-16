@@ -40,7 +40,8 @@ class PromptFactoryBase:
         return self._prompt_collection.get_prompt_list(prompt_name, self.lang_code)
 
 
-def autogenerate_prompt_factory_module(prompts_dir: str, target_module_path: str) -> None:
+def autogenerate_prompt_factory_module(prompts_dir: str, target_module_path: str, interprompt_library_package: str = "interprompt",
+        class_name: str = "PromptFactory") -> None:
     """
     Auto-generates a prompt factory module for the given prompt directory.
     The generated `PromptFactory` class is meant to be the central entry class for retrieving and rendering prompt templates and prompt
@@ -49,18 +50,20 @@ def autogenerate_prompt_factory_module(prompts_dir: str, target_module_path: str
 
     :param prompts_dir: the directory containing the prompt templates and prompt lists
     :param target_module_path: the path to the target module file (.py). Important: The module will be overwritten!
+    :param interprompt_library_package: the package name of the interprompt library
+    :param class_name: the name of the generated prompt factory class
     """
-    generated_code = """# ruff: noqa
+    generated_code = f"""# ruff: noqa
 # black: skip
 # mypy: ignore-errors
 
 # NOTE: This module is auto-generated from interprompt.autogenerate_prompt_factory_module, do not edit manually!
 
-from interprompt.prompt_factory import PromptFactoryBase
+from {interprompt_library_package}.prompt_factory import *
 from typing import Any
 
 
-class PromptFactory(PromptFactoryBase):
+class {class_name}(PromptFactoryBase):
     \"""
     A class for retrieving and rendering prompt templates and prompt lists.
     \"""

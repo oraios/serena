@@ -1296,18 +1296,20 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
 
     def _persist_projects(self) -> None:
         """
-        Persists ONLY the registered-projects list, leaving every other setting at its on-disk value.
-
-        Project (de)registration can happen while a session is running with transient runtime overrides applied
-        to this in-memory instance (e.g. ``start-mcp-server --language-backend`` / ``--log-level``). A full
-        :meth:`save` would write those overrides back to the global config, silently clobbering the user's
-        settings. Instead we re-load the persisted config, copy in the current project list, and save that — so
-        only ``projects`` is ever mutated on disk.
+        Persists the list of registered projects, merging it with the list currently found on disk
+        (parallel agent instances may have added or removed projects in the meantime).
         """
         if self.config_file_path is None:
             return
         persisted = SerenaConfig.from_config_file()
-        persisted.projects = list(self.projects)
+        combined_projects = []
+        handled_project_paths = set()
+        for p in persisted.projects + self.projects:
+            str_path = str(p.project_root)
+            if str_path not in handled_project_paths:
+                combined_projects.append(p)
+                handled_project_paths.add(str_path)
+        persisted.projects = combined_projects
         persisted._save()
 
     def _save(self) -> None:
