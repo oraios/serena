@@ -15,6 +15,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     Metals reports, bounded by the new `indexing_timeout`, `indexing_start_grace` and
     `indexing_quiet_period` settings
 
+* Memories:
+  - Fix: `critical_info` described language-server test gating as marker selection driven by a
+    `PYTEST_MARKERS` variable, which does not exist; there is no `addopts` either, so a bare
+    `poe test` collects every language's tests rather than only the unmarked ones
+
 * Dependencies:
   - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
 
