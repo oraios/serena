@@ -175,7 +175,9 @@ type-check = ["_ty_core", "_ty_test"]
 ty = ["type-check"]
 # docs
 _autogen_docs = "python docs/autogen_docs.py"
-_sphinx_build = "sphinx-build -b html docs docs/_build -W --keep-going"
+# PYTHONPATH: the generated conf.py lists local extensions by module name only,
+# so the docs dir (where they live) must be importable when sphinx runs
+_sphinx_build = { cmd = "sphinx-build -b html docs docs/_build -W --keep-going", env = { PYTHONPATH = "${POE_ROOT}/docs" } }
 _jb_generate_toc = "python docs/create_toc.py"
 _jb_generate_config = "jupyter-book config sphinx docs/"
 doc-clean = "rm -rf docs/_build docs/03_api"

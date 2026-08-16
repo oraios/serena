@@ -6,6 +6,8 @@ Agno is a model-agnostic agent framework that allows you to turn Serena into an 
 added support for MCP servers out of the box, our Agno integration predates this and is a good illustration of how
 easy it is to integrate Serena into an arbitrary agent framework.
 
+## Setting Up the Agno Agent
+
 Here's how it works:
 
 1. Download the agent-ui code with npx
@@ -45,10 +47,14 @@ Here's how it works:
    the same tools as in the MCP server version.
 
 
+## A Short Demo
+
 Here is a short demo of Serena performing a small analysis task with the newest Gemini model:
 
 https://github.com/user-attachments/assets/ccfcb968-277d-4ca9-af7f-b84578858c62
 
+
+## A Word on Safety
 
 ⚠️ IMPORTANT: In contrast to the MCP server approach, tool execution in the Agno UI does
 not ask for the user's permission. The shell tool is particularly critical, as it can perform arbitrary code execution. 
