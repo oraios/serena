@@ -8,6 +8,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Docstrings that named a parameter which does not exist, used an invalid Sphinx role, or wrote
     glob patterns as unescaped RST markup. Five are tool `apply` docstrings, which are published as
     MCP tool descriptions, so those descriptions now render their lists as lists
+  - The documentation now has a Contributing section: the development loop, the house style,
+    the language-support path, an FAQ distilled from the issue tracker, and an auto-generated
+    code reference for the `serena` package (the generator existed but had been disabled since
+    the documentation build was introduced)
 
 * Language Servers:
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)

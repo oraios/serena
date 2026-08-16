@@ -110,6 +110,17 @@ sphinx:
     autodoc_typehints_format: "short"
     autodoc_member_order: "bysource"
     autoclass_content: "both"
+    # wrap long signatures one parameter per line instead of a single unreadable row
+    maximum_signature_line_length: 88
+    # keep type annotations out of the signature line; they merge into the Parameters list,
+    # leaving signatures human-length
+    autodoc_typehints: "description"
+    html_css_files: ["code-reference.css"]
+    # optional extras are not installed in the docs build environment
+    autodoc_mock_imports: ["agno", "sqlalchemy"]
+    # resolve MyST cross-references against document anchors only; without this, autodoc'd
+    # attributes (e.g. ResponseConfigOverview.modes) make references like `modes` ambiguous
+    myst_ref_domains: ["std"]
     autodoc_default_options:
       show-inheritance: True
     autodoc_show_sourcelink: True
