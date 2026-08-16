@@ -351,9 +351,10 @@ class LanguageServerId(Enum):
     """GraphQL language server (experimental) using graphql-language-service-cli
     (https://github.com/graphql/graphql-language-service). Supports *.graphql and *.gql files.
     Must be explicitly specified in project.yml. Requires Node.js and npm.
-    Cross-file navigation (operation field -> schema definition, find-references of a type)
-    requires a graphql-config file (.graphqlrc.yml / graphql.config.{yml,yaml,json}) at the
-    repository root that points at the schema; without it only single-file symbols are available.
+    Requires a graphql-config file (.graphqlrc.yml / graphql.config.{yml,yaml,json}) at the
+    repository root that points at the schema: without one, the server never leaves its
+    "config missing" state and *all* features -- including document symbols for a single,
+    self-contained file, not just cross-file navigation -- return empty results.
     """
 
     @classmethod

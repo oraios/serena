@@ -6,15 +6,19 @@ implements the Language Server Protocol.
 The server resolves schema/operation relationships through graphql-config: it looks
 for a ``.graphqlrc.yml`` / ``graphql.config.{yml,yaml,json,js,ts}`` (or a ``graphql``
 key in ``package.json``) at the workspace root to learn where the schema and the
-GraphQL documents live. Cross-file navigation (go-to-definition from an operation
-field into the schema type that declares it, find-references of a type across the
-schema) only works once that config is present and points at the schema.
+GraphQL documents live.
 
 Caveats:
     * ``graphql-language-service-cli`` declares ``graphql`` as a *peer* dependency, so we
       install both packages into the managed directory.
-    * Without a graphql-config file at the project root, only single-file features
-      (document symbols within one file) are reliable.
+    * A graphql-config file at the workspace root is *required*, not merely helpful for
+      cross-file navigation: ``graphql-language-service-server`` never sets its internal
+      "initialized" flag without one, and every request handler (documentSymbol, hover,
+      definition, completion, workspaceSymbol) short-circuits to an empty result while that
+      flag is unset -- including document symbols for a single, self-contained file. Only
+      syntax highlighting (which Serena does not use) keeps working in that case. The
+      server logs "graphql-config error, only highlighting is enabled" when this happens;
+      we detect that message to fail fast instead of waiting out the full startup timeout.
     * Language is registered as experimental.
 """
 # SPDX-License-Identifier: MIT
@@ -62,6 +66,9 @@ class GraphQLLanguageServer(SolidLanguageServer):
             solidlsp_settings,
         )
         self.server_ready = threading.Event()
+        # Set from the window/logMessage handler when the server reports it found no
+        # graphql-config; guards the final startup log message (see _start_server).
+        self._graphql_config_missing = False
 
     @override
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
@@ -161,12 +168,31 @@ class GraphQLLanguageServer(SolidLanguageServer):
 
         def window_log_message(msg: dict) -> None:
             log.info("LSP: window/logMessage: %s", msg)
+            text = str(msg.get("message", ""))
+            lower = text.lower()
             # graphql-language-service-server builds its schema/document caches asynchronously
             # (triggered by the workspace/didChangeConfiguration we send below) and only sets
             # its internal `_isInitialized` flag once they are ready. Until then documentSymbol
             # requests short-circuit to []. It logs this exact line when the caches are ready,
             # so we use it as the readiness signal.
-            if "caches initialized" in str(msg.get("message", "")).lower():
+            if "caches initialized" in lower:
+                self.server_ready.set()
+            # Without a graphql-config file at the workspace root, the server logs this exact
+            # warning and *never* sets `_isInitialized` -- "caches initialized" above will
+            # therefore never arrive, and (contrary to what one might expect) every request
+            # handler, including documentSymbol for a single self-contained file, short-circuits
+            # to an empty result until that flag is set. Treat this as an immediate negative
+            # readiness signal instead of waiting out the full startup timeout for a signal that
+            # will provably never come.
+            elif "graphql-config error" in lower:
+                self._graphql_config_missing = True
+                log.warning(
+                    "GraphQL language server found no graphql-config (.graphqlrc.yml / "
+                    "graphql.config.{yml,yaml,json,js,ts}) at the workspace root; document "
+                    "symbols, hover, go-to-definition, completion and workspace symbols will all "
+                    "return empty results until one is added. Server message: %s",
+                    text,
+                )
                 self.server_ready.set()
 
         self.server.on_notification("window/logMessage", window_log_message)
@@ -191,5 +217,5 @@ class GraphQLLanguageServer(SolidLanguageServer):
         if not self.server_ready.wait(timeout=30.0):
             log.warning("Timed out waiting for GraphQL language server caches to initialize; proceeding anyway")
             self.server_ready.set()
-        else:
+        elif not self._graphql_config_missing:
             log.info("GraphQL language server caches initialized")
