@@ -10,12 +10,11 @@ from dataclasses import dataclass
 from typing import Any, Literal, cast
 
 import docstring_parser
-from mcp.server.fastmcp import server
-from mcp.server.fastmcp.exceptions import ToolError
-from mcp.server.fastmcp.server import Context, FastMCP, Settings
-from mcp.server.fastmcp.tools.base import Tool as FastMCPTool
-from mcp.server.session import ServerSessionT
-from mcp.shared.context import LifespanContextT, RequestT
+from mcp.server.mcpserver import MCPServer, Context
+from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.mcpserver.server import Settings
+from mcp.server.mcpserver.tools.base import Tool as MCPServerTool
+from mcp.server.context import LifespanContextT, RequestT
 from mcp.types import ToolAnnotations
 from pydantic_settings import SettingsConfigDict
 from sensai.util import logging
@@ -33,15 +32,6 @@ from serena.util.logging import MemoryLogHandler
 log = logging.getLogger(__name__)
 
 
-def configure_logging(*args, **kwargs) -> None:
-    # We only do something here if logging has not yet been configured.
-    # Normally, logging is configured in the MCP server startup script.
-    if not logging.is_enabled():
-        logging.basicConfig(level=logging.INFO, stream=sys.stderr, format=SERENA_LOG_FORMAT)
-
-
-# patch the logging configuration function in fastmcp, because it's hard-coded and broken
-server.configure_logging = configure_logging  # type: ignore
 
 
 @dataclass
@@ -49,7 +39,7 @@ class SerenaMCPRequestContext:
     agent: SerenaAgent
 
 
-class SerenaFastMCPTool(FastMCPTool):
+class SerenaMCPServerTool(MCPServerTool):
     def __init__(self, tool: Tool, openai_tool_compatible: bool, structured_output: bool | None):
         """
         :param tool: the Serena tool
@@ -130,8 +120,8 @@ class SerenaFastMCPTool(FastMCPTool):
     async def run(
         self,
         arguments: dict[str, Any],
-        context: Context[ServerSessionT, LifespanContextT, RequestT] | None = None,
-        convert_result: bool = False,
+        context: Context[LifespanContextT, RequestT] | None = None,
+        convert_result: bool = None,
     ) -> Any:
         # apply parameter aliases
         for param_alias, param_name in self._param_aliases.items():
@@ -275,7 +265,7 @@ class SerenaMCPFactory:
         return walk(s)
 
     @staticmethod
-    def make_mcp_tool(tool: Tool, openai_tool_compatible: bool = True, structured_output: bool | None = None) -> SerenaFastMCPTool:
+    def make_mcp_tool(tool: Tool, openai_tool_compatible: bool = True, structured_output: bool | None = None) -> SerenaMCPServerTool:
         """
         Creates an MCP tool from a Serena Tool instance.
 
@@ -284,14 +274,14 @@ class SerenaMCPFactory:
             (doesn't accept integer, needs number instead, etc.). This allows using Serena MCP within codex.
         :param structured_output: whether to use structured output for the tool (None = auto)
         """
-        return SerenaFastMCPTool(tool, openai_tool_compatible=openai_tool_compatible, structured_output=structured_output)
+        return SerenaMCPServerTool(tool, openai_tool_compatible=openai_tool_compatible, structured_output=structured_output)
 
     def _iter_tools(self) -> Iterator[Tool]:
         assert self.agent is not None
         yield from self.agent.get_exposed_tool_instances()
 
     # noinspection PyProtectedMember
-    def _set_mcp_tools(self, mcp: FastMCP, openai_tool_compatible: bool, structured_output: bool | None) -> None:
+    def _set_mcp_tools(self, mcp: MCPServer, openai_tool_compatible: bool, structured_output: bool | None) -> None:
         """
         Update the tools in the MCP server
 
@@ -331,7 +321,7 @@ class SerenaMCPFactory:
         trace_lsp_communication: bool | None = None,
         tool_timeout: float | None = None,
         project_activation_error: str | None = None,
-    ) -> FastMCP:
+    ) -> MCPServer:
         """
         Create an MCP server with process-isolated SerenaAgent to prevent asyncio contamination.
 
@@ -382,18 +372,16 @@ class SerenaMCPFactory:
         Settings.model_config = SettingsConfigDict(env_prefix="FASTMCP_")
         instructions = self._get_initial_instructions()
         log.info("MCP server initial instructions:\n%s", instructions)
-        mcp = FastMCP(
+        mcp = MCPServer(
             name="Serena",
             lifespan=self.server_lifespan,
             website_url="https://oraios.github.io/serena",
-            host=host,
-            port=port,
             instructions=instructions,
         )
         return mcp
 
     @asynccontextmanager
-    async def server_lifespan(self, mcp_server: FastMCP) -> AsyncIterator[None]:
+    async def server_lifespan(self, mcp_server: MCPServer) -> AsyncIterator[None]:
         """
         Manages the lifespan of MCP server instances and performs necessary setup and teardown.
         For stdio transport, there is a single server instance.

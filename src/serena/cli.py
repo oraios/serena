@@ -397,7 +397,10 @@ class TopLevelCommands(AutoRegisteringGroup):
                 project_file,
             )
         log.info("Starting MCP server …")
-        server.run(transport=transport)
+        if transport == "stdio":
+            server.run(transport=transport)
+        else:
+            server.run(transport=transport, host=host, port=port)
 
     @staticmethod
     @click.command(
