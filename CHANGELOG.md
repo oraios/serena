@@ -8,6 +8,10 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Language Servers:
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
+  - Fix: clojure-lsp was not told that Serena sends `workspace/didChangeWatchedFiles`, so changes made
+    outside Serena's own edit tools (a git checkout, another editor, a build step) need not invalidate
+    its analysis; symbol queries could then answer from a stale index, e.g. `find_symbol` returning a
+    body from the position the symbol used to occupy (#1593)
   - Fix: Scala cross-file queries waited a fixed 5s after the first file was opened, which on a cold
     Metals is long before its build import, indexing and compilation have finished; the first
     `find_referencing_symbols` of a session could return a fraction of the references with nothing to
