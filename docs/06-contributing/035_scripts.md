@@ -52,7 +52,7 @@ missing toolchain is listed with what would satisfy it.
 | argument | effect |
 |:--|:--|
 | *(none)* | the full report: environment checks, then runnable and missing toolchains per language |
-| `--markers` | print only the `pytest -m` expression selecting the runnable markers — paste it straight into a test run |
+| `--markers` | print only the `pytest -m` expression selecting the runnable markers — paste it straight into a test run. When nothing is runnable it prints nothing and exits non-zero, because an empty `-m` expression is no filter at all and would run the whole suite |
 
 **`live_test_client_setup.py`** — does `serena setup <client>` still work against the
 real MCP client CLIs installed on this machine? For every client it knows (claude-code,
