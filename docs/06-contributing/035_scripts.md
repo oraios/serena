@@ -3,13 +3,13 @@
 Everything under `scripts/` runs the same way, from the repository root:
 
 ```bash
-uv run python scripts/<dir>/<name>.py
+uv run python scripts/<name>.py
 ```
 
-The directories encode the audience: `demos/` shows tools running, `dev/` serves people
-working on Serena itself, `release/` is release machinery. Two entry points stay at the
-top level — `mcp_server.py` and `agno_agent.py` — because configurations and guides
-outside this repository launch them by path.
+The sections below group them by audience: demos show tools running, dev tooling serves
+people working on Serena itself, and release machinery is for maintainers. Two of them —
+`mcp_server.py` and `agno_agent.py` — are entry points that configurations and guides
+outside this repository launch by path.
 
 This page is the map — what each one does, what its arguments mean, and when you will be
 glad it exists. Every script also answers `--help` with its purpose and arguments, so the
@@ -22,27 +22,27 @@ repositories — no MCP client, no LLM — which makes them the fastest way to s
 the natural starting point for tool work. None of them take arguments: run one, read what it
 prints, then open the script and change what it calls.
 
-- **`demos/demo_run_tools.py`** — the tour, and where `CONTRIBUTING.md` points first:
+- **`demo_run_tools.py`** — the tour, and where `CONTRIBUTING.md` points first:
   Serena's tools executed against this repository itself, so the output describes the very
   code you have open.
-- **`demos/demo_diagnostics.py`** — file- and symbol-level diagnostics, then an edit that
+- **`demo_diagnostics.py`** — file- and symbol-level diagnostics, then an edit that
   reports only the warnings it introduced — [the loop explained](015_using-serena).
-- **`demos/demo_find_defining_symbol.py`** — both defining-symbol tools on the Python test
+- **`demo_find_defining_symbol.py`** — both defining-symbol tools on the Python test
   repository: start from a location, get the symbol that defines it.
-- **`demos/demo_find_implementing_symbol.py`** — the implementations tool on the Go test
+- **`demo_find_implementing_symbol.py`** — the implementations tool on the Go test
   repository: start from an interface, get everything that implements it.
-- **`demos/demo_progressive_tool_shortening.py`** — how a tool result shortens stage by
+- **`demo_progressive_tool_shortening.py`** — how a tool result shortens stage by
   stage as `max_answer_chars` tightens, on both the LSP and JetBrains backends (the
   JetBrains half skips itself when no IDE is running).
-- **`demos/demo_cli_call.py`** — the `serena` CLI entry point called in-process instead of
+- **`demo_cli_call.py`** — the `serena` CLI entry point called in-process instead of
   as a subprocess — a convenient place to hang a debugger on a CLI path.
 
-`mcp_server.py` is the same idea for the server itself — covered with the other top-level
+`mcp_server.py` is the same idea for the server itself — covered with the other outside
 entry points at the end of this page.
 
 ## Doctor and live probes: is this machine ready?
 
-**`dev/check_dev_env.py`** — run this one first. It checks the core environment (Python
+**`check_dev_env.py`** — run this one first. It checks the core environment (Python
 version, uv, the project virtual environment, and version skew between an installed
 `serena` executable and this checkout), then reports which per-language pytest markers this
 machine's toolchains can actually run. The toolchain table mirrors the availability rules
@@ -54,7 +54,7 @@ missing toolchain is listed with what would satisfy it.
 | *(none)* | the full report: environment checks, then runnable and missing toolchains per language |
 | `--markers` | print only the `pytest -m` expression selecting the runnable markers — paste it straight into a test run |
 
-**`dev/live_test_client_setup.py`** — does `serena setup <client>` still work against the
+**`live_test_client_setup.py`** — does `serena setup <client>` still work against the
 real MCP client CLIs installed on this machine? For every client it knows (claude-code,
 codebuddy, codex, grok) it runs the full registration lifecycle — register, verify the
 registration landed, remove, verify nothing was left behind — refusing to touch a client
@@ -66,7 +66,7 @@ that already has a live serena registration, and restoring configuration byte-fo
 | `--list` | only report which client CLIs are detected; probe nothing |
 | `--record DIR` | additionally write a JSON snapshot of each probed client's observable behaviour into `DIR` — a dated record of how the client behaves today, for diffing across client releases |
 
-**`dev/live_test_grok.py`** — the deep single-client counterpart: a live, zero-inference
+**`live_test_grok.py`** — the deep single-client counterpart: a live, zero-inference
 smoke test against a real `grok` CLI, the un-mocked sibling of the mocked client-setup
 tests. Deliberately not part of `poe test`.
 
@@ -85,23 +85,23 @@ argument.
 
 | script | regenerates |
 |:--|:--|
-| `dev/gen_prompt_factory.py` | `src/serena/generated/generated_prompt_factory.py`, from the prompt templates |
-| `dev/print_language_list.py` | the commented language list pasted into `src/serena/resources/project.template.yml` |
-| `dev/update_downloaded_dependency_hashes.py` | the checksum database in `src/solidlsp/resources/downloaded_dependency_hashes.json`, after a server version bump |
-| `release/build_news_json.py` | `news/news.json`, from the `news/*.html` items; `--deploy` additionally uploads it to the news web root (maintainer-only, needs `HADES_USER`) |
+| `gen_prompt_factory.py` | `src/serena/generated/generated_prompt_factory.py`, from the prompt templates |
+| `print_language_list.py` | the commented language list pasted into `src/serena/resources/project.template.yml` |
+| `update_downloaded_dependency_hashes.py` | the checksum database in `src/solidlsp/resources/downloaded_dependency_hashes.json`, after a server version bump |
+| `build_news_json.py` | `news/news.json`, from the `news/*.html` items; `--deploy` additionally uploads it to the news web root (maintainer-only, needs `HADES_USER`) |
 
 ## Introspection and profiling
 
-- **`dev/print_tool_overview.py`** — the full tool registry: every tool's name and
+- **`print_tool_overview.py`** — the full tool registry: every tool's name and
   description exactly as clients see them. The quickest answer to "which tools exist?",
   no server required.
-- **`dev/print_mode_context_options.py`** — every registered mode and context — the values
+- **`print_mode_context_options.py`** — every registered mode and context — the values
   `--mode` and `--context` accept — with each one's description.
-- **`dev/profile_tool_call.py`** — where the time goes in one symbol lookup: starts a
+- **`profile_tool_call.py`** — where the time goes in one symbol lookup: starts a
   `SerenaAgent` on this repository, runs `FindSymbolTool` once, and writes profiler output
   (`tool_call.pstat` for cProfile, to view with snakeviz, or a pyinstrument report — the
   `profiler` variable inside the script switches between them).
-- **`dev/memory_graph.py`** — how a project's memories reference each other, as a GraphML
+- **`memory_graph.py`** — how a project's memories reference each other, as a GraphML
   file for any graph viewer. Takes the project name (or root path) as its one positional
   argument; `-o`/`--output` names the output file (default `memory_graph.graphml`).
 
@@ -110,7 +110,7 @@ argument.
 Contributors never need to run these; the release process around them lives in
 [`README-dev.md`](https://github.com/oraios/serena/blob/main/README-dev.md).
 
-**`release/bump_version.py`** bumps the version and creates the git tag; pushing that tag
+**`bump_version.py`** bumps the version and creates the git tag; pushing that tag
 starts the release workflow.
 
 | argument | effect |
@@ -119,11 +119,11 @@ starts the release workflow.
 | `-v X.Y.Z` / `--version X.Y.Z` | set an explicit version instead of bumping |
 | `--dry-run` | show what would change without writing any files |
 
-## Top-level entry points
+## Entry points launched from outside
 
 **`mcp_server.py`** starts the Serena MCP server programmatically — the same server that
-`serena start-mcp-server` runs, kept at the top level because configurations and guides
-outside this repository launch it by path. It is also the natural place to hang a debugger
+`serena start-mcp-server` runs, in the form that configurations and guides outside this
+repository launch by path. It is also the natural place to hang a debugger
 on the server itself, and it accepts the server's full option set:
 
 | argument | effect |
