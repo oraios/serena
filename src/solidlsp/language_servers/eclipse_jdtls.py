@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import threading
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path, PurePath
 from time import sleep
 from typing import Any
@@ -65,6 +66,20 @@ JDTLS_CONFIG_DIR_BY_PLATFORM = {
 
 # Minimum supported JDK version for running JDTLS itself
 JDTLS_MIN_JDK_VERSION = 21
+
+
+class NullAnalysisMode(Enum):
+    """Mode for JDTLS' null analysis (``java.compile.nullAnalysis.mode``)."""
+
+    DISABLED = "disabled"
+    """Do not run null analysis; no nullability diagnostics are reported."""
+
+    INTERACTIVE = "interactive"
+    """Ask before enabling the compiler options required for null analysis (JDTLS' own default)."""
+
+    AUTOMATIC = "automatic"
+    """Enable the required compiler options automatically when nullability annotations are on the
+    classpath (Serena's default, so nullability diagnostics are reported without any prompt)."""
 
 
 @dataclasses.dataclass
@@ -140,6 +155,16 @@ class EclipseJDTLS(SolidLanguageServer):
               Set to false for @Data-heavy projects where the extra getters/setters are noise.
               Requires JDTLS commit b2d8952+ (vscode-java >= 1.53.0); older servers ignore the
               key silently. See eclipse-jdtls/eclipse.jdt.ls#3706 and serena #1432.
+        - null_analysis_mode: How JDTLS handles null analysis, i.e. ``java.compile.nullAnalysis.mode``
+              (default: "automatic"). One of:
+                - "automatic": enable the compiler options required for null analysis automatically
+                  when nullability annotations are on the classpath, so nullability diagnostics are
+                  reported without a prompt Serena would never answer.
+                - "interactive": JDTLS' own default; it asks before enabling those compiler options,
+                  which in practice means null analysis stays off.
+                - "disabled": never run null analysis; no nullability diagnostics are reported.
+              An unrecognized value logs a warning and falls back to "automatic".
+              The recognized nullability annotations themselves are not configurable.
         - gradle_version: Override the pinned Gradle distribution version downloaded by Serena
         - vscode_java_version: Override the pinned vscode-java runtime bundle version downloaded by Serena.
               Pinned versions: "1.54.0-923" (default) and "1.42.0-561" (legacy / initial). Other versions
@@ -180,6 +205,7 @@ class EclipseJDTLS(SolidLanguageServer):
         jdtls_xmx: "3G"  # maximum heap size for the JDTLS server JVM
         jdtls_xms: "100m"  # initial heap size for the JDTLS server JVM
         lombok_show_generated: true  # show Lombok-generated methods in document symbols (default true)
+        null_analysis_mode: "automatic"  # null analysis: automatic | interactive | disabled
         gradle_version: "8.14.2"
         vscode_java_version: "1.54.0-923"  # also accepts pinned legacy "1.42.0-561"
         runtimes:  # register additional JDKs for projects targeting a newer Java version
@@ -851,6 +877,28 @@ class EclipseJDTLS(SolidLanguageServer):
         log.info(f"Using bundled JRE for Gradle: {self.runtime_dependency_paths.jre_path}")
         return self.runtime_dependency_paths.jre_path
 
+    def _resolve_null_analysis_mode(self) -> NullAnalysisMode:
+        """
+        Resolve the null-analysis mode to request from JDTLS, as configured via
+        ``ls_specific_settings.java.null_analysis_mode``.
+
+        An unusable value degrades to the default mode with a warning rather than raising, so that a
+        typo in a diagnostics-tuning setting cannot keep the language server from starting.
+
+        :return: the configured mode, or ``AUTOMATIC`` if unset or not recognized
+        """
+        configured_mode = self._custom_settings.get("null_analysis_mode", NullAnalysisMode.AUTOMATIC.value)
+        try:
+            return NullAnalysisMode(configured_mode)
+        except ValueError:
+            log.warning(
+                "Invalid ls_specific_settings.java.null_analysis_mode value %r; expected one of %s. Using '%s' instead.",
+                configured_mode,
+                [mode.value for mode in NullAnalysisMode],
+                NullAnalysisMode.AUTOMATIC.value,
+            )
+            return NullAnalysisMode.AUTOMATIC
+
     def _resolve_configured_runtimes(self) -> list[dict[str, Any]]:
         """
         Validate and normalize the optional extra JRE/JDK runtimes to register with JDT-LS, as configured
@@ -968,6 +1016,10 @@ class EclipseJDTLS(SolidLanguageServer):
 
         # Gradle Java home: explicit setting, system JAVA_HOME when requested, then bundled runtime.
         gradle_java_home = self._resolve_gradle_java_home()
+
+        # Null analysis: default to "automatic" so nullability diagnostics are reported without JDTLS
+        # prompting the client to enable the required compiler options (which Serena never answers).
+        null_analysis_mode = self._resolve_null_analysis_mode()
 
         initialize_params = {
             "locale": "en",
@@ -1236,7 +1288,7 @@ class EclipseJDTLS(SolidLanguageServer):
                                     "org.eclipse.jdt.annotation.Nullable",
                                     "org.springframework.lang.Nullable",
                                 ],
-                                "mode": "automatic",
+                                "mode": null_analysis_mode.value,
                             }
                         },
                         "sharedIndexes": {"enabled": "auto", "location": ""},
