@@ -7,6 +7,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     project list in `serena_config.yml`
 
 * Language Servers:
+  - Add experimental Nim support via nimlangserver (`.nim`, `.nims`, `.nimble`); requires the `nimlangserver`
+    binary and a Nim toolchain on PATH (#645)
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: Scala cross-file queries waited a fixed 5s after the first file was opened, which on a cold
     Metals is long before its build import, indexing and compilation have finished; the first

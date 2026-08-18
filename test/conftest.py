@@ -471,6 +471,10 @@ def _determine_disabled_language_servers() -> list[LanguageServerId]:
         result.append(LanguageServerId.LEAN4)
     if _sh.which("crystalline") is None:
         result.append(LanguageServerId.CRYSTAL)
+    # nimlangserver drives nimsuggest; both it and the Nim toolchain must be present. nimble installs
+    # the binary into ~/.nimble/bin, which may not be on PATH, so check there too.
+    if _sh.which("nimlangserver") is None and not os.path.isfile(os.path.expanduser("~/.nimble/bin/nimlangserver")):
+        result.append(LanguageServerId.NIM)
     if _sh.which("julia") is None:  # LanguageServer.jl is auto-installed by the LS when julia is present
         result.append(LanguageServerId.JULIA)
     if _sh.which("nixd") is None:
