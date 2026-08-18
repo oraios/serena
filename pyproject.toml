@@ -342,6 +342,7 @@ markers = [
   "snapshot: snapshot tests for symbolic editing operations",
   "ruby: language server running for Ruby (uses ruby-lsp)",
   "zig: language server running for Zig",
+  "odin: language server running for Odin",
   "lua: language server running for Lua",
   "luau: language server running for Luau",
   "nextflow: language server running for Nextflow",

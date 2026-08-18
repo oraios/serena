@@ -1,0 +1,6 @@
+{
+	"collections": [{ "name": "src", "path": "src" }],
+	"enable_document_symbols": true,
+	"enable_hover": true,
+	"enable_references": true
+}
