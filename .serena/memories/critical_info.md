@@ -20,7 +20,10 @@ The key principle is to test *only* externally observable behavior and guarantee
   absence of an implementation detail is not a behaviour, and such tests only freeze the current implementation and burden maintenance.
 * Fewer, behaviour-anchored tests are preferred; a missing test is better than an implementation-coupled one.
 
-Language-server tests are pytest-marker-gated (one marker per language; see `pyproject.toml` `[tool.pytest.ini_options].markers`). Default `poe test` runs unmarked tests + whatever `PYTEST_MARKERS` selects.
+Language-server tests carry one pytest marker per language (see `pyproject.toml` `[tool.pytest.ini_options].markers`).
+There is no default marker filter: no `addopts`, and `poe test` is plain `pytest test -vv`, so it collects every language's tests.
+Gating is by `skipif`, not by marker selection — `test/conftest.py:_determine_disabled_language_servers` disables a language whose toolchain/LS is absent (rules differ on/off CI).
+Languages enabled everywhere (python, typescript, go, java) therefore really run and start real language servers on a bare `poe test`; narrow with `-m <lang>`. CI selects markers per job in `.github/workflows/pytest.yml`.
 Snapshot tests use syrupy.
 
 # Docstrings & Comments
