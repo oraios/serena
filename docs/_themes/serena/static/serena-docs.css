@@ -1,0 +1,586 @@
+/* Layout adjustments for the Serena docs theme.
+   Every rule here overrides an inherited sphinx-book-theme/pydata-sphinx-theme
+   default; the parent theme itself is not modified. */
+
+/* Nothing here renders a secondary sidebar, so nothing should be held back for one. The
+   parent theme keeps 17rem in this variable and subtracts it from the article's width; the
+   measure below overrides that subtraction, and zeroing the variable makes sure the
+   reservation cannot come back through the theme's other use of it. The two are the only
+   places it appears. */
+:root {
+    --pst-sidebar-secondary: 0rem;
+}
+
+/* The theme centres the page twice: once for the whole three-column block, and again
+   for the article between the sidebars. Both are dropped, for different reasons.
+
+   The second made the text float in the middle of the window with the navigation
+   stranded away from it, which is a defect.
+
+   The first is a choice. Centring the block puts the page in the middle of a display
+   wider than its 88rem cap, but it also means the left edge of the text moves whenever
+   the window is resized or the page is zoomed — the words shift sideways under the
+   reader for reasons that have nothing to do with the reading. A fixed left edge stays
+   where it was found. The cost is that on a very wide screen, at native zoom, the page
+   occupies the left of it; the remedy is the window, which is the reader's to place. */
+.bd-container {
+    justify-content: flex-start;
+}
+
+.bd-main .bd-content {
+    justify-content: flex-start;
+}
+
+/* Let the page scroll as one document: the sidebar flows with the page instead of
+   being a viewport-pinned region with its own scrollbar. */
+@media (min-width: 768px) {
+    .bd-sidebar-primary {
+        position: static;
+        max-height: none;
+        overflow-y: visible;
+    }
+}
+
+/* On small screens the theme turns the sidebar into an off-canvas overlay: 75% of
+   the viewport wide, full viewport height, dimming the page behind it. Here it stays
+   part of the document instead — hidden until asked for, then opening inline above
+   the article and pushing it down, so the page is never covered and closing it never
+   loses the reader's place. */
+/* The theme hides the sidebar behind a button below 960px, which is narrower than
+   plenty of desktop windows: keep it as a real column down to tablet width, where
+   there is still room for one. */
+@media (min-width: 768px) and (max-width: 959.98px) {
+    /* display, margin-left and visibility are not repeated here: the rule below forces
+       them for every width in this range. Nor are position and max-height, already set
+       to these values for the same range above. */
+    .bd-sidebar-primary {
+        flex: 0 0 auto;
+        height: auto;
+        max-width: none;
+        transition: none;
+        width: 22%;
+        z-index: auto;
+    }
+
+    label.overlay-primary {
+        display: none;
+    }
+}
+
+/* Above the drawer width the sidebar is always part of the page: never hidden, never
+   slid out, whatever the drawer was left doing on a narrow screen or in an earlier
+   visit.
+
+   From 992px up, sphinx-book-theme reads a checked #pst-primary-sidebar-checkbox as
+   "hide the sidebar" — the exact inverse of the drawer, where checked means open — and
+   hides it with margin-left, visibility AND opacity. serena-docs.js keeps the checkbox
+   clear at these widths, so this rule is the backstop for a state that arrives checked
+   anyway (storage restored before the script runs, a reader resizing mid-page). All
+   three properties have to be answered: overriding only margin-left and visibility
+   leaves a fully transparent sidebar that still occupies its column and still takes
+   clicks. */
+@media (min-width: 768px) {
+    .bd-sidebar-primary {
+        display: flex !important;
+        margin-left: 0 !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+    }
+}
+
+/* Wherever the sidebar is simply part of the page, the button that would reveal it
+   has nothing to do. sphinx-book-theme places this button in the article header
+   rather than the site header, so the parent theme's own rule for hiding it on wide
+   screens never matches it — and neither would a rule written against the site
+   header, which is why only the article header is named here. */
+@media (min-width: 768px) {
+    .header-article-items button.primary-toggle {
+        display: none;
+    }
+}
+
+/* On phones the nav stays a panel at the side, but a narrow one: the theme sizes it
+   at 75% of the viewport (up to 350px), which reads as taking over the screen. Kept
+   at 260px so the page behind it stays visible and recognisable. */
+@media (max-width: 767.98px) {
+    .bd-sidebar-primary {
+        max-width: 260px;
+        width: 260px;
+    }
+
+    input#pst-primary-sidebar-checkbox:checked ~ .bd-container .bd-sidebar-primary,
+    html.serena-drawer-open .bd-sidebar-primary {
+        margin-left: 0;
+        visibility: visible;
+    }
+
+    /* No dimming: the page beside the panel stays readable, and the panel carries its
+       own close control. */
+    label.overlay-primary {
+        display: none;
+    }
+}
+
+/* Keep "back to top" clear of the fixed previous/next bar, which the theme knows
+   nothing about (it positions the button at 90vh). */
+#pst-back-to-top {
+    bottom: 5.5rem;
+    top: auto;
+}
+
+/* Visibility is decided by serena-docs.js (scrolled past the header, in either
+   direction) rather than by the theme's scrolling-upwards-only rule; !important is
+   what makes it outrank the inline style the theme keeps assigning. */
+#pst-back-to-top.serena-visible {
+    display: block !important;
+}
+
+#pst-back-to-top:not(.serena-visible) {
+    display: none !important;
+}
+
+/* The button that opens the drawer stays visible and closes it again, so the header
+   sits above the panel and the panel starts below the header. */
+@media (max-width: 767.98px) {
+    .bd-header {
+        z-index: 1060;
+    }
+
+    /* 100vh on a phone is the viewport as it would be with the browser's own bars
+       hidden, so with them showing, the bottom of the panel sits below the fold — and
+       since the panel scrolls inside itself while the page behind it does not move,
+       the entries down there cannot be reached at all. dvh is that same measure taken
+       against the viewport actually on screen; the vh line stays first for browsers
+       that do not know the unit. */
+    .bd-sidebar-primary {
+        height: calc(100vh - var(--pst-header-height));
+        height: calc(100dvh - var(--pst-header-height));
+        max-height: calc(100vh - var(--pst-header-height));
+        max-height: calc(100dvh - var(--pst-header-height));
+        top: var(--pst-header-height);
+    }
+}
+
+/* Room to breathe: the theme gives the article a single rem of horizontal padding
+   against the sidebar and the window edge, which reads as cramped now that the
+   content is left-aligned.
+
+   The width is set here for a reason the reserved space made invisible. The parent
+   theme caps this column at `calc(100% - var(--pst-sidebar-secondary))`, holding back
+   17rem for the right-hand rail — which this theme does not render, so the space was
+   never used. Worse, being in rem it grew with the text: a reader at 200% text zoom
+   had 544px set aside for nothing and 14 characters left to read on, because the
+   column absorbed the growth instead of the margin.
+
+   So the reservation goes, and the measure is stated instead — in em, so it grows
+   with the text rather than shrinking against it, and the line stays about the same
+   number of characters however large the type is. What is left over is margin, which
+   is what it looked like all along.
+
+   72em — about 118 characters at body size — is wider than prose alone would ask for, and
+   deliberate: these pages are mostly commands, configuration and parameter tables, which
+   earn the room. It is also one measure for every page. An earlier version widened only
+   pages that carry a table, and the text edge then shifted between sections — read as a
+   glitch, not as typography. The tables set this width; the rest of the site follows. */
+.bd-main .bd-content .bd-article-container {
+    max-width: 72em;
+    padding: 1rem 2.5rem;
+}
+
+/* Air. A wide measure needs room around the text as much as beside it: fuller leading on
+   paragraphs, clear separation between blocks, table cells that hold their content with
+   space to spare, and sections that announce themselves. Space, not size — the type stays
+   exactly as it is. */
+.bd-article p {
+    line-height: 1.75;
+}
+
+.bd-article p,
+.bd-article ul,
+.bd-article ol {
+    margin-bottom: 1.1rem;
+}
+
+.bd-article li {
+    margin-bottom: 0.35rem;
+}
+
+.bd-article h2 {
+    margin-top: 2.6rem;
+}
+
+.bd-article h3 {
+    margin-top: 1.8rem;
+}
+
+.bd-article table td,
+.bd-article table th {
+    padding: 0.6rem 0.9rem;
+    line-height: 1.55;
+}
+
+/* Inside a table cell, the wrap-anywhere rule at the end of this file would let a column
+   be squeezed until identifiers break mid-name — relative_path arriving as two lines,
+   "relative_p / ath". In a cell an identifier stays whole: the column is then sized by
+   its longest name, and the description column takes the surplus. A table that still
+   cannot fit is the scrolling wrapper's problem, not the identifier's. */
+.bd-article table code,
+.bd-article table code .pre {
+    overflow-wrap: normal;
+    white-space: pre-wrap;
+}
+
+.bd-article {
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 1.5rem;
+}
+
+/* Long pages lay out and paint every section whether or not any of it is on screen.
+   Letting the browser skip the ones that are not costs a line and is felt most where
+   there is most to skip — the generated reference, and the longer guides. The intrinsic
+   size is a starting guess the browser replaces with the real one once a section has
+   been rendered, so the scrollbar settles rather than jumping. */
+.bd-article > section section {
+    contain-intrinsic-size: auto 40rem;
+    content-visibility: auto;
+}
+
+/* Previous/next stays reachable at the bottom of the window rather than only at
+   the end of a long page. The article reserves room for it so the bar never covers
+   the last lines of content. */
+/* Sticky rather than fixed. Previous/next belongs to the article, not to the site, and a
+   sticky element takes its box from the column it already lives in — so it lines up with
+   the text at every width without being told where the sidebar ends. Fixed could only be
+   aligned by hard-coding that width per breakpoint, which is why it used to span the whole
+   page. On a page shorter than the window it now settles at the end of the content instead
+   of floating over empty space, and nothing has to reserve room for it. */
+.prev-next-footer {
+    background-color: var(--pst-color-background);
+    /* A hairline is enough for a footer that content stops above, but this one is fixed and
+       the page slides underneath it, so it needs to read as a different plane rather than as
+       the end of the article. The shadow does that where it can be seen; against a dark
+       background it fades out and the border, which is more visible there, carries it. */
+    border-top: 1px solid var(--pst-color-border);
+    box-shadow: 0 -3px 8px rgb(0 0 0 / 10%);
+    bottom: 0;
+    margin-top: 1.5rem;
+    padding: 0.5rem 0;
+    position: sticky;
+    z-index: 1020;
+}
+
+/* The bar is fixed to the window, but the page it belongs to is left-aligned and capped
+   at 88rem, so centring the row within the window (the theme's margin: 0 auto) sets it
+   off to the right of everything else on a wide screen. Given the same box as the page
+   block — flush left, same cap — the row's centre is the page's centre. The gutter moves
+   inside that box, so the row clears the window edge without growing past the page. */
+.prev-next-footer .prev-next-area {
+    margin: 0;
+    max-width: none;
+    padding: 0;
+}
+
+.prev-next-footer .prev-next-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* The ellipsis above never got the chance to appear: each link is a flex container whose
+   text block, like any flex item, refuses to shrink below its content, so the link clipped
+   it instead — cutting titles mid-word and leaving "Next" as a bare "N" on a phone. Letting
+   the block shrink hands the truncation back to the rule that knows how to do it kindly. */
+.prev-next-footer .left-prev > *,
+.prev-next-footer .right-next > * {
+    min-width: 0;
+}
+
+/* Two and a half rem of gutter either side is a fifth of a phone's screen. The article and
+   the bar below it both pay for that, so the column narrows its own margins there instead. */
+@media (max-width: 767.98px) {
+    .bd-main .bd-content .bd-article-container {
+        padding: 1rem 1.25rem;
+    }
+}
+
+/* Section rows in the sidebar are expanders rather than links (serena-docs.js moves
+   each section's page to an "Overview" child entry), so the whole row is the click
+   target and the chevron sits at the start of it as a state indicator. */
+.bd-sidebar-primary li.has-children > details > summary {
+    align-items: center;
+    cursor: pointer;
+    display: flex;
+    gap: 0.4rem;
+    padding: 0.25rem 0;
+}
+
+.bd-sidebar-primary li.has-children > details > summary::marker,
+.bd-sidebar-primary li.has-children > details > summary::-webkit-details-marker {
+    content: "";
+    display: none;
+}
+
+.bd-sidebar-primary li.has-children > details > summary .toctree-toggle {
+    height: auto;
+    position: static;
+    transform: rotate(-90deg);
+    transition: transform 0.15s ease;
+    width: auto;
+}
+
+.bd-sidebar-primary li.has-children > details[open] > summary .toctree-toggle {
+    transform: rotate(0);
+}
+
+/* A section row carries two controls that do different things, so they are two elements:
+   the title is the theme's own link, left where it was emitted, and the chevron is the
+   disclosure's summary lifted out of the flow to sit beside it. Keeping them as siblings
+   is what makes them separately operable — and keeps a link out of the inside of a
+   control that is itself interactive, which is the arrangement a screen reader cannot
+   describe honestly. */
+.bd-sidebar-primary li.has-children {
+    padding-left: 1.15rem;
+    position: relative;
+}
+
+.bd-sidebar-primary li.has-children > details > summary.serena-section-toggle {
+    left: 0;
+    padding: 0.25rem 0.15rem;
+    position: absolute;
+    top: 0;
+    width: 1rem;
+}
+
+.bd-sidebar-primary li.has-children > details > summary:hover .toctree-toggle {
+    color: var(--pst-color-primary);
+}
+
+/* The children indent from the title rather than from the chevron's column. */
+.bd-sidebar-primary li.has-children > details > ul {
+    margin-left: -0.35rem;
+}
+
+/* Sphinx marks every ancestor on the path to the open page `current`, and the theme keys
+   its marker bar off that, so the bar is drawn once per level: four of them stacked down
+   the tree on a page like serena/util/shell, each at a different indent. A "you are here"
+   pointing at four places is not one, so the bar goes to the page actually open and
+   nowhere else — the anchor of that page is the only one carrying the class itself, which
+   is what makes the two cases separable at all. Ancestors keep the bold weight, so the
+   trail through the tree stays readable without competing with the marker. */
+.bd-sidebar-primary .bd-links .current > a {
+    box-shadow: none;
+    color: inherit;
+    font-weight: 600;
+}
+
+.bd-sidebar-primary .bd-links .current > a:focus-visible {
+    box-shadow: 0 0 0 0.1875rem var(--pst-color-accent);
+    outline: none;
+}
+
+/* Written after the two rules above, which it ties with on specificity. */
+.bd-sidebar-primary .bd-links a.current {
+    box-shadow: inset max(3px, 0.1875rem, 0.12em) 0 0 var(--pst-color-primary);
+    color: var(--pst-color-primary);
+}
+
+.bd-sidebar-primary .bd-links a.current:focus-visible {
+    box-shadow:
+        inset max(3px, 0.1875rem, 0.12em) 0 0 var(--pst-color-primary),
+        0 0 0 0.1875rem var(--pst-color-accent);
+    outline: none;
+}
+
+/* Mobile drawer restored from the previous page: shown as of the first paint and
+   without the theme's slide-in transition, so following a link does not make the
+   drawer close and reopen. Applied by serena-docs.js before the body is parsed;
+   the theme's own :checked rule takes over once the page has rendered. */
+html.serena-drawer-open .bd-sidebar-primary {
+    margin-left: 0 !important;
+    visibility: visible !important;
+}
+
+/* only the restored-on-arrival case skips the slide, so opening and closing by hand
+   still animate */
+html.serena-drawer-restoring .bd-sidebar-primary {
+    transition: none !important;
+}
+
+/* The movement here is decorative: the chevron's turn and the panel's slide say nothing
+   that the state they end in does not already say. Readers who have asked their system
+   for less motion get the same interface without it. (Bootstrap already guards its own
+   smooth scrolling this way; these are the transitions this theme adds or inherits.) */
+@media (prefers-reduced-motion: reduce) {
+    .bd-sidebar-primary,
+    .bd-sidebar-primary li.has-children > details > summary .toctree-toggle {
+        transition: none !important;
+    }
+}
+
+/* Navigating replaces the page, but the sidebar, header and previous/next bar are the
+   same on either side of the change: naming them lets the browser carry them across
+   untouched, so visibly only the article is replaced rather than the window blanking
+   between two documents. It also covers the moment this file's script spends rebuilding
+   the navigation tree on the incoming page. Browsers without cross-document view
+   transitions load the next page exactly as before. */
+@view-transition {
+    navigation: auto;
+}
+
+.bd-header {
+    view-transition-name: serena-header;
+}
+
+.bd-sidebar-primary {
+    view-transition-name: serena-sidebar;
+}
+
+.prev-next-footer {
+    view-transition-name: serena-prev-next;
+}
+
+/* The carried elements are the same element either side, so animating them would be
+   animating nothing — and a cross-fade on furniture that has not changed is the flicker
+   this is meant to remove. */
+::view-transition-old(serena-header),
+::view-transition-new(serena-header),
+::view-transition-old(serena-sidebar),
+::view-transition-new(serena-sidebar),
+::view-transition-old(serena-prev-next),
+::view-transition-new(serena-prev-next) {
+    animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    ::view-transition-old(root),
+    ::view-transition-new(root) {
+        animation: none;
+    }
+}
+
+/* No right rail on any device. With no components configured into it
+   (secondary_sidebar_items) the theme emits no container at all, but it still emits the
+   article-header button that would toggle one, so that is what is hidden here. */
+.secondary-toggle {
+    display: none !important;
+}
+
+/* Inline literals wrap rather than push the page sideways.
+
+   Sphinx renders inline code as <code class="literal"><span class="pre">…</span></code>,
+   and `white-space: pre` on that span makes it unbreakable at any width. A single long
+   identifier is then wider than a phone viewport and the whole document scrolls: on
+   01-about/035_tools, `jet_brains_find_referencing_symbol` is 294px against a 320px
+   viewport, taking the page 84px over.
+
+   `anywhere` rather than `break-word` because the latter only breaks when the word is
+   alone on its line, which is not the case inside a table cell. The white-space override
+   is what actually permits the break; overflow-wrap alone cannot act on a `pre` span. */
+code.literal > span.pre,
+code.docutils > span.pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* The Contents rail, rebuilt on demand: a pill that costs the article nothing, and a
+   popover that answers both halves of the question — where can I go, and where am I.
+   Colors are stated explicitly throughout because the theme's own anchor styling would
+   otherwise paint every entry link-blue. */
+.serena-toc-btn {
+    align-items: center;
+    background: var(--pst-color-background);
+    border: 1px solid var(--pst-color-border);
+    border-radius: 2em;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 8%);
+    color: var(--pst-color-text-base);
+    cursor: pointer;
+    display: flex;
+    font-size: 0.85rem;
+    gap: 0.5em;
+    padding: 0.45em 0.9em;
+    position: fixed;
+    /* anchored to the page block's right edge (88rem, flush left), not the viewport's —
+       on a wide screen the pill stays with the content instead of drifting into the margin */
+    right: max(1.5rem, calc(100vw - 88rem + 1.5rem));
+    top: calc(var(--pst-header-height, 4rem) + 0.75rem);
+    z-index: 1030;
+}
+
+.serena-toc-btn:hover {
+    border-color: var(--pst-color-primary);
+}
+
+.serena-toc-panel {
+    background: var(--pst-color-background);
+    border: 1px solid var(--pst-color-border);
+    border-radius: 0.55rem;
+    box-shadow: 0 6px 24px rgb(0 0 0 / 13%);
+    max-height: 62vh;
+    overflow-y: auto;
+    padding: 0.55rem 0;
+    position: fixed;
+    right: max(1.5rem, calc(100vw - 88rem + 1.5rem));
+    top: calc(var(--pst-header-height, 4rem) + 3.4rem);
+    width: 17.5rem;
+    z-index: 1030;
+}
+
+.serena-toc-title {
+    color: var(--pst-color-text-muted);
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+    padding: 0.2em 1em 0.55em;
+    text-transform: uppercase;
+}
+
+.serena-toc-panel a {
+    color: var(--pst-color-text-muted);
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 400;
+    line-height: 1.45;
+    padding: 0.3em 1em;
+    text-decoration: none;
+}
+
+.serena-toc-panel a.l3 {
+    padding-left: 2.1em;
+}
+
+.serena-toc-panel a.l4 {
+    padding-left: 3.2em;
+}
+
+.serena-toc-panel a:hover {
+    background: var(--pst-color-surface);
+    color: var(--pst-color-primary);
+}
+
+.serena-toc-panel a.current {
+    border-left: 3px solid var(--pst-color-primary);
+    color: var(--pst-color-primary);
+    font-weight: 600;
+    padding-left: calc(1em - 3px);
+}
+
+.serena-toc-panel a.l3.current {
+    padding-left: calc(2.1em - 3px);
+}
+
+.serena-toc-panel a.l4.current {
+    padding-left: calc(3.2em - 3px);
+}
+
+/* during a TOC jump, laziness is suspended for one frame so the landing is exact;
+   the theme's contain-intrinsic-size `auto` keeps the rendered sizes afterwards */
+.serena-toc-jumping .bd-article > section section {
+    content-visibility: visible;
+}
+
+@media print {
+    .serena-toc-btn,
+    .serena-toc-panel {
+        display: none;
+    }
+}
