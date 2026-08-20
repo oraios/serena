@@ -18,6 +18,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     indicate it was incomplete. Serena now declares work-done progress support and waits for the work
     Metals reports, bounded by the new `indexing_timeout`, `indexing_start_grace` and
     `indexing_quiet_period` settings
+  - Fix: a `tsserver` crash mid-indexing (e.g. a V8 heap OOM) sent the same `$/progress` "end"
+    event as a normal completion, so `find_referencing_symbols` and other cross-file queries
+    silently returned an empty result instead of surfacing the crash. The crash is now detected
+    independently via the `window/logMessage` notification tsserver already sends, and the
+    affected wait now raises instead of reporting success (#1814)
 
 * Dependencies:
   - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
