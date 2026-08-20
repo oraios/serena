@@ -109,7 +109,7 @@ To set up the Serena MCP server for Claude Code, you can simply run this command
 Find manual setup instructions as well as workarounds for Claude Code's recent regressions pertaining to (external) tool use below.
 
 :::{attention}
-Recent updates to Claude Code (CC) and to the Opus line of models resulted in drastically reduced
+Updates to Claude Code (CC) and to the Opus line of models in April 2026 resulted in drastically reduced
 adherence to instructions pertaining to Serena's tools.
 
 After extensive analysis, we identified part of the reason to be very long and detailed

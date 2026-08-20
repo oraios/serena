@@ -8,7 +8,7 @@
 real code – especially symbol-aware navigation, cross-file refactors, and monorepo dependency jumps – while I still lean
 on built-ins for tiny text edits and non-code work." 
 
-These are not marketing quotes – they are the agents' own one-sentence verdicts after
+These are not marketing quotes – they are the agents' own one-sentence verdicts, recorded in April 2026, after
 performing hands-on tasks, using both Serena's tools and their built-in
 alternatives side by side, on real codebases (large Python library in the case of Claude Code,
 medium-sized Java project in the case of Codex).

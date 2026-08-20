@@ -64,7 +64,7 @@ one-sentence, user-facing recommendation — the quotes shown on the [main page]
 
 ## Assessment of the Methodology
 
-_The following assessment was written by Claude Opus 4.6 (high effort) after reading the full
+_The following assessment was written by Claude Opus 4.6 (high effort) in April 2026 after reading the full
 evaluation methodology, evaluation prompt, and all result documents._
 
 **The methodology is sound**, and the two published results demonstrate that it produces meaningful,

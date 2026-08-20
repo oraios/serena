@@ -45,7 +45,7 @@ Here's how it works:
    the same tools as in the MCP server version.
 
 
-Here is a short demo of Serena performing a small analysis task with the newest Gemini model:
+Here is a short demo of Serena performing a small analysis task with a Gemini model:
 
 https://github.com/user-attachments/assets/ccfcb968-277d-4ca9-af7f-b84578858c62
 
