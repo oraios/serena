@@ -1,5 +1,8 @@
 """Tests for the mcp.py module in serena."""
 
+import asyncio
+import time
+
 import pytest
 from mcp.server.fastmcp.tools.base import Tool as MCPTool
 
@@ -75,10 +78,48 @@ def test_make_tool_execution() -> None:
     mock_tool = BasicTool()
     mcp_tool = make_tool(mock_tool)
 
-    # Execute the MCP tool function
-    result = mcp_tool.fn(name="Alice", age=30)
+    # Execute the MCP tool function (now offloaded to a worker thread, so it's a coroutine)
+    result = asyncio.run(mcp_tool.fn(name="Alice", age=30))
 
     assert result == "Hello Alice, you are 30 years old!"
+
+
+def test_make_tool_execution_does_not_block_event_loop() -> None:
+    """A blocking apply_ex must run off the event loop, so it can't starve other coroutines on it."""
+
+    class SlowTool(BaseMockTool):
+        def apply(self) -> str:
+            """A slow test function.
+
+            :return: A constant result
+            """
+            return "done"
+
+        def apply_ex(self, log_call: bool = True, catch_exceptions: bool = True, **kwargs) -> str:
+            time.sleep(0.3)
+            return self.apply()
+
+    mcp_tool = make_tool(SlowTool())
+    probe_steps = 0
+
+    async def probe() -> None:
+        nonlocal probe_steps
+        while probe_steps < 10:
+            await asyncio.sleep(0.01)
+            probe_steps += 1
+
+    async def race() -> str:
+        result, _ = await asyncio.gather(mcp_tool.fn(), probe())
+        return result
+
+    start = time.monotonic()
+    result = asyncio.run(race())
+    elapsed = time.monotonic() - start
+
+    # a blocked loop would serialize call + probe (~0.4s); concurrent stays near max(0.3, 0.1)s
+    assert result == "done"
+    assert probe_steps == 10
+    assert elapsed < 0.35
 
 
 def test_make_tool_no_params() -> None:
