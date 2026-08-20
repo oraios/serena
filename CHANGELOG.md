@@ -7,6 +7,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     project list in `serena_config.yml`
 
 * Language Servers:
+  - Add experimental Odin support via ols (`.odin`); requires the `ols` binary and an `odin` compiler on PATH (#594)
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: clojure-lsp was not told that Serena sends `workspace/didChangeWatchedFiles`, so changes made
     outside Serena's own edit tools (a git checkout, another editor, a build step) need not invalidate

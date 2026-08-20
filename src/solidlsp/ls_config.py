@@ -115,6 +115,13 @@ class LanguageServerId(str, Enum):
     CRYSTAL = "crystal"
     CUE = "cue"
     ZIG = "zig"
+    ODIN = "odin"
+    """Odin language server using ols (DanielGavin/ols).
+    Supports .odin files. Requires the `ols` binary plus an `odin` compiler on PATH
+    (ols leans on the compiler to resolve the core/vendor collections).
+    Experimental: ols indexes the workspace in the background, so the first cross-file
+    lookup of a session can be slow.
+    """
     LUA = "lua"
     LUAU = "luau"
     """Luau Language Server for Roblox's Luau language (typed Lua 5.1 superset).
@@ -346,6 +353,7 @@ class LanguageServerId(str, Enum):
             self.SCSS,
             self.ANGULAR,
             self.DENO,
+            self.ODIN,
         }
 
     def is_programming_language(self) -> bool:
@@ -510,6 +518,8 @@ class LanguageServerId(str, Enum):
                 return FilenameMatcher(".toml")
             case self.ZIG:
                 return FilenameMatcher(".zig", ".zon")
+            case self.ODIN:
+                return FilenameMatcher(".odin")
             case self.LUA:
                 return FilenameMatcher(".lua")
             case self.LUAU:
@@ -778,6 +788,10 @@ class LanguageServerId(str, Enum):
                 from solidlsp.language_servers.zls import ZigLanguageServer
 
                 return ZigLanguageServer
+            case self.ODIN:
+                from solidlsp.language_servers.odin_language_server import OdinLanguageServer
+
+                return OdinLanguageServer
             case self.NIX:
                 from solidlsp.language_servers.nixd_ls import NixLanguageServer
 

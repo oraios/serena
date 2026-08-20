@@ -126,6 +126,12 @@ Some languages require additional installations or setup steps, as noted.
   (requires nixd installation)
 * **OCaml**
   (requires opam and ocaml-lsp-server to be installed manually; see the [OCaml Setup Guide](../03-special-guides/ocaml_setup_guide_for_serena.md))
+* **Odin** (experimental)  
+  (requires the [ols](https://github.com/DanielGavin/ols) binary — grab a prebuilt one from its releases page or build it
+  with `odin build src -out:ols` — plus an `odin` compiler on PATH, which ols uses to resolve the core/vendor collections;
+  covers `.odin` files. ols reads collection settings from an `ols.json` at the workspace root; without one it still resolves
+  document symbols and go-to-definition for files inside the workspace. It indexes the workspace in the background, so the
+  first cross-file lookup of a session can be slow)
 * **Pascal**  
   (uses Pascal/Lazarus, which is automatically downloaded; set `PP` and `FPCDIR` environment variables for source navigation)
 * **Perl**  

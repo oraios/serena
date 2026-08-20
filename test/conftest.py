@@ -471,6 +471,10 @@ def _determine_disabled_language_servers() -> list[LanguageServerId]:
         result.append(LanguageServerId.LEAN4)
     if _sh.which("crystalline") is None:
         result.append(LanguageServerId.CRYSTAL)
+    # ols indexes the workspace but leans on the odin compiler for the core/vendor collections,
+    # so both need to be present for the Odin tests to run.
+    if _sh.which("ols") is None or _sh.which("odin") is None:
+        result.append(LanguageServerId.ODIN)
     if _sh.which("julia") is None:  # LanguageServer.jl is auto-installed by the LS when julia is present
         result.append(LanguageServerId.JULIA)
     if _sh.which("nixd") is None:
