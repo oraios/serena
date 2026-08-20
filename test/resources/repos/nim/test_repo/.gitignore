@@ -1,0 +1,4 @@
+nimcache/
+nimbledeps/
+main
+*.exe

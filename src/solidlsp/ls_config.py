@@ -115,6 +115,13 @@ class LanguageServerId(str, Enum):
     CRYSTAL = "crystal"
     CUE = "cue"
     ZIG = "zig"
+    NIM = "nim"
+    """Nim language server using nimlangserver (nim-lang/langserver).
+    Supports .nim, .nims and .nimble files. Requires the `nimlangserver` binary
+    (nimble install nimlangserver) plus a Nim toolchain (nim/nimsuggest) on PATH.
+    Experimental: nimsuggest compiles the project lazily, so the first lookup of
+    a session can be slow and cross-file references depend on project load state.
+    """
     LUA = "lua"
     LUAU = "luau"
     """Luau Language Server for Roblox's Luau language (typed Lua 5.1 superset).
@@ -346,6 +353,7 @@ class LanguageServerId(str, Enum):
             self.SCSS,
             self.ANGULAR,
             self.DENO,
+            self.NIM,
         }
 
     def is_programming_language(self) -> bool:
@@ -510,6 +518,8 @@ class LanguageServerId(str, Enum):
                 return FilenameMatcher(".toml")
             case self.ZIG:
                 return FilenameMatcher(".zig", ".zon")
+            case self.NIM:
+                return FilenameMatcher(".nim", ".nims", ".nimble")
             case self.LUA:
                 return FilenameMatcher(".lua")
             case self.LUAU:
@@ -778,6 +788,10 @@ class LanguageServerId(str, Enum):
                 from solidlsp.language_servers.zls import ZigLanguageServer
 
                 return ZigLanguageServer
+            case self.NIM:
+                from solidlsp.language_servers.nim_language_server import NimLanguageServer
+
+                return NimLanguageServer
             case self.NIX:
                 from solidlsp.language_servers.nixd_ls import NixLanguageServer
 

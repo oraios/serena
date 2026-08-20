@@ -122,6 +122,12 @@ Some languages require additional installations or setup steps, as noted.
   downloaded; requires a Java 17+ runtime, discovered via `ls_specific_settings.nextflow.java_home`, `JAVA_HOME` or `java` on PATH;
   covers `.nf` scripts — Nextflow `.config` files are not treated as source files, since the language server reports no symbols for them;
   processes, workflows and functions are reported under their declared name, e.g. `GREET` for `process GREET`)
+* **Nim** (experimental)  
+  (requires the [nimlangserver](https://github.com/nim-lang/langserver) binary — `nimble install nimlangserver`, which
+  places it in `~/.nimble/bin` — plus a Nim toolchain (`nim`/`nimsuggest`) on PATH; covers `.nim`, `.nims` and `.nimble` files.
+  nimlangserver drives nimsuggest, which compiles the project lazily, so the first lookup of a session can be slow; document
+  symbols and go-to-definition (including across files) work, but nimsuggest's find-references does not resolve cross-file
+  usages reliably)
 * **Nix**  
   (requires nixd installation)
 * **OCaml**
