@@ -30,6 +30,10 @@ Status of the `main` branch. Changes prior to the next official version change w
 # v1.7.0 (2026-08-09)
 
 * General:
+  - Upgrade the `mcp` SDK from 1.28.1 to 2.0.0 (MCP protocol revision 2026-07-28). Two behavioural
+    consequences: `FASTMCP_*` environment variables no longer configure the MCP server (the SDK's
+    `Settings` is no longer environment-backed), and `SerenaMCPFactory.create_mcp_server()` no longer
+    takes `host`/`port`, which the SDK moved to the transport-specific `run()` call
   - Fix: Race conditions in ProjectServer when used by multiple clients in parallel   
   - Fix: `GitignoreParser` interpolated a directory's name unescaped into gitignore pattern position;
     a directory named with pattern metacharacters (e.g. a stray `***`) could turn a scoped pattern
