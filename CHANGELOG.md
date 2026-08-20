@@ -6,6 +6,13 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
 
+* Memories:
+  - Add opt-in tools for reading and updating versioned scalar frontmatter metadata while keeping
+    `read_memory` focused on memory body content. Managed blocks start with
+    `serena_frontmatter_version: 1`, require `type`, and use the Open Knowledge Format field name
+    `description` where applicable. This is field-level alignment, not OKF bundle conformance;
+    unmarked legacy `---` blocks remain ordinary memory body content.
+
 * Language Servers:
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: clojure-lsp was not told that Serena sends `workspace/didChangeWatchedFiles`, so changes made
