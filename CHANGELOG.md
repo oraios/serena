@@ -5,6 +5,9 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
+  - Fix: `TextUtils.insert_text_at_position` returned a wrong position when the inserted text merged
+    with an adjacent character into a single newline sequence (e.g. a `\n` inserted directly after an
+    existing `\r`); the position is now determined from the resulting text
 
 * Language Servers:
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
