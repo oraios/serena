@@ -95,6 +95,12 @@ class TestHookClientDetection:
             hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.GROK)
         assert hook._client == HookClient.GROK
 
+    def test_zcode_client(self, tmp_path: Path):
+        stdin_data = _base_input()
+        with patch("sys.stdin", _make_stdin(stdin_data)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.ZCODE)
+        assert hook._client == HookClient.ZCODE
+
 
 class TestPreToolUseRemindAboutSerenaHook:
     """Tests for the PreToolUse hook that nudges the agent toward symbolic tools."""
@@ -117,6 +123,13 @@ class TestPreToolUseRemindAboutSerenaHook:
             with patch("sys.stdin", _make_stdin(_base_input(tool_name=name))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
                 hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.CLAUDE_CODE)
             assert hook.is_grep_call() == expected, f"is_grep_tool() wrong for {name} (claude-code)"
+
+    def test_grep_tool_detection_zcode(self, tmp_path: Path):
+        """ZCode is grouped with Claude Code / CodeBuddy: exact tool name ``grep``."""
+        for name, expected in [("grep", True), ("grep_search", False), ("mcp_grep", False), ("read", False)]:
+            with patch("sys.stdin", _make_stdin(_base_input(tool_name=name))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+                hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.ZCODE)
+            assert hook.is_grep_call() == expected, f"is_grep_tool() wrong for {name} (zcode)"
 
     def test_grep_tool_detection_non_claude_code(self, tmp_path: Path):
         """Non-Claude-Code clients fall back to substring matching to cover verbose tool names."""
@@ -180,6 +193,16 @@ class TestPreToolUseRemindAboutSerenaHook:
             ):
                 hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.CLAUDE_CODE)
             assert hook.is_read_file_call() == expected, f"is_read_file_tool() wrong for {name} (claude-code)"
+
+    def test_read_file_tool_detection_zcode(self, tmp_path: Path):
+        """ZCode is grouped with Claude Code / CodeBuddy: exact tool name ``read``."""
+        for name, expected in [("read", True), ("mcp__serena__read_file", True), ("grep", False), ("serena_search_for_pattern", False)]:
+            with (
+                patch("sys.stdin", _make_stdin(_read_input(tool_name=name))),
+                patch("serena.hooks.serena_home_dir", str(tmp_path)),
+            ):
+                hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.ZCODE)
+            assert hook.is_read_file_call() == expected, f"is_read_file_tool() wrong for {name} (zcode)"
 
     def test_read_file_tool_detection_non_claude_code(self, tmp_path: Path):
         """Non-Claude-Code clients accept any read-style verb (``read``/``view``/``open``/``show``)
