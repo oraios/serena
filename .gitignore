@@ -138,6 +138,8 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+# generated code-reference sources (docs/autogen_docs.py)
+docs/06-contributing/code-reference/**/*.rst
 
 # PyBuilder
 target/

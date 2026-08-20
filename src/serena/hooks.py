@@ -182,12 +182,13 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             return self.n_recent_non_symbolic_uses >= self._NON_SYMBOLIC_USES_THRESHOLD
 
         def is_hook_active(self, now: datetime) -> bool:
-            """:return: whether the hook should engage at all at ``now``. Returns
-            ``False`` while we are still within :attr:`_MIN_DENY_INTERVAL_SECONDS`
-            of the most recent emitted deny — in that case the entire hook is
-            short-circuited (no counter updates, no deny). Returns ``True`` when
-            no deny has been emitted yet in this session, or when the window has
-            elapsed.
+            """
+            :return: whether the hook should engage at all at ``now``. Returns
+                ``False`` while we are still within :attr:`_MIN_DENY_INTERVAL_SECONDS`
+                of the most recent emitted deny — in that case the entire hook is
+                short-circuited (no counter updates, no deny). Returns ``True`` when
+                no deny has been emitted yet in this session, or when the window has
+                elapsed.
             """
             if self.last_deny_timestamp is None:
                 return True

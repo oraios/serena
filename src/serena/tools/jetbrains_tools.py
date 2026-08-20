@@ -49,12 +49,14 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
 
         To search for a symbol, you provide a name path pattern that is used to match against name paths.
         It can be
+
          * a simple name (e.g. "method"), which will match any symbol with that name
          * a relative path like "class/method", which will match any symbol with that name path suffix
          * an absolute name path "/class/method" (absolute name path), which requires an exact match of the full name path within the source file.
+
         Append an index `[i]` to match a specific overload only, e.g. "MyClass/my_method[1]".
-        In any path component, using `*` will match any sequence of characters (excluding /), e.g. "Class/*substring*" matches a member substring.
-        A pattern must not contain only wildcards (e.g. "*" or "/*").
+        In any path component, using ``*`` will match any sequence of characters (excluding /), e.g. ``"Class/*substring*"`` matches a member substring.
+        A pattern must not contain only wildcards (e.g. ``"*"`` or ``"/*"``).
 
         :param name_path_pattern: the name path matching pattern (see above)
         :param depth: depth up to which descendants shall be retrieved (e.g. use 1 to also retrieve immediate children;
@@ -164,13 +166,18 @@ class JetBrainsMoveTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMa
 
 
         Valid moves:
+
         - Symbol:
+
            * (relative_path, name_path) -> new parent symbol (target_relative_path, target_parent_name_path)
-           * (relative_path, name_path) -> top level of target file or directory (target_relative_path)
+           * (relative_path, name_path) -> top level of target file or directory (target_relative_path).
              Always consider the concrete language-specific semantics!
+
              - target is a file: valid for languages like Python, where files are modules
              - target is a directory: valid for languages like Java, where directories are packages and can contain classes
+
         - File or directory:
+
            * relative_path -> new parent directory (target_relative_path)
 
         :param relative_path: the relative path to the file containing the symbol to move.

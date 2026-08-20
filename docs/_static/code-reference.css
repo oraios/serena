@@ -1,0 +1,119 @@
+/* Styling for the auto-generated code reference (Sphinx autodoc output).
+   Selectors are scoped to autodoc's own markup (dl.py etc.), so regular
+   documentation pages are unaffected. Colors come from the theme's design
+   tokens, so light and dark mode both work. */
+
+/* A generated page is titled with its module path — serena.tools.symbol_tools — and
+   at heading size that does not fit a narrow screen, nor break, so it takes the page
+   sideways with it. This is the one rule here not scoped to autodoc's markup, because
+   the heading sits outside it; it is safe anyway, since a heading only breaks where it
+   has no other opportunity, which prose headings always do. */
+.bd-article h1,
+.bd-article h2,
+.bd-article h3 {
+    overflow-wrap: anywhere;
+}
+
+/* each documented object gets breathing room and a card-like signature */
+dl.py {
+    margin-bottom: 2rem;
+}
+
+dl.py > dt {
+    background: var(--pst-color-surface, #f3f4f6);
+    border-left: 4px solid var(--pst-color-primary, #4051b5);
+    border-radius: 0.25rem;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.95em;
+    /* wrap, never scroll: per-element scroll containers read as a page of iframes */
+    white-space: normal;
+    overflow-wrap: break-word;
+}
+
+/* The line above is not enough on its own. docutils splits literal text into
+   <span class="pre"> chunks and the stylesheets keep each chunk on a single line;
+   white-space wins over both overflow-wrap and word-break, so neither can break
+   the chunk. One long method name — get_modes_with_prompts_to_be_provided_for_
+   project_activation is 59 characters — then pushes the whole page sideways on a
+   phone: 665px of content in a 320px viewport, with every other page scrolling
+   with it. Allowing these chunks to wrap is what makes the rule above work. */
+dl.py > dt .pre {
+    white-space: normal;
+}
+
+/* The page TOC in the right rail lists the documented objects, so its entries are
+   code literals — and a constant like DEFAULT_PROJECT_SERENA_FOLDER_LOCATION is one
+   nowrap chunk, 700px of rail in a 320px viewport, taking the page sideways with it.
+   Not scoped to dl.py because the rail sits outside the article; on prose pages a
+   heading rarely carries a literal, and wrapping it there is just as right. */
+.bd-toc-nav code .pre {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+/* The same chunk problem exists in the body: a ``literal`` in a docstring or a type
+   name in the Parameters list is one unbreakable run — a .pre chunk or an <em> —
+   and a single class name (ModeSelectionDefinitionWithAddedModes, 36 characters)
+   is wider than a phone. Same cure as above, plus a mid-word break where the name
+   offers no better opportunity. */
+dl.py dd .pre,
+dl.py dd em {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+/* nested members (methods within a class) get a lighter accent */
+dl.py dl.py > dt {
+    border-left-color: var(--pst-color-border, #d1d5db);
+}
+
+/* the object kind ("class", "property", "static") and the module prefix */
+dl.py > dt > em.property {
+    color: var(--pst-color-primary, #4051b5);
+    font-style: normal;
+    font-weight: 600;
+}
+
+dl.py > dt > .sig-prename {
+    color: var(--pst-color-text-muted, #6b7280);
+    font-weight: 400;
+}
+
+/* parameter names stand out inside wrapped multi-line signatures */
+dl.py > dt .sig-param .n:first-child {
+    font-weight: 600;
+}
+
+/* [source] link sits quietly at the right edge of the signature */
+dl.py > dt > .viewcode-link,
+dl.py > dt > a.reference.internal:last-child {
+    float: right;
+    font-size: 0.85em;
+    padding-left: 1em;
+}
+
+/* field lists (Parameters / Returns / Raises) as a tidy two-column layout */
+dl.py dl.field-list > dt {
+    background: none;
+    border: none;
+    padding: 0.25rem 0;
+    font-weight: 700;
+    color: var(--pst-color-text-base, inherit);
+}
+
+dl.py dl.field-list > dd {
+    margin-bottom: 0.5rem;
+
+    /* The theme lays field lists out as a grid whose columns size themselves to their
+       content and cannot shrink below it, so one long parameter name sets the width of
+       the page. Letting the values break where they must is what keeps a phone from
+       scrolling sideways; the property inherits, so the descendants are covered. */
+    overflow-wrap: anywhere;
+}
+
+/* de-emphasize the "Bases: object" inheritance line for trivial cases */
+dl.py > dd > p:first-child {
+    color: var(--pst-color-text-muted, #6b7280);
+    font-size: 0.9em;
+}

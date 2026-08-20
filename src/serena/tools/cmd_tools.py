@@ -24,6 +24,7 @@ class ExecuteShellCommandTool(Tool, ToolMarkerCanEdit):
         Execute a shell command and return its output. If there is a memory about suggested commands, read that first.
         Never execute unsafe shell commands!
         IMPORTANT: Do not use this tool to start
+
           * long-running processes (e.g. servers) that are not intended to terminate quickly,
           * processes that require user interaction.
 
