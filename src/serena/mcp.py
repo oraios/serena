@@ -2,6 +2,7 @@
 The Serena Model Context Protocol (MCP) Server
 """
 
+import functools
 import sys
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
@@ -9,6 +10,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
+import anyio.to_thread
 import docstring_parser
 from mcp.server.fastmcp import server
 from mcp.server.fastmcp.exceptions import ToolError
@@ -60,7 +62,9 @@ class SerenaFastMCPTool(FastMCPTool):
         func_name = tool.get_name()
         func_doc = tool.get_apply_docstring() or ""
         func_arg_metadata = tool.get_apply_fn_metadata(structured_output=structured_output)
-        is_async = False
+        # apply_ex does blocking LSP work; run it on a worker thread so it can't stall the
+        # event loop that also serves the MCP transport (health probes, other sessions).
+        is_async = True
         parameters = func_arg_metadata.arg_model.model_json_schema()
         if openai_tool_compatible:
             parameters = SerenaMCPFactory._sanitize_for_openai_tools(parameters)
@@ -94,9 +98,9 @@ class SerenaFastMCPTool(FastMCPTool):
                 param_desc = f"{param_doc.description.strip().strip('.') + '.'}"
                 properties["description"] = param_desc[0].upper() + param_desc[1:]
 
-        def execute_fn(**kwargs) -> str:
+        async def execute_fn(**kwargs) -> str:
             try:
-                return tool.apply_ex(log_call=True, catch_exceptions=False, **kwargs)
+                return await anyio.to_thread.run_sync(functools.partial(tool.apply_ex, log_call=True, catch_exceptions=False, **kwargs))
             except ToolCallError as e:
                 raise ToolError(e.get_error_message()) from e
 

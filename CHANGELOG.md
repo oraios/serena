@@ -5,6 +5,10 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
+  - Fix: a heavy or cold tool call (LSP subprocess round-trips, symbol-tree walks) ran synchronously on
+    the MCP server's single event loop, so it blocked health probes and other sessions' `initialize`
+    handshakes for its whole duration under the streamable-HTTP transport. Tool execution now runs in
+    a worker thread (#1890)
 
 * Language Servers:
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
