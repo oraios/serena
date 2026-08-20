@@ -12,6 +12,16 @@ GROK_EXCLUDED_TOOLS = {
     "search_for_pattern",
 }
 
+OPENCODE_EXCLUDED_TOOLS = {
+    "create_text_file",
+    "execute_shell_command",
+    "find_file",
+    "list_dir",
+    "read_file",
+    "replace_content",
+    "search_for_pattern",
+}
+
 BUILTIN_RUNTIME_CONTEXT_NAMES = [
     name for name in SerenaAgentContext.list_registered_context_names(include_user_contexts=False) if name != "context.template"
 ]
@@ -47,6 +57,15 @@ def test_grok_context_prompt_renders():
 
     assert rendered_prompt.strip()
     assert "Serena's code intelligence tools" in rendered_prompt
+
+
+def test_opencode_context_loads():
+    context = SerenaAgentContext.from_name("opencode")
+
+    assert context.name == "opencode"
+    assert context.single_project is True
+    assert context.structured_tool_output is None
+    assert set(context.excluded_tools) == OPENCODE_EXCLUDED_TOOLS
 
 
 @pytest.mark.parametrize("context_name", BUILTIN_RUNTIME_CONTEXT_NAMES)

@@ -718,6 +718,13 @@ There are many terminal-based coding assistants that support MCP servers, such a
 They generally benefit from the symbolic tools provided by Serena. You might want to customize some aspects of Serena
 by writing your own context, modes or prompts to adjust it to the client's respective internal capabilities (and your general workflow).
 
+For OpenCode, use the built-in `opencode` context. It relies on OpenCode's native filesystem, text-search,
+editing, and shell tools while retaining Serena's semantic code-navigation tools:
+
+```shell
+serena start-mcp-server --context opencode
+```
+
 In most cases, the `ide` context is likely to be appropriate for such clients, i.e. add the arguments `--context ide` 
 in order to reduce tool duplication.
 
