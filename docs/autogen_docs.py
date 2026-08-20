@@ -160,20 +160,78 @@ def autogen_tool_list(target_filename = "01-about/035_tools.md"):
         tools_by_module = ToolRegistry().get_registered_tools_by_module()
         priority_modules = {"serena.tools.symbol_tools": 1, "serena.tools.jetbrains_tools": 2}
 
+        # each module becomes a section heading, so the page's structure is navigable
+        # (an in-page TOC can only anchor to headings, not to bold list markers)
+        module_headings = {"jetbrains_tools": "JetBrains Tools", "cmd_tools": "Command Tools"}
         text = TextBuilder()
         sorted_modules = sorted(tools_by_module.keys(), key=lambda m: (priority_modules.get(m, 3), m))
         for module in sorted_modules:
             tools = tools_by_module[module]
             module = module.replace("serena.tools.", "")
-            text.with_line(f"* **{module}**")
+            heading = module_headings.get(module, module.replace("_", " ").title())
+            text.with_line(f"## {heading}\n")
             for tool in tools:
                 info = ""
                 if tool.is_optional:
                     info += " *(optional)*"
                 if tool.is_beta:
                     info += " [BETA]"
-                text.with_line(f"* `{tool.tool_name}`{info}: {tool.class_docstring}", indent=2)
+                text.with_line(f"* `{tool.tool_name}`{info}: {tool.class_docstring}")
+            text.with_line("")
         f.write(text.build())
+
+
+def autogen_about_orientation():
+    """Append the orientation sections to the About page: how the system is shaped, how
+    these docs are laid out and read, and where an agent should start. Appending (rather
+    than editing the file) keeps the README-derived part regenerable on its own."""
+    docs_root = Path(__file__).parent
+    # the Contributing section lives on its own branch; link it only when it is present,
+    # so this page builds warning-free with or without it
+    contributing_intro = docs_root / "06-contributing" / "000_contributing-intro.md"
+    contributing_entry = (
+        "- **[Contributing](../06-contributing/000_contributing-intro)**"
+        if contributing_intro.is_file()
+        else "- **Contributing**"
+    )
+    with open(docs_root / "01-about" / "000_intro.md", "a", encoding="utf-8") as f:
+        f.write(
+            "## The Shape of the System\n\n"
+            "Serena has three layers. At the top, an **MCP server** that plugs into the coding\n"
+            "agent you already use — see [Clients](../02-usage/030_clients) for who connects and\n"
+            "how. In the middle, the **tools**: symbol-level find, read and edit operations,\n"
+            "listed in [Tools](035_tools) and enabled per\n"
+            "[context, mode and project](../02-usage/050_configuration). Underneath, a\n"
+            "**language backend** that supplies the semantic understanding — a language server\n"
+            "for any [supported language](020_programming-languages), or the JetBrains plugin\n"
+            "riding your IDE's own analysis.\n\n"
+            "## How the Docs Are Laid Out\n\n"
+            "- **About** — what Serena is, [the tools it carries](035_tools), and\n"
+            "  [the languages it speaks](020_programming-languages).\n"
+            "- **[Usage](../02-usage/000_intro)** — installing, connecting a client,\n"
+            "  configuration, the dashboard and the logs. Start at\n"
+            "  [Installation](../02-usage/010_installation).\n"
+            "- **[Special Guides](../03-special-guides/000_intro)** — per-stack walkthroughs:\n"
+            "  C/C++, Scala, Godot, Unreal Engine, ChatGPT and more.\n"
+            "- **[Evaluation](../04-evaluation/000_evaluation-intro)** — Serena measured against\n"
+            "  real tasks, with the full transcripts.\n"
+            f"{contributing_entry} — working on Serena itself, from a first change to a\n"
+            "  new language server, with a guided code reference.\n\n"
+            "## Reading Them Well\n\n"
+            "New here? Go straight down: this page, then\n"
+            "[Installation](../02-usage/010_installation), then your\n"
+            "[client's page](../02-usage/030_clients) — that is a working setup. After that the\n"
+            "docs are built for dipping into, not reading through: come back when something\n"
+            "surprises you, and take the guide or reference page that answers it.\n\n"
+            "## If Your Reader Is an Agent\n\n"
+            "These docs describe themselves. [For Agents](../02-usage/035_for-agents) is the\n"
+            "page written to the agent directly — also served as plain markdown at the site\n"
+            "root, `for-agents.md`, one link to hand over in a chat. Beyond it, `llms.txt` at\n"
+            "the site root lists every page with a one-line summary, and each page's markdown\n"
+            "source is published beside it under `_sources/` — fetch `_sources/<path>.md` for\n"
+            "the raw text. All of it is generated from the same sources as the pages, so none\n"
+            "of it can drift.\n\n"
+        )
 
 
 def autogen_about_intro_features():
@@ -194,6 +252,20 @@ def autogen_about_intro_features():
         f.write(autogen_info)
         f.write("# About Serena\n\n")
         f.write(f"**{tagline}**\n\n")
+
+        # A large share of these readers are agents, and they arrive at this page first.
+        # The pointer sits above the prose rather than in the orientation section below,
+        # because an agent handed one link should not have to read the site to find the
+        # page written for it.
+        f.write(
+            "```{admonition} Reading this as an agent?\n"
+            ":class: tip\n"
+            "[For Agents](../02-usage/035_for-agents) is addressed to you: what the symbol tools\n"
+            "change, the setup to suggest to your human, your first moves, and a quick reference\n"
+            "for the most common needs. It is also served as plain markdown at `/for-agents.md`,\n"
+            "if you would rather fetch one file than read a site.\n"
+            "```\n\n"
+        )
 
         # adjust link
         about_text = about_text.replace("resources/serena-block-diagram.svg", "https://raw.githubusercontent.com/oraios/serena/main/resources/serena-block-diagram.svg")
@@ -238,6 +310,7 @@ if __name__ == "__main__":
     enable_module_docs = False
 
     autogen_about_intro_features()
+    autogen_about_orientation()
 
     autogen_tool_list()
 

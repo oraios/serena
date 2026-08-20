@@ -5,6 +5,11 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
+  - Docs: the tool list and the supported-language list are now built from headings rather than bold
+    list items, so every entry can be linked and reached from a table of contents; each language
+    entry names its language server, links the project and says how the server is obtained; and the
+    build emits `llms.txt`, `sitemap.xml`, `robots.txt` and a For Agents page served as markdown at
+    the site root
 
 * Language Servers:
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)

@@ -98,6 +98,9 @@ sphinx:
     - sphinx.ext.autodoc
     - sphinx.ext.viewcode
     - sphinx_toolbox.more_autodoc.sourcelink
+    # local module beside conf.py: emits llms.txt at the site root; the doc-build
+    # task puts docs/ on PYTHONPATH so the name resolves
+    - llms_txt
     #- sphinxcontrib.spelling
   local_extensions          :   # A list of local extensions to load by sphinx specified by "name: path" items
   recursive_update          : false # A boolean indicating whether to overwrite the Sphinx config (true) or recursively update (false)
