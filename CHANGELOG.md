@@ -177,6 +177,12 @@ Status of the `main` branch. Changes prior to the next official version change w
   - PreToolUse remind hook: coerce non-string shell command values instead of failing, and recognize
     `target_file`/`targetFile` file-path keys (shared payload parsing, applies to all hook clients).
   - Fix hook input parsing for clients that emit raw control characters in JSON string values #1743.
+  - Fix: `serena-hooks cleanup --client=codex` used as a Codex `Stop` hook now always prints valid
+    Stop-hook JSON (`{"continue": true}`) and no longer crashes when the payload has no session id or
+    stdin is empty, so Codex stops reporting `hook returned invalid stop hook JSON output` (#1533).
+  - Fix: `serena-hooks activate` (`SessionStartActivateProjectHook`) no longer requires a session id;
+    it only emits a static reminder message and never touches session state, so a client omitting
+    `session_id` on `SessionStart` no longer crashes it the same way cleanup used to (#1533 review).
 
 
 # v1.6.1 (2026-07-21)
