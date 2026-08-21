@@ -48,8 +48,8 @@ The file allows you to configure ...
   * the set of built-in language servers and explicitly registered external adapters for which servers are spawned
     (not relevant when using the JetBrains plugin). External adapter IDs become available after their Python package is installed;
     see [External Language Server Adapters](../01-about/030_external_language_server_adapters).
-    Configure external IDs in `project.yml`. The [Dashboard](060_dashboard) can dynamically add or remove built-in
-    language servers while Serena is running, but its language actions do not currently list external adapter IDs.
+    The [Dashboard](060_dashboard) can dynamically add or remove built-in language servers and installed, registered external
+    adapters while Serena is running. It does not install adapter packages or offer unregistered adapter IDs.
   * the [language backend](per-project-language-backend) to use for this project (overriding the global setting)
   * the encoding used in source files
   * ignore rules
