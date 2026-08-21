@@ -12,7 +12,7 @@ import threading
 
 from ruamel.yaml import YAML
 
-from serena.util.yaml import load_yaml, save_yaml
+from serena.util.yaml import YamlCommentNormalisation, load_yaml, save_yaml, transfer_yaml_comments
 
 
 def _read_text(path: str) -> str:
@@ -78,3 +78,85 @@ def test_concurrent_saves_never_corrupt(tmp_path):
     loaded = load_yaml(path)
     assert "projects" in loaded
     assert all(isinstance(p, str) for p in loaded["projects"])
+
+
+# The comment block that the template documents for ``ignored_paths``; in a user's config it ends up
+# following the nested ``ls_specific_settings`` mapping, which is where ruamel attaches it.
+_IGNORED_PATHS_COMMENT = "# list of paths to ignore across all projects."
+
+_TEMPLATE = f"""\
+ls_specific_settings: {{}}
+
+{_IGNORED_PATHS_COMMENT}
+# Same syntax as gitignore, so you can use * and **.
+ignored_paths: []
+
+# whether to log verbosely
+log_level: 20
+"""
+
+_USER_CONFIG = f"""\
+ls_specific_settings:
+  java:
+    use_system_java_home: true
+
+{_IGNORED_PATHS_COMMENT}
+# Same syntax as gitignore, so you can use * and **.
+ignored_paths: []
+
+# whether to log verbosely
+log_level: 20
+"""
+
+
+def _save_like_serena_config_does(path: str, template_path: str) -> None:
+    """One save cycle of the global configuration: load, take the template's comments, write back."""
+    config = load_yaml(path, comment_normalisation=YamlCommentNormalisation.LEADING_WITH_CONVERSION_FROM_TRAILING)
+    template = load_yaml(template_path, comment_normalisation=YamlCommentNormalisation.LEADING)
+    transfer_yaml_comments(template, config, YamlCommentNormalisation.LEADING, force_update_all=True)
+    save_yaml(path, config)
+
+
+def test_comment_after_nested_mapping_is_not_duplicated_on_save(tmp_path):
+    """A comment block following a nested mapping must not be duplicated by each save.
+
+    Regression: ruamel attaches such a block to the *last entry of the nested mapping*, at any
+    depth. The normalisation only ever inspects top-level keys, so the block survived untouched,
+    was written back out, and was then joined by the copy that the caller transfers onto the
+    top-level key the block actually documents. Every save added one more copy: a config in the
+    field had accumulated thirty of them, growing by one per project registration.
+    """
+    template_path = str(tmp_path / "template.yml")
+    config_path = str(tmp_path / "config.yml")
+    with open(template_path, "w", encoding="utf-8") as f:
+        f.write(_TEMPLATE)
+    with open(config_path, "w", encoding="utf-8") as f:
+        f.write(_USER_CONFIG)
+
+    _save_like_serena_config_does(config_path, template_path)
+    assert _read_text(config_path).count(_IGNORED_PATHS_COMMENT) == 1
+
+    # and it stays at one, however many times the configuration is saved
+    for _ in range(3):
+        _save_like_serena_config_does(config_path, template_path)
+    assert _read_text(config_path).count(_IGNORED_PATHS_COMMENT) == 1
+
+    # the settings themselves are untouched
+    loaded = load_yaml(config_path)
+    assert loaded["ls_specific_settings"]["java"]["use_system_java_home"] is True
+    assert loaded["log_level"] == 20
+
+
+def test_saving_is_idempotent_for_a_config_with_nested_mappings(tmp_path):
+    """Two consecutive saves produce byte-identical files: nothing accumulates."""
+    template_path = str(tmp_path / "template.yml")
+    config_path = str(tmp_path / "config.yml")
+    with open(template_path, "w", encoding="utf-8") as f:
+        f.write(_TEMPLATE)
+    with open(config_path, "w", encoding="utf-8") as f:
+        f.write(_USER_CONFIG)
+
+    _save_like_serena_config_does(config_path, template_path)
+    once = _read_text(config_path)
+    _save_like_serena_config_does(config_path, template_path)
+    assert _read_text(config_path) == once

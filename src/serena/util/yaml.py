@@ -136,17 +136,28 @@ def normalise_yaml_comments(commented_map: CommentedMap, comment_normalisation: 
 
     def remove_nested_comments() -> None:
         """
-        Removes nested comments, particularly of sequences, which incorrectly capture comments
-        that are actually intended for top-level keys.
+        Removes nested comments, particularly of sequences and nested mappings, which incorrectly
+        capture comments that are actually intended for top-level keys.
+
+        Nested mappings matter as much as sequences here: ruamel attaches a comment block that
+        follows a nested mapping to that mapping's last entry, at any depth. Such a comment survives
+        the normalisation above (which only ever looks at top-level keys), is written back out on
+        save, and is then joined by the comment that the caller transfers onto the top-level key it
+        was actually meant for — so the block is duplicated once per save.
         """
+
+        def remove(node: Any) -> None:
+            if not isinstance(node, CommentedSeq | CommentedMap):
+                return
+            items = node.ca.items
+            if isinstance(items, dict):
+                for i in list(items.keys()):
+                    items[i] = [None] * 4
+            for value in node.values() if isinstance(node, CommentedMap) else node:
+                remove(value)
+
         for key in commented_map.keys():
-            entry = commented_map[key]
-            if isinstance(entry, CommentedSeq):
-                items = entry.ca.items
-                if isinstance(items, dict):
-                    items_keys = list(items.keys())
-                    for i in items_keys:
-                        items[i] = [None] * 4
+            remove(commented_map[key])
 
     match comment_normalisation:
         case YamlCommentNormalisation.NONE:
