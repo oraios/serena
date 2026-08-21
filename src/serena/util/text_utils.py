@@ -11,6 +11,7 @@ from joblib import Parallel, delayed
 from sensai.util.string import ToStringMixin
 
 from serena.util.file_proxy import FileCollection, FileProxy
+from serena.util.regex_timeout import Match, RegexTimeoutError, TimeLimitedPattern, compile_pattern
 from solidlsp.ls_utils import TextUtils
 
 log = logging.getLogger(__name__)
@@ -136,6 +137,8 @@ def search_text(
     :param multiline: whether to apply multi-line matching, enabling the flags re.DOTALL and re.MULTILINE
     :return: List of `TextSearchMatch` objects
     :raises: ValueError if the pattern is not valid
+    :raises RegexTimeoutError: if matching the pattern exceeded the time limit, which indicates
+        catastrophic backtracking
     """
     if source_file_path and content is None:
         with open(source_file_path) as f:
@@ -150,7 +153,7 @@ def search_text(
 
     # For multiline matches, optionally use DOTALL so '.' matches newlines
     flags = (re.MULTILINE | re.DOTALL) if multiline else 0
-    compiled_pattern = re.compile(pattern, flags)
+    compiled_pattern = compile_pattern(pattern, flags)
     # Search across the entire content as a single string
     for match in compiled_pattern.finditer(content):
         start_pos = match.start()
@@ -334,6 +337,11 @@ def search_files(
             if len(search_results) > 0:
                 log.debug(f"Found {len(search_results)} matches in {relative_path}")
             return {"path": relative_path, "results": search_results, "error": None}
+        except RegexTimeoutError:
+            # a pattern that backtracks catastrophically is a problem with the pattern rather than
+            # with this particular file, so it must reach the caller instead of being counted as a
+            # skipped file (which is only logged and would thus be reported as "no matches")
+            raise
         except Exception as e:
             log.debug(f"Error processing {relative_path}: {e}")
             return {"path": relative_path, "results": [], "error": str(e)}
@@ -399,17 +407,16 @@ class ContentReplacer:
         self.regex_multiline = regex_multiline
 
     @staticmethod
-    def _create_replacement_function(regex_pattern: str, repl_template: str, regex_flags: int) -> Callable[[re.Match], str]:
+    def _create_replacement_function(pattern: TimeLimitedPattern, repl_template: str) -> Callable[[Match], str]:
         """
         Creates a replacement function that validates for ambiguity and handles backreferences.
 
-        :param regex_pattern: The regex pattern being used for matching
+        :param pattern: The compiled pattern being used for matching
         :param repl_template: The replacement template with $!1, $!2, etc. for backreferences
-        :param regex_flags: The flags to use when searching (e.g., re.DOTALL | re.MULTILINE)
-        :return: A function suitable for use with re.sub() or re.subn()
+        :return: A function suitable for use with TimeLimitedPattern.subn()
         """
 
-        def validate_and_replace(match: re.Match) -> str:
+        def validate_and_replace(match: Match) -> str:
             matched_text = match.group(0)
 
             # For multi-line match, check if the same pattern matches again within the already-matched text,
@@ -420,7 +427,7 @@ class ContentReplacer:
             # this will match the entire span above, while only the suffix may have been intended.
             # (See test case for a practical example.)
             # To detect this, we check if the same pattern matches again within the matched text,
-            if "\n" in matched_text and re.search(regex_pattern, matched_text[1:], flags=regex_flags):
+            if "\n" in matched_text and pattern.search(matched_text[1:]) is not None:
                 raise ValueError(
                     "Match is ambiguous: the search pattern matches multiple overlapping occurrences. "
                     "Please revise the search pattern to be more specific to avoid ambiguity, "
@@ -463,12 +470,13 @@ class ContentReplacer:
             raise ValueError(f"Invalid mode: '{self.mode}', expected 'literal' or 'regex'.")
 
         regex_flags = (re.MULTILINE | re.DOTALL) if self.regex_multiline else 0
+        compiled_pattern = compile_pattern(regex, regex_flags)
 
         # create replacement function with validation and backreference handling
-        repl_fn = self._create_replacement_function(regex, repl, regex_flags=regex_flags)
+        repl_fn = self._create_replacement_function(compiled_pattern, repl)
 
         # perform replacement
-        updated_content, n = re.subn(regex, repl_fn, content, flags=regex_flags)
+        updated_content, n = compiled_pattern.subn(repl_fn, content)
 
         if n == 0:
             raise ValueError("Error: No matches of search expression found.")
@@ -525,8 +533,8 @@ class MultiFileContentReplacer:
         self.mode = mode
         self._flags = (re.MULTILINE | re.DOTALL) if regex_multiline else 0
 
-    def _compile(self, needle: str) -> re.Pattern:
-        return re.compile(re.escape(needle) if self.mode == "literal" else needle, flags=self._flags)
+    def _compile(self, needle: str) -> TimeLimitedPattern:
+        return compile_pattern(re.escape(needle) if self.mode == "literal" else needle, flags=self._flags)
 
     @classmethod
     def _digest(cls, matched_text: str) -> str:
@@ -537,7 +545,7 @@ class MultiFileContentReplacer:
         return f"{relative_path}:{index_in_file}@{cls._digest(matched_text)}"
 
     @staticmethod
-    def _expand_backreferences(match: re.Match, repl_template: str) -> str:
+    def _expand_backreferences(match: Match, repl_template: str) -> str:
         """Expands $!1, $!2, ... in the replacement template (same syntax as :class:`ContentReplacer`)."""
 
         def expand(m: re.Match) -> str:
@@ -659,8 +667,8 @@ def find_text_coordinates(content: str, regex: str, require_unique: bool = False
         if False, returns None if no match is found, and returns the coordinates of the first match if multiple matches are found
     :return: the coordinates of the match or None
     """
-    pattern = re.compile(regex, flags=re.MULTILINE | re.DOTALL)
-    matches = list(pattern.finditer(content))
+    pattern = compile_pattern(regex, flags=re.MULTILINE | re.DOTALL)
+    matches = pattern.finditer(content)
     if len(matches) == 0:
         if require_unique:
             raise ValueError(f"No match found for regex: {regex}")
