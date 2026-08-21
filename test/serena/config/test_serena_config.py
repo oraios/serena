@@ -604,6 +604,22 @@ class TestSerenaConfigLoadSave:
 
         assert len(resulting_config.projects) == 4
 
+    def test_remove_project_persists_across_reload(self):
+        """remove_project must drop the project from disk, not only from in-memory state."""
+        p1 = self._make_project_dir("project1", 'project_name: "project1"\nlanguages: ["python"]\n')
+        p2 = self._make_project_dir("project2", 'project_name: "project2"\nlanguages: ["python"]\n')
+        self._write_master_config([p1, p2])
+
+        config = SerenaConfig.from_config_file(generate_if_missing=False)
+        assert sorted(p.project_name for p in config.projects) == ["project1", "project2"]
+
+        config.remove_project("project2")
+        assert [p.project_name for p in config.projects] == ["project1"]
+
+        reloaded = SerenaConfig.from_config_file(generate_if_missing=False)
+        reloaded_names = sorted(p.project_name for p in reloaded.projects)
+        assert reloaded_names == ["project1"], f"remove_project('project2') did not persist; reloaded projects: {reloaded_names}"
+
 
 class TestGetRegisteredProjectWithDanglingProject:
     """A registered project whose root directory was deleted (e.g. a removed git
