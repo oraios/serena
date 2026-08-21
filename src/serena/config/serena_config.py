@@ -958,6 +958,8 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
     the path to the configuration file to which updates of the configuration shall be saved;
     if None, the configuration is not saved to disk
     """
+    _loaded_project_roots: set[str] = field(default_factory=set)
+    """Project roots present when this instance was loaded from disk."""
 
     # *** static members ***
 
@@ -1095,6 +1097,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
                 project_config=project_config,
             )
             instance.projects.append(project)
+        instance._loaded_project_roots = {str(p.project_root) for p in instance.projects}
 
         # determine language backend
         language_backend = get_dataclass_default(SerenaConfig, "language_backend")
@@ -1302,10 +1305,14 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         if self.config_file_path is None:
             return
         persisted = SerenaConfig.from_config_file()
+        current_paths = {str(p.project_root) for p in self.projects}
+        removed_paths = self._loaded_project_roots - current_paths
         combined_projects = []
         handled_project_paths = set()
         for p in persisted.projects + self.projects:
             str_path = str(p.project_root)
+            if str_path in removed_paths:
+                continue
             if str_path not in handled_project_paths:
                 combined_projects.append(p)
                 handled_project_paths.add(str_path)
