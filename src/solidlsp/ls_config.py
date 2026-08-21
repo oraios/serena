@@ -96,8 +96,13 @@ class RegisteredLanguageServerId(str):
     _implementation: type["SolidLanguageServer"]
 
     def __new__(cls, value: str, matcher: FilenameMatcher, implementation: type["SolidLanguageServer"]):
-        if not value or not value.strip():
+        canonical_value = value.strip()
+        if not canonical_value:
             raise ValueError("Language server registration requires a non-empty id")
+        if value != canonical_value:
+            raise ValueError(f"Language server id must be trimmed: {value!r}")
+        if value != value.lower():
+            raise ValueError(f"Language server id must be lowercase: {value!r}")
         instance = super().__new__(cls, value)
         instance._matcher: FilenameMatcher = matcher
         instance._implementation: type["SolidLanguageServer"] = implementation
@@ -136,11 +141,22 @@ def register_ls(
     A trusted Python host imports the adapter module before Serena resolves the
     project's ``language_servers``. Project configuration never imports Python code.
     """
+    registered_id = RegisteredLanguageServerId(id, matcher, implementation)
     if id in {language.value for language in LanguageServerId}:
         raise ValueError(f"Language server id is already built in: {id}")
     if id in _registered_language_servers:
         raise ValueError(f"Language server id is already registered: {id}")
-    registered_id = RegisteredLanguageServerId(id, matcher, implementation)
+    for built_in_id in LanguageServerId:
+        if built_in_id.get_ls_class() is implementation:
+            raise ValueError(
+                f"Cannot register external language server id {id!r}: implementation {implementation.__name__} "
+                f"is already assigned to built-in id {built_in_id.value!r}"
+            )
+    for existing_id in _registered_language_servers.values():
+        if existing_id.get_ls_class() is implementation:
+            raise ValueError(
+                f"Language server implementation {implementation.__name__} is already registered under external id: {existing_id.value}"
+            )
     _registered_language_servers[id] = registered_id
     return registered_id
 

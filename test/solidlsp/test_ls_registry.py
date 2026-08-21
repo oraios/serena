@@ -1,12 +1,15 @@
 import logging
 import tempfile
+import threading
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import pytest
 
 from serena.config.serena_config import ProjectConfig
 from serena.constants import PROJECT_TEMPLATE_FILE
+from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from solidlsp import SolidLanguageServer
 from solidlsp.language_server_adapter_discovery import (
     ENTRY_POINT_GROUP,
@@ -17,6 +20,7 @@ from solidlsp.ls_config import (
     FilenameMatcher,
     LanguageServerConfig,
     LanguageServerId,
+    LanguageServerKey,
     RegisteredLanguageServerId,
     _reset_registered_language_servers_for_tests,
     register_ls,
@@ -140,6 +144,49 @@ def test_entry_point_metadata_failure_is_retryable(monkeypatch: pytest.MonkeyPat
     assert resolve_language_server_id("retryable").get_ls_class() is DummyLanguageServer
 
 
+def test_concurrent_discovery_registers_each_adapter_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    metadata_calls = 0
+    registration_calls = 0
+    calls_lock = threading.Lock()
+    second_metadata_call = threading.Event()
+    start_barrier = threading.Barrier(2)
+
+    def register_concurrent() -> None:
+        nonlocal registration_calls
+        with calls_lock:
+            registration_calls += 1
+        register_ls("concurrent", FilenameMatcher(".concurrent"), DummyLanguageServer)
+
+    entry_point = FakeEntryPoint("concurrent", register_concurrent)
+
+    def fake_entry_points(*, group: str) -> tuple[FakeEntryPoint, ...]:
+        nonlocal metadata_calls
+        assert group == ENTRY_POINT_GROUP
+        with calls_lock:
+            metadata_calls += 1
+            call_number = metadata_calls
+        if call_number == 1:
+            second_metadata_call.wait(timeout=1)
+        else:
+            second_metadata_call.set()
+        return (entry_point,)
+
+    monkeypatch.setattr("solidlsp.language_server_adapter_discovery.metadata.entry_points", fake_entry_points)
+
+    def discover_after_barrier() -> None:
+        start_barrier.wait()
+        discover_registered_language_server_adapters()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(discover_after_barrier) for _ in range(2)]
+        for future in futures:
+            future.result()
+
+    assert metadata_calls == 1
+    assert registration_calls == 1
+    assert resolve_language_server_id("concurrent").get_ls_class() is DummyLanguageServer
+
+
 def test_two_registered_language_servers_are_resolvable_together() -> None:
     first = register_ls("dummy-one", FilenameMatcher(".one"), DummyLanguageServer)
     second = register_ls("dummy-two", FilenameMatcher(".two"), OtherDummyLanguageServer)
@@ -182,18 +229,33 @@ def test_discovered_language_server_roundtrips_through_project_config(monkeypatc
     assert config._to_yaml_dict()["language_servers"] == ["roundtrip"]
 
 
-def test_project_yml_resolves_discovered_quickscript_adapter(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    def register_quickscript() -> None:
-        register_ls("quickscript", FilenameMatcher(".vbi", ".vi", case_sensitive=False), DummyLanguageServer)
+def test_project_yml_resolves_discovered_external_adapter(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    def register_example() -> None:
+        register_ls("example-adapter", FilenameMatcher(".example"), DummyLanguageServer)
 
-    install_entry_points(monkeypatch, FakeEntryPoint("quickscript", register_quickscript, "intouch-language-serena"))
+    install_entry_points(monkeypatch, FakeEntryPoint("example", register_example, "example-serena-adapter"))
     project_config_path = tmp_path / ".serena"
     project_config_path.mkdir()
-    (project_config_path / "project.yml").write_text('project_name: "quickscript"\nlanguage_servers: ["quickscript"]\n')
+    (project_config_path / "project.yml").write_text('project_name: "external-example"\nlanguage_servers: ["example-adapter"]\n')
 
     config = ProjectConfig.load(tmp_path, create_default_serena_config())
 
-    assert config.language_servers == [resolve_language_server_id("quickscript")]
+    assert config.language_servers == [resolve_language_server_id("example-adapter")]
+
+
+@pytest.mark.parametrize(
+    ("registration_id", "message"),
+    [
+        ("", "non-empty"),
+        ("   ", "non-empty"),
+        (" leading", "trimmed"),
+        ("trailing ", "trimmed"),
+        ("Mixed-Case", "lowercase"),
+    ],
+)
+def test_registration_rejects_noncanonical_ids(registration_id: str, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        register_ls(registration_id, FilenameMatcher(".example"), DummyLanguageServer)
 
 
 def test_duplicate_registration_and_builtin_override_are_rejected() -> None:
@@ -202,6 +264,26 @@ def test_duplicate_registration_and_builtin_override_are_rejected() -> None:
         register_ls("duplicate", FilenameMatcher(".dup"), DummyLanguageServer)
     with pytest.raises(ValueError, match="already built in"):
         register_ls("python", FilenameMatcher(".py"), DummyLanguageServer)
+
+
+def test_implementation_class_cannot_be_registered_under_multiple_external_ids() -> None:
+    register_ls("first-id", FilenameMatcher(".first"), DummyLanguageServer)
+
+    with pytest.raises(ValueError, match="DummyLanguageServer.*first-id"):
+        register_ls("second-id", FilenameMatcher(".second"), DummyLanguageServer)
+
+    with pytest.raises(ValueError, match="Unknown language server"):
+        resolve_language_server_id("second-id")
+
+
+def test_builtin_implementation_class_cannot_be_registered_under_external_id() -> None:
+    python_implementation = LanguageServerId.PYTHON.get_ls_class()
+
+    with pytest.raises(ValueError, match="python-alias.*PyrightServer.*built-in id 'python'"):
+        register_ls("python-alias", FilenameMatcher(".alias"), python_implementation)
+
+    with pytest.raises(ValueError, match="Unknown language server"):
+        resolve_language_server_id("python-alias")
 
 
 def test_registry_reset_isolation() -> None:
@@ -249,16 +331,76 @@ def test_failing_entry_point_does_not_block_other_adapters(monkeypatch: pytest.M
     assert resolve_language_server_id("working").get_ls_class() is OtherDummyLanguageServer
 
 
-def test_quickscript_entry_point_registers_its_matcher(monkeypatch: pytest.MonkeyPatch) -> None:
-    def register_quickscript() -> None:
-        register_ls("quickscript", FilenameMatcher(".vbi", ".vi", case_sensitive=False), DummyLanguageServer)
+def test_external_entry_point_registers_its_matcher(monkeypatch: pytest.MonkeyPatch) -> None:
+    def register_example() -> None:
+        register_ls("case-insensitive-example", FilenameMatcher(".sample", ".fixture", case_sensitive=False), DummyLanguageServer)
 
-    install_entry_points(monkeypatch, FakeEntryPoint("quickscript", register_quickscript, "intouch-language-serena"))
+    install_entry_points(monkeypatch, FakeEntryPoint("example", register_example, "example-serena-adapter"))
     discover_registered_language_server_adapters()
 
-    quickscript = resolve_language_server_id("quickscript")
-    assert isinstance(quickscript, RegisteredLanguageServerId)
-    matcher = quickscript.get_source_fn_matcher()
-    assert matcher.is_relevant_filename("definition.vbi")
-    assert matcher.is_relevant_filename("caller.vi")
+    external_id = resolve_language_server_id("case-insensitive-example")
+    assert isinstance(external_id, RegisteredLanguageServerId)
+    matcher = external_id.get_source_fn_matcher()
+    assert matcher.is_relevant_filename("definition.SAMPLE")
+    assert matcher.is_relevant_filename("caller.fixture")
     assert not matcher.is_relevant_filename("README.md")
+
+
+def test_factory_and_manager_route_mixed_builtin_and_external_ids(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    external_id = register_ls("external-example", FilenameMatcher(".external"), DummyLanguageServer)
+    data, _ = ProjectConfig._load_yaml_dict(PROJECT_TEMPLATE_FILE)
+    data["project_name"] = "mixed-language-servers"
+    data["language_servers"] = ["python", "external-example"]
+    data["ls_specific_settings"] = {"external-example": {"mode": "external"}}
+    project_config = ProjectConfig._from_dict(data, local_override_keys=[])
+    captured_settings: dict[LanguageServerKey, str | None] = {}
+    captured_settings_lock = threading.Lock()
+
+    class FakeLanguageServer:
+        def __init__(self, ls_id: LanguageServerKey) -> None:
+            self.ls_id = ls_id
+            self._running = False
+
+        def start(self) -> None:
+            self._running = True
+
+        def is_running(self) -> bool:
+            return self._running
+
+        def is_ignored_path(self, relative_path: str, ignore_unsupported_files: bool) -> bool:
+            return not self.ls_id.get_source_fn_matcher().is_relevant_filename(relative_path)
+
+    def fake_create(config, repository_root_path, timeout=None, solidlsp_settings=None):
+        assert solidlsp_settings is not None
+        with captured_settings_lock:
+            captured_settings[config.ls_id] = solidlsp_settings.get_ls_specific_settings(config.ls_id).get("mode")
+        return FakeLanguageServer(config.ls_id)
+
+    class FakeProject:
+        project_root = str(tmp_path)
+
+        @staticmethod
+        def gather_source_files() -> list[str]:
+            return []
+
+    class FakeSerenaPaths:
+        serena_user_home_dir = str(tmp_path / "serena-home")
+
+    monkeypatch.setattr(SolidLanguageServer, "create", staticmethod(fake_create))
+    monkeypatch.setattr("serena.ls_manager.SerenaPaths", FakeSerenaPaths)
+    factory = LanguageServerFactory(
+        project_root=str(tmp_path),
+        project_config=project_config,
+        project_data_path=str(tmp_path / "project-data"),
+        encoding="utf-8",
+        ignored_patterns=[],
+        ls_specific_settings=project_config.ls_specific_settings,
+    )
+
+    manager = LanguageServerManager.from_languages(project_config.language_servers, factory, FakeProject())
+
+    assert manager.get_active_language_server_ids() == [LanguageServerId.PYTHON, external_id]
+    assert manager.get_language_server("module.py").ls_id is LanguageServerId.PYTHON
+    assert manager.get_language_server("module.external").ls_id == external_id
+    assert captured_settings[LanguageServerId.PYTHON] is None
+    assert captured_settings[external_id] == "external"
