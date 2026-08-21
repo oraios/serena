@@ -2,6 +2,8 @@
 Configuration objects for language servers
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import re
@@ -85,6 +87,121 @@ class FilenameMatcher:
             if re.search(rf"{re.escape(ext)}(?:\W|$)", string):
                 return True
         return False
+
+
+class RegisteredLanguageServerId(str):
+    """Canonical external language-server ID carrying its matcher and implementation class.
+
+    The registry enforces a one-to-one mapping between IDs and implementation
+    classes across both built-in and external language servers.
+    """
+
+    _matcher: FilenameMatcher
+    _implementation: type["SolidLanguageServer"]
+
+    def __new__(cls, value: str, matcher: FilenameMatcher, implementation: type["SolidLanguageServer"]):
+        canonical_value = value.strip()
+        if not canonical_value:
+            raise ValueError("Language server registration requires a non-empty id")
+        if value != canonical_value:
+            raise ValueError(f"Language server id must be trimmed: {value!r}")
+        if value != value.lower():
+            raise ValueError(f"Language server id must be lowercase: {value!r}")
+        instance = super().__new__(cls, value)
+        instance._matcher: FilenameMatcher = matcher
+        instance._implementation: type["SolidLanguageServer"] = implementation
+        return instance
+
+    def __deepcopy__(self, memo: dict[int, object]) -> "RegisteredLanguageServerId":
+        return self
+
+    @property
+    def value(self) -> str:
+        return str(self)
+
+    def get_source_fn_matcher(self) -> FilenameMatcher:
+        return self._matcher
+
+    def get_ls_class(self) -> type["SolidLanguageServer"]:
+        return self._implementation
+
+    def get_priority(self) -> int:
+        return 0
+
+    def supports_implementation_request(self) -> bool:
+        return self.get_ls_class().supports_implementation_request()
+
+
+_registered_language_servers: dict[str, RegisteredLanguageServerId] = {}
+
+
+def register_ls(
+    id: str,
+    matcher: FilenameMatcher,
+    implementation: type["SolidLanguageServer"],
+) -> RegisteredLanguageServerId:
+    """Register an external language server explicitly before project configuration loads.
+
+    A trusted Python host imports the adapter module before Serena resolves the
+    project's ``language_servers``. Project configuration never imports Python code.
+
+    IDs must be non-empty, trimmed, and lowercase. Duplicate IDs and reuse of an
+    implementation class are rejected because runtime identity is derived from
+    both the configured ID and its implementation class.
+    """
+    registered_id = RegisteredLanguageServerId(id, matcher, implementation)
+    if id in {language.value for language in LanguageServerId}:
+        raise ValueError(f"Language server id is already built in: {id}")
+    if id in _registered_language_servers:
+        raise ValueError(f"Language server id is already registered: {id}")
+    for built_in_id in LanguageServerId:
+        if built_in_id.get_ls_class() is implementation:
+            raise ValueError(
+                f"Cannot register external language server id {id!r}: implementation {implementation.__name__} "
+                f"is already assigned to built-in id {built_in_id.value!r}"
+            )
+    for existing_id in _registered_language_servers.values():
+        if existing_id.get_ls_class() is implementation:
+            raise ValueError(
+                f"Language server implementation {implementation.__name__} is already registered under external id: {existing_id.value}"
+            )
+    _registered_language_servers[id] = registered_id
+    return registered_id
+
+
+def resolve_language_server_id(value: str) -> LanguageServerKey:
+    """Resolve a built-in or explicitly registered ID without triggering discovery.
+
+    Adapter discovery is owned by the project-configuration loading lifecycle.
+    """
+    try:
+        return LanguageServerId(value)
+    except ValueError:
+        try:
+            return _registered_language_servers[value]
+        except KeyError as error:
+            raise ValueError(f"Unknown language server: {value}") from error
+
+
+def registered_language_servers() -> tuple[RegisteredLanguageServerId, ...]:
+    """Return a snapshot of the explicitly registered external language servers."""
+    return tuple(_registered_language_servers.values())
+
+
+def _reset_registered_language_servers_for_tests() -> None:
+    """Clear explicit registrations for deterministic in-process tests."""
+    _registered_language_servers.clear()
+
+
+def _snapshot_registered_language_servers() -> dict[str, RegisteredLanguageServerId]:
+    """Return the current registrations for transactional adapter discovery."""
+    return dict(_registered_language_servers)
+
+
+def _restore_registered_language_servers(snapshot: dict[str, RegisteredLanguageServerId]) -> None:
+    """Restore registrations after a failing adapter entry point."""
+    _registered_language_servers.clear()
+    _registered_language_servers.update(snapshot)
 
 
 class LanguageServerId(str, Enum):
@@ -939,7 +1056,7 @@ class LanguageServerId(str, Enum):
                 raise ValueError(f"Unhandled language: {self}")
 
     @classmethod
-    def from_ls_class(cls, ls_class: type["SolidLanguageServer"]) -> Self:
+    def from_ls_class(cls, ls_class: type["SolidLanguageServer"]) -> LanguageServerKey:
         """
         Get the Language enum value from a SolidLanguageServer class.
 
@@ -950,7 +1067,13 @@ class LanguageServerId(str, Enum):
         for enum_instance in cls:
             if enum_instance.get_ls_class() == ls_class:
                 return enum_instance
+        for registered_id in registered_language_servers():
+            if registered_id.get_ls_class() == ls_class:
+                return registered_id
         raise ValueError(f"Unhandled language server class: {ls_class}")
+
+
+LanguageServerKey = LanguageServerId | RegisteredLanguageServerId
 
 
 @dataclass(frozen=True)
@@ -959,7 +1082,7 @@ class LanguageServerConfig:
     Configuration parameters for a language server instance
     """
 
-    ls_id: LanguageServerId
+    ls_id: LanguageServerKey
     """
     defines the language server to use
     """

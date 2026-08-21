@@ -12,7 +12,7 @@ from typing import IO, Any, AnyStr
 
 from sensai.util.string import ToStringMixin
 
-from solidlsp.ls_config import LanguageServerId
+from solidlsp.ls_config import LanguageServerKey
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_request import LanguageServerRequest
 from solidlsp.lsp_protocol_handler.lsp_requests import LspNotification
@@ -58,7 +58,7 @@ class LanguageServerTerminatedException(Exception):
     Exception raised when the language server process has terminated unexpectedly.
     """
 
-    def __init__(self, message: str, ls_id: LanguageServerId, cause: Exception | None = None) -> None:
+    def __init__(self, message: str, ls_id: LanguageServerKey, cause: Exception | None = None) -> None:
         super().__init__(message)
         self.message = message
         self.ls_id = ls_id
@@ -121,7 +121,7 @@ class LanguageServerInterface(ABC):
 
     def __init__(
         self,
-        ls_id: LanguageServerId,
+        ls_id: LanguageServerKey,
         determine_log_level: Callable[[str], int],
         logger: Callable[[str, str, StringDict | str], None] | None = None,
         request_timeout: float | None = None,
@@ -491,7 +491,7 @@ class StdioLanguageServer(LanguageServerInterface):
     def __init__(
         self,
         process_launch_info: ProcessLaunchInfo,
-        ls_id: LanguageServerId,
+        ls_id: LanguageServerKey,
         determine_log_level: Callable[[str], int],
         logger: Callable[[str, str, StringDict | str], None] | None = None,
         start_independent_lsp_process: bool = True,
@@ -689,7 +689,7 @@ class TCPLanguageServer(LanguageServerInterface):
     def __init__(
         self,
         connection_info: TCPConnectionInfo,
-        ls_id: LanguageServerId,
+        ls_id: LanguageServerKey,
         determine_log_level: Callable[[str], int],
         logger: Callable[[str, str, StringDict | str], None] | None = None,
         request_timeout: float | None = None,
