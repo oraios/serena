@@ -187,8 +187,11 @@ Some languages require additional installations or setup steps, as noted.
 * **Zig**  
   (requires installation of ZLS - Zig Language Server)
 
-Support for further languages can easily be added by providing a shallow adapter for a new language server implementation,
-see Serena's [memory on that](https://github.com/oraios/serena/blob/main/.serena/memories/adding_new_language_support_guide.md).
+Support for further languages can be added either as a built-in Serena language-server implementation or as an external Python adapter.
+External adapters are supplied by installed packages and registered through the
+[external language-server adapter](030_external_language_server_adapters) entry-point mechanism.
+The external mechanism does not participate in automatic language detection; add the registered ID explicitly to `project.yml`.
+For built-in integrations, see Serena's [guide for adding new language support](https://github.com/oraios/serena/blob/main/.serena/memories/adding_new_language_support_guide.md).
 
 ## The Serena JetBrains Plugin
 

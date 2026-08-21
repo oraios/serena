@@ -637,10 +637,11 @@ class SerenaDashboardAPI:
         self._current_config_overview = self._compute_config_overview().model_dump()
 
     def _get_available_languages(self) -> ResponseAvailableLanguages:
-        from solidlsp.ls_config import LanguageServerId
+        from solidlsp.ls_config import LanguageServerId, registered_language_servers
 
         def run() -> ResponseAvailableLanguages:
             all_languages = [lang.value for lang in LanguageServerId.iter_all(include_experimental=True)]
+            all_languages.extend(lang.value for lang in registered_language_servers())
 
             # Filter out already added languages for the active project
             project = self._agent.get_active_project()
@@ -775,20 +776,20 @@ class SerenaDashboardAPI:
         return {}
 
     def _add_language(self, request_add_language: RequestAddLanguage) -> None:
-        from solidlsp.ls_config import LanguageServerId
+        from solidlsp.ls_config import resolve_language_server_id
 
         try:
-            language = LanguageServerId(request_add_language.language)
+            language = resolve_language_server_id(request_add_language.language)
         except ValueError:
             raise ValueError(f"Invalid language server identifier: {request_add_language.language}")
         # add_language is already thread-safe
         self._agent.add_language_server(language)
 
     def _remove_language(self, request_remove_language: RequestRemoveLanguage) -> None:
-        from solidlsp.ls_config import LanguageServerId
+        from solidlsp.ls_config import resolve_language_server_id
 
         try:
-            language = LanguageServerId(request_remove_language.language)
+            language = resolve_language_server_id(request_remove_language.language)
         except ValueError:
             raise ValueError(f"Invalid language server identifier: {request_remove_language.language}")
         # remove_language is already thread-safe

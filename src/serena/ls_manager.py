@@ -9,7 +9,7 @@ from sensai.util.logging import LogTime
 
 from serena.config.serena_config import ProjectConfig, SerenaPaths
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
+from solidlsp.ls_config import LanguageServerConfig, LanguageServerKey
 from solidlsp.lsp_protocol_handler.lsp_types import DidChangeWatchedFilesParams, FileChangeType, FileEvent
 from solidlsp.settings import SolidLSPSettings
 
@@ -45,7 +45,7 @@ class LanguageServerFactory:
         self.ls_specific_settings = ls_specific_settings
         self.trace_lsp_communication = trace_lsp_communication
 
-    def create_language_server(self, ls_id: LanguageServerId) -> SolidLanguageServer:
+    def create_language_server(self, ls_id: LanguageServerKey) -> SolidLanguageServer:
         ls_config = LanguageServerConfig(
             workspace_folders=self.project_config.ls_workspace_folders,
             additional_workspace_folders=self.project_config.ls_additional_workspace_folders,
@@ -75,7 +75,7 @@ class LanguageServerManager:
 
     def __init__(
         self,
-        language_servers: dict[LanguageServerId, SolidLanguageServer],
+        language_servers: dict[LanguageServerKey, SolidLanguageServer],
         language_server_factory: LanguageServerFactory,
         project: "Project",
     ) -> None:
@@ -97,7 +97,7 @@ class LanguageServerManager:
         return next(iter(self._language_servers.values()))
 
     @staticmethod
-    def from_languages(languages: list[LanguageServerId], factory: LanguageServerFactory, project: "Project") -> "LanguageServerManager":
+    def from_languages(languages: list[LanguageServerKey], factory: LanguageServerFactory, project: "Project") -> "LanguageServerManager":
         """
         Creates a manager with language servers for the given languages using the given factory.
         The language servers are started in parallel threads.
@@ -109,7 +109,7 @@ class LanguageServerManager:
         """
 
         class StartLSThread(threading.Thread):
-            def __init__(self, ls_id: LanguageServerId):
+            def __init__(self, ls_id: LanguageServerKey):
                 super().__init__(target=self._start_language_server, name="StartLS:" + ls_id.value)
                 self.ls_id = ls_id
                 self.language_server: SolidLanguageServer | None = None
@@ -134,8 +134,8 @@ class LanguageServerManager:
             threads.append(thread)
 
         # collect language servers and exceptions
-        language_servers: dict[LanguageServerId, SolidLanguageServer] = {}
-        exceptions: dict[LanguageServerId, Exception] = {}
+        language_servers: dict[LanguageServerKey, SolidLanguageServer] = {}
+        exceptions: dict[LanguageServerKey, Exception] = {}
         for thread in threads:
             thread.join()
             if thread.exception is not None:
@@ -180,7 +180,7 @@ class LanguageServerManager:
             ls = self._default_language_server
         return self._ensure_functional_ls(ls)
 
-    def _create_and_start_language_server(self, ls_id: LanguageServerId) -> SolidLanguageServer:
+    def _create_and_start_language_server(self, ls_id: LanguageServerKey) -> SolidLanguageServer:
         if self._language_server_factory is None:
             raise ValueError(f"No language server factory available to create language server for {ls_id}")
         language_server = self._language_server_factory.create_language_server(ls_id)
@@ -188,7 +188,7 @@ class LanguageServerManager:
         self._language_servers[ls_id] = language_server
         return language_server
 
-    def restart_language_server(self, language: LanguageServerId) -> SolidLanguageServer:
+    def restart_language_server(self, language: LanguageServerKey) -> SolidLanguageServer:
         """
         Forces recreation and restart of the language server for the given language.
         It is assumed that the language server for the given language is no longer running.
@@ -200,7 +200,7 @@ class LanguageServerManager:
             raise ValueError(f"No language server for language {language.value} present; cannot restart")
         return self._create_and_start_language_server(language)
 
-    def add_language_server(self, ls_id: LanguageServerId) -> SolidLanguageServer:
+    def add_language_server(self, ls_id: LanguageServerKey) -> SolidLanguageServer:
         """
         Dynamically adds a new language server for the given language.
 
@@ -211,7 +211,7 @@ class LanguageServerManager:
             raise ValueError(f"Language server for language {ls_id.value} already present")
         return self._create_and_start_language_server(ls_id)
 
-    def remove_language_server(self, language: LanguageServerId, save_cache: bool = False) -> None:
+    def remove_language_server(self, language: LanguageServerKey, save_cache: bool = False) -> None:
         """
         Removes the language server for the given language, stopping it if it is running.
 
@@ -222,7 +222,7 @@ class LanguageServerManager:
         ls = self._language_servers.pop(language)
         self._stop_language_server(ls, save_cache=save_cache)
 
-    def get_active_language_server_ids(self) -> list[LanguageServerId]:
+    def get_active_language_server_ids(self) -> list[LanguageServerKey]:
         """
         Returns the list of languages for which language servers are currently managed.
 
