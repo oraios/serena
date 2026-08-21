@@ -147,6 +147,11 @@ def register_ls(
 
 def resolve_language_server_id(value: str) -> LanguageServerKey:
     """Resolve a built-in or explicitly registered language server id."""
+    # load installed external adapters before resolving project configuration
+    from solidlsp.language_server_adapter_discovery import discover_registered_language_server_adapters
+
+    discover_registered_language_server_adapters()
+
     try:
         return LanguageServerId(value)
     except ValueError:
@@ -164,6 +169,17 @@ def registered_language_servers() -> tuple[RegisteredLanguageServerId, ...]:
 def _reset_registered_language_servers_for_tests() -> None:
     """Clear explicit registrations for deterministic in-process tests."""
     _registered_language_servers.clear()
+
+
+def _snapshot_registered_language_servers() -> dict[str, RegisteredLanguageServerId]:
+    """Return the current registrations for transactional adapter discovery."""
+    return dict(_registered_language_servers)
+
+
+def _restore_registered_language_servers(snapshot: dict[str, RegisteredLanguageServerId]) -> None:
+    """Restore registrations after a failing adapter entry point."""
+    _registered_language_servers.clear()
+    _registered_language_servers.update(snapshot)
 
 
 class LanguageServerId(str, Enum):
@@ -1026,6 +1042,7 @@ class LanguageServerId(str, Enum):
             if registered_id.get_ls_class() == ls_class:
                 return registered_id
         raise ValueError(f"Unhandled language server class: {ls_class}")
+
 
 LanguageServerKey = LanguageServerId | RegisteredLanguageServerId
 

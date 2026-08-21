@@ -21,7 +21,7 @@ from serena.util.file_proxy import FileCollection, FileProxy
 from serena.util.file_system import GitignoreParser, match_path, scan_directory
 from serena.util.text_utils import MatchedConsecutiveLines, search_files
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerId
+from solidlsp.ls_config import LanguageServerKey
 
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
@@ -567,7 +567,7 @@ class Project(ToStringMixin):
             raise Exception(msg.build())
         return self.language_server_manager
 
-    def add_language_server(self, ls_id: LanguageServerId) -> None:
+    def add_language_server(self, ls_id: LanguageServerKey) -> None:
         """
         Adds a new language server to the project configuration, starting the corresponding
         server instance if the LS manager is active.
@@ -590,7 +590,7 @@ class Project(ToStringMixin):
         self.project_config.language_servers.append(ls_id)
         self.save_config()
 
-    def remove_language_server(self, ls_id: LanguageServerId) -> None:
+    def remove_language_server(self, ls_id: LanguageServerKey) -> None:
         """
         Removes a language server from the project configuration, stopping the corresponding
         server instance if the LS manager is active.

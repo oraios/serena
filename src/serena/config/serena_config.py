@@ -35,6 +35,7 @@ from serena.constants import (
 from serena.util.inspection import compute_language_server_support_composition
 from serena.util.text_utils import GlobMatcher
 from serena.util.yaml import YamlCommentNormalisation, load_yaml, normalise_yaml_comments, save_yaml, transfer_yaml_comments
+from solidlsp.language_server_adapter_discovery import discover_registered_language_server_adapters
 from solidlsp.ls_config import LanguageServerId, LanguageServerKey, registered_language_servers, resolve_language_server_id
 
 from ..analytics import RegisteredTokenCountEstimator
@@ -1059,6 +1060,9 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         for field_name in instance._iter_config_file_mapped_fields_without_type_conversion():
             assert hasattr(instance, field_name)
             setattr(instance, field_name, get_value_or_default(field_name))
+
+        # discover installed adapter registrations before loading project language servers
+        discover_registered_language_server_adapters()
 
         # read projects
         if "projects" not in loaded_commented_yaml:
