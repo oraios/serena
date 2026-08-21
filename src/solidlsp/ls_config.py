@@ -147,11 +147,6 @@ def register_ls(
 
 def resolve_language_server_id(value: str) -> LanguageServerKey:
     """Resolve a built-in or explicitly registered language server id."""
-    # load installed external adapters before resolving project configuration
-    from solidlsp.language_server_adapter_discovery import discover_registered_language_server_adapters
-
-    discover_registered_language_server_adapters()
-
     try:
         return LanguageServerId(value)
     except ValueError:

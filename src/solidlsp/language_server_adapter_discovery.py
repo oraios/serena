@@ -24,8 +24,13 @@ def discover_registered_language_server_adapters() -> None:
     if _discovery_state.completed:
         return
 
-    _discovery_state.completed = True
-    for entry_point in metadata.entry_points(group=ENTRY_POINT_GROUP):
+    try:
+        entry_points = metadata.entry_points(group=ENTRY_POINT_GROUP)
+    except Exception as error:
+        log.exception("Failed to discover language server adapter entry points: %s", error)
+        return
+
+    for entry_point in entry_points:
         registry_snapshot = _snapshot_registered_language_servers()
         try:
             registration = entry_point.load()
@@ -40,6 +45,8 @@ def discover_registered_language_server_adapters() -> None:
                 _get_distribution_name(entry_point),
                 error,
             )
+
+    _discovery_state.completed = True
 
 
 def _get_distribution_name(entry_point: metadata.EntryPoint) -> str:

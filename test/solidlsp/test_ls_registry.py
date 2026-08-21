@@ -80,6 +80,15 @@ def test_builtin_language_ids_remain_resolvable() -> None:
     assert resolve_language_server_id("python") is LanguageServerId.PYTHON
 
 
+def test_resolving_language_id_does_not_trigger_discovery(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_if_discovered(*, group: str) -> tuple[FakeEntryPoint, ...]:
+        raise AssertionError(f"Discovery unexpectedly triggered for {group}")
+
+    monkeypatch.setattr("solidlsp.language_server_adapter_discovery.metadata.entry_points", fail_if_discovered)
+
+    assert resolve_language_server_id("python") is LanguageServerId.PYTHON
+
+
 def test_unknown_language_id_is_rejected() -> None:
     with pytest.raises(ValueError, match="Unknown language server"):
         resolve_language_server_id("missing-custom-language")
@@ -107,6 +116,28 @@ def test_entry_point_discovery_registers_multiple_adapters(monkeypatch: pytest.M
 
     assert resolve_language_server_id("dummy-one").get_ls_class() is DummyLanguageServer
     assert resolve_language_server_id("dummy-two").get_ls_class() is OtherDummyLanguageServer
+
+
+def test_entry_point_metadata_failure_is_retryable(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = 0
+
+    def fake_entry_points(*, group: str) -> tuple[FakeEntryPoint, ...]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("metadata unavailable")
+
+        def register_dummy() -> None:
+            register_ls("retryable", FilenameMatcher(".retry"), DummyLanguageServer)
+
+        return (FakeEntryPoint("retryable", register_dummy),)
+
+    monkeypatch.setattr("solidlsp.language_server_adapter_discovery.metadata.entry_points", fake_entry_points)
+    discover_registered_language_server_adapters()
+    discover_registered_language_server_adapters()
+
+    assert calls == 2
+    assert resolve_language_server_id("retryable").get_ls_class() is DummyLanguageServer
 
 
 def test_two_registered_language_servers_are_resolvable_together() -> None:
@@ -141,6 +172,7 @@ def test_discovered_language_server_roundtrips_through_project_config(monkeypatc
         register_ls("roundtrip", FilenameMatcher(".round"), DummyLanguageServer)
 
     install_entry_points(monkeypatch, FakeEntryPoint("roundtrip", register_roundtrip))
+    discover_registered_language_server_adapters()
     data, _ = ProjectConfig._load_yaml_dict(PROJECT_TEMPLATE_FILE)
     data["project_name"] = "test"
     data["language_servers"] = ["roundtrip"]
@@ -195,6 +227,26 @@ def test_failing_entry_point_logs_its_distribution_and_rolls_back_registration(
         resolve_language_server_id("broken")
     assert "broken" in caplog.text
     assert "broken-adapter" in caplog.text
+
+
+def test_failing_entry_point_does_not_block_other_adapters(monkeypatch: pytest.MonkeyPatch) -> None:
+    def register_broken_adapter() -> None:
+        register_ls("broken", FilenameMatcher(".broken"), DummyLanguageServer)
+        raise RuntimeError("registration failed")
+
+    def register_working_adapter() -> None:
+        register_ls("working", FilenameMatcher(".working"), OtherDummyLanguageServer)
+
+    install_entry_points(
+        monkeypatch,
+        FakeEntryPoint("broken", register_broken_adapter, "broken-adapter"),
+        FakeEntryPoint("working", register_working_adapter, "working-adapter"),
+    )
+    discover_registered_language_server_adapters()
+
+    with pytest.raises(ValueError, match="Unknown language server"):
+        resolve_language_server_id("broken")
+    assert resolve_language_server_id("working").get_ls_class() is OtherDummyLanguageServer
 
 
 def test_quickscript_entry_point_registers_its_matcher(monkeypatch: pytest.MonkeyPatch) -> None:
