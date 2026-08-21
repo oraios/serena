@@ -1,0 +1,5 @@
+# Markdown is excluded from language auto-detection, so the language server has
+# to be requested explicitly for this repository.
+project_name: "markdown_test_repo"
+language_servers:
+  - markdown

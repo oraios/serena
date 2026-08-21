@@ -398,6 +398,19 @@ TYPESCRIPT_REPLACED_BODY = """function printValue() {
 """
 
 
+MARKDOWN_TEST_FILE = "guide.md"
+
+MARKDOWN_REPLACED_BODY = """## Configuration
+
+Configuration options are stored in `config.yaml` and are reloaded on change.
+"""
+
+NEW_MARKDOWN_SECTION = """## Deployment
+
+Deployment is covered in the operations handbook.
+"""
+
+
 class ReplaceBodyTest(EditingTest):
     def __init__(self, ls_id: LanguageServerId, rel_path: str, symbol_name: str, new_body: str):
         super().__init__(ls_id, rel_path)
@@ -429,10 +442,18 @@ class ReplaceBodyTest(EditingTest):
             ),
             marks=pytest.mark.typescript,
         ),
+        pytest.param(
+            ReplaceBodyTest(
+                LanguageServerId.MARKDOWN,
+                MARKDOWN_TEST_FILE,
+                "User Guide/Configuration",
+                MARKDOWN_REPLACED_BODY,
+            ),
+            marks=pytest.mark.markdown,
+        ),
     ],
 )
 def test_replace_body(test_case: ReplaceBodyTest, snapshot: SnapshotAssertion):
-    # assert "a" in snapshot
     test_case.run_test(content_after_ground_truth=snapshot)
 
 
@@ -586,18 +607,35 @@ class InsertAndDeleteSymbolTest(EditingTest):
         assert not code_diff.has_changes
 
 
-def test_insert_and_delete_no_change():
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        pytest.param(
+            InsertAndDeleteSymbolTest(
+                LanguageServerId.PYTHON,
+                PYTHON_TEST_REL_FILE_PATH,
+                "VariableContainer/modify_instance_var",
+                "VariableContainer/inserted_function",
+                "    def inserted_function():\n        pass",
+            ),
+            marks=pytest.mark.python,
+        ),
+        pytest.param(
+            InsertAndDeleteSymbolTest(
+                LanguageServerId.MARKDOWN,
+                MARKDOWN_TEST_FILE,
+                "User Guide/Configuration",
+                "User Guide/Deployment",
+                NEW_MARKDOWN_SECTION,
+            ),
+            marks=pytest.mark.markdown,
+        ),
+    ],
+)
+def test_insert_and_delete_no_change(test_case: InsertAndDeleteSymbolTest):
     """
     Tests that inserting and immediately deleting a symbol results in no change to the file content.
     """
-    insertion = "    def inserted_function():\n        pass"
-    test_case = InsertAndDeleteSymbolTest(
-        LanguageServerId.PYTHON,
-        PYTHON_TEST_REL_FILE_PATH,
-        "VariableContainer/modify_instance_var",
-        "VariableContainer/inserted_function",
-        insertion,
-    )
     test_case.run_test(None)
 
 

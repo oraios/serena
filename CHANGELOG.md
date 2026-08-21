@@ -5,6 +5,9 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
+  - Fix: `replace_symbol_body` and `insert_after_symbol` corrupted Markdown documents. A section's
+    body range extends to the start of the next heading, so replacing a body dropped the blank line
+    that separates the sections, and inserting after a section landed inside the following one
 
 * Language Servers:
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
