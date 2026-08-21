@@ -45,7 +45,9 @@ within the project directory.
 
 The file allows you to configure ...
   * the name by which you want to refer to the project (relevant when telling the LLM to dynamically activate the project)
-  * the set of programming languages for which language servers are spawned (not relevant when using the JetBrains plugin)
+  * the set of built-in language servers and explicitly registered external adapters for which servers are spawned
+    (not relevant when using the JetBrains plugin). External adapter IDs become available after their Python package is installed;
+    see [External Language Server Adapters](../01-about/030_external_language_server_adapters).
     Note that you can dynamically add/remove language servers while Serena is running via the [Dashboard](060_dashboard).
   * the [language backend](per-project-language-backend) to use for this project (overriding the global setting)
   * the encoding used in source files

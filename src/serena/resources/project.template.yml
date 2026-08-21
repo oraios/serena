@@ -29,6 +29,8 @@ project_name: "project_name"
 #   - For Deno projects, use deno (serves the same .ts/.js files as typescript; requires the deno CLI on PATH)
 #   - For SCSS / Sass / plain CSS, use scss (some-sass-language-server handles all three)
 #   - For Free Pascal/Lazarus, use pascal
+#   - External Python adapters may add further registered IDs; install the adapter package first
+#     and then use its ID here, for example: quickscript
 # Special requirements:
 #   Some language servers require additional setup/installations.
 #   See here for details: https://oraios.github.io/serena/01-about/020_programming-languages.html#language-servers
