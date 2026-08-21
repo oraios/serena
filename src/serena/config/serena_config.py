@@ -35,7 +35,7 @@ from serena.constants import (
 from serena.util.inspection import compute_language_server_support_composition
 from serena.util.text_utils import GlobMatcher
 from serena.util.yaml import YamlCommentNormalisation, load_yaml, normalise_yaml_comments, save_yaml, transfer_yaml_comments
-from solidlsp.ls_config import LanguageServerId
+from solidlsp.ls_config import LanguageServerId, LanguageServerKey, registered_language_servers, resolve_language_server_id
 
 from ..analytics import RegisteredTokenCountEstimator
 from ..util.class_decorators import singleton
@@ -321,7 +321,7 @@ class ProjectConfigAutoGenerationMode(Enum):
 @dataclass(kw_only=True)
 class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
     project_name: str
-    language_servers: list[LanguageServerId]
+    language_servers: list[LanguageServerKey]
     ignored_paths: list[str] = field(default_factory=list)
     ls_workspace_folders: list[str] = field(default_factory=lambda: ["."])
     ls_additional_workspace_folders: list[str] = field(default_factory=list)
@@ -358,7 +358,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
     @classmethod
     def _determine_project_language_servers(
         cls, project_root: str, interactive: bool, serena_config: "SerenaConfig"
-    ) -> list[LanguageServerId]:
+    ) -> list[LanguageServerKey]:
         log.info("Determining suitable language servers for the project")
 
         # determine language servers to be considered and their priorities
@@ -580,18 +580,19 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         """
         # map languages to list of enum items, checking for errors
         lang_name_mapping = {"javascript": "typescript"}
-        ls_ids: list[LanguageServerId] = []
+        ls_ids: list[LanguageServerKey] = []
         for ls_str in data["language_servers"]:
             orig_language_str = ls_str
             try:
                 ls_str = ls_str.lower()
                 if ls_str in lang_name_mapping:
                     ls_str = lang_name_mapping[ls_str]
-                ls_id = LanguageServerId(ls_str)
+                ls_id = resolve_language_server_id(ls_str)
                 ls_ids.append(ls_id)
             except ValueError as e:
                 raise ValueError(
-                    f"Invalid language server: '{orig_language_str}'.\nValid values are: {[l.value for l in LanguageServerId]}"
+                    f"Invalid language server: '{orig_language_str}'.\nValid values are: "
+                    f"{[l.value for l in LanguageServerId] + [l.value for l in registered_language_servers()]}"
                 ) from e
 
         # Validate activation_command_timeout
