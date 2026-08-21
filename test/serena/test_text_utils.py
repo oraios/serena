@@ -1,9 +1,25 @@
+import re
+import time
 from collections.abc import Callable
 
 import pytest
 
 from serena.util.file_proxy import FileCollection, FileProxy
-from serena.util.text_utils import GlobMatcher, LineType, MultiFileContentReplacer, search_files, search_text
+from serena.util.regex_timeout import (
+    DEFAULT_TIMEOUT_SECONDS,
+    TIMEOUT_ENV_VAR,
+    RegexTimeoutError,
+    compile_pattern,
+    get_timeout_seconds,
+)
+from serena.util.text_utils import (
+    ContentReplacer,
+    GlobMatcher,
+    LineType,
+    MultiFileContentReplacer,
+    search_files,
+    search_text,
+)
 
 
 class TestSearchText:
@@ -656,3 +672,66 @@ class TestMultiFileContentReplacer:
         occ = replacer.find_occurrences([(path, content)], "old_pkg", "new_pkg")[0]
         with pytest.raises(AssertionError):
             replacer.apply_to_content("completely different content", [occ])
+
+
+class TestRegexTimeout:
+    """
+    Matching an expression supplied by the agent has to be abortable: without a time limit, an
+    expression that backtracks catastrophically takes the whole process down with it, because `re`
+    neither releases the GIL nor runs signal handlers while matching.
+    """
+
+    # the nested quantifier spans newlines (DOTALL is enabled by default), so the number of ways in
+    # which this expression can match grows exponentially with the size of the input
+    CATASTROPHIC_PATTERN = r"^func .*\n(?:.*\n){0,40}?.*never_matches_anything"
+    CONTENT = "func f() {\n" + "    body line\n" * 800
+    TIMEOUT_SECONDS = 0.5
+
+    def _assert_aborted(self, call: Callable[[], object]) -> None:
+        started = time.monotonic()
+        with pytest.raises(RegexTimeoutError) as exc_info:
+            call()
+        assert time.monotonic() - started < 30, "the time limit was not enforced"
+        # the message has to explain the way out, since the agent cannot otherwise tell what went wrong
+        assert "DOTALL" in str(exc_info.value)
+
+    def test_finditer_is_aborted(self):
+        pattern = compile_pattern(self.CATASTROPHIC_PATTERN, re.MULTILINE | re.DOTALL, timeout_seconds=self.TIMEOUT_SECONDS)
+        self._assert_aborted(lambda: pattern.finditer(self.CONTENT))
+
+    def test_search_text_is_aborted(self, monkeypatch):
+        monkeypatch.setenv(TIMEOUT_ENV_VAR, str(self.TIMEOUT_SECONDS))
+        self._assert_aborted(lambda: search_text(self.CATASTROPHIC_PATTERN, content=self.CONTENT))
+
+    def test_search_files_does_not_report_a_timeout_as_absence_of_matches(self, monkeypatch):
+        monkeypatch.setenv(TIMEOUT_ENV_VAR, str(self.TIMEOUT_SECONDS))
+        file_collection = MockFileCollection(["module.py"], mock_reader=lambda _path: self.CONTENT)
+        self._assert_aborted(lambda: search_files(file_collection, pattern=self.CATASTROPHIC_PATTERN))
+
+    def test_replacement_is_aborted(self, monkeypatch):
+        monkeypatch.setenv(TIMEOUT_ENV_VAR, str(self.TIMEOUT_SECONDS))
+        replacer = ContentReplacer(mode="regex", allow_multiple_occurrences=True)
+        self._assert_aborted(lambda: replacer.replace(self.CONTENT, self.CATASTROPHIC_PATTERN, "x"))
+
+    def test_multi_file_replacement_is_aborted(self, monkeypatch):
+        monkeypatch.setenv(TIMEOUT_ENV_VAR, str(self.TIMEOUT_SECONDS))
+        replacer = MultiFileContentReplacer(mode="regex")
+        self._assert_aborted(lambda: replacer.find_occurrences([("module.py", self.CONTENT)], self.CATASTROPHIC_PATTERN, "x"))
+
+    def test_well_formed_pattern_is_unaffected(self):
+        matches = search_text(r"^[^\n]*body line[^\n]*$", content=self.CONTENT)
+        assert len(matches) == 800
+
+    @pytest.mark.parametrize(
+        "env_value, expected",
+        [
+            ("", DEFAULT_TIMEOUT_SECONDS),
+            ("2.5", 2.5),
+            ("0", DEFAULT_TIMEOUT_SECONDS),
+            ("-1", DEFAULT_TIMEOUT_SECONDS),
+            ("not a number", DEFAULT_TIMEOUT_SECONDS),
+        ],
+    )
+    def test_timeout_is_configurable(self, monkeypatch, env_value, expected):
+        monkeypatch.setenv(TIMEOUT_ENV_VAR, env_value)
+        assert get_timeout_seconds() == expected
