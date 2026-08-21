@@ -118,6 +118,56 @@ class TestPreToolUseRemindAboutSerenaHook:
                 hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.CLAUDE_CODE)
             assert hook.is_grep_call() == expected, f"is_grep_tool() wrong for {name} (claude-code)"
 
+    def test_grep_tool_detection_claude_code_shell_commands(self, tmp_path: Path):
+        """Claude Code searches through ``Bash`` at least as often as through ``Grep``."""
+        cases = [
+            ("bash", {"command": "grep -rn foo src"}, True),
+            ("bash", {"command": "rg -n foo src"}, True),
+            ("bash", {"command": "/usr/bin/egrep -n foo src"}, True),
+            ("bash", {"command": "go build ./..."}, False),
+            ("bash", {"command": "cat README.md"}, False),
+        ]
+        for tool_name, tool_input, expected in cases:
+            with (
+                patch("sys.stdin", _make_stdin(_base_input(tool_name=tool_name, tool_input=tool_input))),
+                patch("serena.hooks.serena_home_dir", str(tmp_path)),
+            ):
+                hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.CLAUDE_CODE)
+            assert hook.is_grep_call() == expected, f"is_grep_call() wrong for {tool_input} (claude-code)"
+
+    def test_read_tool_detection_claude_code_shell_commands(self, tmp_path: Path):
+        """Reading through the shell is the likelier drift once the built-in read is discouraged."""
+        cases = [
+            ("bash", {"command": "cat src/foo.py"}, True),
+            ("bash", {"command": "sed -n '1,40p' src/foo.py"}, True),
+            ("bash", {"command": "head -20 README.md"}, True),
+            ("bash", {"command": "grep -rn foo src"}, False),
+            ("bash", {"command": "git status"}, False),
+        ]
+        for tool_name, tool_input, expected in cases:
+            with (
+                patch("sys.stdin", _make_stdin(_base_input(tool_name=tool_name, tool_input=tool_input))),
+                patch("serena.hooks.serena_home_dir", str(tmp_path)),
+            ):
+                hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.CLAUDE_CODE)
+            assert hook.is_read_call() == expected, f"is_read_call() wrong for {tool_input} (claude-code)"
+
+    def test_shell_read_target_decides_whether_it_is_a_code_file(self, tmp_path: Path):
+        """The target of a shell read is named in its arguments, so it can be classified."""
+        cases = [
+            ({"command": "cat src/foo.py"}, True),
+            ({"command": "sed -n '1,40p' internal/chat/chat.go"}, True),
+            ({"command": "cat README.md"}, False),
+            ({"command": "tail -n 50 /var/log/syslog"}, False),
+        ]
+        for tool_input, expected in cases:
+            with (
+                patch("sys.stdin", _make_stdin(_base_input(tool_name="bash", tool_input=tool_input))),
+                patch("serena.hooks.serena_home_dir", str(tmp_path)),
+            ):
+                hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.CLAUDE_CODE)
+            assert hook.is_read_code_file_call() == expected, f"is_read_code_file_call() wrong for {tool_input}"
+
     def test_grep_tool_detection_non_claude_code(self, tmp_path: Path):
         """Non-Claude-Code clients fall back to substring matching to cover verbose tool names."""
         for name, expected in [("grep_search", True), ("mcp_grep", True), ("read_file", False), ("serena_find", False)]:
