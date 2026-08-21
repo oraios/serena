@@ -696,6 +696,8 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         """
         from solidlsp.language_server_adapter_discovery import discover_registered_language_server_adapters
 
+        # Discovery belongs at this boundary: external IDs must be registered before
+        # _from_dict resolves language_servers, while the resolver remains side-effect-free.
         discover_registered_language_server_adapters()
 
         project_root = Path(project_root)

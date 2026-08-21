@@ -22,7 +22,14 @@ _discovery_lock = threading.Lock()
 
 
 def discover_registered_language_server_adapters() -> None:
-    """Load installed adapter registrations before project configuration resolves language servers."""
+    """Load installed adapters before project configuration resolves language-server IDs.
+
+    First discovery is serialized because registration and rollback mutate one
+    process-global registry. Metadata-enumeration failures leave discovery
+    incomplete so a later project load can retry. After successful enumeration,
+    each entry point is applied transactionally; a failing adapter is rolled back
+    without preventing the remaining installed adapters from registering.
+    """
     with _discovery_lock:
         if _discovery_state.completed:
             return

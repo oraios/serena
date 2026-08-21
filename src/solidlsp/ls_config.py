@@ -90,7 +90,11 @@ class FilenameMatcher:
 
 
 class RegisteredLanguageServerId(str):
-    """Identifier for an explicitly registered external language server."""
+    """Canonical external language-server ID carrying its matcher and implementation class.
+
+    The registry enforces a one-to-one mapping between IDs and implementation
+    classes across both built-in and external language servers.
+    """
 
     _matcher: FilenameMatcher
     _implementation: type["SolidLanguageServer"]
@@ -140,6 +144,10 @@ def register_ls(
 
     A trusted Python host imports the adapter module before Serena resolves the
     project's ``language_servers``. Project configuration never imports Python code.
+
+    IDs must be non-empty, trimmed, and lowercase. Duplicate IDs and reuse of an
+    implementation class are rejected because runtime identity is derived from
+    both the configured ID and its implementation class.
     """
     registered_id = RegisteredLanguageServerId(id, matcher, implementation)
     if id in {language.value for language in LanguageServerId}:
@@ -162,7 +170,10 @@ def register_ls(
 
 
 def resolve_language_server_id(value: str) -> LanguageServerKey:
-    """Resolve a built-in or explicitly registered language server id."""
+    """Resolve a built-in or explicitly registered ID without triggering discovery.
+
+    Adapter discovery is owned by the project-configuration loading lifecycle.
+    """
     try:
         return LanguageServerId(value)
     except ValueError:
@@ -173,7 +184,7 @@ def resolve_language_server_id(value: str) -> LanguageServerKey:
 
 
 def registered_language_servers() -> tuple[RegisteredLanguageServerId, ...]:
-    """Return the explicitly registered external language servers."""
+    """Return a snapshot of the explicitly registered external language servers."""
     return tuple(_registered_language_servers.values())
 
 
