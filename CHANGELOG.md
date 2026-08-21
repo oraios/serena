@@ -7,6 +7,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     project list in `serena_config.yml`
 
 * Language Servers:
+  - Add: Installed Python packages can provide generic external language-server adapters through the
+    `serena.language_servers` entry-point group for explicit use in `project.yml`
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: clojure-lsp was not told that Serena sends `workspace/didChangeWatchedFiles`, so changes made
     outside Serena's own edit tools (a git checkout, another editor, a build step) need not invalidate

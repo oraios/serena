@@ -42,9 +42,11 @@ An installed adapter contains executable Python code and therefore has the same 
 
 ## Errors and IDs
 
-A failure while reading the installed entry-point metadata is reported and leaves discovery retryable. If one adapter fails while loading or registering, Serena reports the entry-point name and distribution when available, rolls back that adapter's registrations, and continues loading other adapters.
+The first discovery is serialized across concurrent project loads and completes once entry-point metadata has been read successfully. A failure while reading the installed entry-point metadata is reported and leaves discovery retryable. If one adapter fails while loading or registering, Serena reports the entry-point name and distribution when available, rolls back that adapter's registrations, and continues loading other adapters.
 
 A failed adapter ID is not available afterward. If a project references it, normal language-server configuration validation reports an unknown ID. Registered IDs must be unique and cannot replace a built-in Serena language-server ID.
+
+Adapter IDs must be non-empty, trimmed, and lowercase. Each external `SolidLanguageServer` implementation class can be registered under only one external ID.
 
 ## Built-in and External Integrations
 
