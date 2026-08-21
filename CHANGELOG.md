@@ -5,6 +5,13 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
+  - Fix: a comment block following a nested mapping in a configuration file was duplicated on every
+    save, so `serena_config.yml` grew by one copy of the same block per project registration (one
+    config in the field had accumulated thirty copies, 369 lines for 225 lines of content). ruamel
+    attaches such a block to the last entry of the nested mapping, where the comment normalisation —
+    which only inspects top-level keys — left it untouched; it was then written back out alongside
+    the copy transferred onto the top-level key it actually documents. Nested mappings are now
+    treated like nested sequences already were
 
 * Language Servers:
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
