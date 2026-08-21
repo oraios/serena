@@ -5,6 +5,12 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
+  - Fix: the `serena-hooks remind` PreToolUse hook was blind to shell-based searching and reading for
+    the `claude-code` and `codebuddy` clients: only the built-in `Grep`/`Read` tools were counted,
+    while `Bash(grep …)`, `Bash(cat …)` and `Bash(sed -n …)` were not counted at all. The hook thus
+    nudged the agent that reaches for the built-in tool and ignored the one that had already drifted
+    to the shell - the very behaviour it exists to catch. Shell commands are now classified for these
+    clients exactly as they already were for `codex` and `grok`
 
 * Language Servers:
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)

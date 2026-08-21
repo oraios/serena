@@ -274,12 +274,14 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
     #: are caught alongside ``read_file``, while ``write_file``/``edit_file`` are not.
     _READ_FILE_VERB_SUBSTRINGS: frozenset[str] = frozenset(("read", "view", "open", "show"))
 
-    #: Shell commands that perform grep-like search; used to classify Codex/Grok
-    #: shell-command tool calls whose ``cmd`` or ``command`` field starts with one of these.
+    #: Shell commands that perform grep-like search; used to classify shell-command tool
+    #: calls (Claude Code's ``Bash``, Codex/Grok shell tools) whose ``cmd`` or ``command``
+    #: field starts with one of these.
     _GREP_SHELL_COMMANDS: frozenset[str] = frozenset(("grep", "rg", "ag", "ack", "fgrep", "egrep", "search_for_pattern"))
 
-    #: Shell commands that perform file-read operations; used to classify Codex/Grok
-    #: shell-command tool calls whose ``cmd`` or ``command`` field starts with one of these.
+    #: Shell commands that perform file-read operations; used to classify shell-command tool
+    #: calls (Claude Code's ``Bash``, Codex/Grok shell tools) whose ``cmd`` or ``command``
+    #: field starts with one of these.
     _READ_SHELL_COMMANDS: frozenset[str] = frozenset(("cat", "head", "tail", "sed", "less", "more", "bat", "get-content", "gc"))
 
     #: file suffixes for source-like files where symbolic tools are usually more
@@ -381,7 +383,13 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
 
     def is_grep_call(self) -> bool:
         if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
-            return self._tool_name == "grep" or "search_for_pattern" in self._tool_name
+            return (
+                self._tool_name == "grep"
+                or "search_for_pattern" in self._tool_name
+                # a shell call is the drift this hook exists to catch: `Bash(grep -rn ...)`
+                # searches exactly like the built-in tool while bypassing its name
+                or (self._is_shell_command_call() and self._command_name in self._GREP_SHELL_COMMANDS)
+            )
         if self._client == HookClient.GROK:
             return self._tool_name == "grep" or (self._is_shell_command_call() and self._command_name in self._GREP_SHELL_COMMANDS)
         if self._client == HookClient.CODEX and self._is_shell_command_call():
@@ -391,7 +399,14 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
 
     def is_read_call(self) -> bool:
         if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
-            return self._tool_name == "read" or "read_file" in self._tool_name
+            return (
+                self._tool_name == "read"
+                or "read_file" in self._tool_name
+                # as above: `Bash(cat ...)` / `Bash(sed -n ...)` reads a file just as
+                # the built-in tool does, and is the more likely form once the agent
+                # has learned that the built-in read is discouraged
+                or (self._is_shell_command_call() and self._command_name in self._READ_SHELL_COMMANDS)
+            )
         if self._client == HookClient.GROK:
             return self._tool_name == "read_file" or (self._is_shell_command_call() and self._command_name in self._READ_SHELL_COMMANDS)
         if self._client == HookClient.CODEX and self._is_shell_command_call():
@@ -418,7 +433,8 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         if self._file_path is not None:
             return self._is_code_file_path(self._file_path)
 
-        if self._client in (HookClient.CODEX, HookClient.GROK) and self._command_args_str is not None:
+        # a shell read names its target in the arguments, whichever client issued it
+        if self._command_args_str is not None:
             return any(self._is_code_file_path(argument) for argument in self._iter_shell_path_arguments())
 
         return True
