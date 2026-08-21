@@ -44,8 +44,14 @@ class CodeEditor(Generic[TSymbol], ABC):
             """
 
         @abstractmethod
-        def delete_text_between_positions(self, start_pos: PositionInFile, end_pos: PositionInFile) -> None:
-            pass
+        def delete_text_between_positions(self, start_pos: PositionInFile, end_pos: PositionInFile) -> str:
+            """
+            Deletes the text between the given positions.
+
+            :param start_pos: the start position (inclusive)
+            :param end_pos: the end position (exclusive)
+            :return: the deleted text
+            """
 
         @abstractmethod
         def insert_text_at_position(self, pos: PositionInFile, text: str) -> None:
@@ -120,8 +126,15 @@ class CodeEditor(Generic[TSymbol], ABC):
             # and whitespace before/after should remain the same, so we strip it entirely
             body = body.strip()
 
-            edited_file.delete_text_between_positions(start_pos, end_pos)
-            edited_file.insert_text_at_position(start_pos, body)
+            deleted_text = edited_file.delete_text_between_positions(start_pos, end_pos)
+
+            # restore the whitespace which the original body range ended with: for some languages,
+            # the range extends to the start of the next sibling symbol (e.g. Markdown sections,
+            # which reach the next heading), and dropping the separator it contains would glue that
+            # symbol onto the last line of the new body
+            trailing_whitespace = deleted_text[len(deleted_text.rstrip()) :]
+
+            edited_file.insert_text_at_position(start_pos, body + trailing_whitespace)
 
     @staticmethod
     def _count_leading_newlines(text: Iterable) -> int:
@@ -158,9 +171,12 @@ class CodeEditor(Generic[TSymbol], ABC):
 
         pos = symbol.get_body_end_position_or_raise()
 
-        # start at the beginning of the next line
+        # start at the beginning of the line following the symbol; if the body range already ends at
+        # the start of a line, it ends *on* the following symbol's line (for some languages, e.g.
+        # Markdown, the range reaches the next heading), and skipping a further line would insert
+        # inside that symbol
         col = 0
-        line = pos.line + 1
+        line = pos.line if pos.col == 0 else pos.line + 1
 
         # make sure a suitable number of leading empty lines is used (at least 0/1 depending on the symbol type,
         # otherwise as many as the caller wanted to insert)
@@ -176,6 +192,11 @@ class CodeEditor(Generic[TSymbol], ABC):
         # make sure the one line break succeeding the original symbol, which we repurposed as prefix via
         # `line += 1`, is replaced
         body = body.rstrip("\r\n") + "\n"
+
+        # add the separator which was not repurposed above, because no line break succeeded the
+        # body range
+        if line == pos.line:
+            body += "\n"
 
         with self.edited_file_context(relative_file_path) as edited_file:
             edited_file.insert_text_at_position(PositionInFile(line, col), body)
@@ -292,8 +313,10 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
         def set_contents(self, contents: str) -> None:
             self._file_buffer.contents = contents
 
-        def delete_text_between_positions(self, start_pos: PositionInFile, end_pos: PositionInFile) -> None:
-            self._lang_server.delete_text_between_positions(self.relative_path, start_pos.to_lsp_position(), end_pos.to_lsp_position())
+        def delete_text_between_positions(self, start_pos: PositionInFile, end_pos: PositionInFile) -> str:
+            return self._lang_server.delete_text_between_positions(
+                self.relative_path, start_pos.to_lsp_position(), end_pos.to_lsp_position()
+            )
 
         def insert_text_at_position(self, pos: PositionInFile, text: str) -> None:
             self._lang_server.insert_text_at_position(self.relative_path, pos.line, pos.col, text)
@@ -433,10 +456,11 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
         def set_contents(self, contents: str) -> None:
             self._content = contents
 
-        def delete_text_between_positions(self, start_pos: PositionInFile, end_pos: PositionInFile) -> None:
-            self._content, _ = TextUtils.delete_text_between_positions(
+        def delete_text_between_positions(self, start_pos: PositionInFile, end_pos: PositionInFile) -> str:
+            self._content, deleted_text = TextUtils.delete_text_between_positions(
                 self._content, start_pos.line, start_pos.col, end_pos.line, end_pos.col
             )
+            return deleted_text
 
         def insert_text_at_position(self, pos: PositionInFile, text: str) -> None:
             self._content, _, _ = TextUtils.insert_text_at_position(self._content, pos.line, pos.col, text)
