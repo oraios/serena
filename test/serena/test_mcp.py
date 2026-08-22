@@ -298,3 +298,32 @@ def test_make_tool_all_tools(tool_class) -> None:
 
     # The description should be a string (either from docstring or default)
     assert isinstance(mcp_tool.description, str)
+
+
+def test_create_mcp_server_reports_serena_version(monkeypatch) -> None:
+    """Test that the initialize handshake reports Serena's version, not the mcp SDK's."""
+    from importlib.metadata import version as installed_version
+
+    from mcp.server.fastmcp.server import Settings
+
+    from serena import __version__
+    from serena.config.serena_config import SerenaConfig
+
+    class AgentlessFactory(SerenaMCPFactory):
+        """Builds the server without a SerenaAgent, so only the FastMCP construction is exercised."""
+
+        def _create_serena_agent(self, serena_config, modes=None, project_activation_error=None):
+            return MockAgent()
+
+        def _get_initial_instructions(self) -> str:
+            return "test instructions"
+
+    monkeypatch.setattr(SerenaConfig, "from_config_file", classmethod(lambda cls, **kwargs: object()))
+    # create_mcp_server rebinds this class attribute of the SDK; restore it afterwards.
+    monkeypatch.setattr(Settings, "model_config", Settings.model_config)
+
+    mcp = AgentlessFactory(transport="stdio").create_mcp_server()
+    options = mcp._mcp_server.create_initialization_options()
+
+    assert options.server_version == __version__
+    assert options.server_version != installed_version("mcp")

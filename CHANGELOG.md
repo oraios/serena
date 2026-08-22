@@ -5,6 +5,9 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
+  - Fix: the MCP `initialize` handshake reported `serverInfo.version` as the version of the installed
+    `mcp` SDK rather than Serena's own, so a client that logs, displays or compares the server version
+    saw a string that never matches a Serena release (#1889)
 
 * Language Servers:
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
