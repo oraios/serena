@@ -48,6 +48,8 @@ class PhpactorServer(SolidLanguageServer):
         - ignore_vendor: whether to ignore directories named "vendor" (default: true)
         - phpactor_version: Override the pinned Phpactor PHAR version downloaded by
           Serena (default: the bundled Serena version)
+        - file_filter: list of additional file extensions (with leading dot) to treat as PHP
+          sources, e.g. [".module", ".inc"]
     """
 
     @override
@@ -115,6 +117,11 @@ class PhpactorServer(SolidLanguageServer):
             self._ignored_dirnames.add("vendor")
         log.info(f"Ignoring the following directories for PHP (Phpactor): {', '.join(sorted(self._ignored_dirnames))}")
 
+        # extending Serena's source matcher with project-specific PHP extensions
+        file_filter = self._custom_settings.get("file_filter")
+        if file_filter:
+            self.ls_id.get_source_fn_matcher().add_extensions(*file_filter)
+
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
@@ -122,6 +129,8 @@ class PhpactorServer(SolidLanguageServer):
         """
         Returns the initialization params for the Phpactor Language Server.
         """
+        file_filter = self._custom_settings.get("file_filter", [])
+        supported_extensions = ["php", "phar", *(extension.removeprefix(".") for extension in file_filter)]
         initialize_params = {
             "capabilities": {
                 "textDocument": {
@@ -141,6 +150,8 @@ class PhpactorServer(SolidLanguageServer):
                 "language_server_phpstan.enabled": False,
                 "language_server_psalm.enabled": False,
                 "language_server_php_cs_fixer.enabled": False,
+                "indexer.supported_extensions": supported_extensions,
+                "indexer.include_patterns": [f"/**/*.{extension}" for extension in supported_extensions],
             },
         }
         return initialize_params

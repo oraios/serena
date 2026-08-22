@@ -6,7 +6,6 @@ import pytest
 from serena.code_editor import LanguageServerCodeEditor
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerId
-from solidlsp.ls_utils import SymbolUtils
 from src.serena.symbol import LanguageServerSymbolRetriever
 from test.conftest import project_with_ls_context, start_ls_context
 
@@ -127,52 +126,6 @@ def _find_child_symbol(parent_symbol: dict, child_name: str) -> dict:
 
 @pytest.mark.php
 class TestPHPantom:
-    def test_file_filter_makes_inc_symbols_and_references_visible(self, tmp_path: Path) -> None:
-        repo_path = tmp_path / "test_repo"
-        src_dir = repo_path / "src"
-        src_dir.mkdir(parents=True)
-        (repo_path / "composer.json").write_text('{"autoload": {"files": ["src/helpers.inc"]}}\n', encoding="utf-8")
-        (src_dir / "helpers.inc").write_text(
-            """<?php
-namespace Demo;
-
-function inc_helper(string $value): string
-{
-    return strtoupper($value);
-}
-
-function inc_caller(): string
-{
-    return inc_helper('inside');
-}
-""",
-            encoding="utf-8",
-        )
-        (src_dir / "UseHelper.php").write_text(
-            """<?php
-namespace Demo;
-
-function use_helper(): string
-{
-    return inc_helper('outside');
-}
-""",
-            encoding="utf-8",
-        )
-
-        with start_ls_context(
-            LanguageServerId.PHP_PHPANTOM,
-            repo_path=str(repo_path),
-            solidlsp_dir=tmp_path,
-            ls_specific_settings={LanguageServerId.PHP_PHPANTOM: {"file_filter": [".inc"]}},
-        ) as language_server:
-            symbols = language_server.request_full_symbol_tree()
-            assert SymbolUtils.symbol_tree_contains_name(symbols, "inc_helper")
-
-            references = language_server.request_references("src/helpers.inc", 3, len("function "))
-            assert any(reference["uri"].endswith("helpers.inc") for reference in references)
-            assert any(reference["uri"].endswith("UseHelper.php") for reference in references)
-
     @pytest.mark.parametrize("language_server", [LanguageServerId.PHP_PHPANTOM], indirect=True)
     @pytest.mark.parametrize("repo_path", [LanguageServerId.PHP], indirect=True)
     def test_rename_local_variable(self, language_server: SolidLanguageServer, repo_path: Path) -> None:

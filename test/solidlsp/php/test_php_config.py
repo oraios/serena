@@ -1,16 +1,14 @@
-"""Configuration plumbing for ``Intelephense``'s ``file_filter``.
+"""Configuration plumbing for PHP language-server ``file_filter`` settings.
 
 Serena treats only ``.php`` / ``.phtml`` files as PHP sources by default, while Drupal projects
 keep ordinary PHP in ``.module`` / ``.install`` / ``.inc`` / ``.theme`` / ``.profile`` /
 ``.engine`` files, which therefore stay invisible to ``find_symbol`` and friends.
-``ls_specific_settings["php"]`` accepts a ``file_filter`` key with additional extensions,
+Each PHP backend accepts a ``file_filter`` key in its ``ls_specific_settings`` entry,
 mirroring the Perl mechanism from #1449 / #1642 (see #1710).
 
-The unit tests cover the default source-file matcher. The configuration plumbing itself lives
-inline in ``Intelephense.__init__`` (matcher sync) and ``_start_server`` (the
-``intelephense.files.associations`` push) and is exercised end-to-end by the integration test
-at the bottom, which starts a real Intelephense and is gated by the ``php`` marker like the
-rest of the PHP suite.
+The unit tests cover the default source-file matcher. The integration tests exercise matcher
+and server-index configuration through real Intelephense, Phpactor, and PHPantom processes;
+they are gated by the ``php`` marker like the rest of the PHP suite.
 """
 
 import pytest
@@ -75,3 +73,16 @@ class TestFileFilterIntegration:
             assert SymbolUtils.symbol_tree_contains_name(symbols, "DrupalModuleController"), (
                 "DrupalModuleController from drupal_module.module not found in the symbol tree"
             )
+
+    @pytest.mark.parametrize("language_server_id", [LanguageServerId.PHP_PHPACTOR, LanguageServerId.PHP_PHPANTOM])
+    def test_alternative_php_server_file_filter_makes_module_visible(self, language_server_id: LanguageServerId) -> None:
+        with start_ls_context(
+            language_server_id,
+            ls_specific_settings={language_server_id: {"file_filter": [".module"]}},
+        ) as ls:
+            symbols = ls.request_full_symbol_tree()
+            assert SymbolUtils.symbol_tree_contains_name(symbols, "drupal_module_help")
+
+            helper_php_path = str(get_repo_path(language_server_id) / "helper.php")
+            references = ls.request_references(helper_php_path, 2, len("function "))
+            assert any(ref["uri"].endswith("drupal_module.module") for ref in references)
