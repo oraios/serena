@@ -20,6 +20,7 @@ from mcp.types import ToolAnnotations
 from pydantic_settings import SettingsConfigDict
 from sensai.util import logging
 
+from serena import __version__
 from serena.agent import (
     SerenaAgent,
 )
@@ -390,6 +391,9 @@ class SerenaMCPFactory:
             port=port,
             instructions=instructions,
         )
+        # noinspection PyProtectedMember
+        # FastMCP passes no version to the low-level server, whose serverInfo then falls back to the mcp package's version.
+        mcp._mcp_server.version = __version__
         return mcp
 
     @asynccontextmanager
