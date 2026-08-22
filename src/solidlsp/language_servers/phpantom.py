@@ -122,6 +122,8 @@ class PHPantomServer(SolidLanguageServer):
         - ls_path: path to a pre-installed phpantom_lsp binary
         - phpantom_version: override the pinned PHPantom version downloaded by Serena
         - ignore_vendor: whether to ignore directories named "vendor" (default: true)
+        - file_filter: list of additional file extensions (with leading dot) to treat as PHP
+          sources, e.g. [".module", ".inc"]
     """
 
     @override
@@ -169,6 +171,11 @@ class PHPantomServer(SolidLanguageServer):
         if self._custom_settings.get("ignore_vendor", True):
             self._ignored_dirnames.add("vendor")
         log.info(f"Ignoring the following directories for PHP (PHPantom): {', '.join(sorted(self._ignored_dirnames))}")
+
+        # extending Serena's source matcher with project-specific PHP extensions
+        file_filter = self._custom_settings.get("file_filter")
+        if file_filter:
+            self.ls_id.get_source_fn_matcher().add_extensions(*file_filter)
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
