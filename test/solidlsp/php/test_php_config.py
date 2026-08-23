@@ -75,7 +75,7 @@ class TestFileFilterIntegration:
             )
 
     @pytest.mark.parametrize("language_server_id", [LanguageServerId.PHP_PHPACTOR, LanguageServerId.PHP_PHPANTOM])
-    def test_alternative_php_server_file_filter_makes_module_visible(self, language_server_id: LanguageServerId) -> None:
+    def test_alternative_php_server_file_filter_makes_module_symbols_visible(self, language_server_id: LanguageServerId) -> None:
         with start_ls_context(
             language_server_id,
             ls_specific_settings={language_server_id: {"file_filter": [".module"]}},
@@ -83,6 +83,12 @@ class TestFileFilterIntegration:
             symbols = ls.request_full_symbol_tree()
             assert SymbolUtils.symbol_tree_contains_name(symbols, "drupal_module_help")
 
-            helper_php_path = str(get_repo_path(language_server_id) / "helper.php")
+    def test_phpantom_file_filter_makes_module_references_visible(self) -> None:
+        with start_ls_context(
+            LanguageServerId.PHP_PHPANTOM,
+            ls_specific_settings={LanguageServerId.PHP_PHPANTOM: {"file_filter": [".module"]}},
+        ) as ls:
+            ls.request_full_symbol_tree()
+            helper_php_path = str(get_repo_path(LanguageServerId.PHP_PHPANTOM) / "helper.php")
             references = ls.request_references(helper_php_path, 2, len("function "))
             assert any(ref["uri"].endswith("drupal_module.module") for ref in references)

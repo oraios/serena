@@ -129,8 +129,6 @@ class PhpactorServer(SolidLanguageServer):
         """
         Returns the initialization params for the Phpactor Language Server.
         """
-        file_filter = self._custom_settings.get("file_filter", [])
-        supported_extensions = ["php", "phar", *(extension.removeprefix(".") for extension in file_filter)]
         initialize_params = {
             "capabilities": {
                 "textDocument": {
@@ -150,8 +148,6 @@ class PhpactorServer(SolidLanguageServer):
                 "language_server_phpstan.enabled": False,
                 "language_server_psalm.enabled": False,
                 "language_server_php_cs_fixer.enabled": False,
-                "indexer.supported_extensions": supported_extensions,
-                "indexer.include_patterns": [f"/**/*.{extension}" for extension in supported_extensions],
             },
         }
         return initialize_params
