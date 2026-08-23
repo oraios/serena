@@ -65,11 +65,11 @@ Some languages require additional installations or setup steps, as noted.
 * **Dart**
 * **Elixir**  
   (requires Elixir installation; Expert language server is downloaded automatically)
-* **Elm**  
-  (requires Elm compiler)
 * **Erlang**  
-  (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls); experimental, might be slow or hang;
-  note that functions are addressed as `name#arity`, e.g. `create_user#4`, because `/` is reserved as the name path separator)
+  (uses the [Erlang Language Platform](https://github.com/WhatsApp/erlang-language-platform); Serena takes `elp` from PATH or downloads the pinned platform release automatically; requires Erlang/OTP; functions are addressed as `name#arity`, e.g. `create_user#4`, because `/` is reserved as the name path separator)
+* **Elm**
+
+  (requires Elm compiler)
 * **F#**  
   (requires [.NET v8.0+](https://dotnet.microsoft.com/en-us/download/dotnet); uses FsAutoComplete/Ionide, which is auto-installed; for Homebrew .NET on macOS, set DOTNET_ROOT in your environment)
 * **Fortran**   

@@ -546,6 +546,16 @@ Supported settings:
 |---|---|---|
 | `expert_version` | `v0.1.0-rc.6` | Override the Expert version Serena downloads when it does not use an `expert` executable already found in PATH. |
 
+#### Erlang
+
+Serena uses the [Erlang Language Platform](https://github.com/WhatsApp/erlang-language-platform) (ELP) for Erlang support. Serena uses an `elp` executable from PATH when available; otherwise it downloads the pinned official release asset for the current platform.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed download | Override the ELP executable path. |
+
 #### Elm
 
 Serena uses `@elm-tooling/elm-language-server` for Elm support.
