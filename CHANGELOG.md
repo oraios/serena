@@ -7,6 +7,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     project list in `serena_config.yml`
 
 * Language Servers:
+  - Fix: the managed Solidity language server could report no diagnostics on macOS when Hardhat could not write
+    its global state under ``~/Library``; Serena now gives the child process an isolated home-directory view
+    via ``solidity_state_dir`` without changing the parent process's ``HOME`` (#1817)
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: clojure-lsp was not told that Serena sends `workspace/didChangeWatchedFiles`, so changes made
     outside Serena's own edit tools (a git checkout, another editor, a build step) need not invalidate
