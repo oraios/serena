@@ -1914,7 +1914,7 @@ class SolidLanguageServer(ABC):
               (see :class:`serena.symbol.NamePathMatcher`). A symbol whose name contains it cannot be
               addressed by any tool taking an exact name path, not even via the name path that is
               reported for the symbol itself. Language servers that identify symbols in such a way
-              (e.g. Erlang LS, which reports functions as `name/arity`) must substitute another
+              (e.g. Erlang language servers, which may report functions as `name/arity`) must substitute another
               character here.
 
         :param symbol: the symbol
