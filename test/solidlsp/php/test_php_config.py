@@ -15,7 +15,7 @@ import pytest
 
 from solidlsp.ls_config import FilenameMatcher, LanguageServerId
 from solidlsp.ls_utils import SymbolUtils
-from test.conftest import get_repo_path, start_ls_context
+from test.conftest import get_pytest_markers, get_repo_path, start_ls_context
 
 
 class TestPhpSourceFnMatcherDefaults:
@@ -74,7 +74,21 @@ class TestFileFilterIntegration:
                 "DrupalModuleController from drupal_module.module not found in the symbol tree"
             )
 
-    @pytest.mark.parametrize("language_server_id", [LanguageServerId.PHP_PHPACTOR, LanguageServerId.PHP_PHPANTOM])
+    @pytest.mark.parametrize(
+        "language_server_id",
+        [
+            pytest.param(
+                LanguageServerId.PHP_PHPACTOR,
+                marks=get_pytest_markers(LanguageServerId.PHP_PHPACTOR),
+                id="phpactor",
+            ),
+            pytest.param(
+                LanguageServerId.PHP_PHPANTOM,
+                marks=get_pytest_markers(LanguageServerId.PHP_PHPANTOM),
+                id="phpantom",
+            ),
+        ],
+    )
     def test_alternative_php_server_file_filter_makes_module_symbols_visible(self, language_server_id: LanguageServerId) -> None:
         with start_ls_context(
             language_server_id,
