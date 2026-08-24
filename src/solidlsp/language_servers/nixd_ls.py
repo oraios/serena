@@ -12,6 +12,7 @@ import shutil
 import subprocess
 from copy import deepcopy
 from pathlib import Path
+from time import sleep
 from typing import Any
 
 from overrides import override
@@ -377,6 +378,23 @@ class NixLanguageServer(SolidLanguageServer):
             "initializationOptions": deepcopy(self._nixd_settings),
         }
         return initialize_params
+
+    @override
+    def _request_hover(self, file_buffer: LSPFileBuffer, line: int, column: int) -> ls_types.Hover | None:
+        """Retry an empty hover while nixd finishes its initial analysis.
+
+        nixd can answer the first hover request with ``null`` immediately after
+        ``textDocument/didOpen`` even though the same position becomes available
+        shortly afterwards. Keep the retry bounded so a genuinely unsupported
+        hover still returns promptly.
+        """
+        result = super()._request_hover(file_buffer, line, column)
+        for _ in range(5):
+            if result is not None:
+                return result
+            sleep(0.1)
+            result = super()._request_hover(file_buffer, line, column)
+        return result
 
     @override
     def _supports_pull_diagnostics(self) -> bool:

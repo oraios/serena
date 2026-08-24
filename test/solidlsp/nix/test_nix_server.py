@@ -215,3 +215,16 @@ def test_start_registers_configuration_handler_before_start_and_initialize(tmp_p
 
     assert events.index("request:workspace/configuration") < events.index("start") < events.index("initialize")
     assert request_handlers["workspace/configuration"]({"items": [{"section": "nixd.formatting"}]}) == [{"command": ["nixpkgs-fmt"]}]
+
+
+def test_hover_retries_transient_empty_response(tmp_path: Path) -> None:
+    server = _make_server(tmp_path)
+    cast(Any, server.server.send.hover).side_effect = [None, {"contents": {"kind": "markdown", "value": "makeGreeting"}}]
+    file_buffer = Mock(uri="file:///tmp/default.nix")
+
+    with patch("solidlsp.language_servers.nixd_ls.sleep") as wait:
+        result = server._request_hover(file_buffer, 12, 5)
+
+    assert result == {"contents": {"kind": "markdown", "value": "makeGreeting"}}
+    assert server.server.send.hover.call_count == 2
+    wait.assert_called_once_with(0.1)
