@@ -616,6 +616,11 @@ class SolidLanguageServer(ABC):
             self._dependency_provider = self._create_dependency_provider()
         return self._dependency_provider
 
+    def install_dependencies(self) -> None:
+        """Install all runtime dependencies managed by this language server."""
+        if self._dependency_provider is not None:
+            self._dependency_provider.install_dependencies()
+
     def _create_process_launch_info(self) -> ProcessLaunchInfo:
         dependency_provider = self._get_dependency_provider()
         cmd = dependency_provider.create_launch_command()

@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import platform
 import shutil
 import tempfile
 import threading
@@ -11,6 +12,7 @@ from os import PathLike
 
 from solidlsp.ls_utils import FileUtils, is_running_in_ci
 from solidlsp.settings import SOLIDLSP_RESOURCES_DIR, SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +51,14 @@ class LanguageServerDependencyProvider(ABC):
         """
         return {}
 
+    def install_dependencies(self) -> None:
+        """Install dependencies managed by this provider.
+
+        Most providers install dependencies while constructing the launch command. Providers
+        whose installation is deferred until launch time should override this method.
+        """
+        self.create_launch_command()
+
 
 class LanguageServerDependencyProviderBaseCommand(LanguageServerDependencyProvider, ABC):
     """
@@ -83,8 +93,8 @@ class LanguageServerDependencyProviderBaseCommand(LanguageServerDependencyProvid
         :return: the extended command
         """
 
-    def create_launch_command(self) -> list[str]:
-        # obtain base command
+    def _get_custom_base_command(self) -> list[str] | None:
+        """Return a valid user-provided base command, or ``None`` for managed installation."""
         base_command = self._custom_settings.get("ls_base_cmd", None)
         if base_command is not None and not isinstance(base_command, list):
             log.warning("The 'ls_base_cmd' setting should be a list of strings. Ignoring the provided value: %s", base_command)
@@ -93,9 +103,14 @@ class LanguageServerDependencyProviderBaseCommand(LanguageServerDependencyProvid
             ls_path = self._custom_settings.get("ls_path", None)
             if ls_path is not None:
                 base_command = [ls_path]
-            else:
-                # default case: base command is constructed by the provider implementation
-                base_command = self._create_default_base_command()
+        return base_command
+
+    def create_launch_command(self) -> list[str]:
+        # obtain base command
+        base_command = self._get_custom_base_command()
+        if base_command is None:
+            # default case: base command is constructed by the provider implementation
+            base_command = self._create_default_base_command()
 
         # create launch command from base command
         ls_args = self._custom_settings.get("ls_args")
@@ -239,12 +254,45 @@ class LanguageServerDependencyProviderUvx(LanguageServerDependencyProviderBaseCo
 
         raise RuntimeError("Could not find 'uvx' or 'uv' in PATH. Install uv (https://docs.astral.sh/uv/).")
 
+    @staticmethod
+    def _find_uv_executable() -> str:
+        """Return the uv executable, including the directory next to a configured uvx."""
+        uv_path = shutil.which("uv")
+        if uv_path is not None:
+            return uv_path
+
+        uvx_path = os.environ.get("UVX") or "uvx"
+        uvx_path = shutil.which(uvx_path)
+        if uvx_path is not None:
+            candidate = os.path.join(os.path.dirname(uvx_path), "uv.exe" if platform.system() == "Windows" else "uv")
+            if os.path.isfile(candidate):
+                return candidate
+
+        raise RuntimeError("Could not find 'uv' in PATH. Install uv (https://docs.astral.sh/uv/).")
+
+    @classmethod
+    def _build_uv_tool_install_command(cls, package: str, version: str, python_version: str = DEFAULT_UVX_PYTHON_VERSION) -> list[str]:
+        """Build the command that persistently installs a pinned package as a uv tool."""
+        return [cls._find_uv_executable(), "tool", "install", "-p", python_version, f"{package}=={version}"]
+
     def _create_default_base_command(self):
         version = self._custom_settings.get(self._version_setting_key, self._default_version)
         return self._build_uvx_base_command(self._package, version, self._entrypoint)
 
     def _create_launch_command_from_base_command(self, base_command: list[str]) -> list[str]:
         return base_command + list(self._extra_args)
+
+    def install_dependencies(self) -> None:
+        """Materialize the pinned package so later uvx launches need no network access."""
+        if self._get_custom_base_command() is not None:
+            log.info("A custom launch command is configured for package '%s'; no dependencies to install", self._package)
+            return
+
+        version = self._custom_settings.get(self._version_setting_key, self._default_version)
+        cmd = self._build_uv_tool_install_command(self._package, version)
+        result = subprocess_run(cmd)
+        if result.returncode != 0:
+            raise RuntimeError(f"Installation of {self._package}=={version} failed: {result.stderr or result.stdout}")
 
 
 class DownloadedDependencyHashDatabase:
