@@ -919,8 +919,9 @@ settings through LSP `workspace/configuration` requests. Existing `initializatio
 remain top-level overrides and are reflected in both paths. Restart Serena after changing the JSON file.
 
 For the first request after opening a file, nixd can briefly return an empty hover while its initial analysis is completing.
-Serena retries that response for a bounded interval before returning `null`, so transient startup timing does not make hover
-appear unavailable while genuinely unsupported positions still return promptly.
+Serena retries that response up to five times with a 100 ms delay between attempts before returning `null`. This bounded
+retry prevents a transient startup response from immediately making hover unavailable; unsupported positions still return
+`null` after the same bounded retry interval.
 
 
 #### Pascal (`pasls`)

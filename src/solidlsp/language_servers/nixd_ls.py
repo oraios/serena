@@ -32,6 +32,9 @@ class NixLanguageServer(SolidLanguageServer):
     Provides Nix specific instantiation of the LanguageServer class using nixd.
     """
 
+    _HOVER_RETRY_COUNT = 5
+    _HOVER_RETRY_DELAY_SECONDS = 0.1
+
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
         """Provides the nixd launch command and managed dependency fallback."""
 
@@ -389,10 +392,10 @@ class NixLanguageServer(SolidLanguageServer):
         hover still returns promptly.
         """
         result = super()._request_hover(file_buffer, line, column)
-        for _ in range(5):
+        for _ in range(self._HOVER_RETRY_COUNT):
             if result is not None:
                 return result
-            sleep(0.1)
+            sleep(self._HOVER_RETRY_DELAY_SECONDS)
             result = super()._request_hover(file_buffer, line, column)
         return result
 

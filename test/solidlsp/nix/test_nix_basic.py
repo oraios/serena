@@ -127,10 +127,18 @@ class TestNixLanguageServer:
         greeting_symbol = next((symbol for symbol in symbol_list if symbol.get("name") == "makeGreeting"), None)
         assert greeting_symbol is not None, "makeGreeting function not found"
 
-        range_start = greeting_symbol["range"]["start"]
-        hover_info = language_server.request_hover("default.nix", range_start["line"], range_start["character"])
+        definition_start = greeting_symbol["range"]["start"]
+        references = language_server.request_references("default.nix", definition_start["line"], definition_start["character"])
+        inherit_reference = next(
+            (reference for reference in references if reference["range"]["start"]["line"] == 66),
+            None,
+        )
+        assert inherit_reference is not None, "makeGreeting inherit reference not found"
 
-        assert hover_info is not None, "Should provide hover information"
+        reference_start = inherit_reference["range"]["start"]
+        hover_info = language_server.request_hover("default.nix", reference_start["line"], reference_start["character"])
+
+        assert hover_info is not None, "Should provide hover information at a known reference"
 
         if isinstance(hover_info, dict) and len(hover_info) > 0:
             # If hover info is provided, it should have proper structure
