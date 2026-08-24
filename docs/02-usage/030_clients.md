@@ -700,6 +700,77 @@ CodeBuddy supports the same hook system as Claude Code. To set up hooks, add the
   permission mode (`acceptEdits` or `auto`), so blanket approvals cover Serena's destructive
   tools (e.g. `replace_symbol_body`, `rename_symbol`) instead of prompting on every call.
 
+## ZCode
+
+[ZCode](https://zcode.z.ai/en) supports Serena through its MCP configuration and local process hooks.
+Connect Serena using the MCP configuration documented by ZCode; the hook commands below are independent
+of whether Serena is connected through HTTP or another supported MCP transport.
+
+### Hooks
+
+ZCode reads user-level hooks from `~/.zcode/cli/config.json`. Add the following under `hooks` and
+start a new ZCode session after changing the file:
+
+```json
+{
+  "hooks": {
+    "enabled": true,
+    "events": {
+      "SessionStart": [
+        {
+          "matcher": "startup|clear|compact",
+          "hooks": [
+            {
+              "type": "process",
+              "command": "serena-hooks",
+              "args": ["activate", "--client", "zcode"]
+            }
+          ]
+        }
+      ],
+      "PreToolUse": [
+        {
+          "matcher": "Read|Bash",
+          "hooks": [
+            {
+              "type": "process",
+              "command": "serena-hooks",
+              "args": ["remind", "--client", "zcode"]
+            }
+          ]
+        },
+        {
+          "matcher": "mcp__serena__*",
+          "hooks": [
+            {
+              "type": "process",
+              "command": "serena-hooks",
+              "args": ["auto-approve", "--client", "zcode"]
+            }
+          ]
+        }
+      ],
+      "Stop": [
+        {
+          "hooks": [
+            {
+              "type": "process",
+              "command": "serena-hooks",
+              "args": ["cleanup", "--client", "zcode"]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+```
+
+ZCode sends one JSON line to each process hook and accepts Serena's `hookSpecificOutput` format,
+so the existing `activate`, `remind`, `cleanup`, and `auto-approve` commands can be reused directly.
+The current ZCode release does not execute project-level hook configuration; use the user-level file
+above or distribute hooks through a ZCode plugin.
+
 ## Other Clients
 
 For other clients, follow the [general instructions](#clients-general-instructions) above to set up Serena as an MCP server.

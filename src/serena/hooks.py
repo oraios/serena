@@ -26,6 +26,7 @@ class HookClient(Enum):
     VSCODE = "vscode"
     CODEX = "codex"
     GROK = "grok"
+    ZCODE = "zcode"
 
 
 class Hook(ABC):

@@ -95,9 +95,30 @@ class TestHookClientDetection:
             hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.GROK)
         assert hook._client == HookClient.GROK
 
+    def test_zcode_client_uses_compatible_hook_protocol(self, tmp_path: Path):
+        payload = _base_input("mcp__serena__find_symbol")
+        with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient("zcode"))
+            hook.execute()
+
+        output = PreToolUseHook.OutputData(
+            permission_decision="allow",
+            permission_decision_reason="allowed",
+            additional_context="context",
+        ).to_json_string(HookClient.ZCODE)
+        result = json.loads(output)
+        assert result["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
+        assert result["hookSpecificOutput"]["permissionDecision"] == "allow"
+        assert result["hookSpecificOutput"]["additionalContext"] == "context"
+
 
 class TestPreToolUseRemindAboutSerenaHook:
     """Tests for the PreToolUse hook that nudges the agent toward symbolic tools."""
+
+    def test_zcode_is_available_as_cli_client_choice(self):
+        result = CliRunner().invoke(hook_commands, ["remind", "--help"])
+        assert result.exit_code == 0
+        assert "zcode" in result.output
 
     def test_missing_tool_name_raises(self, tmp_path: Path):
         stdin_data = {"session_id": "s1"}
