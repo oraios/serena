@@ -41,6 +41,12 @@ def test_ls_path_override_bypasses_download(tmp_path: Path) -> None:
     assert custom_provider.create_launch_command() == ["/opt/elp", "server"]
 
 
+def test_macos_x64_checksum_matches_release_asset() -> None:
+    assert ELP_SHA256_BY_ASSET["elp-macos-x86_64-apple-darwin-otp-27.3.tar.gz"] == (
+        "d7c739a6b23ba7bfc0fc8481619ec55e41257d08cb7aa8b16499fb4c4f5e38e2"
+    )
+
+
 @pytest.mark.parametrize(
     ("platform_id", "asset_platform", "binary_name"),
     [
