@@ -1,8 +1,10 @@
 import subprocess
+from unittest.mock import Mock
 
 import pytest
 
 from solidlsp.dependency_provider import LanguageServerDependencyProviderUvx
+from solidlsp.ls import SolidLanguageServer
 from solidlsp.settings import SolidLSPSettings
 
 
@@ -56,6 +58,26 @@ def test_install_dependencies_uses_managed_install_for_malformed_base_command(in
 
     assert installation_commands == [["uv", "tool", "install", "-p", "3.13", "somepackage==1.2.3"]]
     assert provider._get_custom_base_command() is None
+
+
+def test_language_server_prefetch_creates_lazy_provider() -> None:
+    server = Mock()
+    server._process_launch_info = None
+    provider = server._get_dependency_provider.return_value
+
+    SolidLanguageServer.install_dependencies(server)
+
+    server._get_dependency_provider.assert_called_once_with()
+    provider.install_dependencies.assert_called_once_with()
+
+
+def test_language_server_prefetch_skips_legacy_fixed_command() -> None:
+    server = Mock()
+    server._process_launch_info = object()
+
+    SolidLanguageServer.install_dependencies(server)
+
+    server._get_dependency_provider.assert_not_called()
 
 
 def test_install_dependencies_raises_on_failure(monkeypatch) -> None:
