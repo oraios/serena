@@ -65,6 +65,12 @@ class PhpactorServer(SolidLanguageServer):
     Serena keeps Phpactor's index in the project's cache directory, one directory per set of
     indexed extensions, so the first cross-file query of a project (or the first one after
     `file_filter` changed) waits for a full index, PHP's bundled stubs included.
+
+    On Windows, Phpactor's indexer does not deliver: it announces "Indexing workspace" and then
+    makes no progress at all (measured on the Windows CI runners: no progress report and an empty
+    index 600s in, where the same workspace takes ~9s elsewhere). Cross-file queries there return
+    nothing once `indexing_timeout` expires -- symbol queries, which do not use the index, are
+    unaffected. Prefer Intelephense or PHPantom on Windows.
     """
 
     # Phpactor indexes the workspace once at startup and reports it as work-done progress; a

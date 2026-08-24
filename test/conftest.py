@@ -467,9 +467,10 @@ def _determine_disabled_language_servers() -> list[LanguageServerId]:
         result.append(LanguageServerId.PHP_PHPACTOR)
         result.append(LanguageServerId.PHP_PHPANTOM)
     elif not _php_has_openssl() or (is_windows and is_ci):
-        # Phpactor downloads its PHAR over HTTPS, which requires PHP's openssl extension, and on
-        # the Windows CI runners its initial workspace index is too slow to answer the cross-file
-        # queries the tests make.
+        # Phpactor downloads its PHAR over HTTPS, which requires PHP's openssl extension. And on
+        # the Windows runners its workspace indexer announces "Indexing workspace" and then makes
+        # no progress at all (measured: empty index 600s in, ~9s elsewhere), so every cross-file
+        # query there returns nothing.
         result.append(LanguageServerId.PHP_PHPACTOR)
     if not is_clojure_cli_available():
         result.append(LanguageServerId.CLOJURE)
