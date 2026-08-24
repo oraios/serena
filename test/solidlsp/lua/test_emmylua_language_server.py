@@ -1,5 +1,6 @@
 """Tests for the experimental EmmyLua Analyzer Rust backend."""
 
+import platform
 from pathlib import Path
 from unittest.mock import patch
 
@@ -79,7 +80,8 @@ def test_system_binary_is_preferred_to_managed_install(tmp_path: Path) -> None:
 
 def test_managed_binary_is_reused(tmp_path: Path) -> None:
     settings = _make_settings(tmp_path)
-    managed_path = Path(EmmyLuaLanguageServer.ls_resources_dir(settings)) / "emmylua" / "emmylua_ls"
+    binary_name = "emmylua_ls.exe" if platform.system() == "Windows" else "emmylua_ls"
+    managed_path = Path(EmmyLuaLanguageServer.ls_resources_dir(settings)) / "emmylua" / binary_name
     managed_path.parent.mkdir(parents=True)
     managed_path.write_text("binary", encoding="utf-8")
     with patch("solidlsp.language_servers.emmylua_ls.shutil.which", return_value=None):
@@ -117,7 +119,8 @@ def test_download_extracts_and_returns_binary(tmp_path: Path) -> None:
 
     resolved_path = Path(binary_path)
     assert resolved_path == Path(EmmyLuaLanguageServer.ls_resources_dir(settings)) / "emmylua" / "emmylua_ls"
-    assert resolved_path.stat().st_mode & 0o111
+    if platform.system() != "Windows":
+        assert resolved_path.stat().st_mode & 0o111
 
 
 def test_language_server_id_registers_emmylua_as_experimental() -> None:
