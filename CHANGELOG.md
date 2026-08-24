@@ -6,6 +6,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
 
+* Hooks:
+  - Add opt-in `serena-hooks enforce` hard-block mode with directive Serena replacement calls for direct
+    code searches and reads, plus configurable code-file extensions (#1470)
+
 * Language Servers:
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: clojure-lsp was not told that Serena sends `workspace/didChangeWatchedFiles`, so changes made
