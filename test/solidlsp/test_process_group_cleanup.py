@@ -56,6 +56,14 @@ def _process_alive(pid: int) -> bool:
         return False
 
 
+def _pid_is_gone(pid: int) -> bool:
+    try:
+        psutil.Process(pid)
+        return False
+    except psutil.NoSuchProcess:
+        return True
+
+
 class _DenyingProcess:
     """Stand-in for ``psutil.Process`` that always raises ``AccessDenied``, used to simulate
     a sandboxed environment denying process-table enumeration without needing one. A real class
@@ -229,6 +237,55 @@ class TestPsutilDenialConsequences:
 
 
 class TestProcessTreeDescendantReaping:
+    def test_kill_fallback_signals_snapshot_after_leader_exits(self) -> None:
+        """A leader can exit before the fallback runs while a child ignores SIGTERM.
+
+        The fallback must use the pre-signal descendant snapshot; re-enumerating from
+        the exited leader would leave the child and its zombie grandchild behind.
+        """
+        child_code = textwrap.dedent(
+            """
+            import signal, subprocess, sys, time
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            subprocess.Popen([sys.executable, "-c", "import sys; sys.exit(17)"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(300)
+            """
+        )
+        leader_code = textwrap.dedent(
+            f"""
+            import subprocess, sys, time
+            subprocess.Popen([sys.executable, "-c", {child_code!r}], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print("READY", flush=True)
+            time.sleep(300)
+            """
+        )
+        proc = _spawn_ready(leader_code)
+        try:
+            descendants: list[psutil.Process] = []
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                descendants = psutil.Process(proc.pid).children(recursive=True)
+                if len(descendants) >= 2 and any(child.status() == psutil.STATUS_ZOMBIE for child in descendants):
+                    break
+                time.sleep(0.05)
+            assert len(descendants) >= 2, "expected leader, child, and grandchild processes"
+            assert any(child.status() == psutil.STATUS_ZOMBIE for child in descendants), "expected a zombie grandchild"
+
+            terminate_process_tree_with_kill_fallback(proc, terminate_timeout=0.2, process_name="leader")
+
+            assert _wait_until(lambda: all(_pid_is_gone(child.pid) for child in descendants)), (
+                "kill fallback must not leave the saved child or zombie grandchild behind"
+            )
+        finally:
+            for child in descendants:
+                try:
+                    child.kill()
+                except psutil.Error:
+                    pass
+            if proc.poll() is None:
+                proc.kill()
+            proc.wait(timeout=2.0)
+
     def test_waits_for_discovered_descendants_after_signaling(self, monkeypatch: pytest.MonkeyPatch) -> None:
         events: list[str] = []
 
@@ -270,6 +327,12 @@ class TestProcessTreeDescendantReaping:
 
             def poll(self) -> None:
                 return None
+
+            def terminate(self) -> None:
+                events.append("terminate:leader")
+
+            def kill(self) -> None:
+                events.append("kill:leader")
 
             def wait(self, timeout: float) -> int:
                 events.append("wait:leader")

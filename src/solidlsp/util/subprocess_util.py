@@ -282,11 +282,20 @@ class ManagedSubprocessLauncher:
             return process
 
 
-def _signal_process_tree(process: subprocess.Popen[bytes], terminate: bool = True) -> None:
+def _signal_process_tree(
+    process: subprocess.Popen[bytes],
+    terminate: bool = True,
+    descendants: list[psutil.Process] | None = None,
+) -> None:
     """
-    Sends a signal (terminate or kill) to the given process and all its children.
+    Sends a signal (terminate or kill) to the given process and its descendants.
+
+    ``descendants`` is an optional snapshot captured before the leader is signaled.
+    It is needed for kill fallback: the leader may have exited and been reaped before
+    the fallback runs, in which case re-enumerating from ``process.pid`` loses the tree.
 
     :param terminate: if True, signal terminate, otherwise signal kill
+    :param descendants: previously discovered descendants to signal even if the leader is gone
     """
 
     def signal_process(p: subprocess.Popen | psutil.Process) -> None:
@@ -295,24 +304,23 @@ def _signal_process_tree(process: subprocess.Popen[bytes], terminate: bool = Tru
                 p.terminate()
             else:
                 p.kill()
-        except:
+        except (psutil.Error, OSError):
             pass
 
-    # Try to get the parent process
-    parent = None
-    try:
-        parent = psutil.Process(process.pid)
-    except (psutil.NoSuchProcess, psutil.AccessDenied, Exception):
-        pass
+    if descendants is None:
+        descendants = []
+        try:
+            parent = psutil.Process(process.pid)
+            if parent.is_running():
+                descendants = parent.children(recursive=True)
+        except (psutil.Error, OSError):
+            pass
 
-    # If we have the parent process and it's running, signal the entire tree
-    if parent and parent.is_running():
-        for child in parent.children(recursive=True):
-            signal_process(child)
-        signal_process(parent)
-    # Otherwise, fall back to direct process signaling
-    else:
-        signal_process(process)
+    # Signal the snapshot first, then the leader. The snapshot remains usable after
+    # the leader has exited, while newly spawned children are outside its guarantee.
+    for child in descendants:
+        signal_process(child)
+    signal_process(process)
 
 
 def _signal_process_group(pgid: int, terminate: bool = True) -> None:
@@ -340,7 +348,7 @@ def _get_process_descendants(process: subprocess.Popen) -> list[psutil.Process]:
     """Return a snapshot of descendants that should be waited on after signaling."""
     try:
         return psutil.Process(process.pid).children(recursive=True)
-    except (psutil.NoSuchProcess, psutil.AccessDenied, Exception):
+    except (psutil.Error, OSError):
         return []
 
 
@@ -361,7 +369,7 @@ def _wait_for_processes(processes: list[psutil.Process], timeout: float) -> bool
             child.wait(timeout=remaining)
         except psutil.TimeoutExpired:
             return False
-        except (psutil.NoSuchProcess, psutil.AccessDenied, Exception):
+        except (psutil.Error, OSError):
             continue
     return True
 
@@ -396,7 +404,7 @@ def terminate_process_tree_with_kill_fallback(
         if process_group_id is not None:
             _signal_process_group(process_group_id, terminate=terminate)
         else:
-            _signal_process_tree(process, terminate=terminate)
+            _signal_process_tree(process, terminate=terminate, descendants=None if terminate else descendants)
 
     signal_tree(terminate=True)
     try:
