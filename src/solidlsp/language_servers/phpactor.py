@@ -141,6 +141,15 @@ class PhpactorServer(SolidLanguageServer):
                 [*PHPACTOR_DEFAULT_INDEXED_EXTENSIONS, *(ext.lstrip(".") for ext in self.ls_id.get_source_fn_matcher().file_extensions)]
             )
         )
+
+        # Phpactor's dirty-document tracker appends to `<indexer.index_path>/dirty` whenever a
+        # references request reconciles the open documents with the index, and raises if that
+        # directory does not exist yet -- which is the case until its background index has flushed
+        # for the first time. A `find_referencing_symbols` early in the session therefore failed
+        # outright (observed on Windows CI). Pointing the index at a directory Serena creates up
+        # front removes the race and keeps the index next to the other cached state of the project.
+        index_path = self.cache_dir / "phpactor-index"
+        index_path.mkdir(parents=True, exist_ok=True)
         initialize_params = {
             "capabilities": {
                 "textDocument": {
@@ -166,6 +175,7 @@ class PhpactorServer(SolidLanguageServer):
                 # These keys replace Phpactor's defaults, hence the union with them.
                 "indexer.include_patterns": [f"/**/*.{ext}" for ext in indexed_extensions],
                 "indexer.supported_extensions": indexed_extensions,
+                "indexer.index_path": str(index_path),
             },
         }
         return initialize_params
