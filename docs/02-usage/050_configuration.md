@@ -918,6 +918,10 @@ Serena loads this file once when creating the language server, uses it as nixd's
 settings through LSP `workspace/configuration` requests. Existing `initializationOptions` configured under `ls_specific_settings.nix`
 remain top-level overrides and are reflected in both paths. Restart Serena after changing the JSON file.
 
+For the first request after opening a file, nixd can briefly return an empty hover while its initial analysis is completing.
+Serena retries that response for a bounded interval before returning `null`, so transient startup timing does not make hover
+appear unavailable while genuinely unsupported positions still return promptly.
+
 
 #### Pascal (`pasls`)
 

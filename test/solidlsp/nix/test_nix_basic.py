@@ -9,7 +9,7 @@ import pytest
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
-from test.conftest import is_ci, language_server_tests_enabled
+from test.conftest import language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
@@ -118,12 +118,17 @@ class TestNixLanguageServer:
             # Check if we found the inherit (line 67, 0-indexed: 66)
             assert 66 in ref_lines, f"Should find makeGreeting inherit at line 67, found at lines {[l + 1 for l in ref_lines]}"
 
-    @pytest.mark.xfail(is_ci, reason="Test is flaky")  # TODO: Re-enable if the hover test becomes more stable (#1040)
     @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
     def test_hover_information(self, language_server: SolidLanguageServer) -> None:
         """Test hover information for symbols."""
-        # Get hover info for makeGreeting function
-        hover_info = language_server.request_hover("default.nix", 12, 5)  # Position at makeGreeting
+        # Ask for hover at the actual symbol location instead of relying on a fixture line/column.
+        symbols = language_server.request_document_symbols("default.nix").get_all_symbols_and_roots()
+        symbol_list = symbols[0] if isinstance(symbols, tuple) else symbols
+        greeting_symbol = next((symbol for symbol in symbol_list if symbol.get("name") == "makeGreeting"), None)
+        assert greeting_symbol is not None, "makeGreeting function not found"
+
+        range_start = greeting_symbol["range"]["start"]
+        hover_info = language_server.request_hover("default.nix", range_start["line"], range_start["character"])
 
         assert hover_info is not None, "Should provide hover information"
 
