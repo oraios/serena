@@ -42,3 +42,27 @@ class TestAngularDiagnostics:
             (),
             min_count=1,
         )
+
+
+@pytest.mark.angular
+class TestAngularPublishedDiagnostics:
+    """``textDocument/publishDiagnostics`` — the stream Serena reads after an edit.
+
+    ngserver publishes for .html templates only; for .ts it publishes nothing, so before the
+    routing below every edited component waited out the full timeout and returned nothing.
+    """
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
+    def test_published_diagnostics_for_component_class(self, language_server: SolidLanguageServer) -> None:
+        path = "src/app/diagnostics_sample.ts"
+        with language_server.open_file(path):
+            diagnostics = language_server.request_published_text_document_diagnostics(path, min_severity=2)
+        assert diagnostics, f"Expected published diagnostics for the type error in {path}, got: {diagnostics}"
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
+    def test_published_diagnostics_for_template(self, language_server: SolidLanguageServer) -> None:
+        """The .html half must keep coming from ngserver — the companion cannot type-check templates."""
+        path = "src/app/diagnostics_sample.html"
+        with language_server.open_file(path):
+            diagnostics = language_server.request_published_text_document_diagnostics(path, min_severity=2)
+        assert diagnostics, f"Expected published diagnostics for the template error in {path}, got: {diagnostics}"

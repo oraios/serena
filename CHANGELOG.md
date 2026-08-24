@@ -24,6 +24,15 @@ Status of the `main` branch. Changes prior to the next official version change w
     unresolved project, silently returning incomplete cross-file references. Serena now opens one `.ts`
     file to trigger the load before waiting (skipped for projects without a `tsconfig.json`, where
     ngserver loads nothing)
+  - The Angular language server now supports `additional_workspace_folders`: the extra folders are
+    activated at startup and the companion TypeScript server is given the same workspace folders,
+    ignore patterns and encoding as the main server, so cross-package queries reach code outside the
+    app. `.ts` references are now the union of what ngserver reports (template usages) and what the
+    companion reports (callers in another project — an extra workspace folder, or a second
+    `tsconfig.json` in a monorepo); neither is complete on its own
+  - Fix: Angular post-edit diagnostics for `.ts` files waited out the 2.5s publish timeout on every
+    edited file, because ngserver publishes diagnostics for `.html` templates only; they are now read
+    from the companion TypeScript server, which does publish them
   - Fix: a `tsserver` crash mid-indexing (e.g. a V8 heap OOM) sent the same `$/progress` "end"
     event as a normal completion, so `find_referencing_symbols` and other cross-file queries
     silently returned an empty result instead of surfacing the crash. The crash is now detected

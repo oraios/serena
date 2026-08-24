@@ -11,7 +11,10 @@ an additional HTML companion because ngserver does not implement
         - handles .ts references (ngserver aggregates template + TS usages in
           one pass; typescript-language-server alone misses template usages
           and often returns partial cross-file .ts references on Angular
-          projects where files aren't pre-opened)
+          projects where files aren't pre-opened). It answers from the project
+          owning the queried file only, so the companion's answer is merged in
+          to cover callers in other projects (additional workspace folders,
+          monorepos with several tsconfigs)
         - exposes Angular-specific custom requests
           (IsInAngularProject, GetComponentsWithTemplateFile, ...)
         - DOES NOT implement ``textDocument/documentSymbol`` at all — returns
@@ -37,7 +40,7 @@ Routing:
     request_document_symbols(.html) -> companion HTML server
     request_definition(.ts)         -> companion TS server
     request_definition(.html)       -> ngserver
-    request_references(.ts)         -> ngserver
+    request_references(.ts)         -> ngserver + companion TS server (union)
     request_references(.html)       -> ngserver
     request_hover(.ts)              -> companion TS server
     request_hover(.html)            -> ngserver
@@ -52,6 +55,7 @@ Hard project requirements (failure modes if violated):
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import os
@@ -366,9 +370,18 @@ class AngularLanguageServer(SolidLanguageServer):
 
         return ng_executable, tsdk_path, ts_ls_executable, angular_plugin_path, install_dir
 
+    def _companion_config(self, ls_id: LanguageServerId) -> LanguageServerConfig:
+        """This server's config, retargeted at a companion.
+
+        The companions serve the same files in the same workspace folders (.ts goes to the TS
+        companion, .html documentSymbol to the HTML one), so they must see the same folder list,
+        ignore patterns and file encoding; only tracing stays off to keep their logs out of ours.
+        """
+        return dataclasses.replace(self.config, ls_id=ls_id, trace_lsp_communication=False)
+
     def _start_typescript_server(self) -> None:
         try:
-            ts_config = LanguageServerConfig(ls_id=LanguageServerId.TYPESCRIPT, trace_lsp_communication=False)
+            ts_config = self._companion_config(LanguageServerId.TYPESCRIPT)
             log.info("Creating companion AngularTypeScriptServer")
             self._ts_server = AngularTypeScriptServer(
                 config=ts_config,
@@ -413,7 +426,7 @@ class AngularLanguageServer(SolidLanguageServer):
         non-fatal: we log and fall back to returning an empty list.
         """
         try:
-            html_config = LanguageServerConfig(ls_id=LanguageServerId.HTML, trace_lsp_communication=False)
+            html_config = self._companion_config(LanguageServerId.HTML)
             log.info("Creating companion VsCodeHtmlLanguageServer")
             self._html_server = VsCodeHtmlLanguageServer(
                 config=html_config,
@@ -575,6 +588,7 @@ class AngularLanguageServer(SolidLanguageServer):
             log.debug("Angular LS initialize response: %s", init_response)
             self.server.notify.initialized({})
             self._warm_up_project()
+            self._activate_additional_workspaces()
         except Exception:
             self._stop_typescript_server()
             self._stop_html_server()
@@ -682,10 +696,35 @@ class AngularLanguageServer(SolidLanguageServer):
         # HTML templates: ngserver knows how to resolve template -> component
         return super().request_definition(relative_file_path, line, column)
 
-    # request_references is intentionally not overridden: ngserver (the parent
-    # process) handles both .ts and .html references and returns the full set,
-    # whereas the TS companion under-reports because it only sees pre-opened
-    # files. See module docstring routing table.
+    @override
+    def request_references(self, relative_file_path: str, line: int, column: int) -> list[ls_types.Location]:
+        """For .ts symbols, the union of ngserver's and the TS companion's references.
+
+        Neither is complete on its own. ngserver aggregates the template usages the companion
+        cannot see (which is why it stays the primary), but it answers from the project owning
+        the queried file alone: usages living in another project — a folder from
+        ``additional_workspace_folders``, or a second ``tsconfig.json`` in a monorepo — are
+        absent from its answer and present in the companion's. Both were verified on the
+        ``cross_package_lib`` fixture.
+        """
+        references = super().request_references(relative_file_path, line, column)
+        if self._ts_server is None or not self._is_typescript_file(relative_file_path):
+            return references
+
+        with self._ts_server.open_file(relative_file_path):
+            companion_references = self._ts_server.request_references(relative_file_path, line, column)
+        seen = {self._location_key(location) for location in references}
+        for location in companion_references:
+            key = self._location_key(location)
+            if key not in seen:
+                seen.add(key)
+                references.append(location)
+        return references
+
+    @staticmethod
+    def _location_key(location: ls_types.Location) -> tuple[str, int, int]:
+        start = location["range"]["start"]
+        return location["uri"], start["line"], start["character"]
 
     @override
     def request_rename_symbol_edit(self, relative_file_path: str, line: int, column: int, new_name: str) -> ls_types.WorkspaceEdit | None:
@@ -719,6 +758,65 @@ class AngularLanguageServer(SolidLanguageServer):
             relative_file_path,
         )
         return []
+
+    @override
+    def get_published_diagnostics_generation(self, relative_file_path: str) -> int:
+        # Same split as the pull diagnostics below: ngserver publishes for .html only, so the
+        # generation counter that matters for a .ts file is the companion's.
+        if self._ts_server is not None and self._is_typescript_file(relative_file_path):
+            return self._ts_server.get_published_diagnostics_generation(relative_file_path)
+        return super().get_published_diagnostics_generation(relative_file_path)
+
+    @override
+    def get_cached_published_text_document_diagnostics(
+        self,
+        relative_file_path: str,
+        start_line: int = 0,
+        end_line: int = -1,
+        min_severity: int = 4,
+    ) -> list[ls_types.Diagnostic] | None:
+        if self._ts_server is not None and self._is_typescript_file(relative_file_path):
+            return self._ts_server.get_cached_published_text_document_diagnostics(
+                relative_file_path, start_line=start_line, end_line=end_line, min_severity=min_severity
+            )
+        return super().get_cached_published_text_document_diagnostics(
+            relative_file_path, start_line=start_line, end_line=end_line, min_severity=min_severity
+        )
+
+    @override
+    def request_published_text_document_diagnostics(
+        self,
+        relative_file_path: str,
+        after_generation: int = -1,
+        timeout: float = 2.5,
+        start_line: int = 0,
+        end_line: int = -1,
+        min_severity: int = 4,
+        allow_cached: bool = True,
+    ) -> list[ls_types.Diagnostic] | None:
+        # ngserver publishes diagnostics for .html templates only; for .ts it publishes nothing at
+        # all, so asking it meant waiting out the timeout on every edited component (measured 2.5s)
+        # before Serena fell back to pull diagnostics. The companion publishes them (measured 1.8s).
+        if self._ts_server is not None and self._is_typescript_file(relative_file_path):
+            with self._ts_server.open_file(relative_file_path):
+                return self._ts_server.request_published_text_document_diagnostics(
+                    relative_file_path,
+                    after_generation=after_generation,
+                    timeout=timeout,
+                    start_line=start_line,
+                    end_line=end_line,
+                    min_severity=min_severity,
+                    allow_cached=allow_cached,
+                )
+        return super().request_published_text_document_diagnostics(
+            relative_file_path,
+            after_generation=after_generation,
+            timeout=timeout,
+            start_line=start_line,
+            end_line=end_line,
+            min_severity=min_severity,
+            allow_cached=allow_cached,
+        )
 
     @override
     def request_text_document_diagnostics(
