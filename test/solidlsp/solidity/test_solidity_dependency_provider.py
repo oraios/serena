@@ -33,7 +33,9 @@ def test_darwin_uses_isolated_state_dir_and_preserves_node_options(tmp_path: Pat
 
     assert launch_env["SERENA_SOLIDITY_STATE_DIR"] == str(state_dir)
     assert state_dir.is_dir()
-    assert launch_env["NODE_OPTIONS"] == f'{existing_node_options} --require "{provider._HOMEDIR_PRELOAD}"'
+    assert launch_env["NODE_OPTIONS"] == (
+        f"{existing_node_options} --require {provider._quote_node_option_argument(provider._HOMEDIR_PRELOAD)}"
+    )
     assert "HOME" not in launch_env
     assert os.environ["NODE_OPTIONS"] == existing_node_options
 
