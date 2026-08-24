@@ -123,7 +123,10 @@ class PHPantomServer(SolidLanguageServer):
         - phpantom_version: override the pinned PHPantom version downloaded by Serena
         - ignore_vendor: whether to ignore directories named "vendor" (default: true)
         - file_filter: list of additional file extensions (with leading dot) to treat as PHP
-          sources, e.g. [".module", ".inc"]
+          sources, e.g. [".module", ".inc"]. Note that PHPantom's own workspace scan covers
+          ``.php`` only and offers no setting to widen it (its configuration schema exposes
+          ``indexing.strategy`` as the sole indexing knob), so symbols in the added extensions
+          become referenceable once Serena's traversal has opened the respective files.
     """
 
     @override

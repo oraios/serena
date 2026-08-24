@@ -15,7 +15,7 @@ import pytest
 
 from solidlsp.ls_config import FilenameMatcher, LanguageServerId
 from solidlsp.ls_utils import SymbolUtils
-from test.conftest import get_pytest_markers, get_repo_path, start_ls_context
+from test.conftest import get_pytest_markers, get_repo_path, language_server_tests_enabled, start_ls_context
 
 
 class TestPhpSourceFnMatcherDefaults:
@@ -46,8 +46,8 @@ class TestPhpSourceFnMatcherDefaults:
 class TestFileFilterIntegration:
     """End-to-end check that a custom ``file_filter`` makes a Drupal-style file visible.
 
-    Starts a real Intelephense, hence gated by the ``php`` marker. The ``drupal_module.module``
-    fixture stays invisible to every test that runs with default settings.
+    Starts real language server processes, hence gated by the ``php`` marker. The
+    ``drupal_module.module`` fixture stays invisible to every test that runs with default settings.
     """
 
     def test_module_file_symbols_and_references_visible(self) -> None:
@@ -97,12 +97,39 @@ class TestFileFilterIntegration:
             symbols = ls.request_full_symbol_tree()
             assert SymbolUtils.symbol_tree_contains_name(symbols, "drupal_module_help")
 
+    @pytest.mark.skipif(
+        not language_server_tests_enabled(LanguageServerId.PHP_PHPACTOR),
+        reason=f"{LanguageServerId.PHP_PHPACTOR.value} tests are disabled in this environment",
+    )
+    def test_phpactor_file_filter_makes_module_references_visible(self) -> None:
+        with start_ls_context(
+            LanguageServerId.PHP_PHPACTOR,
+            ls_specific_settings={LanguageServerId.PHP_PHPACTOR: {"file_filter": [".module"]}},
+        ) as ls:
+            # no traversal beforehand: drupal_module.module is never opened, so this reference can
+            # only come from Phpactor's own index -- i.e. from the indexer extensions pushed in
+            # PhpactorServer._create_base_initialize_params.
+            helper_php_path = str(get_repo_path(LanguageServerId.PHP_PHPACTOR) / "helper.php")
+            references = ls.request_references(helper_php_path, 2, len("function "))
+            assert any(ref["uri"].endswith("drupal_module.module") for ref in references), (
+                f"helperFunction call in drupal_module.module not found in references: {references}"
+            )
+
+    @pytest.mark.skipif(
+        not language_server_tests_enabled(LanguageServerId.PHP_PHPANTOM),
+        reason=f"{LanguageServerId.PHP_PHPANTOM.value} tests are disabled in this environment",
+    )
     def test_phpantom_file_filter_makes_module_references_visible(self) -> None:
         with start_ls_context(
             LanguageServerId.PHP_PHPANTOM,
             ls_specific_settings={LanguageServerId.PHP_PHPANTOM: {"file_filter": [".module"]}},
         ) as ls:
+            # PHPantom's workspace scan covers .php only and exposes no setting to widen it
+            # (see PHPantomServer's class docstring), so the traversal below -- which didOpens every
+            # file the matcher accepts -- is what gets drupal_module.module into its index.
             ls.request_full_symbol_tree()
             helper_php_path = str(get_repo_path(LanguageServerId.PHP_PHPANTOM) / "helper.php")
             references = ls.request_references(helper_php_path, 2, len("function "))
-            assert any(ref["uri"].endswith("drupal_module.module") for ref in references)
+            assert any(ref["uri"].endswith("drupal_module.module") for ref in references), (
+                f"helperFunction call in drupal_module.module not found in references: {references}"
+            )

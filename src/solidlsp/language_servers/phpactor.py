@@ -28,6 +28,10 @@ INITIAL_PHPACTOR_PHAR_SHA256 = "53bbe9625cd9b5e9b394bc2f595fbad13dbbe6dfc96950c5
 DEFAULT_PHPACTOR_VERSION = "2025.12.21.1"
 DEFAULT_PHPACTOR_PHAR_SHA256 = "53bbe9625cd9b5e9b394bc2f595fbad13dbbe6dfc96950c56dea3b5d9a246cc3"
 
+# Phpactor's own default `indexer.supported_extensions`; overriding that setting replaces the
+# defaults rather than extending them, so they have to be carried over explicitly.
+PHPACTOR_DEFAULT_INDEXED_EXTENSIONS = ("php", "phar")
+
 
 def _phpactor_sha(version: str) -> str | None:
     if version == INITIAL_PHPACTOR_VERSION:
@@ -49,7 +53,8 @@ class PhpactorServer(SolidLanguageServer):
         - phpactor_version: Override the pinned Phpactor PHAR version downloaded by
           Serena (default: the bundled Serena version)
         - file_filter: list of additional file extensions (with leading dot) to treat as PHP
-          sources, e.g. [".module", ".inc"]
+          sources, e.g. [".module", ".inc"]; these are also pushed to Phpactor's indexer, so
+          references contained in such files are found as well
     """
 
     @override
@@ -129,6 +134,13 @@ class PhpactorServer(SolidLanguageServer):
         """
         Returns the initialization params for the Phpactor Language Server.
         """
+        # union of Phpactor's own indexer extensions with everything Serena's source-file matcher
+        # treats as PHP (the defaults plus any configured via `file_filter`)
+        indexed_extensions = list(
+            dict.fromkeys(
+                [*PHPACTOR_DEFAULT_INDEXED_EXTENSIONS, *(ext.lstrip(".") for ext in self.ls_id.get_source_fn_matcher().file_extensions)]
+            )
+        )
         initialize_params = {
             "capabilities": {
                 "textDocument": {
@@ -148,6 +160,12 @@ class PhpactorServer(SolidLanguageServer):
                 "language_server_phpstan.enabled": False,
                 "language_server_psalm.enabled": False,
                 "language_server_php_cs_fixer.enabled": False,
+                # Phpactor's indexer only walks its own default extensions, so the extra extensions
+                # Serena treats as PHP sources (`file_filter`, #1710) would be missing from the index
+                # and cross-file requests such as `textDocument/references` would not see them.
+                # These keys replace Phpactor's defaults, hence the union with them.
+                "indexer.include_patterns": [f"/**/*.{ext}" for ext in indexed_extensions],
+                "indexer.supported_extensions": indexed_extensions,
             },
         }
         return initialize_params
