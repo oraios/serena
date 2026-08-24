@@ -24,6 +24,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     independently via the `window/logMessage` notification tsserver already sends, and the
     affected wait now raises instead of reporting success (#1814)
 
+* CLI:
+  - Fix: Codex cleanup hooks now always emit a valid non-blocking Stop-hook JSON response, including
+    when the session input is incomplete (#1533)
+
 * Dependencies:
   - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
 
