@@ -7,6 +7,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     project list in `serena_config.yml`
 
 * Language Servers:
+  - Add the experimental Rust-based EmmyLua Analyzer backend as `lua_emmylua`, with managed
+    cross-platform downloads and SHA-256 verification; the default `lua` backend remains unchanged
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: clojure-lsp was not told that Serena sends `workspace/didChangeWatchedFiles`, so changes made
     outside Serena's own edit tools (a git checkout, another editor, a build step) need not invalidate
