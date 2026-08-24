@@ -1,6 +1,7 @@
 import json
 import os
 import pickle
+import shlex
 import shutil
 import sys
 from abc import ABC, abstractmethod
@@ -274,13 +275,18 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
     #: are caught alongside ``read_file``, while ``write_file``/``edit_file`` are not.
     _READ_FILE_VERB_SUBSTRINGS: frozenset[str] = frozenset(("read", "view", "open", "show"))
 
-    #: Shell commands that perform grep-like search; used to classify Codex/Grok
-    #: shell-command tool calls whose ``cmd`` or ``command`` field starts with one of these.
-    _GREP_SHELL_COMMANDS: frozenset[str] = frozenset(("grep", "rg", "ag", "ack", "fgrep", "egrep", "search_for_pattern"))
+    #: Shell commands that perform grep-like search; used to classify shell-command tool calls
+    #: for clients whose payload carries a ``cmd`` or ``command`` field.
+    _GREP_SHELL_COMMANDS: frozenset[str] = frozenset(
+        ("grep", "rg", "ag", "ack", "fgrep", "egrep", "search_for_pattern", "ugrep", "ug", "bfs", "find", "fd")
+    )
 
-    #: Shell commands that perform file-read operations; used to classify Codex/Grok
-    #: shell-command tool calls whose ``cmd`` or ``command`` field starts with one of these.
-    _READ_SHELL_COMMANDS: frozenset[str] = frozenset(("cat", "head", "tail", "sed", "less", "more", "bat", "get-content", "gc"))
+    #: Shell commands that perform file-read operations; used to classify shell-command tool calls
+    #: for clients whose payload carries a ``cmd`` or ``command`` field.
+    _READ_SHELL_COMMANDS: frozenset[str] = frozenset(("cat", "head", "tail", "sed", "less", "more", "bat", "get-content", "gc", "awk"))
+
+    _SHELL_COMMAND_SEPARATORS: frozenset[str] = frozenset(("&&", "||", ";", "|", "&"))
+    _SHELL_COMMAND_WRAPPERS: frozenset[str] = frozenset(("command", "exec"))
 
     #: file suffixes for source-like files where symbolic tools are usually more
     #: appropriate than repeated raw reads. Lowercase and extension-only.
@@ -360,16 +366,17 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         self._command: str | None = None
         self._command_name: str | None = None
         self._command_args_str: str | None = None
+        self._shell_commands: list[tuple[str, list[str]]] = []
         # extract a direct file-path field (Claude Code's ``Read``/``Edit``/``Write`` tool
         # payloads pass the target as ``file_path`` rather than via a shell command).
         self._file_path: str | None = None
         if self._tool_input is not None:
             self._command = str(self._tool_input.get("cmd", self._tool_input.get("command", ""))).strip()
             if self._command:
-                cmd_split = self._command.split(maxsplit=1)
-                if len(cmd_split) > 1:
-                    self._command_args_str = cmd_split[1]
-                self._command_name = os.path.basename(cmd_split[0]).lower()
+                self._shell_commands = self._parse_shell_commands(self._command)
+                if self._shell_commands:
+                    self._command_name, command_args = self._shell_commands[0]
+                    self._command_args_str = shlex.join(command_args)
             file_path = (
                 self._tool_input.get("file_path")
                 or self._tool_input.get("filePath")
@@ -379,23 +386,80 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             )
             self._file_path = str(file_path).strip() or None
 
+    @classmethod
+    def _parse_shell_commands(cls, command: str) -> list[tuple[str, list[str]]]:
+        """Return executable command names and arguments from a shell command line.
+
+        ``shlex`` keeps quoted paths intact while treating common shell separators as
+        command boundaries. A small wrapper set handles forms Claude Code commonly emits,
+        such as ``cd repo && rg pattern`` and ``env FOO=bar cat file.py``.
+        """
+        try:
+            tokens = shlex.split(command, posix=True)
+        except ValueError:
+            # A malformed or incomplete shell line should never make a reminder hook fail.
+            tokens = command.split()
+
+        commands: list[tuple[str, list[str]]] = []
+        segment: list[str] = []
+        segments: list[list[str]] = []
+        for token in tokens:
+            if token in cls._SHELL_COMMAND_SEPARATORS:
+                if segment:
+                    segments.append(segment)
+                    segment = []
+            else:
+                segment.append(token)
+        if segment:
+            segments.append(segment)
+
+        for segment in segments:
+            index = 0
+            while index < len(segment):
+                token = segment[index]
+                command_name = os.path.basename(token).lower()
+                if command_name in cls._SHELL_COMMAND_WRAPPERS:
+                    index += 1
+                    continue
+                if command_name == "env":
+                    index += 1
+                    while index < len(segment) and (segment[index].startswith("-") or "=" in segment[index]):
+                        index += 1
+                    continue
+                break
+            if index < len(segment):
+                command_name = os.path.basename(segment[index]).lower()
+                commands.append((command_name, segment[index + 1 :]))
+        return commands
+
+    def _shell_command_invocations(self) -> list[tuple[str, list[str]]]:
+        """Return parsed shell commands, including compatibility fallback for test stubs."""
+        shell_commands = getattr(self, "_shell_commands", [])
+        if shell_commands:
+            return shell_commands
+        if self._command_name is not None:
+            try:
+                arguments: list[str] = shlex.split(self._command_args_str or "", posix=True)
+            except ValueError:
+                arguments = list(map(str, (self._command_args_str or "").split()))
+            return [(self._command_name, arguments)]
+        return []
+
     def is_grep_call(self) -> bool:
+        shell_grep = any(name in self._GREP_SHELL_COMMANDS for name, _ in self._shell_command_invocations())
         if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
-            return self._tool_name == "grep" or "search_for_pattern" in self._tool_name
-        if self._client == HookClient.GROK:
-            return self._tool_name == "grep" or (self._is_shell_command_call() and self._command_name in self._GREP_SHELL_COMMANDS)
-        if self._client == HookClient.CODEX and self._is_shell_command_call():
-            return self._command_name in self._GREP_SHELL_COMMANDS
+            return self._tool_name == "grep" or "search_for_pattern" in self._tool_name or shell_grep
+        if self._client in (HookClient.GROK, HookClient.CODEX):
+            return self._tool_name == "grep" or shell_grep
         # heuristic for other clients
         return "grep" in self._tool_name
 
     def is_read_call(self) -> bool:
+        shell_read = any(name in self._READ_SHELL_COMMANDS for name, _ in self._shell_command_invocations())
         if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
-            return self._tool_name == "read" or "read_file" in self._tool_name
-        if self._client == HookClient.GROK:
-            return self._tool_name == "read_file" or (self._is_shell_command_call() and self._command_name in self._READ_SHELL_COMMANDS)
-        if self._client == HookClient.CODEX and self._is_shell_command_call():
-            return self._command_name in self._READ_SHELL_COMMANDS
+            return self._tool_name == "read" or "read_file" in self._tool_name or shell_read
+        if self._client in (HookClient.GROK, HookClient.CODEX):
+            return self._tool_name == "read_file" or shell_read
         # heuristic for other clients
         name = self._tool_name
         if "file" not in name:
@@ -404,7 +468,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
 
     def _is_shell_command_call(self) -> bool:
         """:return: whether the hook payload represents a shell-command tool call."""
-        return self._command_name is not None
+        return bool(self._shell_command_invocations())
 
     def is_read_file_call(self) -> bool:
         """:return: whether the tool call reads a file-like target."""
@@ -418,18 +482,26 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         if self._file_path is not None:
             return self._is_code_file_path(self._file_path)
 
-        if self._client in (HookClient.CODEX, HookClient.GROK) and self._command_args_str is not None:
+        if (
+            self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY, HookClient.CODEX, HookClient.GROK)
+            and self._is_shell_command_call()
+        ):
             return any(self._is_code_file_path(argument) for argument in self._iter_shell_path_arguments())
 
         return True
 
     def _iter_shell_path_arguments(self) -> list[str]:
-        """:return: path-like shell arguments with quoting and common options removed."""
+        """:return: path-like arguments passed to shell read commands."""
         arguments: list[str] = []
-        if self._command_args_str is None:
-            return arguments
+        invocations = self._shell_command_invocations()
+        if invocations:
+            raw_arguments = [argument for name, args in invocations if name in self._READ_SHELL_COMMANDS for argument in args]
+        elif self._command_args_str is not None:
+            raw_arguments = self._command_args_str.split()
+        else:
+            raw_arguments = []
 
-        for raw_argument in self._command_args_str.split():
+        for raw_argument in raw_arguments:
             argument = raw_argument.strip().strip("'\"")
             if not argument or argument.startswith("-"):
                 continue

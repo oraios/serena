@@ -24,6 +24,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     independently via the `window/logMessage` notification tsserver already sends, and the
     affected wait now raises instead of reporting success (#1814)
 
+* Hooks:
+  - Fix: Claude Code and CodeBuddy Bash payloads now classify common shell searches and source-file
+    reads, including compound commands, so native shell traffic reaches the symbolic-tool reminder (#1845)
+
 * Dependencies:
   - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
 
