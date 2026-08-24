@@ -343,6 +343,15 @@ def _is_perl_language_server_available() -> bool:
         return False
 
 
+def _php_has_openssl() -> bool:
+    """Whether the PHP installation has the openssl extension Phpactor's PHAR download needs."""
+    try:
+        completed_process = subprocess.run(["php", "-m"], capture_output=True, text=True, timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return "openssl" in {line.strip().lower() for line in completed_process.stdout.splitlines()}
+
+
 def _is_matlab_available() -> bool:
     """Whether a MATLAB installation can be located (env var or a known install path)."""
     if os.environ.get("MATLAB_PATH") is not None:
@@ -457,6 +466,11 @@ def _determine_disabled_language_servers() -> list[LanguageServerId]:
     if _sh.which("php") is None:
         result.append(LanguageServerId.PHP_PHPACTOR)
         result.append(LanguageServerId.PHP_PHPANTOM)
+    elif not _php_has_openssl() or (is_windows and is_ci):
+        # Phpactor downloads its PHAR over HTTPS, which requires PHP's openssl extension, and on
+        # the Windows CI runners its initial workspace index is too slow to answer the cross-file
+        # queries the tests make.
+        result.append(LanguageServerId.PHP_PHPACTOR)
     if not is_clojure_cli_available():
         result.append(LanguageServerId.CLOJURE)
     if _sh.which("verible-verilog-ls") is None:
