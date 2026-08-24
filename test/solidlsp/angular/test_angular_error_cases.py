@@ -14,6 +14,7 @@ upstream LSPs are known to differ (Windows TS server tends to swallow malformed
 positions instead of raising).
 """
 
+import logging
 import os
 import sys
 import time
@@ -367,3 +368,92 @@ class TestAngularStartupCleanup:
                 ls.stop(shutdown_timeout=2.0)
             except Exception:
                 pass
+
+
+class TestAngularWarmUpSeedFile:
+    """Unit tests for the warm-up seed search (``_find_representative_source_file``).
+
+    Pure filesystem walking — no language server is started.
+    """
+
+    @staticmethod
+    def _find(directory) -> str | None:
+        from solidlsp.language_servers.angular_language_server import AngularLanguageServer
+
+        # Bypass __init__ (which would install/launch the LS): the walk only needs the class' own
+        # is_ignored_dirname.
+        ls = object.__new__(AngularLanguageServer)
+        return AngularLanguageServer._find_representative_source_file(ls, str(directory))
+
+    @staticmethod
+    def _write(path, content: str = "export const x = 1;\n") -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+
+    def test_prefers_component_over_plain_ts(self, tmp_path) -> None:
+        (tmp_path / "tsconfig.json").write_text("{}")
+        self._write(tmp_path / "src" / "main.ts")
+        self._write(tmp_path / "src" / "app" / "app.component.ts")
+        assert self._find(tmp_path) == str(tmp_path / "src" / "app" / "app.component.ts")
+
+    def test_falls_back_to_any_ts_file(self, tmp_path) -> None:
+        (tmp_path / "tsconfig.json").write_text("{}")
+        self._write(tmp_path / "src" / "main.ts")
+        assert self._find(tmp_path) == str(tmp_path / "src" / "main.ts")
+
+    def test_skips_declaration_and_spec_files(self, tmp_path) -> None:
+        """``.d.ts`` carries no project, and specs are excluded from the app tsconfig."""
+        (tmp_path / "tsconfig.json").write_text("{}")
+        self._write(tmp_path / "src" / "types.d.ts")
+        self._write(tmp_path / "src" / "app.component.spec.ts")
+        assert self._find(tmp_path) is None
+
+    def test_never_descends_into_node_modules(self, tmp_path) -> None:
+        """A seed inside node_modules would resolve the dependency's project, not the app's."""
+        (tmp_path / "tsconfig.json").write_text("{}")
+        self._write(tmp_path / "node_modules" / "some-lib" / "lib.component.ts")
+        assert self._find(tmp_path) is None
+
+    def test_returns_none_without_tsconfig(self, tmp_path) -> None:
+        """Regression: without a tsconfig.json ngserver never loads a project and never sends
+        ``projectLoadingFinish``, so warming up would burn the full NG_SERVER_READY_TIMEOUT on
+        every startup (measured 31s vs 1s) for nothing.
+        """
+        self._write(tmp_path / "src" / "app" / "app.component.ts")
+        assert self._find(tmp_path) is None
+
+    def test_finds_tsconfig_in_subproject(self, tmp_path) -> None:
+        """Monorepo layout: the tsconfig.json lives in the sub-project, not at the walk root."""
+        self._write(tmp_path / "projects" / "app" / "src" / "app.component.ts")
+        (tmp_path / "projects" / "app" / "tsconfig.json").write_text("{}")
+        assert self._find(tmp_path) == str(tmp_path / "projects" / "app" / "src" / "app.component.ts")
+
+    def test_returns_none_for_empty_directory(self, tmp_path) -> None:
+        assert self._find(tmp_path) is None
+
+
+class TestAngularProjectWarmUp:
+    """Regression: ngserver must have resolved the Angular project by the time ``start()`` returns.
+
+    ngserver loads the project lazily on the first ``didOpen``, not on ``initialized``. Before the
+    warm-up landed, ``angular/projectLoadingFinish`` therefore never arrived during startup: the wait
+    always ran into its timeout (10s of dead latency) and the first symbol query of the session ran
+    against an unresolved project, silently returning incomplete cross-file references.
+    """
+
+    def test_project_load_completes_during_startup(self, caplog: pytest.LogCaptureFixture) -> None:
+        ls = _create_ls(LanguageServerId.ANGULAR)
+        logger = "solidlsp.language_servers.angular_language_server"
+        try:
+            with caplog.at_level(logging.INFO, logger=logger):
+                ls.start()
+            messages = [r.getMessage() for r in caplog.records if r.name == logger]
+        finally:
+            ls.stop(shutdown_timeout=2.0)
+
+        assert any("Angular project loading finished" in m for m in messages), (
+            f"ngserver never signalled projectLoadingFinish during startup; log was: {messages}"
+        )
+        assert not any("Timeout waiting for ngserver project load" in m for m in messages), (
+            f"Startup fell back to the timeout path; log was: {messages}"
+        )

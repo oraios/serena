@@ -18,6 +18,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     indicate it was incomplete. Serena now declares work-done progress support and waits for the work
     Metals reports, bounded by the new `indexing_timeout`, `indexing_start_grace` and
     `indexing_quiet_period` settings
+  - Fix: the Angular language server waited for ngserver's `projectLoadingFinish` after `initialized`,
+    but ngserver loads the project lazily, on the first document open — so the notification could not
+    arrive, every startup burned the full wait, and the first symbol query of a session ran against an
+    unresolved project, silently returning incomplete cross-file references. Serena now opens one `.ts`
+    file to trigger the load before waiting (skipped for projects without a `tsconfig.json`, where
+    ngserver loads nothing)
   - Fix: a `tsserver` crash mid-indexing (e.g. a V8 heap OOM) sent the same `$/progress` "end"
     event as a normal completion, so `find_referencing_symbols` and other cross-file queries
     silently returned an empty result instead of surfacing the crash. The crash is now detected
