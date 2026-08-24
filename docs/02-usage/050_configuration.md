@@ -1033,6 +1033,24 @@ Supported settings:
 | `phpactor_version` | `2025.12.21.1` | Override the Phpactor PHAR version Serena downloads when `ls_path` is not set. |
 | `ignore_vendor` | `true` | Ignore directories named `vendor` while indexing the project. |
 
+#### PHP (`Devsense`)
+
+Serena provides the experimental `php_devsense` language key for the standalone Devsense PHP Language Server.
+The package is installed from npm when no `ls_path` or `devsense-php-ls` executable is available on `PATH`.
+Basic language-server features are available without a license; premium features can be activated with the
+`DEVSENSE_PHP_LS_LICENSE` environment variable.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed npm install | Override the `devsense-php-ls` launcher path. |
+| `devsense_php_ls_version` | `1.0.19197` | Override the pinned npm package version used by the managed install. |
+| `npm_registry` | `null` | Override the npm registry used for the managed install. |
+| `ignore_vendor` | `true` | Ignore directories named `vendor` while indexing the project. |
+| `php_version` | unset | Forward the PHP version as `initializationOptions["php.version"]`. |
+| `file_filter` | unset | Additional file extensions (with leading dot) to treat as PHP sources, added to `.php` / `.phtml`. |
+
 #### PowerShell
 
 Serena uses PowerShell Editor Services for PowerShell support.

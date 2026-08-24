@@ -133,7 +133,9 @@ Some languages require additional installations or setup steps, as noted.
 * **PHP**  
   (by default, uses the Intelephense language server (language `php`), set `INTELEPHENSE_LICENSE_KEY` environment variable for premium features;
   we also support [Phpactor](https://github.com/phpactor/phpactor) (language `php_phpactor`), which requires PHP 8.1+;
-  and the experimental [PHPantom](https://github.com/PHPantom-dev/phpantom_lsp) backend (language `php_phpantom`)
+  the experimental [PHPantom](https://github.com/PHPantom-dev/phpantom_lsp) backend (language `php_phpantom`);
+  and the experimental standalone [Devsense PHP Language Server](https://www.npmjs.com/package/devsense-php-ls)
+  (language `php_devsense`), which is installed with npm when needed
 * **PowerShell**  
   (requires PowerShell 7+ (`pwsh`) on PATH or in a standard install location; Serena automatically downloads PowerShell Editor Services 4.4.0 and installs PSScriptAnalyzer 1.25.0 via `Save-Module` from your configured PowerShell repository)
 * **Python**
