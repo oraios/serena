@@ -1070,6 +1070,22 @@ class TestHookCli:
         assert result.exit_code == 0
         assert result.output == ""
 
+    def test_auto_approve_command_dsh_stays_silent(self, tmp_path: Path):
+        """DSH's Claude-compatible bridge does not treat ``allow`` as pre-approval."""
+        stdin_json = json.dumps(
+            {
+                "session_id": "cli-auto-approve-dsh",
+                "tool_name": "mcp__serena__find_symbol",
+                "tool_input": {},
+                "permission_mode": "auto",
+            }
+        )
+        runner = CliRunner()
+        with patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            result = runner.invoke(hook_commands, ["auto-approve", "--client", "dsh"], input=stdin_json)
+        assert result.exit_code == 0
+        assert result.output == ""
+
     def test_auto_approve_command_grok_uses_native_output(self, tmp_path: Path):
         """The ``auto-approve`` CLI command accepts ``--client=grok`` and emits Grok-native JSON."""
         stdin_json = json.dumps(

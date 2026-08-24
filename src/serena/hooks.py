@@ -545,15 +545,17 @@ class SessionEndCleanupHook(Hook):
 
 
 class PreToolUseAutoApproveSerenaHook(PreToolUseHook):
-    """Pre-tool-use hook that auto-approves Serena tool calls while the client is in a permissive permission mode.
+    """Pre-tool-use hook that auto-approves Serena tool calls for supported clients.
 
     Claude Code's permissive permission modes (``acceptEdits`` for blanket edit approval and
     ``auto`` for hands-off autonomous execution) only apply to its built-in editing tools or
     its auto-mode classifier; Serena's destructive tools (e.g. ``replace_symbol_body`` or
     ``rename_symbol``) would still prompt the user on every call. This hook emits an ``allow``
-    decision for any Serena MCP tool call whenever the client reports one of these modes as
-    the active permission mode, so blanket approvals also cover Serena's tools. In all other
-    situations it stays silent, preserving the default approval flow.
+    decision for any Serena MCP tool call whenever the client reports one of these modes as the
+    active permission mode, so blanket approvals also cover Serena's tools. The DSH bridge does
+    not use Claude's ``allow`` decision for pre-approval, so this hook intentionally stays silent
+    for DSH. In all other situations it stays silent, preserving the default approval flow.
+
 
     ``bypassPermissions`` and ``dontAsk`` are deliberately excluded. ``bypassPermissions``
     already approves everything before the hook would matter, so silence here is harmless.
@@ -571,6 +573,9 @@ class PreToolUseAutoApproveSerenaHook(PreToolUseHook):
         return self._permission_mode in self._AUTO_APPROVE_MODES
 
     def execute(self) -> None:
+        # DSH's Claude-compatible bridge does not implement allow as pre-approval.
+        if self._client == HookClient.DSH:
+            return
         # only emit a decision when both the tool and the mode match; stay silent otherwise
         if not self.is_serena_symbolic_tool() or not self.is_auto_approve_mode():
             return
@@ -624,8 +629,8 @@ class HookCommands(AutoRegisteringGroup):
     @staticmethod
     @click.command(
         "auto-approve",
-        help="Set this as hook at PreToolUse to auto-approve Serena tool calls while the client is in a "
-        "permissive permission mode (acceptEdits or auto, Claude Code).",
+        help="Set this as a Claude Code hook at PreToolUse to auto-approve Serena tool calls while the client is in a "
+        "permissive permission mode (acceptEdits or auto). DSH does not support this decision.",
     )
     @_client_option
     def auto_approve(client: str) -> None:
