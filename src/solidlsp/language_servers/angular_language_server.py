@@ -45,6 +45,11 @@ Routing:
     request_hover(.ts)              -> companion TS server
     request_hover(.html)            -> ngserver
     request_rename_symbol_edit      -> companion TS server (.ts), ngserver (.html)
+    published diagnostics (.ts)     -> companion TS server
+    published diagnostics (.html)   -> ngserver
+      ("published diagnostics" = request_published_text_document_diagnostics plus the
+       cached/generation accessors, which must route identically or the generation
+       counter would be read off a different server than the diagnostics.)
 
 Hard project requirements (failure modes if violated):
     * tsconfig.json at the repository root (or above any opened .ts file).
@@ -74,6 +79,7 @@ from solidlsp.language_servers.typescript_language_server import (
 from solidlsp.language_servers.vscode_html_language_server import VsCodeHtmlLanguageServer
 from solidlsp.ls import LanguageServerDependencyProvider, LSPFileBuffer, SolidLanguageServer
 from solidlsp.ls_config import FilenameMatcher, LanguageServerConfig, LanguageServerId
+from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.lsp_protocol_handler.lsp_types import DocumentSymbol, SymbolInformation
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -218,6 +224,8 @@ class AngularLanguageServer(SolidLanguageServer):
     """
 
     NG_SERVER_READY_TIMEOUT = 30.0
+    # Upper bound on the warm-up seed search once a usable (non-component) seed is already in hand.
+    MAX_SEED_SEARCH_DIRS = 2000
     TS_SERVER_READY_TIMEOUT = 10.0
     HTML_SERVER_READY_TIMEOUT = 10.0
 
@@ -620,6 +628,13 @@ class AngularLanguageServer(SolidLanguageServer):
                 if not self.server_ready.wait(timeout=self.NG_SERVER_READY_TIMEOUT):
                     log.info("Timeout waiting for ngserver project load; proceeding anyway")
                     self.server_ready.set()
+        except SolidLSPException as e:
+            # A terminated ngserver is not a warm-up problem: swallowing it would report a
+            # successful startup and surface the failure from whatever ran next instead.
+            if e.is_language_server_terminated():
+                raise
+            log.warning("ngserver warm-up via %s failed (%s); proceeding anyway", seed, e)
+            self.server_ready.set()
         except Exception as e:
             # The warm-up is an optimisation; a seed file we cannot read is no reason to fail startup.
             log.warning("ngserver warm-up via %s failed (%s); proceeding anyway", seed, e)
@@ -632,25 +647,57 @@ class AngularLanguageServer(SolidLanguageServer):
         Returns None if the directory contains no ``tsconfig.json``: without one ngserver never loads a
         project and so never sends ``projectLoadingFinish``, and opening a file would only burn the
         full ``NG_SERVER_READY_TIMEOUT`` on every startup (measured: 31s vs 1s when skipped).
+
+        The ``tsconfig.json`` may sit anywhere in the tree, not necessarily next to the chosen seed —
+        deliberately looser than the TypeScript sibling, which picks a file adjacent to the tsconfig:
+        ngserver resolves the owning project from the file itself, and in a monorepo the seed and the
+        tsconfig that covers it routinely live in different directories.
         """
         component: str | None = None
         fallback: str | None = None
         has_tsconfig = False
+        scanned_dirs = 0
         for dirpath, dirnames, filenames in os.walk(directory):
-            # prune in place so a big node_modules is never descended into
-            dirnames[:] = [d for d in dirnames if not self.is_ignored_dirname(d)]
+            # prune in place so a big node_modules is never descended into; sort so the seed is the
+            # same file on every machine rather than whatever the filesystem happened to list first
+            dirnames[:] = sorted(d for d in dirnames if not self.is_ignored_dirname(d))
             has_tsconfig = has_tsconfig or "tsconfig.json" in filenames
             for name in sorted(filenames):
                 if not name.endswith(".ts") or name.endswith((".d.ts", ".spec.ts")):
                     continue
                 path = os.path.join(dirpath, name)
-                if name.endswith(".component.ts") and component is None:
-                    component = path
+                if name.endswith(".component.ts"):
+                    if component is None:
+                        component = path
                 elif fallback is None:
                     fallback = path
             if has_tsconfig and component is not None:
                 return component
+            scanned_dirs += 1
+            # ponytail: fixed budget rather than a cleverer search. A repo with no .component.ts
+            # anywhere (a plain-TS workspace folder) would otherwise walk its whole source tree just
+            # to confirm the preference cannot be satisfied; once a fallback exists, that walk buys
+            # nothing after a point. Raise it if a real project's components turn out to sit deeper.
+            if has_tsconfig and fallback is not None and scanned_dirs >= self.MAX_SEED_SEARCH_DIRS:
+                log.info("Seed search stopped after %d directories under %s; using %s", scanned_dirs, directory, fallback)
+                return fallback
         return (component or fallback) if has_tsconfig else None
+
+    @override
+    def _signal_expect_indexing(self) -> None:
+        # `_activate_additional_workspaces` is about to didOpen a file from an extra folder, which is
+        # what makes ngserver load that folder's project. Clear the flag the load will re-raise.
+        self.server_ready.clear()
+
+    @override
+    def _wait_for_additional_workspace_indexing(self) -> None:
+        # Without this the base class returns from `start()` as soon as the didOpens are sent, and the
+        # first query races ngserver's project load — the very bug the startup warm-up fixed.
+        if self.server_ready.wait(timeout=self.NG_SERVER_READY_TIMEOUT):
+            log.info("Additional workspace project load finished")
+        else:
+            log.info("Timeout waiting for additional workspace project load; proceeding anyway")
+            self.server_ready.set()
 
     @override
     def stop(self, shutdown_timeout: float = 5.0) -> None:
@@ -711,8 +758,20 @@ class AngularLanguageServer(SolidLanguageServer):
         if self._ts_server is None or not self._is_typescript_file(relative_file_path):
             return references
 
-        with self._ts_server.open_file(relative_file_path):
-            companion_references = self._ts_server.request_references(relative_file_path, line, column)
+        try:
+            with self._ts_server.open_file(relative_file_path):
+                companion_references = self._ts_server.request_references(relative_file_path, line, column)
+        except SolidLSPException as e:
+            # Termination must propagate so tools_base can restart the LS and retry (as in ls.py).
+            if e.is_language_server_terminated():
+                raise
+            log.warning("Companion TS server failed on references for %s (%s); using ngserver's answer alone", relative_file_path, e)
+            return references
+        except Exception as e:
+            # ngserver's answer is already in hand and is the primary one; a companion failure
+            # degrades cross-project coverage but must not turn a usable result into an error.
+            log.warning("Companion TS server failed on references for %s (%s); using ngserver's answer alone", relative_file_path, e)
+            return references
         seen = {self._location_key(location) for location in references}
         for location in companion_references:
             key = self._location_key(location)
@@ -723,8 +782,16 @@ class AngularLanguageServer(SolidLanguageServer):
 
     @staticmethod
     def _location_key(location: ls_types.Location) -> tuple[str, int, int]:
+        """Identity of a reference, on the one field both servers normalise.
+
+        Not the raw ``uri``: that is whatever each process spelled it, and the two disagree —
+        ``TypeScriptLanguageServer._get_published_diagnostics_uri`` exists precisely because
+        tsserver lower-cases the Windows drive letter. ``absolutePath`` is normalised by
+        ``convert_location_item`` for both, so a same-location pair collapses instead of
+        showing the user the reference twice.
+        """
         start = location["range"]["start"]
-        return location["uri"], start["line"], start["character"]
+        return os.path.normcase(location["absolutePath"]), start["line"], start["character"]
 
     @override
     def request_rename_symbol_edit(self, relative_file_path: str, line: int, column: int, new_name: str) -> ls_types.WorkspaceEdit | None:
@@ -761,8 +828,8 @@ class AngularLanguageServer(SolidLanguageServer):
 
     @override
     def get_published_diagnostics_generation(self, relative_file_path: str) -> int:
-        # Same split as the pull diagnostics below: ngserver publishes for .html only, so the
-        # generation counter that matters for a .ts file is the companion's.
+        # Same split as the published diagnostics below, and it must stay identical: a generation
+        # counter read off ngserver would never advance for the diagnostics the companion published.
         if self._ts_server is not None and self._is_typescript_file(relative_file_path):
             return self._ts_server.get_published_diagnostics_generation(relative_file_path)
         return super().get_published_diagnostics_generation(relative_file_path)
@@ -794,9 +861,11 @@ class AngularLanguageServer(SolidLanguageServer):
         min_severity: int = 4,
         allow_cached: bool = True,
     ) -> list[ls_types.Diagnostic] | None:
-        # ngserver publishes diagnostics for .html templates only; for .ts it publishes nothing at
-        # all, so asking it meant waiting out the timeout on every edited component (measured 2.5s)
-        # before Serena fell back to pull diagnostics. The companion publishes them (measured 1.8s).
+        # ngserver publishes for .html templates, and for a .ts file whose *inline* template has an
+        # error (measured 0.39s) — but never for an ordinary TypeScript error, where it stayed silent
+        # for the full 15s we waited. Asking it therefore burned the whole timeout (2.5s) on every
+        # edited component before Serena fell back to pull diagnostics. The companion covers both
+        # (the @angular/language-service plugin gives it the inline templates) in a measured 1.8s.
         if self._ts_server is not None and self._is_typescript_file(relative_file_path):
             with self._ts_server.open_file(relative_file_path):
                 return self._ts_server.request_published_text_document_diagnostics(

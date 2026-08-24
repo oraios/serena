@@ -48,8 +48,12 @@ class TestAngularDiagnostics:
 class TestAngularPublishedDiagnostics:
     """``textDocument/publishDiagnostics`` — the stream Serena reads after an edit.
 
-    ngserver publishes for .html templates only; for .ts it publishes nothing, so before the
-    routing below every edited component waited out the full timeout and returned nothing.
+    ngserver publishes for .html templates, and for a .ts file whose *inline* template has an
+    error — but never for an ordinary TypeScript error, where every edited component waited out
+    the full timeout and returned nothing. .ts is therefore routed to the companion, which covers
+    both kinds; the two tests below pin exactly that, since a companion missing its
+    @angular/language-service plugin would silently drop inline-template errors with the plain-TS
+    test still passing.
     """
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
@@ -58,6 +62,19 @@ class TestAngularPublishedDiagnostics:
         with language_server.open_file(path):
             diagnostics = language_server.request_published_text_document_diagnostics(path, min_severity=2)
         assert diagnostics, f"Expected published diagnostics for the type error in {path}, got: {diagnostics}"
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
+    def test_published_diagnostics_for_inline_template(self, language_server: SolidLanguageServer) -> None:
+        """The other half of the .ts route: an error inside an inline ``template:``.
+
+        Only the @angular/language-service plugin inside the companion sees this — plain tsserver
+        reads the template as an ordinary template literal. Since the companion is the sole source
+        of published .ts diagnostics, losing the plugin would lose these errors silently.
+        """
+        path = "src/app/inline_template_sample.ts"
+        with language_server.open_file(path):
+            diagnostics = language_server.request_published_text_document_diagnostics(path, min_severity=2)
+        assert diagnostics, f"Expected published diagnostics for the inline-template error in {path}, got: {diagnostics}"
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
     def test_published_diagnostics_for_template(self, language_server: SolidLanguageServer) -> None:

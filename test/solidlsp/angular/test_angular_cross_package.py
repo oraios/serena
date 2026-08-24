@@ -6,6 +6,7 @@ into that package only appear once the extra workspace folder has been activated
 a file in it — which is what ``_activate_additional_workspaces`` does at startup.
 """
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -57,4 +58,23 @@ class TestAngularCrossPackageReferences:
             ref_paths = _greeter_interface_refs(ls)
         assert not any("external-greeter.ts" in p for p in ref_paths), (
             f"Did not expect references outside the app workspace, got: {ref_paths}"
+        )
+
+    def test_additional_workspace_project_load_is_awaited(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Regression: opening the extra folder's seed file only *triggers* ngserver's project load.
+
+        The base class returns from ``_activate_additional_workspaces`` as soon as the didOpen is
+        sent, so without the Angular override of ``_wait_for_additional_workspace_indexing`` the
+        first query races that load — exactly the bug the startup warm-up fixed for the main folder.
+        """
+        logger = "solidlsp.language_servers.angular_language_server"
+        with caplog.at_level(logging.INFO, logger=logger):
+            with start_ls_context(LanguageServerId.ANGULAR, repo_path=APP, additional_workspace_folders=[LIB]):
+                pass
+        messages = [r.getMessage() for r in caplog.records if r.name == logger]
+        assert any("Additional workspace project load finished" in m for m in messages), (
+            f"start() did not wait for the extra folder's project load; log was: {messages}"
+        )
+        assert not any("Timeout waiting for additional workspace project load" in m for m in messages), (
+            f"The wait fell through to its timeout, adding dead startup latency; log was: {messages}"
         )

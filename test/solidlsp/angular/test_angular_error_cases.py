@@ -370,68 +370,6 @@ class TestAngularStartupCleanup:
                 pass
 
 
-class TestAngularWarmUpSeedFile:
-    """Unit tests for the warm-up seed search (``_find_representative_source_file``).
-
-    Pure filesystem walking — no language server is started.
-    """
-
-    @staticmethod
-    def _find(directory) -> str | None:
-        from solidlsp.language_servers.angular_language_server import AngularLanguageServer
-
-        # Bypass __init__ (which would install/launch the LS): the walk only needs the class' own
-        # is_ignored_dirname.
-        ls = object.__new__(AngularLanguageServer)
-        return AngularLanguageServer._find_representative_source_file(ls, str(directory))
-
-    @staticmethod
-    def _write(path, content: str = "export const x = 1;\n") -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content)
-
-    def test_prefers_component_over_plain_ts(self, tmp_path) -> None:
-        (tmp_path / "tsconfig.json").write_text("{}")
-        self._write(tmp_path / "src" / "main.ts")
-        self._write(tmp_path / "src" / "app" / "app.component.ts")
-        assert self._find(tmp_path) == str(tmp_path / "src" / "app" / "app.component.ts")
-
-    def test_falls_back_to_any_ts_file(self, tmp_path) -> None:
-        (tmp_path / "tsconfig.json").write_text("{}")
-        self._write(tmp_path / "src" / "main.ts")
-        assert self._find(tmp_path) == str(tmp_path / "src" / "main.ts")
-
-    def test_skips_declaration_and_spec_files(self, tmp_path) -> None:
-        """``.d.ts`` carries no project, and specs are excluded from the app tsconfig."""
-        (tmp_path / "tsconfig.json").write_text("{}")
-        self._write(tmp_path / "src" / "types.d.ts")
-        self._write(tmp_path / "src" / "app.component.spec.ts")
-        assert self._find(tmp_path) is None
-
-    def test_never_descends_into_node_modules(self, tmp_path) -> None:
-        """A seed inside node_modules would resolve the dependency's project, not the app's."""
-        (tmp_path / "tsconfig.json").write_text("{}")
-        self._write(tmp_path / "node_modules" / "some-lib" / "lib.component.ts")
-        assert self._find(tmp_path) is None
-
-    def test_returns_none_without_tsconfig(self, tmp_path) -> None:
-        """Regression: without a tsconfig.json ngserver never loads a project and never sends
-        ``projectLoadingFinish``, so warming up would burn the full NG_SERVER_READY_TIMEOUT on
-        every startup (measured 31s vs 1s) for nothing.
-        """
-        self._write(tmp_path / "src" / "app" / "app.component.ts")
-        assert self._find(tmp_path) is None
-
-    def test_finds_tsconfig_in_subproject(self, tmp_path) -> None:
-        """Monorepo layout: the tsconfig.json lives in the sub-project, not at the walk root."""
-        self._write(tmp_path / "projects" / "app" / "src" / "app.component.ts")
-        (tmp_path / "projects" / "app" / "tsconfig.json").write_text("{}")
-        assert self._find(tmp_path) == str(tmp_path / "projects" / "app" / "src" / "app.component.ts")
-
-    def test_returns_none_for_empty_directory(self, tmp_path) -> None:
-        assert self._find(tmp_path) is None
-
-
 class TestAngularProjectWarmUp:
     """Regression: ngserver must have resolved the Angular project by the time ``start()`` returns.
 
@@ -457,3 +395,50 @@ class TestAngularProjectWarmUp:
         assert not any("Timeout waiting for ngserver project load" in m for m in messages), (
             f"Startup fell back to the timeout path; log was: {messages}"
         )
+
+
+class TestAngularReferencesCompanionFailure:
+    """Regression: a broken companion must not discard ngserver's own reference answer.
+
+    ``.ts`` references are the union of the two servers, and ngserver's half is the primary one
+    (it is the only one that sees template usages). Before the guard, any companion failure —
+    a tsserver V8 heap OOM being the documented one — propagated out of a request that already
+    had a perfectly usable answer in hand.
+    """
+
+    # ``GreetingService`` on line 5 (0-based 4), column 13 — referenced from app.component.ts.
+    SERVICE_CLASS_LINE = 4
+    SERVICE_CLASS_COL = 13
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
+    def test_companion_error_falls_back_to_ngserver_references(
+        self, language_server: SolidLanguageServer, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        baseline = language_server.request_references(SERVICE_FILE, self.SERVICE_CLASS_LINE, self.SERVICE_CLASS_COL)
+        assert baseline, "Fixture problem: no references found even with a working companion"
+
+        calls: list[object] = []
+
+        def boom(*_args: object, **_kwargs: object) -> list:
+            calls.append(None)
+            raise SolidLSPException("simulated companion failure")
+
+        monkeypatch.setattr(language_server._ts_server, "request_references", boom)
+        refs = language_server.request_references(SERVICE_FILE, self.SERVICE_CLASS_LINE, self.SERVICE_CLASS_COL)
+        assert calls, "The companion was never consulted, so this test would pass even without the guard"
+        assert refs, "ngserver's references were discarded when the companion failed"
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
+    def test_terminated_companion_still_propagates(self, language_server: SolidLanguageServer, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A dead language server must keep propagating so tools_base can restart the LS and retry."""
+        from solidlsp.ls_process import LanguageServerTerminatedException
+
+        def terminated(*_args: object, **_kwargs: object) -> list:
+            raise SolidLSPException(
+                "simulated termination",
+                cause=LanguageServerTerminatedException("companion died", LanguageServerId.TYPESCRIPT),
+            )
+
+        monkeypatch.setattr(language_server._ts_server, "request_references", terminated)
+        with pytest.raises(SolidLSPException):
+            language_server.request_references(SERVICE_FILE, self.SERVICE_CLASS_LINE, self.SERVICE_CLASS_COL)

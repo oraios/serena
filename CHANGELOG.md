@@ -31,8 +31,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     companion reports (callers in another project — an extra workspace folder, or a second
     `tsconfig.json` in a monorepo); neither is complete on its own
   - Fix: Angular post-edit diagnostics for `.ts` files waited out the 2.5s publish timeout on every
-    edited file, because ngserver publishes diagnostics for `.html` templates only; they are now read
-    from the companion TypeScript server, which does publish them
+    edited file, because ngserver never publishes for an ordinary TypeScript error (it publishes for
+    `.html` templates, and for a `.ts` file whose inline template has an error); they are now read
+    from the companion TypeScript server, which publishes for both
   - Fix: a `tsserver` crash mid-indexing (e.g. a V8 heap OOM) sent the same `$/progress` "end"
     event as a normal completion, so `find_referencing_symbols` and other cross-file queries
     silently returned an empty result instead of surfacing the crash. The crash is now detected
