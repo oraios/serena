@@ -1156,23 +1156,43 @@ class TestPreToolUseEnforceSymbolicToolsHook:
     """Tests for the opt-in hard-block symbolic-tools hook."""
 
     def test_code_file_read_is_denied_with_exact_serena_replacement(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        _execute_enforce_hook(HookClient.CLAUDE_CODE, _read_input(file_path="src/foo.py"), tmp_path)
-
-        output = json.loads(capsys.readouterr().out)
-        assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
-        assert 'mcp__serena__read_file(relative_path="src/foo.py")' in output["hookSpecificOutput"]["permissionDecisionReason"]
-
-    def test_grep_is_denied_with_pattern_replacement(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         _execute_enforce_hook(
             HookClient.CLAUDE_CODE,
-            _base_input(tool_name="grep", tool_input={"query": "needle"}),
+            _read_input(file_path="src/foo.py") | {"tool_input": {"file_path": "src/foo.py", "start_line": 120, "end_line": 159}},
             tmp_path,
         )
 
         output = json.loads(capsys.readouterr().out)
         reason = output["hookSpecificOutput"]["permissionDecisionReason"]
         assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
-        assert 'mcp__serena__search_for_pattern(substring_pattern="needle")' in reason
+        assert 'mcp__serena__read_file(relative_path="src/foo.py", start_line=120, end_line=159)' in reason
+        assert 'mcp__serena__find_symbol(name_path="<symbol>", include_body=True)' in reason
+
+    def test_serena_replacement_calls_are_not_denied(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        _execute_enforce_hook(
+            HookClient.CLAUDE_CODE,
+            _base_input(tool_name="mcp__serena__read_file", tool_input={"relative_path": "src/foo.py"}),
+            tmp_path,
+        )
+        _execute_enforce_hook(
+            HookClient.CLAUDE_CODE,
+            _base_input(tool_name="mcp__serena__search_for_pattern", tool_input={"substring_pattern": "needle"}),
+            tmp_path,
+        )
+
+        assert capsys.readouterr().out == ""
+
+    def test_grep_is_denied_with_pattern_and_scope_replacement(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        _execute_enforce_hook(
+            HookClient.CLAUDE_CODE,
+            _base_input(tool_name="grep", tool_input={"query": "needle", "path": "src"}),
+            tmp_path,
+        )
+
+        output = json.loads(capsys.readouterr().out)
+        reason = output["hookSpecificOutput"]["permissionDecisionReason"]
+        assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert 'mcp__serena__search_for_pattern(substring_pattern="needle", relative_path="src")' in reason
 
     def test_non_code_file_read_is_allowed(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         _execute_enforce_hook(HookClient.CLAUDE_CODE, _read_input(file_path="notes.txt"), tmp_path)
