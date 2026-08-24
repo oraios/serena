@@ -142,6 +142,18 @@ class PhpactorServer(SolidLanguageServer):
             )
         )
 
+        initialization_options: dict[str, object] = {
+            "language_server_phpstan.enabled": False,
+            "language_server_psalm.enabled": False,
+            "language_server_php_cs_fixer.enabled": False,
+            # Phpactor's indexer only walks its own default extensions, so the extra extensions
+            # Serena treats as PHP sources (`file_filter`, #1710) would be missing from the index
+            # and cross-file requests such as `textDocument/references` would not see them.
+            # These keys replace Phpactor's defaults, hence the union with them.
+            "indexer.include_patterns": [f"/**/*.{ext}" for ext in indexed_extensions],
+            "indexer.supported_extensions": indexed_extensions,
+        }
+
         # Phpactor's dirty-document tracker appends to `<indexer.index_path>/dirty` whenever a
         # references request reconciles the open documents with the index, and raises if that
         # directory does not exist yet -- which is the case until its background index has flushed
@@ -149,8 +161,15 @@ class PhpactorServer(SolidLanguageServer):
         # outright (observed on Windows CI). Pointing the index at a directory Serena creates up
         # front removes the race and keeps the index next to the other cached state of the project.
         index_path = self.cache_dir / "phpactor-index"
-        index_path.mkdir(parents=True, exist_ok=True)
-        initialize_params = {
+        if re.search(r"%.*%", str(index_path)):
+            # Phpactor expands `%token%` pairs in path settings and aborts on unknown tokens, so
+            # such a path cannot be passed on; the project keeps Phpactor's default index location.
+            log.warning(f"Not configuring Phpactor's index path: '{index_path}' would be read as containing a placeholder")
+        else:
+            index_path.mkdir(parents=True, exist_ok=True)
+            initialization_options["indexer.index_path"] = str(index_path)
+
+        return {
             "capabilities": {
                 "textDocument": {
                     "synchronization": {"didSave": True, "dynamicRegistration": True},
@@ -165,20 +184,8 @@ class PhpactorServer(SolidLanguageServer):
                     "didChangeConfiguration": {"dynamicRegistration": True},
                 },
             },
-            "initializationOptions": {
-                "language_server_phpstan.enabled": False,
-                "language_server_psalm.enabled": False,
-                "language_server_php_cs_fixer.enabled": False,
-                # Phpactor's indexer only walks its own default extensions, so the extra extensions
-                # Serena treats as PHP sources (`file_filter`, #1710) would be missing from the index
-                # and cross-file requests such as `textDocument/references` would not see them.
-                # These keys replace Phpactor's defaults, hence the union with them.
-                "indexer.include_patterns": [f"/**/*.{ext}" for ext in indexed_extensions],
-                "indexer.supported_extensions": indexed_extensions,
-                "indexer.index_path": str(index_path),
-            },
+            "initializationOptions": initialization_options,
         }
-        return initialize_params
 
     def _start_server(self) -> None:
         """Start Phpactor server process."""
