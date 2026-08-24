@@ -6,6 +6,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
 
+* CLI:
+  - Add `download-ls-dependencies` to prefetch runtime dependencies for selected language servers, or all
+    non-experimental servers with `--all`, for environments with restricted network access (#664)
+
 * Language Servers:
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: clojure-lsp was not told that Serena sends `workspace/didChangeWatchedFiles`, so changes made
