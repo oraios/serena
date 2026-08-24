@@ -2,11 +2,13 @@
 Provides PHP specific instantiation of the LanguageServer class using Phpactor.
 """
 
+import hashlib
 import logging
 import os
 import re
 import shutil
 import stat
+import threading
 
 from overrides import override
 
@@ -55,7 +57,22 @@ class PhpactorServer(SolidLanguageServer):
         - file_filter: list of additional file extensions (with leading dot) to treat as PHP
           sources, e.g. [".module", ".inc"]; these are also pushed to Phpactor's indexer, so
           references contained in such files are found as well
+        - indexing_timeout: float, seconds to wait for Phpactor's initial workspace index before
+          the first cross-file query (default: 120.0)
+        - indexing_start_grace: float, seconds to wait for Phpactor to start reporting indexing
+          progress at all (default: 5.0)
+
+    Serena keeps Phpactor's index in the project's cache directory, one directory per set of
+    indexed extensions, so the first cross-file query of a project (or the first one after
+    `file_filter` changed) waits for a full index, PHP's bundled stubs included.
     """
+
+    # Phpactor indexes the workspace once at startup and reports it as work-done progress; a
+    # cross-file query before that index exists comes back empty (see
+    # `_wait_for_cross_file_references_if_needed`). The timeouts only bound the pathological case
+    # of a server that never reports.
+    INDEXING_TIMEOUT = 120.0
+    INDEXING_START_GRACE = 5.0
 
     @override
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -127,6 +144,12 @@ class PhpactorServer(SolidLanguageServer):
         if file_filter:
             self.ls_id.get_source_fn_matcher().add_extensions(*file_filter)
 
+        # tracking the workspace indexing that Phpactor reports as work-done progress
+        self._progress_lock = threading.Lock()
+        self._active_progress_tokens: set[str] = set()
+        self._indexing_started = threading.Event()
+        self._indexing_complete = threading.Event()
+
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
@@ -160,7 +183,12 @@ class PhpactorServer(SolidLanguageServer):
         # for the first time. A `find_referencing_symbols` early in the session therefore failed
         # outright (observed on Windows CI). Pointing the index at a directory Serena creates up
         # front removes the race and keeps the index next to the other cached state of the project.
-        index_path = self.cache_dir / "phpactor-index"
+        #
+        # The indexed extensions are part of the directory name because Phpactor's indexer skips
+        # files that are older than the index: widening `file_filter` for an already indexed
+        # project would otherwise leave the newly included files out of the index indefinitely.
+        index_key = hashlib.sha256(",".join(indexed_extensions).encode()).hexdigest()[:8]
+        index_path = self.cache_dir / f"phpactor-index-{index_key}"
         if re.search(r"%.*%", str(index_path)):
             # Phpactor expands `%token%` pairs in path settings and aborts on unknown tokens, so
             # such a path cannot be passed on; the project keeps Phpactor's default index location.
@@ -183,9 +211,54 @@ class PhpactorServer(SolidLanguageServer):
                     "workspaceFolders": True,
                     "didChangeConfiguration": {"dynamicRegistration": True},
                 },
+                # Phpactor reports its workspace indexing as work-done progress, which is what the
+                # first cross-file query waits on
+                "window": {"workDoneProgress": True},
             },
             "initializationOptions": initialization_options,
         }
+
+    def _on_progress(self, params: dict) -> None:
+        """Track the work-done progress tokens Phpactor reports, the workspace index among them.
+
+        :param params: the `$/progress` notification's `ProgressParams`
+        """
+        token = str(params.get("token", ""))
+        value = params.get("value") or {}
+        kind = value.get("kind")
+        if kind == "begin":
+            with self._progress_lock:
+                self._active_progress_tokens.add(token)
+                self._indexing_complete.clear()
+            self._indexing_started.set()
+            log.info(f"Phpactor progress [{token}] started: {value.get('title')}")
+        elif kind == "end":
+            with self._progress_lock:
+                self._active_progress_tokens.discard(token)
+                if not self._active_progress_tokens:
+                    self._indexing_complete.set()
+            log.info(f"Phpactor progress [{token}] ended: {value.get('message')}")
+
+    @override
+    def _wait_for_cross_file_references_if_needed(self) -> None:
+        if self._has_waited_for_cross_file_references:
+            return
+
+        # Phpactor answers reference queries from its index and reconciles the open documents with
+        # it first, so a query issued before the initial index has been written returns nothing at
+        # all -- and its dirty-document tracker even raises if the index directory is still absent.
+        # Wait for the indexing progress Phpactor reports rather than for a fixed period.
+        timeout = float(self._custom_settings.get("indexing_timeout", self.INDEXING_TIMEOUT))
+        start_grace = float(self._custom_settings.get("indexing_start_grace", self.INDEXING_START_GRACE))
+        if not self._indexing_started.wait(timeout=start_grace):
+            log.warning(f"Phpactor reported no indexing progress within {start_grace:.0f}s; proceeding")
+        elif not self._indexing_complete.wait(timeout=timeout):
+            with self._progress_lock:
+                outstanding = ", ".join(sorted(self._active_progress_tokens)) or "<none>"
+            log.warning(f"Phpactor indexing did not complete within {timeout:.0f}s; proceeding (outstanding tokens: {outstanding})")
+        else:
+            log.info("Phpactor indexing complete")
+        self._has_waited_for_cross_file_references = True
 
     def _start_server(self) -> None:
         """Start Phpactor server process."""
@@ -200,8 +273,9 @@ class PhpactorServer(SolidLanguageServer):
             return
 
         self.server.on_request("client/registerCapability", register_capability_handler)
+        self.server.on_request("window/workDoneProgress/create", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
-        self.server.on_notification("$/progress", do_nothing)
+        self.server.on_notification("$/progress", self._on_progress)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
 
         log.info("Starting Phpactor server process")
