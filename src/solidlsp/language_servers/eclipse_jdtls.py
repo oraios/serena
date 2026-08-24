@@ -133,6 +133,8 @@ class EclipseJDTLS(SolidLanguageServer):
               use_system_java_home is true, then the bundled JRE)
         - use_system_java_home: Whether to use the system's JAVA_HOME for JDTLS itself and, when
               gradle_java_home is unset, Gradle import (default: false)
+        - custom_jre_path: Path to a Java executable used to launch JDTLS instead of the bundled JRE;
+              useful when the bundled runtime is too old for a project or JDTLS bundle (default: unset)
         - jdtls_xmx: Maximum heap size for the JDTLS server JVM (default: "3G")
         - jdtls_xms: Initial heap size for the JDTLS server JVM (default: "100m")
         - lombok_show_generated: Show Lombok-generated methods (getX/setX/builder()/...) in document
@@ -708,6 +710,7 @@ class EclipseJDTLS(SolidLanguageServer):
                 "use_system_java_home",
                 "maven_offline",
                 "runtimes",
+                "custom_jre_path",
             )
             workspace_settings = {key: custom_settings.settings[key] for key in workspace_setting_keys if key in custom_settings.settings}
             workspace_settings_json = json.dumps(workspace_settings, sort_keys=True, separators=(",", ":"))
@@ -744,7 +747,7 @@ class EclipseJDTLS(SolidLanguageServer):
             os.makedirs(shared_cache_location, exist_ok=True)
             os.makedirs(ws_dir, exist_ok=True)
 
-            jre_path = self.runtime_dependency_paths.jre_path
+            jre_path = self._resolve_jre_path()
             lombok_jar_path = self.runtime_dependency_paths.lombok_jar_path
 
             jdtls_launcher_jar = self.runtime_dependency_paths.jdtls_launcher_jar_path
@@ -804,7 +807,28 @@ class EclipseJDTLS(SolidLanguageServer):
 
             return cmd
 
+        def _resolve_jre_path(self) -> str:
+            """Return the configured Java executable or the bundled JRE executable."""
+            custom_jre_path = self._custom_settings.get("custom_jre_path")
+            if custom_jre_path is None:
+                return self.runtime_dependency_paths.jre_path
+
+            jre_path = Path(str(custom_jre_path)).expanduser()
+            if not jre_path.is_file():
+                raise SolidLSPException(
+                    f"custom_jre_path='{custom_jre_path}' is invalid: '{jre_path}' does not exist or is not a file. "
+                    "Set ls_specific_settings.java.custom_jre_path to a Java executable (for example, /path/to/jdk/bin/java)."
+                )
+            log.info("Using custom JRE executable for JDTLS: %s", jre_path)
+            return str(jre_path)
+
         def create_launch_command_env(self) -> dict[str, str]:
+            custom_jre_path = self._custom_settings.get("custom_jre_path")
+            if custom_jre_path is not None:
+                jre_path = Path(self._resolve_jre_path())
+                java_home = jre_path.parent.parent if jre_path.parent.name.lower() == "bin" else self.runtime_dependency_paths.jre_home_path
+                return {"syntaxserver": "false", "JAVA_HOME": str(java_home)}
+
             use_system_java_home = self._custom_settings.get("use_system_java_home", False)
             if use_system_java_home:
                 system_java_home = os.environ.get("JAVA_HOME")
