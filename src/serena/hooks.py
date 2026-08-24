@@ -544,24 +544,52 @@ class PreToolUseEnforceSymbolicToolsHook(PreToolUseRemindAboutSymbolicToolsHook)
 
     def _replacement_call(self) -> str:
         if self.is_read_code_file_call():
-            file_path = self._file_path or "<relative_path>"
-            return f"mcp__serena__read_file(relative_path={json.dumps(file_path)})"
+            file_path = self._file_path
+            if file_path is None:
+                file_path = next(
+                    (argument for argument in self._iter_shell_path_arguments() if self._is_code_file_path(argument)),
+                    "<relative_path>",
+                )
+            arguments = [f"relative_path={json.dumps(file_path)}"]
+            if self._tool_input is not None:
+                for key in ("start_line", "end_line", "max_answer_chars"):
+                    value = self._tool_input.get(key)
+                    if value is not None:
+                        arguments.append(f"{key}={json.dumps(value)}")
+            return f"mcp__serena__read_file({', '.join(arguments)})"
 
         pattern = "<pattern>"
+        relative_path: str | None = None
         if self._tool_input is not None:
             for key in ("pattern", "query", "substring_pattern", "search_query"):
                 value = self._tool_input.get(key)
                 if value is not None:
                     pattern = str(value)
                     break
-        return f"mcp__serena__search_for_pattern(substring_pattern={json.dumps(pattern)})"
+            for key in ("relative_path", "path", "file_path"):
+                value = self._tool_input.get(key)
+                if value is not None:
+                    relative_path = str(value)
+                    break
+        arguments = [f"substring_pattern={json.dumps(pattern)}"]
+        if relative_path:
+            arguments.append(f"relative_path={json.dumps(relative_path)}")
+        return f"mcp__serena__search_for_pattern({', '.join(arguments)})"
 
     def execute(self) -> None:
+        # The replacement calls are themselves non-symbolic Serena tools. They must be allowed,
+        # otherwise the denial creates an infinite retry loop in the client.
+        if "serena" in self._tool_name:
+            return
         if not self.is_read_code_file_call() and not self.is_grep_call():
             return
 
         replacement = self._replacement_call()
-        reason = f"Forbidden: direct code-file search/read. Use Serena's symbolic tools instead.\nRetry with: {replacement}"
+        reason = (
+            "Forbidden: direct code-file search/read. Use Serena's symbolic tools instead.\n"
+            f"Retry with: {replacement}\n"
+            'For a named symbol, use: mcp__serena__find_symbol(name_path="<symbol>", include_body=True)'
+        )
         click.echo(self.OutputData(permission_decision="deny", permission_decision_reason=reason).to_json_string(self._client))
 
 
