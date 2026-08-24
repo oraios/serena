@@ -104,6 +104,7 @@ class LanguageServerId(str, Enum):
     CPP = "cpp"
     CPP_CCLS = "cpp_ccls"
     PHP = "php"
+    PHP_DEVSENSE = "php_devsense"
     R = "r"
     PERL = "perl"
     CLOJURE = "clojure"
@@ -334,6 +335,7 @@ class LanguageServerId(str, Enum):
             self.RUBY_SOLARGRAPH,
             self.PHP_PHPACTOR,
             self.PHP_PHPANTOM,
+            self.PHP_DEVSENSE,
             self.MARKDOWN,
             self.LATEX,
             self.YAML,
@@ -479,7 +481,7 @@ class LanguageServerId(str, Enum):
                 return FilenameMatcher(".kt", ".kts")
             case self.DART:
                 return FilenameMatcher(".dart")
-            case self.PHP | self.PHP_PHPACTOR | self.PHP_PHPANTOM:
+            case self.PHP | self.PHP_PHPACTOR | self.PHP_PHPANTOM | self.PHP_DEVSENSE:
                 # .phtml is a standard (yet outdated) extension for PHP sources
                 return FilenameMatcher(".php", ".phtml")
             case self.R:
@@ -726,6 +728,10 @@ class LanguageServerId(str, Enum):
                 from solidlsp.language_servers.phpantom import PHPantomServer
 
                 return PHPantomServer
+            case self.PHP_DEVSENSE:
+                from solidlsp.language_servers.devsense_php_language_server import DevsensePHPLanguageServer
+
+                return DevsensePHPLanguageServer
             case self.PERL:
                 from solidlsp.language_servers.perl_language_server import PerlLanguageServer
 

@@ -7,6 +7,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     project list in `serena_config.yml`
 
 * Language Servers:
+  - Add experimental Devsense PHP Language Server support through the `php_devsense` language key and
+    pinned npm-managed `devsense-php-ls` installation (#710)
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: clojure-lsp was not told that Serena sends `workspace/didChangeWatchedFiles`, so changes made
     outside Serena's own edit tools (a git checkout, another editor, a build step) need not invalidate
