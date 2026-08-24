@@ -25,6 +25,7 @@ import time
 import psutil
 import pytest
 
+from solidlsp.util import subprocess_util
 from solidlsp.util.subprocess_util import _signal_process_group, terminate_process_tree_with_kill_fallback
 
 pytestmark = pytest.mark.skipif(platform.system() == "Windows", reason="process groups / os.killpg are POSIX-specific")
@@ -225,3 +226,64 @@ class TestPsutilDenialConsequences:
                     pass
             if proc.poll() is None:
                 proc.wait(timeout=2.0)
+
+
+class TestProcessTreeDescendantReaping:
+    def test_waits_for_discovered_descendants_after_signaling(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        events: list[str] = []
+
+        class FakeDescendant:
+            def __init__(self, name: str) -> None:
+                self.name = name
+
+            def terminate(self) -> None:
+                events.append(f"terminate:{self.name}")
+
+            def kill(self) -> None:
+                events.append(f"kill:{self.name}")
+
+            def wait(self, timeout: float) -> None:
+                events.append(f"wait:{self.name}")
+
+        descendants = [FakeDescendant("child"), FakeDescendant("grandchild")]
+
+        class FakePsutilProcess:
+            def __init__(self, pid: int) -> None:
+                self.pid = pid
+
+            def is_running(self) -> bool:
+                return True
+
+            def children(self, recursive: bool) -> list[FakeDescendant]:
+                assert recursive
+                return descendants
+
+            def terminate(self) -> None:
+                events.append("terminate:leader")
+
+            def kill(self) -> None:
+                events.append("kill:leader")
+
+        class FakePopen:
+            pid = 123
+            args = ["fake-language-server"]
+
+            def poll(self) -> None:
+                return None
+
+            def wait(self, timeout: float) -> int:
+                events.append("wait:leader")
+                return 0
+
+        monkeypatch.setattr(subprocess_util.psutil, "Process", FakePsutilProcess)
+
+        subprocess_util.terminate_process_tree_with_kill_fallback(FakePopen(), terminate_timeout=1.0)
+
+        assert events == [
+            "terminate:child",
+            "terminate:grandchild",
+            "terminate:leader",
+            "wait:grandchild",
+            "wait:child",
+            "wait:leader",
+        ]

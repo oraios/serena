@@ -6,6 +6,7 @@ import signal
 import subprocess
 import threading
 from collections.abc import Callable
+from time import monotonic
 from typing import IO, TYPE_CHECKING, Any, Generic, TypeVar, cast
 
 import oslex
@@ -335,6 +336,36 @@ def _signal_process_group(pgid: int, terminate: bool = True) -> None:
         log.warning(f"Unexpected error signaling process group {pgid} with {sig.name}: {e}")
 
 
+def _get_process_descendants(process: subprocess.Popen) -> list[psutil.Process]:
+    """Return a snapshot of descendants that should be waited on after signaling."""
+    try:
+        return psutil.Process(process.pid).children(recursive=True)
+    except (psutil.NoSuchProcess, psutil.AccessDenied, Exception):
+        return []
+
+
+def _wait_for_processes(processes: list[psutil.Process], timeout: float) -> bool:
+    """Wait for a process snapshot within one shared deadline.
+
+    Descendants are waited in reverse depth-first discovery order so that a child
+    has a chance to exit before its parent is reaped. A process that disappears
+    or cannot be waited by the current OS process is already clean for our
+    purposes; a timeout is returned to trigger the caller's kill fallback.
+    """
+    deadline = monotonic() + timeout
+    for child in reversed(processes):
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            return False
+        try:
+            child.wait(timeout=remaining)
+        except psutil.TimeoutExpired:
+            return False
+        except (psutil.NoSuchProcess, psutil.AccessDenied, Exception):
+            continue
+    return True
+
+
 def terminate_process_tree_with_kill_fallback(
     process: subprocess.Popen,
     terminate_timeout: float,
@@ -359,6 +390,7 @@ def terminate_process_tree_with_kill_fallback(
         also signal us.
     """
     log.debug(f"Terminating process {process.pid}, current status: {process.poll()}")
+    descendants = [] if process_group_id is not None else _get_process_descendants(process)
 
     def signal_tree(terminate: bool) -> None:
         if process_group_id is not None:
@@ -369,12 +401,16 @@ def terminate_process_tree_with_kill_fallback(
     signal_tree(terminate=True)
     try:
         log.debug(f"Waiting for process {process.pid} to terminate...")
+        descendants_finished = _wait_for_processes(descendants, terminate_timeout)
+        if not descendants_finished:
+            raise subprocess.TimeoutExpired(process.args, terminate_timeout)
         exit_code = process.wait(timeout=terminate_timeout)
         log.info(f"{process_name} terminated successfully with exit code {exit_code}.")
     except subprocess.TimeoutExpired:
         # If termination failed, forcefully kill the process
         log.warning(f"{process_name} (pid={process.pid}) termination timed out, killing process forcefully...")
         signal_tree(terminate=False)
+        _wait_for_processes(descendants, 2.0)
         try:
             exit_code = process.wait(timeout=2.0)
             log.info(f"{process_name} killed successfully with exit code {exit_code}.")

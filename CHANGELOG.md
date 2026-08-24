@@ -5,6 +5,8 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
+  - Fix: process-tree cleanup signaled descendant language-server processes without waiting for them,
+    which could leave grandchildren as zombies; cleanup now waits for the discovered descendants (#1464)
 
 * Language Servers:
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
