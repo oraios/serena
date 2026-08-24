@@ -14,7 +14,7 @@ from overrides import override
 
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_utils import PlatformUtils
+from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
@@ -43,14 +43,43 @@ class DevsensePHPLanguageServer(SolidLanguageServer):
     """
 
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
-        def _get_or_install_core_dependency(self) -> str:
-            """Install the pinned Devsense npm package and return its launcher."""
-            platform_id = PlatformUtils.get_platform_id()
-            if platform_id.is_windows():
-                executable_name = "devsense-php-ls.cmd"
-            else:
-                executable_name = "devsense-php-ls"
+        _PLATFORM_PACKAGE_SUFFIXES: dict[PlatformId, str] = {
+            PlatformId.LINUX_x64: "linux-x64",
+            PlatformId.LINUX_arm64: "linux-arm64",
+            PlatformId.LINUX_MUSL_x64: "linux-musl-x64",
+            PlatformId.LINUX_MUSL_arm64: "linux-musl-arm64",
+            PlatformId.OSX_x64: "darwin-x64",
+            PlatformId.OSX_arm64: "darwin-arm64",
+            PlatformId.WIN_x64: "win32-x64",
+            PlatformId.WIN_arm64: "win32-arm64",
+        }
 
+        @classmethod
+        def _platform_binary_path(cls, install_dir: str, platform_id: PlatformId) -> str:
+            try:
+                package_suffix = cls._PLATFORM_PACKAGE_SUFFIXES[platform_id]
+            except KeyError as exc:
+                raise RuntimeError(
+                    f"Devsense PHP Language Server does not provide a binary for platform '{platform_id.value}'. "
+                    "Supported platforms are Linux, macOS, and Windows x64/arm64."
+                ) from exc
+
+            binary_name = "devsense.php.ls.exe" if platform_id.is_windows() else "devsense.php.ls"
+            return os.path.join(
+                install_dir,
+                "node_modules",
+                f"devsense-php-ls-{package_suffix}",
+                "dist",
+                binary_name,
+            )
+
+        def _get_or_install_core_dependency(self) -> str:
+            """Install the pinned Devsense npm package and return its platform binary.
+
+            The package's documented platform binary is more reliable than npm's
+            ``node_modules/.bin`` shim, which may be absent until a later npm rebuild.
+            """
+            platform_id = PlatformUtils.get_platform_id()
             system_executable = shutil.which("devsense-php-ls")
             if system_executable is not None:
                 log.info("Using system-installed devsense-php-ls at %s", system_executable)
@@ -65,7 +94,7 @@ class DevsensePHPLanguageServer(SolidLanguageServer):
             registry = self._custom_settings.get("npm_registry")
             install_dir_name = "devsense-php-ls" if version == INITIAL_DEVSENSE_PHP_LS_VERSION else f"devsense-php-ls-{version}"
             install_dir = os.path.join(self._ls_resources_dir, install_dir_name)
-            executable_path = os.path.join(install_dir, "node_modules", ".bin", executable_name)
+            executable_path = self._platform_binary_path(install_dir, platform_id)
 
             if not os.path.exists(executable_path):
                 dependencies = RuntimeDependencyCollection(
@@ -81,8 +110,11 @@ class DevsensePHPLanguageServer(SolidLanguageServer):
                 log.info("Installing devsense-php-ls %s into %s", version, install_dir)
                 dependencies.install(install_dir)
 
-            if not os.path.exists(executable_path):
-                raise FileNotFoundError(f"devsense-php-ls executable not found at {executable_path}")
+            if not os.path.isfile(executable_path):
+                raise FileNotFoundError(
+                    f"devsense-php-ls platform binary not found at {executable_path}. "
+                    "The npm install may have skipped the matching optional platform dependency."
+                )
             return executable_path
 
         def _create_launch_command(self, core_path: str) -> list[str]:
