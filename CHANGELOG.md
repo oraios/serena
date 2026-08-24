@@ -7,6 +7,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     project list in `serena_config.yml`
   - Fix: process-tree cleanup signaled descendant language-server processes without waiting for them,
     which could leave grandchildren as zombies; cleanup now waits for the discovered descendants (#1464)
+  - Fix: process-tree cleanup could spend `terminate_timeout` once waiting for descendants and again
+    waiting for the leader (and similarly double-spend the kill fallback budget); both phases now use
+    one shared absolute deadline (#1918)
 
 * Language Servers:
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)

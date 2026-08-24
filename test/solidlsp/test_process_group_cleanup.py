@@ -123,6 +123,74 @@ class TestTerminateProcessTreeWithKillFallback:
                 proc.kill()
                 proc.wait(timeout=2.0)
 
+    def test_graceful_termination_uses_one_shared_deadline(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The descendant wait and leader wait must share ``terminate_timeout``."""
+        now = [0.0]
+        descendant_wait_timeouts: list[float] = []
+        leader_wait_timeouts: list[float] = []
+
+        class FakeDescendant:
+            def wait(self, timeout: float) -> None:
+                descendant_wait_timeouts.append(timeout)
+                now[0] += 3.0
+
+        class FakePopen:
+            pid = 123
+            args = ["fake-language-server"]
+
+            def poll(self) -> None:
+                return None
+
+            def wait(self, timeout: float) -> int:
+                leader_wait_timeouts.append(timeout)
+                return 0
+
+        monkeypatch.setattr(subprocess_util, "monotonic", lambda: now[0])
+        monkeypatch.setattr(subprocess_util, "_get_process_descendants", lambda _process: [FakeDescendant()])
+        monkeypatch.setattr(subprocess_util, "_signal_process_tree", lambda *args, **kwargs: None)
+
+        terminate_process_tree_with_kill_fallback(FakePopen(), terminate_timeout=5.0)
+
+        assert descendant_wait_timeouts == [pytest.approx(5.0)]
+        assert leader_wait_timeouts == [pytest.approx(2.0)]
+
+    def test_kill_fallback_uses_one_shared_deadline(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The forceful descendant wait and leader wait must share the 2s fallback budget."""
+        now = [0.0]
+        descendant_wait_timeouts: list[float] = []
+        leader_wait_timeouts: list[float] = []
+
+        class FakeDescendant:
+            wait_count = 0
+
+            def wait(self, timeout: float) -> None:
+                descendant_wait_timeouts.append(timeout)
+                self.wait_count += 1
+                if self.wait_count == 1:
+                    now[0] += timeout
+                    raise psutil.TimeoutExpired(timeout, 456)
+                now[0] += 1.5
+
+        class FakePopen:
+            pid = 123
+            args = ["fake-language-server"]
+
+            def poll(self) -> None:
+                return None
+
+            def wait(self, timeout: float) -> int:
+                leader_wait_timeouts.append(timeout)
+                return 0
+
+        monkeypatch.setattr(subprocess_util, "monotonic", lambda: now[0])
+        monkeypatch.setattr(subprocess_util, "_get_process_descendants", lambda _process: [FakeDescendant()])
+        monkeypatch.setattr(subprocess_util, "_signal_process_tree", lambda *args, **kwargs: None)
+
+        terminate_process_tree_with_kill_fallback(FakePopen(), terminate_timeout=5.0)
+
+        assert descendant_wait_timeouts == [pytest.approx(5.0), pytest.approx(2.0)]
+        assert leader_wait_timeouts == [pytest.approx(0.5)]
+
     def test_falls_back_to_kill_when_group_ignores_sigterm(self) -> None:
         src = textwrap.dedent(
             """

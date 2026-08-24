@@ -352,15 +352,14 @@ def _get_process_descendants(process: subprocess.Popen) -> list[psutil.Process]:
         return []
 
 
-def _wait_for_processes(processes: list[psutil.Process], timeout: float) -> bool:
-    """Wait for a process snapshot within one shared deadline.
+def _wait_for_processes_until(processes: list[psutil.Process], deadline: float) -> bool:
+    """Wait for a process snapshot until an absolute monotonic deadline.
 
     Descendants are waited in reverse depth-first discovery order so that a child
     has a chance to exit before its parent is reaped. A process that disappears
     or cannot be waited by the current OS process is already clean for our
     purposes; a timeout is returned to trigger the caller's kill fallback.
     """
-    deadline = monotonic() + timeout
     for child in reversed(processes):
         remaining = deadline - monotonic()
         if remaining <= 0:
@@ -372,6 +371,11 @@ def _wait_for_processes(processes: list[psutil.Process], timeout: float) -> bool
         except (psutil.Error, OSError):
             continue
     return True
+
+
+def _wait_for_processes(processes: list[psutil.Process], timeout: float) -> bool:
+    """Wait for a process snapshot within one shared timeout budget."""
+    return _wait_for_processes_until(processes, monotonic() + timeout)
 
 
 def terminate_process_tree_with_kill_fallback(
@@ -409,18 +413,25 @@ def terminate_process_tree_with_kill_fallback(
     signal_tree(terminate=True)
     try:
         log.debug(f"Waiting for process {process.pid} to terminate...")
-        descendants_finished = _wait_for_processes(descendants, terminate_timeout)
-        if not descendants_finished:
+        terminate_deadline = monotonic() + terminate_timeout
+        descendants_finished = _wait_for_processes_until(descendants, terminate_deadline)
+        remaining = terminate_deadline - monotonic()
+        if not descendants_finished or remaining <= 0:
             raise subprocess.TimeoutExpired(process.args, terminate_timeout)
-        exit_code = process.wait(timeout=terminate_timeout)
+        exit_code = process.wait(timeout=remaining)
         log.info(f"{process_name} terminated successfully with exit code {exit_code}.")
     except subprocess.TimeoutExpired:
         # If termination failed, forcefully kill the process
         log.warning(f"{process_name} (pid={process.pid}) termination timed out, killing process forcefully...")
         signal_tree(terminate=False)
-        _wait_for_processes(descendants, 2.0)
+        kill_deadline = monotonic() + 2.0
+        _wait_for_processes_until(descendants, kill_deadline)
+        remaining = kill_deadline - monotonic()
+        if remaining <= 0:
+            log.error(f"{process_name} (pid={process.pid}) could not be killed within timeout.")
+            return
         try:
-            exit_code = process.wait(timeout=2.0)
+            exit_code = process.wait(timeout=remaining)
             log.info(f"{process_name} killed successfully with exit code {exit_code}.")
         except subprocess.TimeoutExpired:
             log.error(f"{process_name} (pid={process.pid}) could not be killed within timeout.")
