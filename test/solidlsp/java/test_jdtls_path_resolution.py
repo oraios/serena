@@ -769,3 +769,43 @@ class TestConfiguredRuntimesInitializeSettings:
 
         with pytest.raises(ValueError, match="requires at least a 'name' and a 'path' key"):
             server._create_base_initialize_params()
+
+
+class TestCustomJrePath:
+    def _make_provider(self, tmp_path: Path, settings: dict[str, object]) -> EclipseJDTLS.DependencyProvider:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        provider = object.__new__(EclipseJDTLS.DependencyProvider)
+        provider._custom_settings = SolidLSPSettings.CustomLSSettings(settings)
+        provider._solidlsp_settings = SolidLSPSettings(solidlsp_dir=str(tmp_path / "solidlsp"))
+        provider._repository_root_path = str(repo)
+        provider.runtime_dependency_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+        return provider
+
+    def test_custom_jre_replaces_bundled_executable_in_launch_command(self, tmp_path: Path) -> None:
+        custom_jre = tmp_path / "custom-jdk" / "bin" / _JAVA_EXE_NAME
+        custom_jre.parent.mkdir(parents=True)
+        custom_jre.touch()
+        provider = self._make_provider(tmp_path, {"custom_jre_path": str(custom_jre)})
+
+        command = provider.create_launch_command()
+
+        assert command[0] == str(custom_jre)
+        assert command[0] != provider.runtime_dependency_paths.jre_path
+
+    def test_custom_jre_sets_matching_java_home(self, tmp_path: Path) -> None:
+        custom_jre = tmp_path / "custom-jdk" / "bin" / _JAVA_EXE_NAME
+        custom_jre.parent.mkdir(parents=True)
+        custom_jre.touch()
+        provider = self._make_provider(tmp_path, {"custom_jre_path": str(custom_jre)})
+
+        assert provider.create_launch_command_env() == {
+            "syntaxserver": "false",
+            "JAVA_HOME": str(custom_jre.parent.parent),
+        }
+
+    def test_custom_jre_path_must_be_a_file(self, tmp_path: Path) -> None:
+        provider = self._make_provider(tmp_path, {"custom_jre_path": str(tmp_path / "missing" / _JAVA_EXE_NAME)})
+
+        with pytest.raises(SolidLSPException, match="custom_jre_path=.*does not exist"):
+            provider.create_launch_command_env()
