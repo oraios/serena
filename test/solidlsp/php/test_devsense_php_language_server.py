@@ -6,6 +6,7 @@ from solidlsp.language_servers.devsense_php_language_server import (
     DevsensePHPLanguageServer,
 )
 from solidlsp.ls_config import LanguageServerId
+from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.settings import SolidLSPSettings
 
 
@@ -35,15 +36,24 @@ class TestDevsensePHPDependencyProvider:
             assert provider._get_or_install_core_dependency() == "/usr/local/bin/devsense-php-ls"
             which.assert_called_once_with("devsense-php-ls")
 
+    def test_platform_binary_path_uses_official_layout(self, tmp_path: Path) -> None:
+        install_dir = str(tmp_path / "devsense-php-ls")
+        assert DevsensePHPLanguageServer.DependencyProvider._platform_binary_path(install_dir, PlatformId.LINUX_x64) == str(
+            tmp_path / "devsense-php-ls" / "node_modules" / "devsense-php-ls-linux-x64" / "dist" / "devsense.php.ls"
+        )
+        assert DevsensePHPLanguageServer.DependencyProvider._platform_binary_path(install_dir, PlatformId.WIN_x64) == str(
+            tmp_path / "devsense-php-ls" / "node_modules" / "devsense-php-ls-win32-x64" / "dist" / "devsense.php.ls.exe"
+        )
+
     def test_managed_install_uses_pinned_npm_package(self, tmp_path: Path) -> None:
         provider = DevsensePHPLanguageServer.DependencyProvider(_custom_settings(), str(tmp_path))
-        installed = tmp_path / "devsense-php-ls" / "node_modules" / ".bin" / "devsense-php-ls"
         commands: list[str | list[str]] = []
 
-        def fake_install(target_dir: str) -> dict[str, str]:
+        def fake_run(command: str | list[str], cwd: str) -> None:
+            commands.append(command)
+            installed = Path(provider._platform_binary_path(cwd, PlatformUtils.get_platform_id()))
             installed.parent.mkdir(parents=True)
             installed.touch()
-            return {"devsense-php-ls": str(installed)}
 
         def fake_which(name: str) -> str | None:
             return None if name == "devsense-php-ls" else f"/usr/bin/{name}"
@@ -52,15 +62,15 @@ class TestDevsensePHPDependencyProvider:
             patch("solidlsp.language_servers.devsense_php_language_server.shutil.which", side_effect=fake_which),
             patch(
                 "solidlsp.language_servers.devsense_php_language_server.RuntimeDependencyCollection._run_command",
-                side_effect=lambda command, cwd: commands.append(command),
+                side_effect=fake_run,
             ),
-            patch("solidlsp.language_servers.devsense_php_language_server.RuntimeDependencyCollection.install", side_effect=fake_install),
         ):
             result = provider._get_or_install_core_dependency()
 
-        assert result == str(installed)
-        assert commands == []
-        # The default remains pinned and the target is versioned through the provider's install layout.
+        expected = provider._platform_binary_path(str(tmp_path / "devsense-php-ls"), PlatformUtils.get_platform_id())
+        assert result == expected
+        assert len(commands) == 1
+        assert commands[0] == ["npm", "install", "--prefix", "./", "devsense-php-ls@1.0.19197"]
         assert DEFAULT_DEVSENSE_PHP_LS_VERSION == "1.0.19197"
 
 

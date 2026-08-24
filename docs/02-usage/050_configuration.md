@@ -1035,16 +1035,18 @@ Supported settings:
 
 #### PHP (`Devsense`)
 
-Serena provides the experimental `php_devsense` language key for the standalone Devsense PHP Language Server.
-The package is installed from npm when no `ls_path` or `devsense-php-ls` executable is available on `PATH`.
-Basic language-server features are available without a license; premium features can be activated with the
-`DEVSENSE_PHP_LS_LICENSE` environment variable.
+Serena provides the experimental `php_devsense` language key for the standalone [Devsense PHP Language Server](https://www.npmjs.com/package/devsense-php-ls).
+When no `ls_path` or `devsense-php-ls` executable is available on `PATH`, Serena requires `node` and `npm`,
+installs the pinned npm package, and launches its matching platform-specific binary. This avoids depending on
+npm's platform-specific `.bin` shim. Basic language-server features are available without a license; premium
+features can be activated with the `DEVSENSE_PHP_LS_LICENSE` environment variable. The Devsense package requires
+visible attribution, so keep this documentation link when redistributing or packaging the integration.
 
 Supported settings:
 
 | Setting | Default | Description |
 |---|---|---|
-| `ls_path` | managed npm install | Override the `devsense-php-ls` launcher path. |
+| `ls_path` | managed npm install | Override the `devsense-php-ls` executable path; on Windows use the `.exe` binary or a working launcher. |
 | `devsense_php_ls_version` | `1.0.19197` | Override the pinned npm package version used by the managed install. |
 | `npm_registry` | `null` | Override the npm registry used for the managed install. |
 | `ignore_vendor` | `true` | Ignore directories named `vendor` while indexing the project. |
