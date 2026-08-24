@@ -8,7 +8,6 @@ import logging
 import os
 import pathlib
 import platform
-import shlex
 import shutil
 import threading
 from time import monotonic, sleep
@@ -189,11 +188,22 @@ class SolidityLanguageServer(SolidLanguageServer):
                 state_dir = self._get_solidity_state_dir()
                 os.makedirs(state_dir, exist_ok=True)
                 launch_env["SERENA_SOLIDITY_STATE_DIR"] = state_dir
-                preload_arg = f"--require {shlex.quote(self._HOMEDIR_PRELOAD)}"
+                preload_arg = f"--require {self._quote_node_option_argument(self._HOMEDIR_PRELOAD)}"
                 existing_node_options = os.environ.get("NODE_OPTIONS", "").strip()
                 launch_env["NODE_OPTIONS"] = f"{existing_node_options} {preload_arg}".strip()
 
             return launch_env
+
+        @staticmethod
+        def _quote_node_option_argument(value: str) -> str:
+            """Quote a value for Node's NODE_OPTIONS parser.
+
+            Node parses NODE_OPTIONS independently from the shell. POSIX single-quote escaping
+            produced by ``shlex.quote`` is therefore not understood by Node. Use double quotes,
+            escaping the two characters that have special meaning inside Node's double-quoted
+            option values.
+            """
+            return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
         def _get_solidity_state_dir(self) -> str:
             configured_state_dir = self._custom_settings.get("solidity_state_dir", os.path.join(self._ls_resources_dir, "solidity-state"))

@@ -1,6 +1,7 @@
 import os
 import platform
-import shlex
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -32,9 +33,38 @@ def test_darwin_uses_isolated_state_dir_and_preserves_node_options(tmp_path: Pat
 
     assert launch_env["SERENA_SOLIDITY_STATE_DIR"] == str(state_dir)
     assert state_dir.is_dir()
-    assert launch_env["NODE_OPTIONS"] == (f"{existing_node_options} --require {shlex.quote(provider._HOMEDIR_PRELOAD)}")
+    assert launch_env["NODE_OPTIONS"] == f'{existing_node_options} --require "{provider._HOMEDIR_PRELOAD}"'
     assert "HOME" not in launch_env
     assert os.environ["NODE_OPTIONS"] == existing_node_options
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for this test")
+def test_darwin_node_options_loads_preload_path_with_spaces(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(platform, "system", lambda: "Darwin")
+    monkeypatch.delenv("NODE_OPTIONS", raising=False)
+
+    preload_path = tmp_path / "solidity state" / "preload.cjs"
+    preload_path.parent.mkdir()
+    preload_path.write_text("console.log('PRELOAD_LOADED_OK')", encoding="utf-8")
+    provider = SolidityLanguageServer.DependencyProvider(
+        SolidLSPSettings.CustomLSSettings({"solidity_state_dir": str(tmp_path / "state dir")}),
+        str(tmp_path / "language-server-resources"),
+    )
+    monkeypatch.setattr(provider, "_HOMEDIR_PRELOAD", str(preload_path))
+
+    launch_env = provider.create_launch_command_env()
+    result = subprocess.run(
+        ["node", "-e", "console.log('NODE_STARTED_OK')"],
+        env={**os.environ, **launch_env},
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "PRELOAD_LOADED_OK" in result.stdout
+    assert "NODE_STARTED_OK" in result.stdout
 
 
 def test_darwin_defaults_state_dir_under_language_server_resources(
