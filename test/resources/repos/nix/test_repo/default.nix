@@ -9,9 +9,6 @@ let
   # Import our custom utilities
   utils = import ./lib/utils.nix { inherit lib; };
 
-  # Keep one direct nixpkgs selector available for hover integration coverage.
-  bashPackage = pkgs.bash;
-
   # Custom function to create a greeting
   makeGreeting = name: "Hello, ${name}!";
 
