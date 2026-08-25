@@ -6,11 +6,12 @@ These tests validate symbol finding and cross-file reference capabilities for Ni
 
 import pytest
 
+from serena.util.text_utils import find_text_coordinates
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
 from test.conftest import language_server_tests_enabled
-from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
+from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, read_repo_file, request_all_symbols
 from test.solidlsp.util.diagnostics import assert_file_diagnostics
 
 pytestmark = pytest.mark.skipif(
@@ -119,17 +120,21 @@ class TestNixLanguageServer:
             assert 66 in ref_lines, f"Should find makeGreeting inherit at line 67, found at lines {[l + 1 for l in ref_lines]}"
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
-    @pytest.mark.xfail(
-        strict=False,
-        reason="Current nixd returns no hover for this fixture binding; keep the regression covered until upstream support is available",
-    )
     def test_hover_information(self, language_server: SolidLanguageServer) -> None:
-        """Test hover information for symbols."""
-        # Hover a local binding that is already exercised by the successful definition tests.
-        # The position is inside the `utils` identifier in `unique = utils.lists.unique;`.
-        hover_info = language_server.request_hover("default.nix", 23, 13)
+        """Test hover information for a nixpkgs-backed package selector."""
+        # Local bindings such as `makeGreeting` and the cross-file `utils` import are not
+        # guaranteed to have hover documentation in nixd. Use a nixpkgs-backed selector instead,
+        # which is the hover provider path that nixd supports consistently.
+        coords = find_text_coordinates(
+            read_repo_file(language_server, "default.nix"),
+            r"\bbashPackage = (pkgs\.bash)\b;",
+            require_unique=True,
+        )
+        assert coords is not None, "The fixture must contain one pkgs.bash selector"
 
-        assert hover_info is not None, "Should provide hover information at a known binding reference"
+        hover_info = language_server.request_hover("default.nix", coords.line, coords.col)
+
+        assert hover_info is not None, "Should provide hover information for a nixpkgs package selector"
 
         if isinstance(hover_info, dict) and len(hover_info) > 0:
             # If hover info is provided, it should have proper structure
