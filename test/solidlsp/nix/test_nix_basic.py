@@ -123,16 +123,16 @@ class TestNixLanguageServer:
     def test_hover_information(self, language_server: SolidLanguageServer) -> None:
         """Test hover information for a nixpkgs-backed package selector."""
         # Local bindings such as `makeGreeting` and the cross-file `utils` import are not
-        # guaranteed to have hover documentation in nixd. Use the existing `with pkgs; hello`
-        # expression instead, which follows nixd's supported nixpkgs hover-provider path.
+        # guaranteed to have hover documentation in nixd. Use the dedicated minimal fixture
+        # instead, which follows nixd's supported `with pkgs; hello` hover-provider path.
         coords = find_text_coordinates(
-            read_repo_file(language_server, "default.nix"),
-            r"^\s+(hello)\s*$",
+            read_repo_file(language_server, "hover.nix"),
+            r"^with pkgs; (hello)$",
             require_unique=True,
         )
-        assert coords is not None, "The fixture must contain one package selector under `with pkgs`"
+        assert coords is not None, "The hover fixture must contain one package selector"
 
-        hover_info = language_server.request_hover("default.nix", coords.line, coords.col)
+        hover_info = language_server.request_hover("hover.nix", coords.line, coords.col)
 
         assert hover_info is not None, "Should provide hover information for a nixpkgs package selector"
 
