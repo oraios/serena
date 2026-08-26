@@ -395,14 +395,15 @@ def terminate_process_tree_with_kill_fallback(
     :param process_name: the name of the process (used for logging purposes); should start with capital letter
     :param process_group_id: if given, the POSIX process group ID that ``process`` leads (i.e. it was
         launched with ``start_new_session=True``, so its PGID equals its PID). When set, cleanup
-        signals the whole group directly via ``os.killpg`` instead of walking the process tree with
-        ``psutil``, which requires system-wide process-table enumeration (``sysctl(KERN_PROC_ALL)`` on
-        macOS) that can be denied even for processes we started and own. Only pass this for a process
-        that was started in its own session: signaling the group of a process that shares ours would
-        also signal us.
+        signals the whole group directly via ``os.killpg`` rather than walking the process tree to
+        signal it. Descendant discovery remains best-effort so cleanup can wait for children after
+        the group is signaled; ``_get_process_descendants`` safely returns an empty list when the
+        platform denies process-table enumeration (for example, ``sysctl(KERN_PROC_ALL)`` on macOS).
+        Only pass this for a process that was started in its own session: signaling the group of a
+        process that shares ours would also signal us.
     """
     log.debug(f"Terminating process {process.pid}, current status: {process.poll()}")
-    descendants = [] if process_group_id is not None else _get_process_descendants(process)
+    descendants = _get_process_descendants(process)
 
     def signal_tree(terminate: bool) -> None:
         if process_group_id is not None:

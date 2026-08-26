@@ -191,6 +191,56 @@ class TestTerminateProcessTreeWithKillFallback:
         assert descendant_wait_timeouts == [pytest.approx(5.0), pytest.approx(2.0)]
         assert leader_wait_timeouts == [pytest.approx(0.5)]
 
+    def test_group_cleanup_kills_descendant_after_leader_exits(self) -> None:
+        """A group leader may exit after SIGTERM while a descendant keeps running.
+
+        Cleanup must snapshot descendants before signaling, wait for them, and use the
+        group kill fallback instead of treating the exited leader as sufficient.
+        """
+        child_code = textwrap.dedent(
+            """
+            import signal, time
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            time.sleep(300)
+            """
+        )
+        leader_code = textwrap.dedent(
+            f"""
+            import subprocess, sys, time
+            subprocess.Popen([sys.executable, "-c", {child_code!r}], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print("READY", flush=True)
+            time.sleep(300)
+            """
+        )
+        proc = _spawn_ready(leader_code)
+        child_pid: int | None = None
+        try:
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                children = psutil.Process(proc.pid).children(recursive=True)
+                if children:
+                    child_pid = children[0].pid
+                    break
+                time.sleep(0.05)
+            assert child_pid is not None, "expected the process-group leader to have a child"
+            child_pid_value = child_pid
+
+            terminate_process_tree_with_kill_fallback(proc, terminate_timeout=0.2, process_group_id=proc.pid)
+
+            assert _wait_until(lambda: not _process_alive(child_pid_value)), "descendant survived group cleanup"
+        finally:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            if proc.poll() is None:
+                proc.wait(timeout=2.0)
+            if child_pid is not None and _process_alive(child_pid):
+                try:
+                    os.kill(child_pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
     def test_falls_back_to_kill_when_group_ignores_sigterm(self) -> None:
         src = textwrap.dedent(
             """
