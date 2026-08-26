@@ -388,6 +388,21 @@ class AngularLanguageServer(SolidLanguageServer):
         return dataclasses.replace(self.config, ls_id=ls_id, trace_lsp_communication=False)
 
     def _start_typescript_server(self) -> None:
+        """Spawn the companion typescript-language-server. Unlike the HTML companion, failure is fatal.
+
+        The asymmetry is deliberate. A missing HTML companion costs one method on one extension
+        (.html documentSymbol, which returns None). A missing TS companion silently changes the
+        answer for every .ts operation, and .ts is most of an Angular project: `request_implementation`
+        hard-returns [] (ngserver answers -32601), and .ts diagnostics fall back to the ngserver
+        routing that this class exists to correct. Serena surfaces those as "nothing found", not as
+        "degraded" — a confidently empty answer is worse than a startup that refuses loudly.
+
+        The request-time routing below guards every companion call with ``self._ts_server is not
+        None``, but those branches are unreachable while the server runs: the field is only cleared
+        here and in ``_stop_typescript_server``, and a restart builds a fresh instance
+        (``ls_manager.restart_language_server``). Making this non-fatal would put ten never-exercised
+        fallbacks on the live path. Revisit if capability loss ever becomes visible to the caller.
+        """
         try:
             ts_config = self._companion_config(LanguageServerId.TYPESCRIPT)
             log.info("Creating companion AngularTypeScriptServer")
@@ -408,9 +423,12 @@ class AngularLanguageServer(SolidLanguageServer):
             self._ts_server_started = True
             log.info("Companion TypeScript server ready")
         except Exception:
+            # Stop before dropping the reference. The companion spawns its node process in
+            # `server.start()` and only *then* initializes, so every failure after that point --
+            # an initialize timeout, or one of the capability asserts on the response -- would
+            # otherwise orphan a live tsserver. Nothing else holds a handle to it once we return.
             log.exception("Error starting companion TypeScript server")
-            self._ts_server = None
-            self._ts_server_started = False
+            self._stop_typescript_server()
             raise
 
     def _stop_typescript_server(self) -> None:
@@ -449,9 +467,10 @@ class AngularLanguageServer(SolidLanguageServer):
             self._html_server_started = True
             log.info("Companion HTML server ready")
         except Exception:
+            # Same spawn-then-initialize leak as the TS companion, and worse here: this failure is
+            # swallowed, so an orphaned process would never be surfaced by a propagating exception.
             log.exception("Error starting companion HTML server; .html documentSymbol will return []")
-            self._html_server = None
-            self._html_server_started = False
+            self._stop_html_server()
 
     def _stop_html_server(self) -> None:
         if self._html_server is not None:
