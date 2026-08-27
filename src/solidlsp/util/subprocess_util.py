@@ -427,10 +427,7 @@ def terminate_process_tree_with_kill_fallback(
         signal_tree(terminate=False)
         kill_deadline = monotonic() + 2.0
         _wait_for_processes_until(descendants, kill_deadline)
-        remaining = kill_deadline - monotonic()
-        if remaining <= 0:
-            log.error(f"{process_name} (pid={process.pid}) could not be killed within timeout.")
-            return
+        remaining = max(kill_deadline - monotonic(), 0.1)
         try:
             exit_code = process.wait(timeout=remaining)
             log.info(f"{process_name} killed successfully with exit code {exit_code}.")
