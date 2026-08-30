@@ -8,6 +8,14 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
 
 * Language Servers:
+  - Fix: PHPantom and Phpactor now honor their `ls_specific_settings.*.file_filter`, so
+    project-specific PHP extensions such as `.inc` participate in symbol queries; Phpactor's
+    indexer is configured accordingly, such that references contained in these files are found too
+  - Fix: Phpactor's first cross-file query of a session could return nothing, or fail outright with
+    "Dirty index file path cannot be created", because it was answered from an index Phpactor had
+    not written yet. Serena now waits for the indexing progress Phpactor reports, bounded by the new
+    `indexing_timeout` and `indexing_start_grace` settings, and keeps the index in the project's
+    cache directory, keyed by the indexed extensions so that widening `file_filter` reindexes
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: clojure-lsp was not told that Serena sends `workspace/didChangeWatchedFiles`, so changes made
     outside Serena's own edit tools (a git checkout, another editor, a build step) need not invalidate
