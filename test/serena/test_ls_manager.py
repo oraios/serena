@@ -1,8 +1,8 @@
-import os
 import subprocess
 import sys
 import time
 
+import psutil
 import pytest
 
 from serena.ls_manager import LanguageServerManager, LanguageServerManagerInitialisationError
@@ -10,11 +10,11 @@ from solidlsp.ls_config import LanguageServerId
 
 
 def _pid_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except OSError:
-        return False
-    return True
+    # Not `os.kill(pid, 0)`: that is a no-op liveness probe on POSIX, but on Windows
+    # `os.kill` has no signal-0 special case and falls through to `TerminateProcess(handle,
+    # 0)`, so the "check" can itself kill (or, if the pid was already recycled, terminate an
+    # unrelated process) instead of only reading process-table state.
+    return psutil.pid_exists(pid)
 
 
 class _FakeLanguageServer:
@@ -70,8 +70,10 @@ def _cleanup_leftover_pids():
     pids: list[int] = []
     yield pids
     for pid in pids:
-        if _pid_alive(pid):
-            os.kill(pid, 15)
+        try:
+            psutil.Process(pid).kill()
+        except psutil.NoSuchProcess:
+            pass
 
 
 def test_from_languages_stops_process_of_server_that_raises_after_spawning(_cleanup_leftover_pids):
