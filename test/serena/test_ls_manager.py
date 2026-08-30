@@ -29,11 +29,14 @@ class _FakeLanguageServer:
         self._running = False
 
     def start(self) -> "_FakeLanguageServer":
-        # Mirrors e.g. clangd_language_server.py: the OS subprocess is spawned as part of
-        # start(), and a capability/initialize() check can still raise after that process
-        # is already running.
+        # Mirrors SolidLanguageServer.start(): the OS subprocess is spawned as part of
+        # start(), a capability/initialize() check can still raise after that process is
+        # already running, and start() stops the process it just spawned before re-raising
+        # (see SolidLanguageServer.start).
         self.proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(100)"])
         if self.should_fail:
+            self._running = True
+            self.stop()
             raise RuntimeError(f"simulated: capability assertion failed after initialize() ({self.ls_id.value})")
         self._running = True
         return self
@@ -77,10 +80,12 @@ def _cleanup_leftover_pids():
 
 
 def test_from_languages_stops_process_of_server_that_raises_after_spawning(_cleanup_leftover_pids):
-    """A language server whose `start()` spawns its OS subprocess and then raises (e.g. a
-    capability assertion or an initialize() timeout firing after the process is already up)
-    must still have that process stopped by `from_languages`'s failure-path cleanup, exactly
-    like a server that started successfully and is stopped because a sibling failed.
+    """End-to-end: a language server whose `start()` spawns its OS subprocess and then raises
+    (e.g. a capability assertion or an initialize() timeout firing after the process is
+    already up) must not leak that process, and a sibling that started successfully must be
+    stopped too since `from_languages` fails the whole batch. The failing server cleans up its
+    own process (SolidLanguageServer.start()); `from_languages` is responsible only for
+    stopping the siblings that succeeded.
     """
     ok_id = LanguageServerId("python")
     failing_id = LanguageServerId("rust")

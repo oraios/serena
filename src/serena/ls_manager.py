@@ -133,27 +133,26 @@ class LanguageServerManager:
             thread.start()
             threads.append(thread)
 
-        # collect language servers and exceptions. `spawned_servers` also captures a server whose
-        # own thread raised, since its process may already be running and still needs `stop()`.
+        # collect language servers and exceptions
         language_servers: dict[LanguageServerId, SolidLanguageServer] = {}
         exceptions: dict[LanguageServerId, Exception] = {}
-        spawned_servers: list[SolidLanguageServer] = []
         for thread in threads:
             thread.join()
-            if thread.language_server is not None:
-                spawned_servers.append(thread.language_server)
             if thread.exception is not None:
                 exceptions[thread.ls_id] = thread.exception
             elif thread.language_server is not None:
                 language_servers[thread.ls_id] = thread.language_server
 
         # If any server failed to start up, raise an exception and stop all started language servers.
+        # A server whose own thread raised has already stopped its own process, since
+        # SolidLanguageServer.start() cleans up after itself on failure; only the servers that
+        # started successfully (and are therefore absent from `exceptions`) still need stopping.
         # We intentionally fail fast here. The user's intention is to work with all the specified languages,
         # so if any of them is not available, it is better to make symbolic tool calls fail, bringing the issue to the
         # user's attention instead of silently continuing with a subset of the language servers and potentially
         # causing suboptimal agent behaviour.
         if exceptions:
-            for ls in spawned_servers:
+            for ls in language_servers.values():
                 ls.stop()
             failure_messages = "\n".join([f"{lang.value}: {e}" for lang, e in exceptions.items()])
             raise LanguageServerManagerInitialisationError(f"Failed to start {len(exceptions)} language server(s):\n{failure_messages}")
