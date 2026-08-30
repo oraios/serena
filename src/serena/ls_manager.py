@@ -133,11 +133,15 @@ class LanguageServerManager:
             thread.start()
             threads.append(thread)
 
-        # collect language servers and exceptions
+        # collect language servers and exceptions. `spawned_servers` also captures a server whose
+        # own thread raised, since its process may already be running and still needs `stop()`.
         language_servers: dict[LanguageServerId, SolidLanguageServer] = {}
         exceptions: dict[LanguageServerId, Exception] = {}
+        spawned_servers: list[SolidLanguageServer] = []
         for thread in threads:
             thread.join()
+            if thread.language_server is not None:
+                spawned_servers.append(thread.language_server)
             if thread.exception is not None:
                 exceptions[thread.ls_id] = thread.exception
             elif thread.language_server is not None:
@@ -149,7 +153,7 @@ class LanguageServerManager:
         # user's attention instead of silently continuing with a subset of the language servers and potentially
         # causing suboptimal agent behaviour.
         if exceptions:
-            for ls in language_servers.values():
+            for ls in spawned_servers:
                 ls.stop()
             failure_messages = "\n".join([f"{lang.value}: {e}" for lang, e in exceptions.items()])
             raise LanguageServerManagerInitialisationError(f"Failed to start {len(exceptions)} language server(s):\n{failure_messages}")

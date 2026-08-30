@@ -7,6 +7,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     project list in `serena_config.yml`
 
 * Language Servers:
+  - Fix: `LanguageServerManager.from_languages` did not stop the OS subprocess of a language
+    server that raised after spawning it during multi-language startup; that process leaked
+    for the remaining session (#1949)
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: clojure-lsp was not told that Serena sends `workspace/didChangeWatchedFiles`, so changes made
     outside Serena's own edit tools (a git checkout, another editor, a build step) need not invalidate
