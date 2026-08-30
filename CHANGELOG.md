@@ -7,6 +7,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     project list in `serena_config.yml`
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
 
+* Hooks:
+  - Add Codex plan-mode context and enforcement hooks driven by each tool's edit-capability metadata. #1854
+  - Document safer Codex hook defaults, timeouts, status messages, event mappings and troubleshooting guidance.
+
 * Language Servers:
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: clojure-lsp was not told that Serena sends `workspace/didChangeWatchedFiles`, so changes made

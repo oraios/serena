@@ -61,6 +61,33 @@ def _read_input(tool_name: str = "read", session_id: str = "test-session-123", f
     }
 
 
+def _codex_prompt_input(permission_mode: str | None, permission_mode_key: str = "permission_mode") -> dict:
+    data = {
+        "session_id": "codex-plan-context",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Plan this change",
+    }
+    if permission_mode is not None:
+        data[permission_mode_key] = permission_mode
+    return data
+
+
+def _codex_tool_input(
+    tool_name: str,
+    permission_mode: str | None,
+    session_id: str = "codex-plan-guard",
+) -> dict:
+    data = {
+        "session_id": session_id,
+        "hook_event_name": "PreToolUse",
+        "tool_name": tool_name,
+        "tool_input": {},
+    }
+    if permission_mode is not None:
+        data["permission_mode"] = permission_mode
+    return data
+
+
 def _execute_remind_hook(client: HookClient, payload: dict, tmp_path: Path) -> None:
     with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
         PreToolUseRemindAboutSymbolicToolsHook(client).execute()
@@ -930,6 +957,138 @@ class TestPreToolUseAutoApproveSerenaHook:
         with patch("sys.stdin", _make_stdin(stdin_data)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
             PreToolUseAutoApproveSerenaHook(HookClient.CLAUDE_CODE).execute()
         assert capsys.readouterr().out == ""
+
+
+class TestCodexPlanHooks:
+    def test_plan_context_emits_read_only_guidance(self):
+        runner = CliRunner()
+        result = runner.invoke(
+            hook_commands,
+            ["plan-context", "--client", "codex"],
+            input=json.dumps(_codex_prompt_input("plan")),
+        )
+
+        assert result.exit_code == 0
+        assert json.loads(result.output) == {
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": (
+                    "Codex is in plan mode. Use Serena only for read-only repository analysis and planning; "
+                    "do not call edit-capable Serena tools."
+                ),
+            }
+        }
+
+    def test_plan_context_accepts_camel_case_permission_mode(self):
+        runner = CliRunner()
+        result = runner.invoke(
+            hook_commands,
+            ["plan-context", "--client", "codex"],
+            input=json.dumps(_codex_prompt_input("plan", permission_mode_key="permissionMode")),
+        )
+
+        assert result.exit_code == 0
+        assert json.loads(result.output)["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+
+    @pytest.mark.parametrize("permission_mode", [None, "default", "acceptEdits", "dontAsk", "bypassPermissions"])
+    def test_plan_context_stays_silent_outside_plan_mode(self, permission_mode: str | None):
+        runner = CliRunner()
+        result = runner.invoke(
+            hook_commands,
+            ["plan-context", "--client", "codex"],
+            input=json.dumps(_codex_prompt_input(permission_mode)),
+        )
+
+        assert result.exit_code == 0
+        assert result.output == ""
+
+    @pytest.mark.parametrize(
+        "tool_name",
+        [
+            "mcp__serena__replace_symbol_body",
+            "mcp__serena__create_text_file",
+            "mcp__serena__write_memory",
+            "mcp__serena__execute_shell_command",
+        ],
+    )
+    def test_plan_guard_denies_edit_capable_serena_tools(self, tool_name: str):
+        runner = CliRunner()
+        result = runner.invoke(
+            hook_commands,
+            ["plan-guard", "--client", "codex"],
+            input=json.dumps(_codex_tool_input(tool_name, "plan")),
+        )
+
+        assert result.exit_code == 0
+        hook_output = json.loads(result.output)["hookSpecificOutput"]
+        assert hook_output["hookEventName"] == "PreToolUse"
+        assert hook_output["permissionDecision"] == "deny"
+        assert tool_name.removeprefix("mcp__serena__") in hook_output["permissionDecisionReason"]
+        assert "plan mode" in hook_output["permissionDecisionReason"]
+
+    @pytest.mark.parametrize(
+        "tool_name",
+        [
+            "mcp__serena__find_symbol",
+            "mcp__serena__future_unknown_tool",
+            "mcp__filesystem__replace_symbol_body",
+            "replace_symbol_body",
+        ],
+    )
+    def test_plan_guard_stays_silent_for_unblocked_tools(self, tool_name: str):
+        runner = CliRunner()
+        result = runner.invoke(
+            hook_commands,
+            ["plan-guard", "--client", "codex"],
+            input=json.dumps(_codex_tool_input(tool_name, "plan")),
+        )
+
+        assert result.exit_code == 0
+        assert result.output == ""
+
+    @pytest.mark.parametrize("permission_mode", [None, "default", "acceptEdits", "dontAsk", "bypassPermissions"])
+    def test_plan_guard_stays_silent_outside_plan_mode(self, permission_mode: str | None):
+        runner = CliRunner()
+        result = runner.invoke(
+            hook_commands,
+            ["plan-guard", "--client", "codex"],
+            input=json.dumps(_codex_tool_input("mcp__serena__replace_symbol_body", permission_mode)),
+        )
+
+        assert result.exit_code == 0
+        assert result.output == ""
+
+    def test_plan_guard_uses_each_payload_without_persisting_mode(self):
+        runner = CliRunner()
+        session_id = "codex-plan-transition"
+
+        plan_result = runner.invoke(
+            hook_commands,
+            ["plan-guard", "--client", "codex"],
+            input=json.dumps(_codex_tool_input("mcp__serena__replace_symbol_body", "plan", session_id=session_id)),
+        )
+        default_result = runner.invoke(
+            hook_commands,
+            ["plan-guard", "--client", "codex"],
+            input=json.dumps(_codex_tool_input("mcp__serena__replace_symbol_body", "default", session_id=session_id)),
+        )
+
+        assert json.loads(plan_result.output)["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert default_result.exit_code == 0
+        assert default_result.output == ""
+
+    @pytest.mark.parametrize("command", ["plan-context", "plan-guard"])
+    def test_plan_commands_reject_non_codex_clients(self, command: str):
+        payload = _codex_prompt_input("plan") if command == "plan-context" else _codex_tool_input("mcp__serena__find_symbol", "plan")
+        runner = CliRunner()
+        result = runner.invoke(
+            hook_commands,
+            [command, "--client", "claude-code"],
+            input=json.dumps(payload),
+        )
+
+        assert result.exit_code != 0
+        assert "only supported for codex" in result.output.lower()
 
 
 class TestSessionEndCleanupHook:
