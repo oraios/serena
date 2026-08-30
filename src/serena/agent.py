@@ -794,6 +794,7 @@ class SerenaAgent:
         # of tools that will be exposed to the client.
         # Furthermore, we disable tools that are only relevant for project activation.
         # So if the project exists, we apply all the aforementioned exclusions.
+        apply_read_only = False
         if is_single_project:
             assert project is not None
             log.info(
@@ -807,9 +808,12 @@ class SerenaAgent:
                 )
             )
             tool_inclusion_definitions.append(project.project_config)
+            apply_read_only = project.project_config.read_only
 
         # compute the resulting tool set
         base_toolset = ToolSet.default().apply(*tool_inclusion_definitions)
+        if apply_read_only:
+            base_toolset = base_toolset.without_editing_tools()
         log.info(f"Number of exposed tools: {len(base_toolset)}")
         return base_toolset
 
