@@ -225,12 +225,7 @@ class NixLanguageServer(SolidLanguageServer):
         return {
             "nixpkgs": {"expr": "import <nixpkgs> { }"},
             "formatting": {"command": ["nixpkgs-fmt"]},
-            "options": {
-                "enable": True,
-                "target": {
-                    "installable": "",
-                },
-            },
+            "options": {},
         }
 
     @classmethod
