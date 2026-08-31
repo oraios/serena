@@ -63,15 +63,15 @@ def test_default_launch_command_uses_managed_dependency_resolution(tmp_path: Pat
     managed_resolution.assert_called_once_with()
 
 
-def test_default_nixd_settings_preserve_existing_behavior() -> None:
-    assert NixLanguageServer._load_nixd_settings(SolidLSPSettings.CustomLSSettings({})) == {
+def test_default_nixd_settings_use_schema_valid_options_map() -> None:
+    settings = NixLanguageServer._load_nixd_settings(SolidLSPSettings.CustomLSSettings({}))
+
+    assert settings == {
         "nixpkgs": {"expr": "import <nixpkgs> { }"},
         "formatting": {"command": ["nixpkgs-fmt"]},
-        "options": {
-            "enable": True,
-            "target": {"installable": ""},
-        },
+        "options": {},
     }
+    assert NixLanguageServer._get_workspace_configuration({"items": [{"section": "nixd.options"}]}, settings) == [{}]
 
 
 def test_config_path_loads_bare_nixd_settings_object(tmp_path: Path) -> None:
