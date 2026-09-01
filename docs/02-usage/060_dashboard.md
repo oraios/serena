@@ -30,6 +30,21 @@ Configure your preferred interface via the setting `web_dashboard_interface` in 
 By default, the dashboard can be accessed at `http://localhost:24282/dashboard/index.html`,
 but a higher port may be used if the default port is unavailable/multiple instances are running.
 
+For local development, you can give the dashboard its own browser origin while keeping it bound
+to loopback:
+
+```yaml
+web_dashboard_listen_address: 127.0.0.1
+web_dashboard_advertised_host: serena.localhost
+web_dashboard_trusted_hosts:
+  - 127.0.0.1
+  - localhost
+  - serena.localhost
+```
+
+This is useful when other local applications use `localhost`, because browser caches and other
+origin-scoped state stay separated. `*.localhost` resolves to loopback in modern browsers.
+
 ### Features
 
 The dashboard provides ...
