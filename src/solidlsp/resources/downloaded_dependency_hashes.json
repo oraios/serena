@@ -16,5 +16,10 @@
   "https://download-cdn.jetbrains.com/language-server/kotlin-server/262.9593.0/kotlin-server-262.9593.0.tar.gz": "2d99d8e198fbe4aa8f4481e37799724ce94803b4ea12a60b416040e3fcd7cc5e",
   "https://download-cdn.jetbrains.com/language-server/kotlin-server/262.9593.0/kotlin-server-262.9593.0-aarch64.tar.gz": "2317831c6e5607d05b7ebc1da655330125ce0e3d66fbf24517dfce442debc14e",
   "https://download-cdn.jetbrains.com/language-server/kotlin-server/262.9593.0/kotlin-server-262.9593.0.sit": "17369fda97c85418ac24ab38a9df56b21522a3468dfe193832fe455c13920745",
-  "https://download-cdn.jetbrains.com/language-server/kotlin-server/262.9593.0/kotlin-server-262.9593.0-aarch64.sit": "6ba6021a706b21e64cef33f7e2b79f187c0910320722bb2d3ed05ad1115ec43f"
+  "https://download-cdn.jetbrains.com/language-server/kotlin-server/262.9593.0/kotlin-server-262.9593.0-aarch64.sit": "6ba6021a706b21e64cef33f7e2b79f187c0910320722bb2d3ed05ad1115ec43f",
+  "https://github.com/mrjosh/helm-ls/releases/download/v0.5.4/helm_ls_darwin_amd64": "d2e2a201ddb698c333b2408549a43bfcfbe3b03662e259bb39c8f1b0a0b1f748",
+  "https://github.com/mrjosh/helm-ls/releases/download/v0.5.4/helm_ls_darwin_arm64": "8d917fedac8aa7c0199bccb5fc54df68303d215d2c76a47b59094ea272e250c1",
+  "https://github.com/mrjosh/helm-ls/releases/download/v0.5.4/helm_ls_linux_amd64": "5d857ba25c461d3218bb98d9e98cb61bc948bfa92b124667d7e6ed695fe2da5f",
+  "https://github.com/mrjosh/helm-ls/releases/download/v0.5.4/helm_ls_linux_arm64": "565d4a298d15e69a1bc7275a7fcf287d364668e53fdf09110d76aac5c820f78c",
+  "https://github.com/mrjosh/helm-ls/releases/download/v0.5.4/helm_ls_windows_amd64.exe": "38ed1eea9c018365d4ba1c335c2955b067a4ae68fcfe18ed52b5dc1df51c860f"
 }
