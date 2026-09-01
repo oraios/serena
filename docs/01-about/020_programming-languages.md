@@ -28,6 +28,11 @@ or at least freely available for use.
 We currently provide direct, out-of-the-box support for the programming languages listed below.
 Some languages require additional installations or setup steps, as noted.
 
+When multiple configured language servers support a file, Serena uses the first matching server in
+the `language_servers` list. If you use Helm and YAML together, put `helm` before `yaml` so chart
+files use Helm support. The Helm matcher only recognizes `.yaml`, `.yml`, and `.tpl` files beneath
+a `Chart.yaml` ancestor, so unrelated YAML files continue to use `yaml`.
+
 * **Ada / SPARK**  
   (uses AdaCore's [Ada Language Server (ALS)](https://github.com/AdaCore/ada_language_server),
   automatically downloaded; supports `.ads`, `.adb`, and `.ada` files;
@@ -89,6 +94,12 @@ Some languages require additional installations or setup steps, as noted.
 * **Haxe**
   (requires Haxe compiler 3.4.0+ and Node.js; uses the [vshaxe language server](https://github.com/vshaxe/haxe-language-server);
   automatically downloaded from Open VSX, or discovered from the vshaxe VSCode extension)
+* **Helm**
+  (experimental and zero-priority, so it is not auto-detected and must be explicitly added to
+  `language_servers`; uses [helm-ls](https://github.com/mrjosh/helm-ls) v0.5.4, which Serena downloads automatically;
+  recognizes `.yaml`, `.yml`, and `.tpl` files only beneath a `Chart.yaml` ancestor; put it before `yaml` when both are configured;
+  configure upstream options through `ls_specific_settings.helm.helm_settings`, or override the managed versions with
+  `helm_ls_version` and `yaml_language_server_version`; installing the managed YAML server requires Node.js and npm)
 * **HLSL / GLSL / WGSL**
   (uses [shader-language-server](https://github.com/antaalt/shader-sense) (language `hlsl`); automatically downloaded;
   on macOS, requires Rust toolchain for building from source;
@@ -182,6 +193,7 @@ Some languages require additional installations or setup steps, as noted.
 * **Wolfram Language**
   (requires Wolfram Mathematica 13.0+ or Wolfram Engine 12.1+; uses the official [WolframResearch LSPServer](https://github.com/WolframResearch/LSPServer) paclet; supports .wl and .wls files; references are within-file only)
 * **YAML**
+  (uses yaml-language-server, which Serena manages automatically; when Helm is also configured, list `helm` first)
 * **JSON**  
   (experimental; must be explicitly added to the languages list; requires Node.js and npm)
 * **Zig**  

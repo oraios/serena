@@ -7,12 +7,12 @@ project_name: "project_name"
 #   csharp                 csharp_omnisharp       cue                    dart                   deno
 #   elixir                 elm                    erlang                 fortran                fsharp
 #   gdscript               gleam                  go                     groovy                 haskell
-#   haxe                   hlsl                   html                   java                   json
-#   julia                  kotlin                 latex                  lean4                  lua
-#   luau                   markdown               matlab                 msl                    nextflow
-#   nix                    ocaml                  pascal                 perl                   php
-#   php_phpactor           php_phpantom           powershell             python                 python_basedpyright
-#   python_jedi            python_pyrefly         python_ty              qml                    r
+#   haxe                   helm                   hlsl                   html                   java
+#   json                   julia                  kotlin                 latex                  lean4
+#   lua                    luau                   markdown               matlab                 msl
+#   nextflow               nix                    ocaml                  pascal                 perl
+#   php                    php_phpactor           php_phpantom           powershell             python
+#   python_basedpyright    python_jedi            python_pyrefly         python_ty              qml
 #   rego                   ruby                   ruby_solargraph        rust                   scala
 #   scss                   solidity               svelte                 swift                  systemverilog
 #   terraform              toml                   typescript             typescript_vts         vue
@@ -29,6 +29,7 @@ project_name: "project_name"
 #   - For Deno projects, use deno (serves the same .ts/.js files as typescript; requires the deno CLI on PATH)
 #   - For SCSS / Sass / plain CSS, use scss (some-sass-language-server handles all three)
 #   - For Free Pascal/Lazarus, use pascal
+#   - Helm is experimental and not auto-detected; add helm explicitly to language_servers. If yaml is also listed, put helm before yaml
 # Special requirements:
 #   Some language servers require additional setup/installations.
 #   See here for details: https://oraios.github.io/serena/01-about/020_programming-languages.html#language-servers
