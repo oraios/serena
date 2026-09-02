@@ -531,6 +531,65 @@ def test_go_symbol_replacement_no_double_keyword(snapshot: SnapshotAssertion):
     test_case.run_test(content_after_ground_truth=snapshot)
 
 
+# A single `export const` declaration body that re-supplies the leading `export const` prefix, as a
+# user would after copying the body returned by find_symbol. Replacing the body with this must not
+# duplicate the prefix.
+TS_DECL_REPLACEMENT = """export const twice = (n: number): number => n * 3;"""
+
+
+class TsDeclReplacementTest(EditingTest):
+    """Test for replacing a single TypeScript `const`/`let`/`var` declaration that should NOT result
+    in a duplicated leading `export`/keyword (e.g. `export const export const twice = ...`).
+    """
+
+    def __init__(self, ls_id: LanguageServerId, rel_path: str, symbol_name: str, new_body: str):
+        super().__init__(ls_id, rel_path)
+        self.symbol_name = symbol_name
+        self.new_body = new_body
+
+    def _apply_edit(self, code_editor: CodeEditor) -> None:
+        code_editor.replace_body(self.symbol_name, self.rel_path, self.new_body)
+
+    @overrides
+    def _test_diff(self, code_diff: CodeDiff, snapshot: SnapshotAssertion | None) -> None:
+        # the leading `export`/declaration keyword must appear exactly once (no `export const
+        # export const` corruption); this doubles as a syntax check, since a duplicated prefix is
+        # `export`/`const`/`let`/`var` immediately followed by whitespace and the same word again
+        for keyword in ("export const", "const", "let", "var"):
+            assert f"{keyword} {keyword} " not in code_diff.modified_content, (
+                f"Replacement duplicated the '{keyword}' prefix: {code_diff.modified_content!r}"
+            )
+        return super()._test_diff(code_diff, snapshot)
+
+
+@pytest.mark.typescript
+def test_typescript_symbol_replacement_no_double_keyword(snapshot: SnapshotAssertion):
+    """
+    Test that replacing a TypeScript `const`/`let`/`var` declaration does not duplicate the leading
+    `export`/keyword.
+
+    This exercises the bug where:
+    - Original: export const twice = (n: number): number => n * 2;
+    - Replacement body (as displayed by find_symbol): export const twice = (n: number): number => n * 3;
+    - Bug result would be: export const export const twice = (n: number): number => n * 3;; (the
+      original `export const ` prefix is kept because the tsserver symbol range starts at the
+      identifier, and the supplied body adds another `export const`)
+    - Correct result should be: export const twice = (n: number): number => n * 3;
+
+    tsserver reports the symbol range of such declarations starting at the identifier (after the
+    keyword(s)), unlike `function`/`class` declarations whose range includes the leading keyword.
+    The range extension in TypeScriptLanguageServer.request_document_symbols prevents the
+    duplicated prefix (GH #1956).
+    """
+    test_case = TsDeclReplacementTest(
+        LanguageServerId.TYPESCRIPT,
+        "symbol_body.ts",
+        "twice",
+        TS_DECL_REPLACEMENT,
+    )
+    test_case.run_test(content_after_ground_truth=snapshot)
+
+
 class RenameSymbolTest(EditingTest):
     def __init__(self, ls_id: LanguageServerId, rel_path: str, symbol_name: str, new_name: str):
         super().__init__(ls_id, rel_path)

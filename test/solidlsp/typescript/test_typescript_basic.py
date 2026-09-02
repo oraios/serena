@@ -34,6 +34,46 @@ class TestTypescriptLanguageServer:
             "index.ts should reference helperFunction (tried all positions in selectionRange)"
         )
 
+    @pytest.mark.parametrize("language_server", [LanguageServerId.TYPESCRIPT], indirect=True)
+    def test_const_let_var_body_includes_leading_keyword(self, language_server: SolidLanguageServer) -> None:
+        """
+        Single top-level ``const``/``let``/``var`` declarations must expose a body and replacement
+        range that include a leading ``export`` (if present) and the declaration keyword, just like
+        ``function``/``class`` declarations do.
+
+        Regression test for tsserver reporting the symbol range of such declarations starting at the
+        declared identifier (after the keyword(s)) rather than at the keyword(s). That asymmetry made
+        replace_symbol_body drop them from the body and replacement range, so a natural
+        keyword-inclusive round-trip edit duplicated the prefix and corrupted the file (e.g.
+        ``export const twice = ...`` -> ``export const export const twice = ...``, GH #1956).
+        """
+        all_symbols, _ = language_server.request_document_symbols("symbol_body.ts").get_all_symbols_and_roots()
+        symbols_by_name = {sym.get("name"): sym for sym in all_symbols}
+
+        # single declarations: body starts with the full keyword prefix, the range start moves to
+        # the keyword (column 0 here), and the selection range still points at the identifier
+        expected_prefix_by_name = {
+            "twice": "export const ",
+            "localCounter": "const ",
+            "mutableFlag": "export let ",
+            "legacyVar": "var ",
+        }
+        for name, prefix in expected_prefix_by_name.items():
+            sym = symbols_by_name.get(name)
+            assert sym is not None, f"{name} not found in symbol_body.ts"
+            body = sym["body"].get_text()
+            assert body.startswith(prefix), f"Expected body of {name} to start with {prefix!r}, got {body[:24]!r}"
+            assert sym["location"]["range"]["start"]["character"] == 0, f"Expected {name} body range to start at the keyword (col 0)"
+            assert sym["selectionRange"]["start"]["character"] > 0, f"Expected {name} selectionRange to point at the identifier"
+
+        # function/class declarations already include their keyword in tsserver's own range;
+        # this override must be a no-op for them
+        for name in ("helperFunction", "HelperClass"):
+            sym = symbols_by_name.get(name)
+            assert sym is not None, f"{name} not found in symbol_body.ts"
+            body = sym["body"].get_text()
+            assert body.startswith("export "), f"Expected {name} body to already start with 'export ', got {body[:24]!r}"
+
     if ls_has_verified_implementation_support(LanguageServerId.TYPESCRIPT):
 
         @pytest.mark.parametrize("language_server", [LanguageServerId.TYPESCRIPT], indirect=True)

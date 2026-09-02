@@ -8,13 +8,21 @@ import re
 import shutil
 import threading
 import time
+from collections.abc import Hashable
 from typing import Any
 
 from overrides import override
 from sensai.util.logging import LogTime
 
 from solidlsp import ls_types
-from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
+from solidlsp.ls import (
+    DocumentSymbols,
+    LanguageServerDependencyProvider,
+    LanguageServerDependencyProviderSinglePath,
+    LSPFileBuffer,
+    SolidLanguageServer,
+    SymbolBodyFactory,
+)
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_utils import PlatformId, PlatformUtils
@@ -99,6 +107,13 @@ class TypeScriptLanguageServer(SolidLanguageServer):
     @classmethod
     def supports_implementation_request(cls) -> bool:
         return True
+
+    # matches a line prefix that consists solely of a leading `const`/`let`/`var` declaration
+    # keyword (with an optional `export` modifier, optional indentation, and the whitespace
+    # before the declared identifier). tsserver reports the symbol range of such declarations
+    # starting at the identifier, i.e. after the keyword(s), unlike `function`/`class` declarations
+    # whose range includes the leading keyword(s). Mirrors Gopls._LEADING_DECL_KEYWORD_RE.
+    _LEADING_DECL_KEYWORD_RE = re.compile(r"(?P<indent>\s*)(?:export\s+)?(?:const|let|var)\s+")
 
     # Safety timeout for $/progress-based indexing wait. Normally the event fires
     # well within this window; the timeout is only hit if the server never sends progress.
@@ -607,3 +622,97 @@ class TypeScriptLanguageServer(SolidLanguageServer):
     @override
     def _get_preferred_definition(self, definitions: list[ls_types.Location]) -> ls_types.Location:
         return prefer_non_node_modules_definition(definitions)
+
+    @override
+    def _document_symbols_cache_fingerprint(self) -> Hashable:
+        # bump whenever request_document_symbols's post-processing below changes what it returns,
+        # so a pre-existing on-disk cache from before this override existed gets invalidated
+        return 1
+
+    @override
+    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
+        # Override to extend single `const`/`let`/`var` declaration ranges to include a leading
+        # `export` and the declaration keyword. tsserver excludes both from such ranges (unlike
+        # `function`/`class` declarations), which causes replace_symbol_body to drop them from the
+        # symbol body and replacement range; re-supplying them in a keyword-inclusive edit then
+        # duplicates the prefix and corrupts the file (e.g. `export const` becomes
+        # `export const export const`). See _extend_ts_symbol_range_to_include_leading_keyword.
+        document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
+        if not document_symbols.root_symbols:
+            return document_symbols
+
+        # obtain the file lines and a body factory to recompute the bodies of extended symbols
+        with self._open_file_context(relative_file_path, file_buffer, open_in_ls=False) as file_data:
+            file_lines = file_data.split_lines()
+            body_factory = SymbolBodyFactory(file_data)
+
+            # extend ranges recursively, operating on copies so the cached symbols are not mutated;
+            # see Gopls.request_document_symbols for why child `parent` back-pointers are left aimed
+            # at the original (un-extended) nodes
+            def extend_symbol_and_children(symbol: ls_types.UnifiedSymbolInformation) -> ls_types.UnifiedSymbolInformation:
+                extended = self._extend_ts_symbol_range_to_include_leading_keyword(symbol, file_lines, body_factory)
+                children = symbol.get("children")
+                if children:
+                    if extended is symbol:
+                        extended = symbol.copy()
+                    extended["children"] = [extend_symbol_and_children(child) for child in children]
+                return extended
+
+            extended_root_symbols = [extend_symbol_and_children(sym) for sym in document_symbols.root_symbols]
+
+        return DocumentSymbols(extended_root_symbols)
+
+    def _extend_ts_symbol_range_to_include_leading_keyword(
+        self,
+        symbol: ls_types.UnifiedSymbolInformation,
+        file_lines: list[str],
+        body_factory: SymbolBodyFactory,
+    ) -> ls_types.UnifiedSymbolInformation:
+        """
+        Extend a TypeScript/JavaScript symbol's body range to include a leading `export`/
+        `const`/`let`/`var`.
+
+        tsserver reports the range of a single `const`/`let`/`var` declaration starting at the
+        declared identifier (after the keyword(s)), whereas the range of a `function`/`class`
+        declaration includes its leading keyword. This asymmetry makes :meth:`replace_symbol_body`
+        omit the keyword(s) from both the displayed body and the replacement range, so re-supplying
+        them in an edit duplicates the prefix (e.g. ``export const twice = ...`` becomes
+        ``export const export const twice = ...``).
+
+        :param symbol: the symbol whose range may be extended.
+        :param file_lines: the lines of the file in which the symbol is defined.
+        :param body_factory: the factory used to recompute the symbol body from the extended range.
+        :return: a copy of the symbol with an extended range, or the original symbol if no leading
+            `export`/`const`/`let`/`var` precedes the identifier on the start line (e.g. for
+            functions/classes, or for destructuring declarations whose keyword sits before the
+            opening bracket rather than directly before this identifier).
+        """
+        # determine whether only `export`/`const`/`let`/`var` precedes the identifier on the start line
+        range_info = symbol["range"]
+        start_line = range_info["start"]["line"]
+        start_char = range_info["start"]["character"]
+        if start_line >= len(file_lines):
+            return symbol
+        prefix = file_lines[start_line][:start_char]
+        match = self._LEADING_DECL_KEYWORD_RE.fullmatch(prefix)
+        if match is None:
+            return symbol
+
+        # extend the range start back to the keyword (excluding indentation), updating both the
+        # symbol range and its location range so the replacement range covers the keyword(s)
+        new_start = ls_types.Position(line=start_line, character=len(match.group("indent")))
+        extended = symbol.copy()
+        extended["range"] = ls_types.Range(start=new_start, end=range_info["end"])
+        location = extended.get("location")
+        if location:
+            location = location.copy()
+            if "range" in location:
+                location["range"] = ls_types.Range(start=new_start, end=location["range"]["end"])
+            extended["location"] = location
+
+        # recompute the body from the now-extended location range so the displayed body stays
+        # consistent with the replacement range; the stale body must be removed first, since the
+        # factory returns an existing SymbolBody as-is and otherwise reads the updated location range
+        extended.pop("body", None)
+        extended["body"] = body_factory.create_symbol_body(extended)
+        return extended
