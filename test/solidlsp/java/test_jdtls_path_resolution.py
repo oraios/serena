@@ -769,3 +769,54 @@ class TestConfiguredRuntimesInitializeSettings:
 
         with pytest.raises(ValueError, match="requires at least a 'name' and a 'path' key"):
             server._create_base_initialize_params()
+
+
+class TestWorkspaceLock:
+    """Tests for EclipseJDTLS.DependencyProvider._try_acquire_workspace_lock (GH #1944):
+    concurrent Serena sessions on the same project spawn separate JDTLS processes sharing one
+    `-data` workspace directory, which is single-writer by design and gets silently corrupted.
+    This is a diagnostic-only mitigation (warn, don't refuse to start), tested here in isolation
+    from JDTLS itself -- no Java/JDK required, just filesystem locking.
+    """
+
+    def test_first_acquisition_succeeds(self, tmp_path: Path) -> None:
+        lock = EclipseJDTLS.DependencyProvider._try_acquire_workspace_lock(str(tmp_path))
+        assert lock is not None
+        lock.release()
+
+    def test_second_acquisition_while_first_is_held_returns_none_and_warns(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        first = EclipseJDTLS.DependencyProvider._try_acquire_workspace_lock(str(tmp_path))
+        assert first is not None
+        try:
+            with caplog.at_level("WARNING"):
+                second = EclipseJDTLS.DependencyProvider._try_acquire_workspace_lock(str(tmp_path))
+            assert second is None
+            assert any("already holds the Eclipse JDTLS workspace" in r.message for r in caplog.records)
+        finally:
+            first.release()
+
+    def test_acquisition_succeeds_again_after_release(self, tmp_path: Path) -> None:
+        first = EclipseJDTLS.DependencyProvider._try_acquire_workspace_lock(str(tmp_path))
+        assert first is not None
+        first.release()
+
+        second = EclipseJDTLS.DependencyProvider._try_acquire_workspace_lock(str(tmp_path))
+        assert second is not None, "Expected the lock to be acquirable again once the first holder released it"
+        second.release()
+
+    def test_different_workspaces_do_not_contend(self, tmp_path: Path) -> None:
+        ws_a = tmp_path / "a"
+        ws_b = tmp_path / "b"
+        ws_a.mkdir()
+        ws_b.mkdir()
+
+        lock_a = EclipseJDTLS.DependencyProvider._try_acquire_workspace_lock(str(ws_a))
+        lock_b = EclipseJDTLS.DependencyProvider._try_acquire_workspace_lock(str(ws_b))
+        try:
+            assert lock_a is not None
+            assert lock_b is not None
+        finally:
+            if lock_a is not None:
+                lock_a.release()
+            if lock_b is not None:
+                lock_b.release()
