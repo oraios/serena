@@ -42,6 +42,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     independently via the `window/logMessage` notification tsserver already sends, and the
     affected wait now raises instead of reporting success (#1814)
 
+CLI:
+  - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)
+
 * Dependencies:
   - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
 
