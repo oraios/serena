@@ -40,8 +40,9 @@ class PromptFactoryBase:
         return self._prompt_collection.get_prompt_list(prompt_name, self.lang_code)
 
 
-def autogenerate_prompt_factory_module(prompts_dir: str, target_module_path: str, interprompt_library_package: str = "interprompt",
-        class_name: str = "PromptFactory") -> None:
+def autogenerate_prompt_factory_module(
+    prompts_dir: str, target_module_path: str, interprompt_library_package: str = "interprompt", class_name: str = "PromptFactory"
+) -> None:
     """
     Auto-generates a prompt factory module for the given prompt directory.
     The generated `PromptFactory` class is meant to be the central entry class for retrieving and rendering prompt templates and prompt

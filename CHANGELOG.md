@@ -5,18 +5,30 @@ Status of the `main` branch. Changes prior to the next official version change w
 * General:
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
+  - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
 
 * Language Servers:
   - Fix: Nextflow's `_flush_deferred_workspace_scan` marked the workspace scan flushed even when both
     of its `completion` probes failed, permanently skipping the flush (and silencing retries) for the
     rest of the session (#1871)
+  - Fix: Exceptions raised during `LanguageServerManager.start` did not stop the language server subprocess if it was
+    already started (#1949)
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
+  - Fix: clojure-lsp was not told that Serena sends `workspace/didChangeWatchedFiles`, so changes made
+    outside Serena's own edit tools (a git checkout, another editor, a build step) need not invalidate
+    its analysis; symbol queries could then answer from a stale index, e.g. `find_symbol` returning a
+    body from the position the symbol used to occupy (#1593)
   - Fix: Scala cross-file queries waited a fixed 5s after the first file was opened, which on a cold
     Metals is long before its build import, indexing and compilation have finished; the first
     `find_referencing_symbols` of a session could return a fraction of the references with nothing to
     indicate it was incomplete. Serena now declares work-done progress support and waits for the work
     Metals reports, bounded by the new `indexing_timeout`, `indexing_start_grace` and
     `indexing_quiet_period` settings
+  - Fix: a `tsserver` crash mid-indexing (e.g. a V8 heap OOM) sent the same `$/progress` "end"
+    event as a normal completion, so `find_referencing_symbols` and other cross-file queries
+    silently returned an empty result instead of surfacing the crash. The crash is now detected
+    independently via the `window/logMessage` notification tsserver already sends, and the
+    affected wait now raises instead of reporting success (#1814)
 
 * Dependencies:
   - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
