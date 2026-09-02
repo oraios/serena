@@ -5,6 +5,7 @@ Configuration objects for language servers
 import logging
 import os
 import re
+from collections import OrderedDict
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -84,6 +85,69 @@ class FilenameMatcher:
         for ext in self._file_extensions:
             if re.search(rf"{re.escape(ext)}(?:\W|$)", string):
                 return True
+        return False
+
+
+class AnchoredFilenameMatcher(FilenameMatcher):
+    """Match files with registered extensions beneath an anchor file.
+
+    A candidate must have an absolute path. Ancestor depth ``0`` is the
+    candidate's containing directory, and ``max_walk_depth`` is inclusive, so
+    ``max_walk_depth=0`` checks only that directory. The anchor is considered
+    present when the configured filename is a regular file in one of the
+    checked directories.
+    """
+
+    def __init__(
+        self,
+        *file_extensions: str,
+        anchor_filename: str = "Chart.yaml",
+        max_walk_depth: int = 8,
+        cache_size: int = 256,
+        case_sensitive: bool = True,
+    ) -> None:
+        super().__init__(*file_extensions, case_sensitive=case_sensitive)
+        if max_walk_depth < 0:
+            raise ValueError("max_walk_depth must be non-negative")
+        if cache_size < 1:
+            raise ValueError("cache_size must be positive")
+        self._anchor_filename = anchor_filename
+        self._max_walk_depth = max_walk_depth
+        self._cache_size = cache_size
+        self._anchor_cache: OrderedDict[Path, bool] = OrderedDict()
+
+    def reset(self) -> None:
+        """Restore extensions and discard cached filesystem observations."""
+        super().reset()
+        self._anchor_cache.clear()
+
+    def _directory_has_anchor(self, directory: Path) -> bool:
+        try:
+            has_anchor = self._anchor_cache.pop(directory)
+        except KeyError:
+            has_anchor = (directory / self._anchor_filename).is_file()
+        self._anchor_cache[directory] = has_anchor
+        if len(self._anchor_cache) > self._cache_size:
+            self._anchor_cache.popitem(last=False)
+        return has_anchor
+
+    def is_relevant_filename(self, fn: str) -> bool:
+        """Match an absolute path whose anchor ancestor is within the depth limit."""
+        if not super().is_relevant_filename(fn):
+            return False
+
+        path = Path(fn)
+        if not path.is_absolute():
+            return False
+
+        directory = path.parent
+        for _depth in range(self._max_walk_depth + 1):
+            if self._directory_has_anchor(directory):
+                return True
+            parent = directory.parent
+            if parent == directory:
+                break
+            directory = parent
         return False
 
 
@@ -275,6 +339,12 @@ class LanguageServerId(str, Enum):
     Must be explicitly specified in project.yml. Requires Node.js and npm.
     Requires ``ansible`` in PATH for full functionality.
     """
+    HELM = "helm"
+    """Helm language server for Kubernetes charts (experimental).
+    Supports chart YAML, template YAML, and ``.tpl`` files beneath ``Chart.yaml``.
+    Must be explicitly specified in project.yml. Requires Node.js and npm when
+    Serena needs to install the accompanying YAML language server.
+    """
     HTML = "html"
     """HTML language server (experimental) using vscode-html-language-server from
     Microsoft's vscode-langservers-extracted npm package. Supports *.html and *.htm files.
@@ -325,6 +395,7 @@ class LanguageServerId(str, Enum):
         """
         return self in {
             self.ANSIBLE,
+            self.HELM,
             self.TYPESCRIPT_VTS,
             self.PYTHON_JEDI,
             self.PYTHON_TY,
@@ -352,7 +423,7 @@ class LanguageServerId(str, Enum):
         """Whether the supported language should be considered a programming language.
         Solidlsp supports languages like markdown or json, this method returns False for them.
         """
-        return self not in frozenset((self.MARKDOWN, self.LATEX, self.JSON, self.TOML, self.YAML, self.ANSIBLE))
+        return self not in frozenset((self.MARKDOWN, self.LATEX, self.JSON, self.TOML, self.YAML, self.ANSIBLE, self.HELM))
 
     def __str__(self) -> str:
         return self.value
@@ -587,6 +658,8 @@ class LanguageServerId(str, Enum):
                 return FilenameMatcher(".sol")
             case self.ANSIBLE:
                 return FilenameMatcher(".yaml", ".yml")
+            case self.HELM:
+                return AnchoredFilenameMatcher(".yaml", ".yml", ".tpl", anchor_filename="Chart.yaml", max_walk_depth=8)
             case self.MSL:
                 return FilenameMatcher(".mrc")
             case self.BSL:
@@ -880,6 +953,10 @@ class LanguageServerId(str, Enum):
                 from solidlsp.language_servers.ansible_language_server import AnsibleLanguageServer
 
                 return AnsibleLanguageServer
+            case self.HELM:
+                from solidlsp.language_servers.helm_language_server import HelmLanguageServer
+
+                return HelmLanguageServer
             case self.MSL:
                 from solidlsp.language_servers.msl_language_server import MslLanguageServer
 
