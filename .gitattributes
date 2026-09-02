@@ -2,3 +2,6 @@
 # The Haxe language server cannot properly parse/index files with CRLF endings, causing it to fail on Windows without this.
 *.hxml text eol=lf
 *.hx text eol=lf
+
+# helm-ls relies on source positions from YAML nodes, which are not stable with CRLF fixtures on Windows.
+test/resources/repos/helm/** text eol=lf
