@@ -298,7 +298,43 @@ class SymbolBodyFactory:
         end_line = symbol["location"]["range"]["end"]["line"]
         start_col = symbol["location"]["range"]["start"]["character"]
         end_col = symbol["location"]["range"]["end"]["character"]
+
+        # detect a language server response where the identifier position (selectionRange) falls
+        # outside the range the body is sliced from; such a mismatch typically indicates a stale
+        # index on the server side and would otherwise silently yield a body for the wrong symbol
+        selection_range = symbol.get("selectionRange")
+        if selection_range is not None and not self._range_contains(selection_range, start_line, start_col, end_line, end_col):
+            log.warning(
+                "Symbol '%s' in %s has a selectionRange %s outside of its body range "
+                "(line %d, col %d) to (line %d, col %d); the extracted body may belong to a "
+                "different symbol (stale language server index?)",
+                symbol.get("name"),
+                symbol["location"].get("relativePath"),
+                selection_range,
+                start_line,
+                start_col,
+                end_line,
+                end_col,
+            )
+
         return SymbolBody(self._lines, start_line, start_col, end_line, end_col)
+
+    @staticmethod
+    def _range_contains(inner: ls_types.Range, start_line: int, start_col: int, end_line: int, end_col: int) -> bool:
+        """Check whether *inner* lies entirely within the (start_line, start_col)-(end_line, end_col) range."""
+
+        def position_within(line: int, col: int) -> bool:
+            if line < start_line or line > end_line:
+                return False
+            if line == start_line and col < start_col:
+                return False
+            if line == end_line and col > end_col:
+                return False
+            return True
+
+        inner_start = inner["start"]
+        inner_end = inner["end"]
+        return position_within(inner_start["line"], inner_start["character"]) and position_within(inner_end["line"], inner_end["character"])
 
 
 class DocumentSymbols:
