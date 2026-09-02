@@ -41,4 +41,4 @@ def test_helm_values_definition_and_references(language_server: SolidLanguageSer
     assert any(location["uri"].endswith("values.yaml") for location in definitions)
 
     references = language_server.request_references("values.yaml", 0, 0)
-    assert any(reference.get("relativePath") == "templates/deployment.yaml" for reference in references)
+    assert any(reference.get("relativePath", "").replace("\\", "/") == "templates/deployment.yaml" for reference in references)
