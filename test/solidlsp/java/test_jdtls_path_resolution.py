@@ -9,6 +9,7 @@ mocked.
 
 from __future__ import annotations
 
+import os
 import platform
 from pathlib import Path
 from unittest.mock import patch
@@ -771,12 +772,10 @@ class TestConfiguredRuntimesInitializeSettings:
             server._create_base_initialize_params()
 
 
-class TestWorkspaceLock:
-    """Tests for EclipseJDTLS.DependencyProvider._try_acquire_workspace_lock (GH #1944):
-    concurrent Serena sessions on the same project spawn separate JDTLS processes sharing one
-    `-data` workspace directory, which is single-writer by design and gets silently corrupted.
-    This is a diagnostic-only mitigation (warn, don't refuse to start), tested here in isolation
-    from JDTLS itself -- no Java/JDK required, just filesystem locking.
+class TestTryAcquireWorkspaceLock:
+    """Tests for the low-level EclipseJDTLS.DependencyProvider._try_acquire_workspace_lock:
+    purely mechanical file locking, no logging of its own (callers decide what a failed
+    acquisition means for them -- see TestAcquireWorkspaceDir). No Java/JDK required.
     """
 
     def test_first_acquisition_succeeds(self, tmp_path: Path) -> None:
@@ -784,14 +783,12 @@ class TestWorkspaceLock:
         assert lock is not None
         lock.release()
 
-    def test_second_acquisition_while_first_is_held_returns_none_and_warns(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    def test_second_acquisition_while_first_is_held_returns_none(self, tmp_path: Path) -> None:
         first = EclipseJDTLS.DependencyProvider._try_acquire_workspace_lock(str(tmp_path))
         assert first is not None
         try:
-            with caplog.at_level("WARNING"):
-                second = EclipseJDTLS.DependencyProvider._try_acquire_workspace_lock(str(tmp_path))
+            second = EclipseJDTLS.DependencyProvider._try_acquire_workspace_lock(str(tmp_path))
             assert second is None
-            assert any("already holds the Eclipse JDTLS workspace" in r.message for r in caplog.records)
         finally:
             first.release()
 
@@ -820,3 +817,77 @@ class TestWorkspaceLock:
                 lock_a.release()
             if lock_b is not None:
                 lock_b.release()
+
+
+class TestAcquireWorkspaceDir:
+    """Tests for EclipseJDTLS.DependencyProvider._acquire_workspace_dir (GH #1944): concurrent
+    Serena sessions on the same project spawn separate JDTLS processes sharing one `-data`
+    workspace directory, which is single-writer by design and gets silently corrupted. This picks
+    a workspace to use -- the normal shared one if available, a per-instance fallback if not --
+    rather than just detecting the collision. No Java/JDK required, just filesystem locking.
+    """
+
+    @staticmethod
+    def _fallback_dir_for(ls_resources_dir: Path, project_hash: str) -> Path:
+        """The exact fallback path _acquire_workspace_dir computes for the current process."""
+        return ls_resources_dir / "EclipseJDTLS" / "workspaces" / f"{project_hash}-instance-{os.getpid()}"
+
+    def test_uses_shared_workspace_when_uncontended(self, tmp_path: Path) -> None:
+        ws_dir, lock = EclipseJDTLS.DependencyProvider._acquire_workspace_dir(str(tmp_path), "abc123")
+        try:
+            assert ws_dir == str(tmp_path / "EclipseJDTLS" / "workspaces" / "abc123")
+            assert lock is not None
+        finally:
+            if lock is not None:
+                lock.release()
+
+    def test_reacquiring_the_shared_workspace_after_release_still_uses_it(self, tmp_path: Path) -> None:
+        """The common case (one session, possibly restarting) must keep reusing its cached
+        index -- i.e. it must NOT get shunted onto the per-instance fallback path just because
+        it previously held and released the shared workspace.
+        """
+        first_dir, first_lock = EclipseJDTLS.DependencyProvider._acquire_workspace_dir(str(tmp_path), "abc123")
+        assert first_lock is not None
+        first_lock.release()
+
+        second_dir, second_lock = EclipseJDTLS.DependencyProvider._acquire_workspace_dir(str(tmp_path), "abc123")
+        try:
+            assert second_dir == first_dir
+            assert second_lock is not None
+        finally:
+            if second_lock is not None:
+                second_lock.release()
+
+    def test_falls_back_to_per_instance_workspace_when_shared_is_held(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        primary_dir, primary_lock = EclipseJDTLS.DependencyProvider._acquire_workspace_dir(str(tmp_path), "abc123")
+        assert primary_lock is not None
+        try:
+            with caplog.at_level("WARNING"):
+                fallback_dir, fallback_lock = EclipseJDTLS.DependencyProvider._acquire_workspace_dir(str(tmp_path), "abc123")
+            try:
+                assert fallback_dir != primary_dir
+                assert fallback_dir == str(self._fallback_dir_for(tmp_path, "abc123"))
+                assert fallback_lock is not None
+                assert any("using a separate per-instance workspace" in r.message for r in caplog.records)
+            finally:
+                if fallback_lock is not None:
+                    fallback_lock.release()
+        finally:
+            primary_lock.release()
+
+    def test_proceeds_unlocked_on_primary_when_even_the_fallback_is_held(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        primary_dir, primary_lock = EclipseJDTLS.DependencyProvider._acquire_workspace_dir(str(tmp_path), "abc123")
+        assert primary_lock is not None
+        fallback_path = self._fallback_dir_for(tmp_path, "abc123")
+        fallback_path.mkdir(parents=True)
+        fallback_lock = EclipseJDTLS.DependencyProvider._try_acquire_workspace_lock(str(fallback_path))
+        assert fallback_lock is not None, "Test setup: expected to be able to pre-lock the fallback path"
+        try:
+            with caplog.at_level("WARNING"):
+                ws_dir, lock = EclipseJDTLS.DependencyProvider._acquire_workspace_dir(str(tmp_path), "abc123")
+            assert ws_dir == primary_dir, "Expected to proceed on the primary workspace, unlocked, as a last resort"
+            assert lock is None
+            assert any("proceeding without a workspace lock" in r.message for r in caplog.records)
+        finally:
+            primary_lock.release()
+            fallback_lock.release()

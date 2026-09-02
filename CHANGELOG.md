@@ -30,11 +30,15 @@ Status of the `main` branch. Changes prior to the next official version change w
     outside Serena's own edit tools (a git checkout, another editor, a build step) need not invalidate
     its analysis; symbol queries could then answer from a stale index, e.g. `find_symbol` returning a
     body from the position the symbol used to occupy (#1593)
-  - Eclipse JDTLS now warns when its `-data` workspace directory is already held by another live
-    process (e.g. a second concurrent Serena session on the same project), rather than silently
-    letting both processes continuously invalidate each other's index. Diagnostic only for now -
-    both processes still run and the workspace is not namespaced per session - see the issue for
-    the more thorough mitigations this doesn't yet cover (#1944)
+  - Fix: two concurrent Serena sessions on the same project (the default for two stdio MCP clients
+    sharing a repository) handed their Eclipse JDTLS processes the identical `-data` workspace
+    directory, which is single-writer by design; neither settled, and both continuously invalidated
+    each other's index with nothing surfaced through MCP. The shared workspace is now tried first
+    (so the common case - one session, possibly restarting - keeps reusing its cached index exactly
+    as before), and only when another live process already holds it does JDTLS fall back to a
+    workspace namespaced by this process's PID, so concurrent sessions no longer corrupt a shared
+    index. The fallback session indexes independently rather than reusing the shared cache - the
+    accepted cost of avoiding the corruption, not a bug (#1944)
   - Fix: Scala cross-file queries waited a fixed 5s after the first file was opened, which on a cold
     Metals is long before its build import, indexing and compilation have finished; the first
     `find_referencing_symbols` of a session could return a fraction of the references with nothing to
