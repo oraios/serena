@@ -225,7 +225,10 @@ class TextUtils:
         """
         :param text: the text in which the coordinates are to be located
         :param line: the 0-based line number
-        :param col: the 0-based column number
+        :param col: the 0-based column number; clamped to the line's actual length if it
+            points beyond it (a language server can report an end-of-line column one past
+            the last character, and letting it stand would roll over into the next line's
+            content, silently consuming that line's separating newline)
         :return: the corresponding 0-based index in the text
         """
         # step over full lines until the requested line is reached
@@ -234,7 +237,16 @@ class TextUtils:
             if not text_stepper.step_line():
                 raise InvalidTextLocationError(f"{line=}, {col=}")
 
-        return text_stepper.line_start_idx + col
+        line_start_idx = text_stepper.line_start_idx
+        # peek at the next line boundary to find the target line's actual length; step_line()
+        # can return True without advancing `line` (it also uses that return value to signal
+        # "consumed the final, newline-less line"), so line must be compared, not just truthiness
+        target_line = text_stepper.line
+        if text_stepper.step_line() and text_stepper.line > target_line:
+            max_col = text_stepper.prev_line_end_idx - line_start_idx
+        else:
+            max_col = len(text) - line_start_idx
+        return line_start_idx + min(col, max_col)
 
     @staticmethod
     def _get_updated_position_from_line_and_column_and_edit(l: int, c: int, text_to_be_inserted: str) -> tuple[int, int]:

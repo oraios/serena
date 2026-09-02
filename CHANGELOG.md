@@ -41,6 +41,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     silently returned an empty result instead of surfacing the crash. The crash is now detected
     independently via the `window/logMessage` notification tsserver already sends, and the
     affected wait now raises instead of reporting success (#1814)
+  - Fix: `replace_symbol_body` could delete the blank line separating a symbol from the one
+    following it, e.g. on Godot's GDScript language server, whose `documentSymbol` reports a
+    body-end column one past the line's actual length; `TextUtils.get_index_from_line_col` now
+    clamps an out-of-range column to the target line's end instead of rolling over into the
+    next line (#1952)
 
 CLI:
   - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)
