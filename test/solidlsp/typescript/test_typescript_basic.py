@@ -35,23 +35,27 @@ class TestTypescriptLanguageServer:
         )
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.TYPESCRIPT], indirect=True)
-    def test_const_let_var_body_includes_leading_keyword(self, language_server: SolidLanguageServer) -> None:
+    def test_const_let_var_body_includes_leading_keyword_and_trailing_semicolon(self, language_server: SolidLanguageServer) -> None:
         """
         Single top-level ``const``/``let``/``var`` declarations must expose a body and replacement
-        range that include a leading ``export`` (if present) and the declaration keyword, just like
-        ``function``/``class`` declarations do.
+        range that include a leading ``export`` (if present), the declaration keyword, and the
+        trailing statement-terminating semicolon, just like ``function``/``class`` declarations
+        already do (for the keyword; they are not semicolon-terminated).
 
-        Regression test for tsserver reporting the symbol range of such declarations starting at the
-        declared identifier (after the keyword(s)) rather than at the keyword(s). That asymmetry made
-        replace_symbol_body drop them from the body and replacement range, so a natural
-        keyword-inclusive round-trip edit duplicated the prefix and corrupted the file (e.g.
-        ``export const twice = ...`` -> ``export const export const twice = ...``, GH #1956).
+        Regression test for tsserver reporting the symbol range of such declarations starting at
+        the declared identifier (after the keyword(s)) and ending before the semicolon, rather
+        than spanning the full statement. That asymmetry made replace_symbol_body drop the prefix
+        and the semicolon from the body and replacement range, so a natural round-trip edit either
+        duplicated the prefix and corrupted the file (``export const twice = ...`` ->
+        ``export const export const twice = ...``) or, once only the prefix was fixed, left a
+        harmless but incorrect double semicolon behind (``... n * 3;;``). GH #1956.
         """
         all_symbols, _ = language_server.request_document_symbols("symbol_body.ts").get_all_symbols_and_roots()
         symbols_by_name = {sym.get("name"): sym for sym in all_symbols}
 
-        # single declarations: body starts with the full keyword prefix, the range start moves to
-        # the keyword (column 0 here), and the selection range still points at the identifier
+        # single declarations: body starts with the full keyword prefix and ends with the
+        # semicolon, the range start moves to the keyword (column 0 here), the range end moves
+        # past the semicolon, and the selection range still points at the identifier
         expected_prefix_by_name = {
             "twice": "export const ",
             "localCounter": "const ",
@@ -63,16 +67,18 @@ class TestTypescriptLanguageServer:
             assert sym is not None, f"{name} not found in symbol_body.ts"
             body = sym["body"].get_text()
             assert body.startswith(prefix), f"Expected body of {name} to start with {prefix!r}, got {body[:24]!r}"
+            assert body.endswith(";"), f"Expected body of {name} to end with a semicolon, got {body[-8:]!r}"
             assert sym["location"]["range"]["start"]["character"] == 0, f"Expected {name} body range to start at the keyword (col 0)"
             assert sym["selectionRange"]["start"]["character"] > 0, f"Expected {name} selectionRange to point at the identifier"
 
-        # function/class declarations already include their keyword in tsserver's own range;
-        # this override must be a no-op for them
+        # function/class declarations already include their keyword in tsserver's own range and
+        # are not semicolon-terminated; this override must be a no-op for them
         for name in ("helperFunction", "HelperClass"):
             sym = symbols_by_name.get(name)
             assert sym is not None, f"{name} not found in symbol_body.ts"
             body = sym["body"].get_text()
             assert body.startswith("export "), f"Expected {name} body to already start with 'export ', got {body[:24]!r}"
+            assert not body.endswith(";"), f"Expected {name} body to not have gained a trailing semicolon, got {body[-8:]!r}"
 
     if ls_has_verified_implementation_support(LanguageServerId.TYPESCRIPT):
 

@@ -627,16 +627,20 @@ class TypeScriptLanguageServer(SolidLanguageServer):
     def _document_symbols_cache_fingerprint(self) -> Hashable:
         # bump whenever request_document_symbols's post-processing below changes what it returns,
         # so a pre-existing on-disk cache from before this override existed gets invalidated
-        return 1
+        return 2
 
     @override
     def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
-        # Override to extend single `const`/`let`/`var` declaration ranges to include a leading
-        # `export` and the declaration keyword. tsserver excludes both from such ranges (unlike
-        # `function`/`class` declarations), which causes replace_symbol_body to drop them from the
-        # symbol body and replacement range; re-supplying them in a keyword-inclusive edit then
-        # duplicates the prefix and corrupts the file (e.g. `export const` becomes
-        # `export const export const`). See _extend_ts_symbol_range_to_include_leading_keyword.
+        # Override to extend single `const`/`let`/`var` declaration ranges on both ends: a leading
+        # `export` and the declaration keyword, and a trailing statement-terminating semicolon.
+        # tsserver excludes both from such ranges (unlike `function`/`class` declarations, whose
+        # range already includes the keyword), which causes replace_symbol_body to drop them from
+        # the symbol body and replacement range. Re-supplying a dropped leading keyword duplicates
+        # the prefix and corrupts the file (`export const` becomes `export const export const`);
+        # re-supplying a dropped trailing semicolon (as naturally happens when the replacement is
+        # itself a full statement) produces a harmless but incorrect double semicolon. See
+        # _extend_ts_symbol_range_to_include_leading_keyword and
+        # _extend_ts_symbol_range_to_include_trailing_semicolon.
         document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
         if not document_symbols.root_symbols:
             return document_symbols
@@ -651,6 +655,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             # at the original (un-extended) nodes
             def extend_symbol_and_children(symbol: ls_types.UnifiedSymbolInformation) -> ls_types.UnifiedSymbolInformation:
                 extended = self._extend_ts_symbol_range_to_include_leading_keyword(symbol, file_lines, body_factory)
+                extended = self._extend_ts_symbol_range_to_include_trailing_semicolon(extended, file_lines, body_factory)
                 children = symbol.get("children")
                 if children:
                     if extended is symbol:
@@ -713,6 +718,62 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         # recompute the body from the now-extended location range so the displayed body stays
         # consistent with the replacement range; the stale body must be removed first, since the
         # factory returns an existing SymbolBody as-is and otherwise reads the updated location range
+        extended.pop("body", None)
+        extended["body"] = body_factory.create_symbol_body(extended)
+        return extended
+
+    def _extend_ts_symbol_range_to_include_trailing_semicolon(
+        self,
+        symbol: ls_types.UnifiedSymbolInformation,
+        file_lines: list[str],
+        body_factory: SymbolBodyFactory,
+    ) -> ls_types.UnifiedSymbolInformation:
+        """
+        Extend a TypeScript/JavaScript symbol's body range to include a trailing statement-
+        terminating semicolon, if one immediately follows the range's current end.
+
+        tsserver reports the range of statement declarations (e.g. `const`/`let`/`var`) as the
+        underlying expression, excluding the semicolon that terminates the statement. Replacing
+        the body with a full statement (as naturally happens when the replacement is copied from
+        the body :meth:`request_document_symbols`/`find_symbol` itself returned, semicolon
+        included, per the leading-keyword extension above) then leaves the file's own original
+        semicolon in place *after* the replaced range, producing a harmless but incorrect double
+        semicolon rather than the single one the replacement supplied.
+
+        Mirrors ``NixdLanguageServer._extend_nix_symbol_range_to_include_semicolon``, adapted to
+        recompute the body from the shared ``body_factory``/``file_lines`` already available here
+        rather than re-reading the file.
+
+        :param symbol: the symbol whose range may be extended.
+        :param file_lines: the lines of the file in which the symbol is defined.
+        :param body_factory: the factory used to recompute the symbol body from the extended range.
+        :return: a copy of the symbol with an extended range, or the original symbol if no
+            semicolon immediately follows the range's end (e.g. for `function`/`class`
+            declarations, which are not semicolon-terminated).
+        """
+        range_info = symbol["range"]
+        end_line = range_info["end"]["line"]
+        end_char = range_info["end"]["character"]
+        if end_line >= len(file_lines):
+            return symbol
+        line = file_lines[end_line]
+        if end_char >= len(line) or line[end_char] != ";":
+            return symbol
+
+        # extend the range end past the semicolon, updating both the symbol range and its
+        # location range so the replacement range covers it
+        new_end = ls_types.Position(line=end_line, character=end_char + 1)
+        extended = symbol.copy()
+        extended["range"] = ls_types.Range(start=range_info["start"], end=new_end)
+        location = extended.get("location")
+        if location:
+            location = location.copy()
+            if "range" in location:
+                location["range"] = ls_types.Range(start=location["range"]["start"], end=new_end)
+            extended["location"] = location
+
+        # recompute the body from the now-extended location range, for the same reason as in
+        # _extend_ts_symbol_range_to_include_leading_keyword
         extended.pop("body", None)
         extended["body"] = body_factory.create_symbol_body(extended)
         return extended

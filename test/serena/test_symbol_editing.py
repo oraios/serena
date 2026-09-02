@@ -538,8 +538,9 @@ TS_DECL_REPLACEMENT = """export const twice = (n: number): number => n * 3;"""
 
 
 class TsDeclReplacementTest(EditingTest):
-    """Test for replacing a single TypeScript `const`/`let`/`var` declaration that should NOT result
-    in a duplicated leading `export`/keyword (e.g. `export const export const twice = ...`).
+    """Test for replacing a single TypeScript `const`/`let`/`var` declaration that should NOT
+    result in a duplicated leading `export`/keyword (e.g. `export const export const twice = ...`)
+    or a duplicated trailing semicolon (e.g. `... n * 3;;`).
     """
 
     def __init__(self, ls_id: LanguageServerId, rel_path: str, symbol_name: str, new_body: str):
@@ -559,6 +560,8 @@ class TsDeclReplacementTest(EditingTest):
             assert f"{keyword} {keyword} " not in code_diff.modified_content, (
                 f"Replacement duplicated the '{keyword}' prefix: {code_diff.modified_content!r}"
             )
+        # the trailing semicolon must appear exactly once, not doubled up
+        assert ";;" not in code_diff.modified_content, f"Replacement duplicated the trailing semicolon: {code_diff.modified_content!r}"
         return super()._test_diff(code_diff, snapshot)
 
 
@@ -566,20 +569,21 @@ class TsDeclReplacementTest(EditingTest):
 def test_typescript_symbol_replacement_no_double_keyword(snapshot: SnapshotAssertion):
     """
     Test that replacing a TypeScript `const`/`let`/`var` declaration does not duplicate the leading
-    `export`/keyword.
+    `export`/keyword or the trailing semicolon.
 
     This exercises the bug where:
     - Original: export const twice = (n: number): number => n * 2;
     - Replacement body (as displayed by find_symbol): export const twice = (n: number): number => n * 3;
     - Bug result would be: export const export const twice = (n: number): number => n * 3;; (the
-      original `export const ` prefix is kept because the tsserver symbol range starts at the
-      identifier, and the supplied body adds another `export const`)
+      original `export const ` prefix and trailing `;` are kept because the tsserver symbol range
+      starts at the identifier and ends before the semicolon, and the supplied body adds both back)
     - Correct result should be: export const twice = (n: number): number => n * 3;
 
     tsserver reports the symbol range of such declarations starting at the identifier (after the
-    keyword(s)), unlike `function`/`class` declarations whose range includes the leading keyword.
-    The range extension in TypeScriptLanguageServer.request_document_symbols prevents the
-    duplicated prefix (GH #1956).
+    keyword(s)) and ending before the semicolon, unlike `function`/`class` declarations whose range
+    includes the leading keyword (and are not semicolon-terminated). The range extension in
+    TypeScriptLanguageServer.request_document_symbols prevents both the duplicated prefix and the
+    duplicated semicolon (GH #1956).
     """
     test_case = TsDeclReplacementTest(
         LanguageServerId.TYPESCRIPT,

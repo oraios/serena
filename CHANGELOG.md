@@ -31,12 +31,15 @@ Status of the `main` branch. Changes prior to the next official version change w
     its analysis; symbol queries could then answer from a stale index, e.g. `find_symbol` returning a
     body from the position the symbol used to occupy (#1593)
   - Fix: tsserver reports the range of a single top-level `const`/`let`/`var` declaration starting
-    at the identifier, excluding a leading `export` and the keyword (unlike `function`/`class`
-    declarations, whose range includes their keyword). `replace_symbol_body` then dropped the
-    prefix from the body and replacement range, so re-supplying it in a keyword-inclusive edit
-    duplicated it and produced invalid syntax (e.g. `export const twice = ...` became
-    `export const export const twice = ...`, returned as `OK`). Mirrors the same fix already
-    applied to Go's `type`/`var`/`const` declarations (#1956)
+    at the identifier and ending before the statement's semicolon, excluding a leading `export`,
+    the keyword, and the trailing `;` (unlike `function`/`class` declarations, whose range already
+    includes their keyword). `replace_symbol_body` then dropped the prefix and the semicolon from
+    the body and replacement range, so re-supplying them in a full-statement edit either duplicated
+    the prefix and produced invalid syntax (`export const twice = ...` became `export const export
+    const twice = ...`, returned as `OK`) or, once only the prefix was fixed, left a harmless but
+    incorrect double semicolon behind (`... n * 3;;`). Mirrors the range-start fix already applied
+    to Go's `type`/`var`/`const` declarations, and the range-end fix already applied to Nix's
+    attribute declarations (#1956)
   - Fix: Scala cross-file queries waited a fixed 5s after the first file was opened, which on a cold
     Metals is long before its build import, indexing and compilation have finished; the first
     `find_referencing_symbols` of a session could return a fraction of the references with nothing to

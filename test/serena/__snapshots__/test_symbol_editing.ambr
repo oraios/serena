@@ -2388,7 +2388,7 @@
   // Fixture for verifying that replace_symbol_body includes the leading `export`/`const`/`let`/`var`
   // keyword(s) in the symbol body and replacement range, just like `function`/`class` declarations do.
   
-  export const twice = (n: number): number => n * 3;;
+  export const twice = (n: number): number => n * 3;
   
   const localCounter: number = 0;
   
