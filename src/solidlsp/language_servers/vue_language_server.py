@@ -289,6 +289,16 @@ class VueLanguageServer(SolidLanguageServer):
             except Exception as e:
                 log.debug(f"Failed to open {vue_file} on TS server: {e}")
 
+        # a companion server that is down or unresponsive fails every open above; leave the
+        # flag unset so a later call retries instead of permanently treating a zero-file
+        # index as complete (files being found but none of them opening is the failure case
+        # to catch here, not the ordinary "no .vue files in this repo" case)
+        if vue_files and not self._indexed_vue_file_uris:
+            log.warning(
+                f"Failed to open any of the {len(vue_files)} .vue file(s) on the companion TypeScript server; will retry indexing on the next request"
+            )
+            return
+
         self._vue_files_indexed = True
         log.info("Vue file indexing on TypeScript server complete, waiting for TS server to finish processing")
 

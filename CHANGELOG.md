@@ -30,6 +30,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     outside Serena's own edit tools (a git checkout, another editor, a build step) need not invalidate
     its analysis; symbol queries could then answer from a stale index, e.g. `find_symbol` returning a
     body from the position the symbol used to occupy (#1593)
+  - Fix: Vue's `_ensure_vue_files_indexed_on_ts_server` marked indexing complete even when every
+    `.vue` file failed to open on the companion TypeScript server, so a transient outage of that
+    server became a silent, permanent loss of Vue cross-file indexing for the rest of the session
+    (#1923)
   - Fix: Scala cross-file queries waited a fixed 5s after the first file was opened, which on a cold
     Metals is long before its build import, indexing and compilation have finished; the first
     `find_referencing_symbols` of a session could return a fraction of the references with nothing to
