@@ -26,6 +26,12 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Exceptions raised during `LanguageServerManager.start` did not stop the language server subprocess if it was
     already started (#1949)
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
+  - Fix: `DartLanguageServer._start_server` discarded both `$/analyzerStatus` and
+    `experimental/serverStatus`, the two notifications the Dart analysis server sends to report
+    indexing progress, and returned as soon as `initialized` was sent instead of waiting for either
+    one; a request issued right after activation (`find_symbol`, `find_referencing_symbols`) could
+    return before the workspace scan finished. Serena now waits (bounded by 60s) for either signal to
+    report completion, matching the pattern already used for pyright, basedpyright and rust-analyzer
   - Fix: clojure-lsp was not told that Serena sends `workspace/didChangeWatchedFiles`, so changes made
     outside Serena's own edit tools (a git checkout, another editor, a build step) need not invalidate
     its analysis; symbol queries could then answer from a stale index, e.g. `find_symbol` returning a
