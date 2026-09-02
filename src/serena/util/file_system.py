@@ -1,6 +1,8 @@
 import logging
 import os
 import re
+import tempfile
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,6 +13,51 @@ from pathspec import PathSpec
 from sensai.util.logging import LogTime
 
 log = logging.getLogger(__name__)
+
+
+def write_file_atomic(path: str, content: str, *, encoding: str, newline: str | None = None) -> None:
+    """
+    Write ``content`` to ``path`` atomically: the content is written to a temporary file in the
+    same directory first, then swapped into place with ``os.replace``. A plain
+    ``open(path, "w")`` is not atomic: it truncates the file before the new content is complete,
+    so a crash, an out-of-memory kill, or a disk-full error partway through the write leaves
+    ``path`` holding neither the old content nor the new one.
+
+    :param path: the path to write to
+    :param content: the text content to write
+    :param encoding: the encoding to use for the write
+    :param newline: passed through to the underlying ``open()`` call to control newline translation
+    """
+    target_dir = os.path.dirname(path) or "."
+    fd, tmp_path = tempfile.mkstemp(dir=target_dir, prefix=os.path.basename(path) + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding=encoding, newline=newline) as f:
+            f.write(content)
+        _replace_with_retry(tmp_path, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _replace_with_retry(src: str, dst: str, *, attempts: int = 10, delay_s: float = 0.05) -> None:
+    """``os.replace(src, dst)`` with a short retry on a Windows sharing violation: on Windows the
+    atomic rename fails with ``PermissionError`` if another process momentarily holds ``dst`` open
+    (e.g. a second Serena process reading the same memory or source file). A brief bounded retry
+    rides out that contention; the temp file is still complete, so this never falls back to a
+    non-atomic write.
+    """
+    for attempt in range(attempts):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(delay_s)
+
 
 # Characters meaningful to pathspec's gitignore grammar: glob wildcards, bracket expressions,
 # the escape character itself, and '!'/'#' which change a whole pattern's meaning when they

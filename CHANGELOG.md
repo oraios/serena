@@ -7,6 +7,13 @@ Status of the `main` branch. Changes prior to the next official version change w
     project list in `serena_config.yml`
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
 
+* Memories:
+  - Fix: `save_memory`/`edit_memory` wrote directly to the memory file with `open(path, "w")`, which
+    truncates it before the new content is written; a crash, OOM kill, or full disk partway through
+    the write could destroy the previous, valid content instead of just losing the update. Both now
+    write through a temp-file-plus-`os.replace` helper, matching the approach `save_yaml()` already
+    uses for settings files (#1958)
+
 * JetBrains:
   - Fix: Concurrent Serena sessions activating different projects at the same time with
     `jetbrains_launch_command` set would each independently launch the IDE, racing each other for

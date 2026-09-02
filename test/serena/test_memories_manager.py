@@ -16,6 +16,7 @@ from serena.memories.memory_reference_analysis import (
     find_stale_reference_candidates,
 )
 from serena.project import MemoryManager
+from serena.util import file_system
 
 
 @pytest.fixture
@@ -267,6 +268,56 @@ def fs_manager(tmp_path) -> MemoryManager:
 
 def _write(manager: MemoryManager, name: str, content: str) -> None:
     manager.save_memory(name, content, is_tool_context=False)
+
+
+class TestSaveAndEditMemoryAreAtomic:
+    """Regression for issue #1958: ``save_memory``/``edit_memory`` used a plain
+    ``open(path, "w")``, which truncates the file before the new content is written. An
+    interrupted write (crash, OOM kill, disk full) then loses the previous content entirely.
+    """
+
+    @staticmethod
+    def _install_crashing_fdopen(monkeypatch) -> None:
+        real_fdopen = os.fdopen
+
+        def crashing_fdopen(fd, *args, **kwargs):
+            f = real_fdopen(fd, *args, **kwargs)
+            real_write = f.write
+
+            def crashing_write(data):
+                real_write(data[: len(data) // 4])
+                f.flush()
+                raise RuntimeError("simulated crash mid-write")
+
+            f.write = crashing_write
+            return f
+
+        monkeypatch.setattr(file_system.os, "fdopen", crashing_fdopen)
+
+    def test_save_memory_preserves_prior_content_on_interrupted_write(self, fs_manager: MemoryManager, monkeypatch) -> None:
+        _write(fs_manager, "notes", "original notes" * 20)
+        self._install_crashing_fdopen(monkeypatch)
+
+        with pytest.raises(RuntimeError, match="simulated crash mid-write"):
+            fs_manager.save_memory("notes", "new notes that never fully arrive" * 20, is_tool_context=False)
+
+        assert fs_manager.load_memory("notes") == "original notes" * 20
+
+    def test_edit_memory_preserves_prior_content_on_interrupted_write(self, fs_manager: MemoryManager, monkeypatch) -> None:
+        _write(fs_manager, "notes", "the original needle is here" * 20)
+        self._install_crashing_fdopen(monkeypatch)
+
+        with pytest.raises(RuntimeError, match="simulated crash mid-write"):
+            fs_manager.edit_memory(
+                "notes",
+                needle="original needle",
+                repl="replacement needle",
+                mode="literal",
+                allow_multiple_occurrences=True,
+                is_tool_context=False,
+            )
+
+        assert fs_manager.load_memory("notes") == "the original needle is here" * 20
 
 
 class TestListMemoriesFollowsSymlinks:
