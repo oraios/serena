@@ -7,7 +7,97 @@ from pathlib import Path
 import pytest
 from pathspec import PathSpec
 
-from serena.util.file_system import GitignoreParser, GitignoreSpec, _escape_gitignore_path_component, match_path
+from serena.util import file_system
+from serena.util.file_system import GitignoreParser, GitignoreSpec, _escape_gitignore_path_component, match_path, write_file_atomic
+
+
+class TestWriteFileAtomic:
+    """Regression tests for issue #1958: a plain ``open(path, "w")`` truncates the file before
+    the new content is complete, so a crash, OOM kill, or disk-full error partway through the
+    write loses the previous content. ``write_file_atomic`` must never expose that intermediate
+    state.
+    """
+
+    def test_writes_new_file(self, tmp_path):
+        target = tmp_path / "notes.md"
+        write_file_atomic(str(target), "hello", encoding="utf-8")
+        assert target.read_text(encoding="utf-8") == "hello"
+
+    def test_overwrites_existing_file(self, tmp_path):
+        target = tmp_path / "notes.md"
+        target.write_text("old", encoding="utf-8")
+        write_file_atomic(str(target), "new", encoding="utf-8")
+        assert target.read_text(encoding="utf-8") == "new"
+
+    def test_no_leftover_temp_file_after_success(self, tmp_path):
+        target = tmp_path / "notes.md"
+        write_file_atomic(str(target), "hello", encoding="utf-8")
+        assert list(tmp_path.iterdir()) == [target]
+
+    def test_respects_newline_argument(self, tmp_path):
+        target = tmp_path / "notes.md"
+        write_file_atomic(str(target), "a\nb\n", encoding="utf-8", newline="\r\n")
+        assert target.read_bytes() == b"a\r\nb\r\n"
+
+    def test_preserves_original_content_when_write_is_interrupted(self, tmp_path, monkeypatch):
+        """The core invariant: an interrupted write (process killed / OOM / disk full while the
+        temp file is being written) must leave the target file exactly as it was, never
+        truncated or half-overwritten.
+        """
+        target = tmp_path / "notes.md"
+        original = "original content that must survive" * 20
+        target.write_text(original, encoding="utf-8")
+
+        real_fdopen = os.fdopen
+
+        def crashing_fdopen(fd, *args, **kwargs):
+            f = real_fdopen(fd, *args, **kwargs)
+            real_write = f.write
+
+            def crashing_write(data):
+                # write a truncated prefix to the temp file, flush it to disk, then blow up,
+                # simulating a crash after the OS has seen some but not all of the new content.
+                real_write(data[: len(data) // 4])
+                f.flush()
+                raise RuntimeError("simulated crash mid-write")
+
+            f.write = crashing_write
+            return f
+
+        monkeypatch.setattr(file_system.os, "fdopen", crashing_fdopen)
+
+        with pytest.raises(RuntimeError, match="simulated crash mid-write"):
+            write_file_atomic(str(target), "brand new content that never fully arrives" * 20, encoding="utf-8")
+
+        assert target.read_text(encoding="utf-8") == original
+        # the partially-written temp file must be cleaned up, not left behind
+        assert list(tmp_path.iterdir()) == [target]
+
+    def test_replace_with_retry_survives_transient_permission_error(self, tmp_path, monkeypatch):
+        """Mirrors ``util/yaml.py``'s ``_replace_with_retry``: on Windows, ``os.replace`` can
+        fail with a transient ``PermissionError`` while another process momentarily holds the
+        destination open. The write must not be treated as failed while the temp file is still
+        complete and a retry can still succeed.
+        """
+        target = tmp_path / "notes.md"
+        target.write_text("old", encoding="utf-8")
+
+        real_replace = os.replace
+        calls = {"n": 0}
+
+        def flaky_replace(src, dst):
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise PermissionError("simulated transient sharing violation")
+            return real_replace(src, dst)
+
+        monkeypatch.setattr(file_system.os, "replace", flaky_replace)
+        monkeypatch.setattr(file_system.time, "sleep", lambda _seconds: None)
+
+        write_file_atomic(str(target), "new", encoding="utf-8")
+
+        assert calls["n"] == 3
+        assert target.read_text(encoding="utf-8") == "new"
 
 
 class TestGitignoreParser:

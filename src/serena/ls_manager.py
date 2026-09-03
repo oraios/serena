@@ -144,6 +144,9 @@ class LanguageServerManager:
                 language_servers[thread.ls_id] = thread.language_server
 
         # If any server failed to start up, raise an exception and stop all started language servers.
+        # A server whose own thread raised has already stopped its own process, since
+        # SolidLanguageServer.start() cleans up after itself on failure; only the servers that
+        # started successfully (and are therefore absent from `exceptions`) still need stopping.
         # We intentionally fail fast here. The user's intention is to work with all the specified languages,
         # so if any of them is not available, it is better to make symbolic tool calls fail, bringing the issue to the
         # user's attention instead of silently continuing with a subset of the language servers and potentially
