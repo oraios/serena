@@ -115,6 +115,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     `(int X, string Y)`, had their name corrupted to include a trailing `:` because the
     parenthesis in the type was mistaken for a method's parameter list; `find_symbol` on
     the real name then returned nothing
+  - Fix: TypeScript's `_has_waited_for_cross_file_references` latch was set after the first
+    cross-file query and never reset, so a later query that opened a file from a project tsserver
+    had not loaded yet (e.g. a monorepo package) skipped the indexing wait even while that
+    project's own `$/progress` indexing was still in flight (#1937)
   - Fix: Nextflow's `_flush_deferred_workspace_scan` marked the workspace scan flushed even when both
     of its `completion` probes failed, permanently skipping the flush (and silencing retries) for the
     rest of the session (#1871)
