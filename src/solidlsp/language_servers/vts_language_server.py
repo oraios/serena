@@ -13,7 +13,6 @@ from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
-from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -75,18 +74,6 @@ class VtsLanguageServer(SolidLanguageServer):
         """
         Setup runtime dependencies for VTS Language Server and return the command to start the server.
         """
-        platform_id = PlatformUtils.get_platform_id()
-
-        valid_platforms = [
-            PlatformId.LINUX_x64,
-            PlatformId.LINUX_arm64,
-            PlatformId.OSX,
-            PlatformId.OSX_x64,
-            PlatformId.OSX_arm64,
-            PlatformId.WIN_x64,
-            PlatformId.WIN_arm64,
-        ]
-        assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for vtsls at the moment"
         vts_config = solidlsp_settings.get_ls_specific_settings(LanguageServerId.TYPESCRIPT_VTS)
         vtsls_version = vts_config.get("vtsls_version", DEFAULT_VTSLS_VERSION)
         npm_registry = vts_config.get("npm_registry")

@@ -31,6 +31,8 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Language Servers:
   - Add FreeBSD mapping to platform detection
+  - Remove unnecessary platform checks from the following language servers, expanding the set of
+    supported platforms accordingly: Elixir Tools, Intelephense, Perl, TypeScript, VTS
   - Fix: the managed Solidity language server could report no diagnostics on macOS when Hardhat could not write
     its global state under ``~/Library``; Serena now gives the child process an isolated home-directory view
     via ``solidity_state_dir`` without changing the parent process's ``HOME`` (#1817)
