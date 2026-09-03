@@ -8,7 +8,7 @@ import platform
 import shutil
 import tempfile
 import threading
-from collections.abc import Hashable, Iterable
+from collections.abc import Hashable, Iterable, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
@@ -222,6 +222,9 @@ class CSharpLanguageServer(SolidLanguageServer):
         # Cache for original Roslyn symbol names with type annotations
         # Key: (relative_file_path, line, character) -> Value: original name
         self._original_symbol_names: dict[tuple[str, int, int], str] = {}
+        # Set once Roslyn confirms it finished (re)loading the solution/projects; reused by
+        # notify_files_created to wait out a reload triggered after startup.
+        self._project_reload_complete = threading.Event()
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir, self._solidlsp_settings, self.repository_root_path)
@@ -548,6 +551,12 @@ class CSharpLanguageServer(SolidLanguageServer):
 
             log.log(level_map.get(level, logging.DEBUG), f"LSP: {message_text}")
 
+            # workspace/projectInitializationComplete (below) fires too early on a project
+            # *re*-open to signal reload completion; this log line is the reliable one for
+            # notify_files_created's wait.
+            if "Completed (re)load of all projects" in message_text:
+                self._project_reload_complete.set()
+
         def handle_progress(params: dict) -> None:
             """Handle progress notifications from the language server."""
             token = params.get("token", "")
@@ -758,3 +767,19 @@ class CSharpLanguageServer(SolidLanguageServer):
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
         return 2
+
+    @override
+    def notify_files_created(self, relative_file_paths: Sequence[str]) -> None:
+        """
+        Roslyn's project system only learns which files belong to a project from the
+        `solution/open`/`project/open` notifications sent once at startup (see
+        `_open_solution_and_projects`); a plain `didChangeWatchedFiles`/open-close cycle
+        does not make it re-evaluate the project, so a file created after startup is
+        analyzed as a standalone Miscellaneous Files document instead of being folded into
+        the already-loaded compilation. Resend the same notifications and wait for the
+        server to confirm the reload before the file is opened.
+        """
+        self._project_reload_complete.clear()
+        self._open_solution_and_projects()
+        if not self._project_reload_complete.wait(30):
+            log.warning("Timeout waiting for project reload after new file(s) were created: %s", list(relative_file_paths))
