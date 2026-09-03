@@ -19,6 +19,13 @@ Status of the `main` branch. Changes prior to the next official version change w
     successful Serena call. Add a `serena-hooks reset` command and a `PostToolUse` example matched to
     Serena's own tools to close the gap (#1852)
 
+* Memories:
+  - Add opt-in tools for reading and updating versioned scalar frontmatter metadata while keeping
+    `read_memory` focused on memory body content. Managed blocks start with
+    `serena_frontmatter_version: 1`, require `type`, and use the Open Knowledge Format field name
+    `description` where applicable. This is field-level alignment, not OKF bundle conformance;
+    unmarked legacy `---` blocks remain ordinary memory body content.
+
 * Language Servers:
   - Fix: Nextflow's `_flush_deferred_workspace_scan` marked the workspace scan flushed even when both
     of its `completion` probes failed, permanently skipping the flush (and silencing retries) for the
