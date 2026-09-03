@@ -256,7 +256,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         return hover
 
     def _document_symbols_cache_fingerprint(self) -> Hashable | None:
-        normalize_symbol_name_version = 1
+        normalize_symbol_name_version = 2
         return normalize_symbol_name_version
 
     def _normalize_symbol_name(self, symbol: RawDocumentSymbol, relative_file_path: str) -> str:
