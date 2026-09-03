@@ -3,6 +3,8 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - Add an `opencode` context that relies on OpenCode's native filesystem, text-search, editing, and shell tools
+    while retaining Serena's semantic code-navigation tools
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
