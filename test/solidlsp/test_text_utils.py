@@ -83,3 +83,32 @@ class TestTextUtils:
         with pytest.raises(InvalidTextLocationError):
             # end_line = 5 is well past the one-line-past-EOF position (3) for a 3-line file.
             TextUtils.delete_text_between_positions("a\nb\nc", 0, 0, 5, 0)
+
+    def test_idx_from_line_col_clamps_column_past_line_end(self) -> None:
+        """A column one past a line's length (a language server can report this as an
+        end-of-line position) must resolve to the end of that line, not roll over into
+        the next line and consume its separating newline.
+        """
+        text = "ab\ncd\nef"
+        # line 0 ("ab") is 2 chars long; col=3 is one past its end.
+        assert TextUtils.get_index_from_line_col(text, 0, 3) == TextUtils.get_index_from_line_col(text, 0, 2)
+        # a column far beyond the line's length clamps the same way.
+        assert TextUtils.get_index_from_line_col(text, 0, 99) == TextUtils.get_index_from_line_col(text, 0, 2)
+        # the last line (no trailing newline) clamps against the end of the text.
+        assert TextUtils.get_index_from_line_col(text, 2, 99) == len(text)
+
+    def test_delete_text_between_positions_does_not_swallow_next_line_on_overflowing_end_col(self) -> None:
+        """Reproduces the reported symptom: replace_symbol_body loses the blank line
+        separating two GDScript functions because Godot's documentSymbol reports the
+        first function's body-end column one past the line's actual length.
+        """
+        text = 'extends Node\n\nfunc first():\n\tprint("old")\n\nfunc second():\n\tprint("keep")\n'
+        # "\tprint(\"old\")" is 13 chars (valid columns 0-13); col=14 is one past it.
+        new_text, deleted = TextUtils.delete_text_between_positions(text, 2, 0, 3, 14)
+        assert deleted == 'func first():\n\tprint("old")'
+        assert new_text == 'extends Node\n\n\n\nfunc second():\n\tprint("keep")\n'
+
+        # end-to-end, as CodeEditor.replace_body performs it (delete, then insert the stripped body)
+        new_body = 'func first():\n\tprint("new")\n'.strip()
+        final_text, _, _ = TextUtils.insert_text_at_position(new_text, 2, 0, new_body)
+        assert final_text == 'extends Node\n\nfunc first():\n\tprint("new")\n\nfunc second():\n\tprint("keep")\n'
