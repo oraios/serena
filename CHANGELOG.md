@@ -2,6 +2,52 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
+    project list in `serena_config.yml`
+  - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
+
+* JetBrains:
+  - Fix: Concurrent Serena sessions activating different projects at the same time with
+    `jetbrains_launch_command` set would each independently launch the IDE, racing each other for
+    the IDE's own config-directory lock; JetBrains IDE launches are now serialized per launch
+    command and Serena waits for the plugin server to become reachable before proceeding (#1864)
+
+* Hooks:
+  - Fix: Codex's documented hook wiring only routes `remind` through `PreToolUse` on `Bash`, so its
+    reset-on-Serena-tool-use branch was unreachable there and reminder counters never cleared after a
+    successful Serena call. Add a `serena-hooks reset` command and a `PostToolUse` example matched to
+    Serena's own tools to close the gap (#1852)
+
+* Language Servers:
+  - Fix: Nextflow's `_flush_deferred_workspace_scan` marked the workspace scan flushed even when both
+    of its `completion` probes failed, permanently skipping the flush (and silencing retries) for the
+    rest of the session (#1871)
+  - Fix: Exceptions raised during `LanguageServerManager.start` did not stop the language server subprocess if it was
+    already started (#1949)
+  - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
+  - Fix: clojure-lsp was not told that Serena sends `workspace/didChangeWatchedFiles`, so changes made
+    outside Serena's own edit tools (a git checkout, another editor, a build step) need not invalidate
+    its analysis; symbol queries could then answer from a stale index, e.g. `find_symbol` returning a
+    body from the position the symbol used to occupy (#1593)
+  - Fix: Scala cross-file queries waited a fixed 5s after the first file was opened, which on a cold
+    Metals is long before its build import, indexing and compilation have finished; the first
+    `find_referencing_symbols` of a session could return a fraction of the references with nothing to
+    indicate it was incomplete. Serena now declares work-done progress support and waits for the work
+    Metals reports, bounded by the new `indexing_timeout`, `indexing_start_grace` and
+    `indexing_quiet_period` settings
+  - Fix: a `tsserver` crash mid-indexing (e.g. a V8 heap OOM) sent the same `$/progress` "end"
+    event as a normal completion, so `find_referencing_symbols` and other cross-file queries
+    silently returned an empty result instead of surfacing the crash. The crash is now detected
+    independently via the `window/logMessage` notification tsserver already sends, and the
+    affected wait now raises instead of reporting success (#1814)
+
+CLI:
+  - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)
+
+* Dependencies:
+  - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
+
 # v1.7.0 (2026-08-09)
 
 * General:
@@ -59,6 +105,9 @@ Status of the `main` branch. Changes prior to the next official version change w
       option `skip_ignored_files` (whether to skip ignored sub-paths).
       Note that if the base path is itself ignored, ignored paths cannot be considered.
 
+* JetBrains:
+  - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file
+
 * Language Servers: 
   - Add Gleam language server support (via the `gleam lsp` server bundled with the Gleam compiler)
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
@@ -110,11 +159,6 @@ Status of the `main` branch. Changes prior to the next official version change w
     struct bodies, interface bodies and `const` groups; improve the logic for finding the nearest
     enclosing symbol, adding the helper function `SymbolKind.is_container` (which is now also
     applied to identify high-level symbols that should appear in symbol overiews).
-    
-* JetBrains:
-  - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file
-
-* Language Servers:
   - Rust: reduce rust-analyzer memory usage and reload churn by disabling cache priming and Cargo autoreload while preserving diagnostics.
   - `typescript`: Fix: on large projects, the first `find_referencing_symbols`/`request_references` call
     could silently race tsserver's project load and return incomplete results, because the fixed 2s

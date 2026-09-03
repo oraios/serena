@@ -325,6 +325,12 @@ class ClojureLSP(SolidLanguageServer):
                 "workspace": {
                     "applyEdit": True,
                     "workspaceEdit": {"documentChanges": True},
+                    # Serena notifies language servers about files changed outside its own
+                    # edit tools (git checkout, another editor, a build step) via
+                    # workspace/didChangeWatchedFiles; see LanguageServerManager.poll_and_notify.
+                    # Without declaring the capability, clojure-lsp is not told the client
+                    # sends those notifications and may keep answering from its stale analysis.
+                    "didChangeWatchedFiles": {"dynamicRegistration": True},
                     "symbol": {"symbolKind": {"valueSet": list(range(1, 27))}},
                     "workspaceFolders": True,
                 },
