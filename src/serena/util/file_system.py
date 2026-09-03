@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import stat
 import tempfile
 import time
 from collections.abc import Callable, Iterator
@@ -29,10 +30,19 @@ def write_file_atomic(path: str, content: str, *, encoding: str, newline: str | 
     :param newline: passed through to the underlying ``open()`` call to control newline translation
     """
     target_dir = os.path.dirname(path) or "."
+    try:
+        existing_mode: int | None = stat.S_IMODE(os.stat(path).st_mode)
+    except FileNotFoundError:
+        existing_mode = None
     fd, tmp_path = tempfile.mkstemp(dir=target_dir, prefix=os.path.basename(path) + ".", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding=encoding, newline=newline) as f:
             f.write(content)
+        # mkstemp creates the temp file with mode 0600 regardless of umask, which would silently
+        # tighten an existing file's permissions (e.g. 0644 -> 0600) on replace. Restore the
+        # original mode, or fall back to what a plain open(path, "w") would have produced for a
+        # new file (0666 masked by the process umask).
+        os.chmod(tmp_path, existing_mode if existing_mode is not None else _new_file_mode())
         _replace_with_retry(tmp_path, path)
     except BaseException:
         try:
@@ -40,6 +50,16 @@ def write_file_atomic(path: str, content: str, *, encoding: str, newline: str | 
         except OSError:
             pass
         raise
+
+
+def _new_file_mode() -> int:
+    """The mode a plain ``open(path, "w")`` would give a brand-new file: 0o666 masked by the
+    process umask. Reading the umask requires setting it, so the previous value is restored
+    immediately after.
+    """
+    current_umask = os.umask(0o022)
+    os.umask(current_umask)
+    return 0o666 & ~current_umask
 
 
 def _replace_with_retry(src: str, dst: str, *, attempts: int = 10, delay_s: float = 0.05) -> None:
