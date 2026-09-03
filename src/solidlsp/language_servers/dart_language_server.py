@@ -1,5 +1,6 @@
 import logging
 import os
+import threading
 from collections.abc import Hashable
 
 from overrides import override
@@ -53,6 +54,11 @@ class DartLanguageServer(SolidLanguageServer):
           (default: the bundled Serena version).
     """
 
+    # Mirrors pyright_server.py / basedpyright_server.py: a bounded wait for the server's own
+    # readiness signal, not an indefinite one, so a Dart analysis server that never reports
+    # quiescence (or a protocol variant that stops sending these notifications) cannot hang startup.
+    _TIMEOUT_FOR_INITIAL_ANALYSIS = 60.0
+
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings) -> None:
         """
         Creates a DartServer instance. This class is not meant to be instantiated directly. Use LanguageServer.create() instead.
@@ -61,6 +67,9 @@ class DartLanguageServer(SolidLanguageServer):
         super().__init__(
             config, repository_root_path, ProcessLaunchInfo(cmd=executable_path, cwd=repository_root_path), "dart", solidlsp_settings
         )
+        # Set once the Dart analysis server reports it has finished its initial workspace scan,
+        # via either notification it sends for this (see _start_server).
+        self.analysis_complete = threading.Event()
 
     @override
     def _document_symbols_cache_fingerprint(self) -> Hashable:
@@ -181,8 +190,17 @@ class DartLanguageServer(SolidLanguageServer):
         def do_nothing(params: dict) -> None:
             return
 
+        def check_analyzer_status(params: dict) -> None:
+            # Legacy signal: isAnalyzing flips to False once the initial workspace scan finishes
+            # (dart-lang/sdk lsp_analysis_server.dart AnalyzerStatusParams(isAnalyzing=...)).
+            if params.get("isAnalyzing") is False:
+                log.info("Received $/analyzerStatus with isAnalyzing=false")
+                self.analysis_complete.set()
+
         def check_experimental_status(params: dict) -> None:
-            pass
+            if params.get("quiescent") is True:
+                log.info("Received experimental/serverStatus with quiescent=true")
+                self.analysis_complete.set()
 
         def window_log_message(msg: dict) -> None:
             log.info(f"LSP: window/logMessage: {msg}")
@@ -192,7 +210,7 @@ class DartLanguageServer(SolidLanguageServer):
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
         self.server.on_notification("$/progress", do_nothing)
-        self.server.on_notification("$/analyzerStatus", do_nothing)
+        self.server.on_notification("$/analyzerStatus", check_analyzer_status)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("language/actionableNotification", do_nothing)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
@@ -205,3 +223,10 @@ class DartLanguageServer(SolidLanguageServer):
         log.info(f"Received initialize response from dart-language-server: {init_response}")
 
         self.server.notify.initialized({})
+
+        log.info(f"Waiting up to {self._TIMEOUT_FOR_INITIAL_ANALYSIS}s for dart-language-server to finish initial analysis...")
+        if self.analysis_complete.wait(timeout=self._TIMEOUT_FOR_INITIAL_ANALYSIS):
+            log.info("dart-language-server initial analysis complete, server ready")
+        else:
+            log.warning("Timeout waiting for dart-language-server analysis completion, proceeding anyway")
+            self.analysis_complete.set()
