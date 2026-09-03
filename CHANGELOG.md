@@ -64,6 +64,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     silently returned an empty result instead of surfacing the crash. The crash is now detected
     independently via the `window/logMessage` notification tsserver already sends, and the
     affected wait now raises instead of reporting success (#1814)
+  - Fix: two Serena instances activating the same project concurrently launched their Kotlin LSP
+    processes against the same on-disk index storage location, so the second instance's requests
+    were repeatedly cancelled by the first instance's server. A Kotlin LSP process now claims that
+    storage directory via a lock; a single instance (including across restarts) still gets the
+    same directory, and a second concurrent instance gets a directory of its own instead of
+    contending for the first one's (#1966)
 
 CLI:
   - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)
