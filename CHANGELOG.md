@@ -39,6 +39,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     workspace namespaced by this process's PID, so concurrent sessions no longer corrupt a shared
     index. The fallback session indexes independently rather than reusing the shared cache - the
     accepted cost of avoiding the corruption, not a bug (#1944)
+  - Fix: `start()` only called `stop()` on a failed language-server launch when the underlying
+    process was already considered running, so a resource acquired earlier in the same
+    construction/launch path (e.g. the workspace lock above) leaked whenever the failure happened
+    before that point. `stop()` is now called unconditionally on any `start()` failure, matching
+    the contract `ls_manager.py`'s multi-server startup already assumed
   - Fix: Scala cross-file queries waited a fixed 5s after the first file was opened, which on a cold
     Metals is long before its build import, indexing and compilation have finished; the first
     `find_referencing_symbols` of a session could return a fraction of the references with nothing to
