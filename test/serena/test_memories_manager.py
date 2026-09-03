@@ -6,6 +6,7 @@ and :meth:`_prepare_name`).
 
 import os
 import stat
+import sys
 
 import pytest
 
@@ -320,6 +321,7 @@ class TestSaveAndEditMemoryAreAtomic:
 
         assert fs_manager.load_memory("notes") == "the original needle is here" * 20
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="os.chmod does not set POSIX group/other bits on Windows")
     def test_save_memory_preserves_existing_file_permissions(self, fs_manager: MemoryManager) -> None:
         _write(fs_manager, "notes", "original notes")
         path = fs_manager.get_memory_file_path("notes")
@@ -329,6 +331,7 @@ class TestSaveAndEditMemoryAreAtomic:
 
         assert stat.S_IMODE(os.stat(path).st_mode) == 0o644
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="os.chmod does not set POSIX group/other bits on Windows")
     def test_edit_memory_preserves_existing_file_permissions(self, fs_manager: MemoryManager) -> None:
         _write(fs_manager, "notes", "the original needle is here")
         path = fs_manager.get_memory_file_path("notes")
