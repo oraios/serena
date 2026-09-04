@@ -10,6 +10,7 @@ from click.testing import CliRunner
 
 from serena.hooks import (
     HookClient,
+    PostToolUseResetSymbolicToolCounterHook,
     PreToolUseAutoApproveSerenaHook,
     PreToolUseHook,
     PreToolUseRemindAboutSymbolicToolsHook,
@@ -33,6 +34,21 @@ def _base_input(
         "session_id": session_id,
         "tool_name": tool_name,
         "tool_input": tool_input if tool_input is not None else {"query": "foo"},
+    }
+
+
+def _post_tool_use_input(
+    tool_name: str,
+    session_id: str = "test-session-123",
+    tool_response: dict | None = None,
+) -> dict:
+    """Build a Codex-shaped PostToolUse payload, with ``tool_response`` carrying the MCP
+    ``tools/call`` result shape (``isError`` per the MCP spec).
+    """
+    return {
+        "session_id": session_id,
+        "tool_name": tool_name,
+        "tool_response": tool_response if tool_response is not None else {"content": [], "isError": False},
     }
 
 
@@ -932,6 +948,150 @@ class TestPreToolUseAutoApproveSerenaHook:
         assert capsys.readouterr().out == ""
 
 
+class TestPostToolUseResetSymbolicToolCounterHook:
+    """Tests for the PostToolUse hook that resets the reminder counters after a
+    successful Serena symbolic tool call, for clients (Codex) whose PreToolUse wiring
+    never observes Serena's own tools.
+    """
+
+    def test_missing_tool_name_raises(self, tmp_path: Path):
+        stdin_data = {"session_id": "s1", "tool_response": {"isError": False}}
+        with patch("sys.stdin", _make_stdin(stdin_data)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            with pytest.raises(ValueError, match="Tool name is required"):
+                PostToolUseResetSymbolicToolCounterHook(HookClient.CODEX)
+
+    def test_missing_session_id_raises(self, tmp_path: Path):
+        stdin_data = {"tool_name": "mcp__serena__find_symbol", "tool_response": {"isError": False}}
+        with patch("sys.stdin", _make_stdin(stdin_data)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            with pytest.raises(ValueError, match="Session ID is required"):
+                PostToolUseResetSymbolicToolCounterHook(HookClient.CODEX)
+
+    def _persisted_counter(self, tmp_path: Path, session_id: str) -> ToolUseCounter:
+        path = tmp_path / "hook_data" / session_id / "tool_use_counter.pkl"
+        with open(path, "rb") as f:
+            return pickle.load(f)
+
+    def _seed_counter(self, tmp_path: Path, session_id: str, counter: ToolUseCounter) -> None:
+        path = tmp_path / "hook_data" / session_id / "tool_use_counter.pkl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "wb") as f:
+            pickle.dump(counter, f)
+
+    def test_resets_persisted_counter_on_successful_serena_call(self, tmp_path: Path):
+        session_id = "reset-success"
+        seeded = ToolUseCounter(n_recent_grep_uses=2, n_recent_read_file_uses=1, n_recent_non_symbolic_uses=3)
+        self._seed_counter(tmp_path, session_id, seeded)
+
+        payload = _post_tool_use_input("mcp__serena__find_symbol", session_id=session_id, tool_response={"isError": False})
+        with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            PostToolUseResetSymbolicToolCounterHook(HookClient.CODEX).execute()
+
+        result = self._persisted_counter(tmp_path, session_id)
+        assert result.n_recent_grep_uses == 0
+        assert result.n_recent_read_file_uses == 0
+        assert result.n_recent_non_symbolic_uses == 0
+
+    def test_does_not_reset_on_failed_serena_call(self, tmp_path: Path):
+        """A Serena call that itself errored must not mask a real grep/read streak."""
+        session_id = "reset-failure"
+        seeded = ToolUseCounter(n_recent_grep_uses=2)
+        self._seed_counter(tmp_path, session_id, seeded)
+
+        payload = _post_tool_use_input("mcp__serena__find_symbol", session_id=session_id, tool_response={"isError": True})
+        with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            PostToolUseResetSymbolicToolCounterHook(HookClient.CODEX).execute()
+
+        assert self._persisted_counter(tmp_path, session_id).n_recent_grep_uses == 2
+
+    def test_does_not_reset_without_a_tool_response(self, tmp_path: Path):
+        """No structured response to confirm success against: stay conservative, do not reset."""
+        session_id = "reset-no-response"
+        seeded = ToolUseCounter(n_recent_grep_uses=2)
+        self._seed_counter(tmp_path, session_id, seeded)
+
+        payload = {"session_id": session_id, "tool_name": "mcp__serena__find_symbol"}
+        with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            PostToolUseResetSymbolicToolCounterHook(HookClient.CODEX).execute()
+
+        assert self._persisted_counter(tmp_path, session_id).n_recent_grep_uses == 2
+
+    def test_does_not_reset_for_non_serena_tool(self, tmp_path: Path):
+        session_id = "reset-non-serena"
+        seeded = ToolUseCounter(n_recent_grep_uses=2)
+        self._seed_counter(tmp_path, session_id, seeded)
+
+        payload = _post_tool_use_input("exec_command", session_id=session_id, tool_response={"isError": False})
+        with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            PostToolUseResetSymbolicToolCounterHook(HookClient.CODEX).execute()
+
+        assert self._persisted_counter(tmp_path, session_id).n_recent_grep_uses == 2
+
+    def test_does_not_reset_for_non_symbolic_serena_tool(self, tmp_path: Path):
+        """``read_file``-like Serena tools are excluded, same as the PreToolUse classification."""
+        session_id = "reset-non-symbolic"
+        seeded = ToolUseCounter(n_recent_grep_uses=2)
+        self._seed_counter(tmp_path, session_id, seeded)
+
+        payload = _post_tool_use_input("mcp__serena__read_file", session_id=session_id, tool_response={"isError": False})
+        with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            PostToolUseResetSymbolicToolCounterHook(HookClient.CODEX).execute()
+
+        assert self._persisted_counter(tmp_path, session_id).n_recent_grep_uses == 2
+
+    def test_creates_fresh_counter_when_none_persisted_yet(self, tmp_path: Path):
+        """A successful Serena call as the very first hook invocation of a session must not raise."""
+        session_id = "reset-fresh"
+        payload = _post_tool_use_input("mcp__serena__find_symbol", session_id=session_id, tool_response={"isError": False})
+        with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            PostToolUseResetSymbolicToolCounterHook(HookClient.CODEX).execute()
+
+        assert self._persisted_counter(tmp_path, session_id).n_recent_grep_uses == 0
+
+    def test_codex_acceptance_scenario_successful_serena_call_prevents_deny(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """The issue's own acceptance test: Bash(rg) -> Bash(rg) -> successful Serena call -> Bash(rg)
+        must not deny the final call, using exactly the documented Codex hook wiring
+        (``remind`` on PreToolUse/Bash, ``reset`` on PostToolUse/``mcp__serena__.*``).
+        """
+        session_id = "codex-acceptance-success"
+        grep_shell_payload = _base_input(tool_name="exec_command", session_id=session_id, tool_input={"cmd": "rg -n foo README.md"})
+
+        for _ in range(ToolUseCounter._GREP_USES_THRESHOLD - 1):
+            with patch("sys.stdin", _make_stdin(grep_shell_payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+                PreToolUseRemindAboutSymbolicToolsHook(HookClient.CODEX).execute()
+        assert capsys.readouterr().out == ""
+
+        serena_call = _post_tool_use_input("mcp__serena__find_symbol", session_id=session_id, tool_response={"isError": False})
+        with patch("sys.stdin", _make_stdin(serena_call)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            PostToolUseResetSymbolicToolCounterHook(HookClient.CODEX).execute()
+
+        with patch("sys.stdin", _make_stdin(grep_shell_payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            PreToolUseRemindAboutSymbolicToolsHook(HookClient.CODEX).execute()
+
+        assert capsys.readouterr().out == ""
+
+    def test_codex_acceptance_scenario_failed_serena_call_still_denies(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """The issue's second acceptance test: a failed Serena call must not reset the streak,
+        so the threshold is still reached.
+        """
+        session_id = "codex-acceptance-failure"
+        grep_shell_payload = _base_input(tool_name="exec_command", session_id=session_id, tool_input={"cmd": "rg -n foo README.md"})
+
+        for _ in range(ToolUseCounter._GREP_USES_THRESHOLD - 1):
+            with patch("sys.stdin", _make_stdin(grep_shell_payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+                PreToolUseRemindAboutSymbolicToolsHook(HookClient.CODEX).execute()
+        assert capsys.readouterr().out == ""
+
+        failed_serena_call = _post_tool_use_input("mcp__serena__find_symbol", session_id=session_id, tool_response={"isError": True})
+        with patch("sys.stdin", _make_stdin(failed_serena_call)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            PostToolUseResetSymbolicToolCounterHook(HookClient.CODEX).execute()
+
+        with patch("sys.stdin", _make_stdin(grep_shell_payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            PreToolUseRemindAboutSymbolicToolsHook(HookClient.CODEX).execute()
+
+        output = json.loads(capsys.readouterr().out.strip())
+        assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 class TestSessionEndCleanupHook:
     def test_removes_session_dir(self, tmp_path: Path):
         session_dir = tmp_path / "hook_data" / "cleanup-session"
@@ -1019,6 +1179,41 @@ class TestHookCli:
         assert output["decision"] == "deny"
         assert "grep" in output["reason"].lower()
         assert "hookSpecificOutput" not in output
+
+    def test_reset_command(self, tmp_path: Path):
+        """The ``reset`` CLI command clears a persisted counter after a successful Serena call."""
+        session_id = "cli-reset"
+        session_dir = tmp_path / "hook_data" / session_id
+        session_dir.mkdir(parents=True)
+        with open(session_dir / "tool_use_counter.pkl", "wb") as f:
+            pickle.dump(ToolUseCounter(n_recent_grep_uses=2), f)
+
+        stdin_json = json.dumps({"session_id": session_id, "tool_name": "mcp__serena__find_symbol", "tool_response": {"isError": False}})
+        runner = CliRunner()
+        with patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            result = runner.invoke(hook_commands, ["reset", "--client", "codex"], input=stdin_json)
+        assert result.exit_code == 0
+        assert result.output == ""
+
+        with open(session_dir / "tool_use_counter.pkl", "rb") as f:
+            assert pickle.load(f).n_recent_grep_uses == 0
+
+    def test_reset_command_stays_silent_on_failed_call(self, tmp_path: Path):
+        """The ``reset`` CLI command must not clear the counter for a failed Serena call."""
+        session_id = "cli-reset-failed"
+        session_dir = tmp_path / "hook_data" / session_id
+        session_dir.mkdir(parents=True)
+        with open(session_dir / "tool_use_counter.pkl", "wb") as f:
+            pickle.dump(ToolUseCounter(n_recent_grep_uses=2), f)
+
+        stdin_json = json.dumps({"session_id": session_id, "tool_name": "mcp__serena__find_symbol", "tool_response": {"isError": True}})
+        runner = CliRunner()
+        with patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            result = runner.invoke(hook_commands, ["reset", "--client", "codex"], input=stdin_json)
+        assert result.exit_code == 0
+
+        with open(session_dir / "tool_use_counter.pkl", "rb") as f:
+            assert pickle.load(f).n_recent_grep_uses == 2
 
     def test_auto_approve_command(self, tmp_path: Path):
         """The ``auto-approve`` CLI command emits an allow for a Serena tool in acceptEdits mode."""
