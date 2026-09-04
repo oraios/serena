@@ -228,6 +228,8 @@ class LanguageServerId(str, Enum):
     """PHPantom language server for PHP (instead of Intelephense, which is the default).
     Uses the open-source Rust-based phpantom_lsp binary and can be auto-downloaded.
     """
+    JULIA_FATOU = "julia_fatou"
+    """Fatou language server for Julia (instead of LanguageServer.jl, which is the default)."""
     MARKDOWN = "markdown"
     """Marksman language server for Markdown (experimental).
     Must be explicitly specified as the main language, not auto-detected.
@@ -334,6 +336,7 @@ class LanguageServerId(str, Enum):
             self.RUBY_SOLARGRAPH,
             self.PHP_PHPACTOR,
             self.PHP_PHPANTOM,
+            self.JULIA_FATOU,
             self.MARKDOWN,
             self.LATEX,
             self.YAML,
@@ -532,7 +535,7 @@ class LanguageServerId(str, Enum):
                 return FilenameMatcher(".tex", ".bib", ".sty", ".cls")
             case self.SCALA:
                 return FilenameMatcher(".scala", ".sbt")
-            case self.JULIA:
+            case self.JULIA | self.JULIA_FATOU:
                 return FilenameMatcher(".jl")
             case self.FORTRAN:
                 return FilenameMatcher(".f90", ".f95", ".f03", ".f08", ".f", ".for", ".fpp", case_sensitive=False)
@@ -828,6 +831,10 @@ class LanguageServerId(str, Enum):
                 from solidlsp.language_servers.julia_server import JuliaLanguageServer
 
                 return JuliaLanguageServer
+            case self.JULIA_FATOU:
+                from solidlsp.language_servers.fatou_language_server import FatouLanguageServer
+
+                return FatouLanguageServer
             case self.FORTRAN:
                 from solidlsp.language_servers.fortran_language_server import FortranLanguageServer
 

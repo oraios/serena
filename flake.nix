@@ -79,7 +79,7 @@
               ];
           });
         }
-        // lib.optionalAttrs pkgs.stdenv.isLinux {
+        // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           # pyproject-nix's virtualenv resolver follows pyproject-style
           # passthru.dependencies, while these GI bindings are already packaged
           # by nixpkgs' Python infrastructure. nixpkgsPrebuilt is the upstream
@@ -146,11 +146,11 @@
           dontWrapGApps = true;
           nativeBuildInputs =
             [pkgs.makeWrapper]
-            ++ lib.optionals pkgs.stdenv.isLinux [
+            ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [
               pkgs.wrapGAppsHook3
               pkgs.gobject-introspection
             ];
-          buildInputs = lib.optionals pkgs.stdenv.isLinux [
+          buildInputs = lib.optionals pkgs.stdenv.hostPlatform.isLinux [
             pkgs.gtk3
             pkgs.libayatana-appindicator
           ];
@@ -159,7 +159,7 @@
 
             mkdir -p $out/bin
             ${
-              lib.optionalString (!pkgs.stdenv.isLinux) ''
+              lib.optionalString (!pkgs.stdenv.hostPlatform.isLinux) ''
                 ln -s ${packages.serena-env}/bin/serena $out/bin/serena
               ''
             }
@@ -170,7 +170,7 @@
           # Run the GApps fixup phase so the wrapper gets GI_TYPELIB_PATH for
           # Gtk and AyatanaAppIndicator3. This is the same pattern nixpkgs uses
           # for pystray consumers such as plex-mpv-shim and jellyfin-mpv-shim.
-          preFixup = lib.optionalString pkgs.stdenv.isLinux ''
+          preFixup = lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
             makeWrapper ${packages.serena-env}/bin/serena $out/bin/serena "''${gappsWrapperArgs[@]}"
           '';
           meta = {
@@ -201,7 +201,7 @@
               UV_PYTHON_DOWNLOADS = "never";
               UV_PYTHON = python.interpreter;
             }
-            // lib.optionalAttrs pkgs.stdenv.isLinux {
+            // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
               LD_LIBRARY_PATH = lib.makeLibraryPath pkgs.pythonManylinuxPackages.manylinux1;
             };
           shellHook = ''
