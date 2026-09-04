@@ -27,15 +27,6 @@ class TestDevsensePHPDependencyProvider:
             assert provider.create_launch_command() == ["/custom/devsense-php-ls", "--stdio"]
             get_dependency.assert_not_called()
 
-    def test_system_path_is_preferred(self, tmp_path: Path) -> None:
-        provider = DevsensePHPLanguageServer.DependencyProvider(_custom_settings(), str(tmp_path))
-
-        with patch(
-            "solidlsp.language_servers.devsense_php_language_server.shutil.which", return_value="/usr/local/bin/devsense-php-ls"
-        ) as which:
-            assert provider._get_or_install_core_dependency() == "/usr/local/bin/devsense-php-ls"
-            which.assert_called_once_with("devsense-php-ls")
-
     def test_platform_binary_path_uses_official_layout(self, tmp_path: Path) -> None:
         install_dir = str(tmp_path / "devsense-php-ls")
         assert DevsensePHPLanguageServer.DependencyProvider._platform_binary_path(install_dir, PlatformId.LINUX_x64) == str(
@@ -55,11 +46,8 @@ class TestDevsensePHPDependencyProvider:
             installed.parent.mkdir(parents=True)
             installed.touch()
 
-        def fake_which(name: str) -> str | None:
-            return None if name == "devsense-php-ls" else f"/usr/bin/{name}"
-
         with (
-            patch("solidlsp.language_servers.devsense_php_language_server.shutil.which", side_effect=fake_which),
+            patch("solidlsp.language_servers.devsense_php_language_server.shutil.which", return_value="/usr/bin/node"),
             patch(
                 "solidlsp.language_servers.devsense_php_language_server.RuntimeDependencyCollection._run_command",
                 side_effect=fake_run,

@@ -80,11 +80,6 @@ class DevsensePHPLanguageServer(SolidLanguageServer):
             ``node_modules/.bin`` shim, which may be absent until a later npm rebuild.
             """
             platform_id = PlatformUtils.get_platform_id()
-            system_executable = shutil.which("devsense-php-ls")
-            if system_executable is not None:
-                log.info("Using system-installed devsense-php-ls at %s", system_executable)
-                return system_executable
-
             if shutil.which("node") is None:
                 raise RuntimeError("node is not installed or is not in PATH. Please install Node.js and try again.")
             if shutil.which("npm") is None:
