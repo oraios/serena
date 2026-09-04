@@ -3,13 +3,60 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
+  - Fix: `TextUtils.insert_text_at_position` returned a wrong position when the inserted text merged
+    with an adjacent character into a single newline sequence (e.g. a `\n` inserted directly after an
+    existing `\r`); the position is now determined from the resulting text
+  - Fix: process-tree cleanup signaled descendant language-server processes without waiting for them,
+    which could leave grandchildren as zombies; cleanup now waits for the discovered descendants (#1464)
+  - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
+
+* Memories:
+  - Fix: `save_memory`/`edit_memory` wrote directly to the memory file with `open(path, "w")`, which
+    truncates it before the new content is written; a crash, OOM kill, or full disk partway through
+    the write could destroy the previous, valid content instead of just losing the update. Both now
+    write through a temp-file-plus-`os.replace` helper, matching the approach `save_yaml()` already
+    uses for settings files (#1958)
+
+* JetBrains:
+  - Fix: Concurrent Serena sessions activating different projects at the same time with
+    `jetbrains_launch_command` set would each independently launch the IDE, racing each other for
+    the IDE's own config-directory lock; JetBrains IDE launches are now serialized per launch
+    command and Serena waits for the plugin server to become reachable before proceeding (#1864)
+
+* Hooks:
+  - Fix: Codex's documented hook wiring only routes `remind` through `PreToolUse` on `Bash`, so its
+    reset-on-Serena-tool-use branch was unreachable there and reminder counters never cleared after a
+    successful Serena call. Add a `serena-hooks reset` command and a `PostToolUse` example matched to
+    Serena's own tools to close the gap (#1852)
 
 * Language Servers:
+<<<<<<< HEAD
   - Add experimental Devsense PHP Language Server support through the `php_devsense` language key and
     pinned npm-managed `devsense-php-ls` installation (#710)
+=======
+  - Add FreeBSD mapping to platform detection
+  - Remove unnecessary platform checks from the following language servers, expanding the set of
+    supported platforms accordingly: Elixir Tools, Intelephense, Perl, TypeScript, VTS
+  - Fix: the managed Solidity language server could report no diagnostics on macOS when Hardhat could not write
+    its global state under ``~/Library``; Serena now gives the child process an isolated home-directory view
+    via ``solidity_state_dir`` without changing the parent process's ``HOME`` (#1817)
+  - Add Fatou support as an alternative Julia language server (`julia_fatou`)
+  - Fix: Nextflow's `_flush_deferred_workspace_scan` marked the workspace scan flushed even when both
+    of its `completion` probes failed, permanently skipping the flush (and silencing retries) for the
+    rest of the session (#1871)
+  - Fix: Exceptions raised during `LanguageServerManager.start` did not stop the language server subprocess if it was
+    already started (#1949)
+>>>>>>> upstream/main
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
+  - Fix: `DartLanguageServer._start_server` discarded both `$/analyzerStatus` and
+    `experimental/serverStatus`, the two notifications the Dart analysis server sends to report
+    indexing progress, and returned as soon as `initialized` was sent instead of waiting for either
+    one; a request issued right after activation (`find_symbol`, `find_referencing_symbols`) could
+    return before the workspace scan finished. Serena now waits (bounded by 60s) for either signal to
+    report completion, matching the pattern already used for pyright, basedpyright and rust-analyzer
   - Fix: clojure-lsp was not told that Serena sends `workspace/didChangeWatchedFiles`, so changes made
     outside Serena's own edit tools (a git checkout, another editor, a build step) need not invalidate
     its analysis; symbol queries could then answer from a stale index, e.g. `find_symbol` returning a
@@ -25,6 +72,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     silently returned an empty result instead of surfacing the crash. The crash is now detected
     independently via the `window/logMessage` notification tsserver already sends, and the
     affected wait now raises instead of reporting success (#1814)
+
+CLI:
+  - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)
 
 * Dependencies:
   - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
