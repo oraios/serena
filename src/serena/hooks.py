@@ -49,23 +49,31 @@ class Hook(ABC):
         pass
 
 
-class PreToolUseHook(Hook, ABC):
-    _NON_SYMBOLIC_SERENA_TOOL_NAME_SUBSTRINGS = frozenset(
-        (
-            "pattern",
-            "read",
-            "diagnostics",
-            "memory",
-            "onboarding",
-            "config",
-            "list_file",
-            "find_file",
-            "shell",
-            "dashboard",
-            "restart_language_server",
-        )
+#: substrings that mark a "serena"-containing tool name as one of Serena's own non-symbolic
+#: utilities (read/config/dashboard/shell) rather than a code-navigation tool; shared across
+#: PreToolUse and PostToolUse hooks so both classify a call the same way.
+_NON_SYMBOLIC_SERENA_TOOL_NAME_SUBSTRINGS = frozenset(
+    (
+        "pattern",
+        "read",
+        "diagnostics",
+        "memory",
+        "onboarding",
+        "config",
+        "list_file",
+        "find_file",
+        "shell",
+        "dashboard",
+        "restart_language_server",
     )
+)
 
+
+def _is_serena_symbolic_tool_name(tool_name: str) -> bool:
+    return "serena" in tool_name and not any(substring in tool_name for substring in _NON_SYMBOLIC_SERENA_TOOL_NAME_SUBSTRINGS)
+
+
+class PreToolUseHook(Hook, ABC):
     def __init__(self, client: HookClient):
         super().__init__(client)
         _tool_name = self._input_data.get("tool_name") or self._input_data.get("toolName", "") or ""
@@ -108,9 +116,7 @@ class PreToolUseHook(Hook, ABC):
             return json.dumps(hook_output)
 
     def is_serena_symbolic_tool(self) -> bool:
-        return "serena" in self._tool_name and not any(
-            substring in self._tool_name for substring in self._NON_SYMBOLIC_SERENA_TOOL_NAME_SUBSTRINGS
-        )
+        return _is_serena_symbolic_tool_name(self._tool_name)
 
 
 class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
@@ -593,6 +599,48 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         )
 
 
+class PostToolUseResetSymbolicToolCounterHook(Hook):
+    """Post-tool-use hook that resets :class:`PreToolUseRemindAboutSymbolicToolsHook`'s
+    persisted counters after a successful Serena symbolic tool call.
+
+    ``PreToolUseRemindAboutSymbolicToolsHook`` already resets on a Serena tool call, but
+    only when it is itself invoked for that call, which requires the client's PreToolUse
+    matcher to observe ``mcp__serena__*`` tool names. Codex's documented wiring (see
+    docs/02-usage/030_clients.md) attaches ``remind`` to the ``Bash`` matcher only, so it
+    is never invoked for Serena's own tools there and the reset branch is unreachable.
+    This hook closes that gap from the other side of the call: wired to PostToolUse with a
+    matcher on Serena's tools, it fires once the call has completed.
+
+    Gated on the call having succeeded (``tool_response`` carrying no ``isError: true``,
+    the MCP ``tools/call`` result shape) so a failed Serena call does not mask a real
+    grep/read-drift streak the agent is still in.
+    """
+
+    def __init__(self, client: HookClient):
+        super().__init__(client)
+        raw_tool_name = self._input_data.get("tool_name") or self._input_data.get("toolName", "") or ""
+        tool_name = str(raw_tool_name).lower().strip()
+        if not tool_name:
+            raise ValueError("Tool name is required in the hook input data")
+        self._tool_name = tool_name
+        raw_tool_response = self._input_data.get("tool_response") or self._input_data.get("toolResponse")
+        self._tool_response: dict | None = raw_tool_response if isinstance(raw_tool_response, dict) else None
+
+    def _call_succeeded(self) -> bool:
+        # no structured response to check: be conservative and treat it as not confirmed
+        # successful, rather than resetting on data we can't actually read
+        if self._tool_response is None:
+            return False
+        return self._tool_response.get("isError") is not True
+
+    def execute(self) -> None:
+        if not _is_serena_symbolic_tool_name(self._tool_name) or not self._call_succeeded():
+            return
+        counter = PreToolUseRemindAboutSymbolicToolsHook.ToolUseCounter.load(self)
+        counter.reset()
+        counter.save(self)
+
+
 class SessionStartActivateProjectHook(Hook):
     def execute(self) -> None:
         message = (
@@ -701,6 +749,17 @@ class HookCommands(AutoRegisteringGroup):
     @_client_option
     def auto_approve(client: str) -> None:
         PreToolUseAutoApproveSerenaHook(HookClient(client)).execute()
+
+    @staticmethod
+    @click.command(
+        "reset",
+        help="Set this as hook at PostToolUse, matched to Serena's own tools, to reset the grep/read-drift "
+        "counters after a successful Serena tool call. For clients whose PreToolUse wiring does not observe "
+        "Serena tool calls (e.g. Codex, matched to Bash only); complements `remind`'s own reset branch.",
+    )
+    @_client_option
+    def reset(client: str) -> None:
+        PostToolUseResetSymbolicToolCounterHook(HookClient(client)).execute()
 
 
 hook_commands = HookCommands()
