@@ -8,10 +8,11 @@ import pytest
 
 from solidlsp.language_servers.emmylua_ls import (
     DEFAULT_EMMYLUA_LS_VERSION,
+    EMMYLUA_ALLOWED_HOSTS,
     EmmyLuaLanguageServer,
     _emmylua_ls_asset,
+    _emmylua_ls_dep,
     _emmylua_ls_install_dir,
-    _emmylua_ls_sha,
 )
 from solidlsp.ls_config import LanguageServerId
 from solidlsp.settings import SolidLSPSettings
@@ -43,12 +44,38 @@ def test_asset_mapping_rejects_unsupported_platform() -> None:
         _emmylua_ls_asset("Linux", "i686")
 
 
-def test_default_release_assets_have_sha256() -> None:
-    for system, machine in (("Linux", "x86_64"), ("Linux", "aarch64"), ("Darwin", "x86_64"), ("Windows", "amd64")):
-        asset_name, _, _ = _emmylua_ls_asset(system, machine)
-        digest = _emmylua_ls_sha(DEFAULT_EMMYLUA_LS_VERSION, asset_name)
-        assert digest is not None
-        assert len(digest) == 64
+@pytest.mark.parametrize(
+    ("system", "machine"),
+    [("Linux", "x86_64"), ("Linux", "aarch64"), ("Darwin", "x86_64"), ("Darwin", "arm64"), ("Windows", "amd64"), ("Windows", "arm64")],
+)
+def test_pinned_release_assets_are_checksum_verified(tmp_path: Path, system: str, machine: str) -> None:
+    dep = _emmylua_ls_dep(system, machine)
+
+    with patch("solidlsp.dependency_provider.FileUtils.download_and_extract_archive_verified") as download:
+        dep.download_to(tmp_path)
+
+    assert download.call_args.kwargs["expected_sha256"] is not None, "pinned release must be verified against the hash database"
+
+
+def test_custom_versions_skip_hash_lookup_by_design(tmp_path: Path) -> None:
+    dep = _emmylua_ls_dep("Linux", "x86_64", "0.26.0")
+
+    with (
+        patch(
+            "solidlsp.dependency_provider.DownloadedDependencyHashDatabase.get_instance",
+            side_effect=AssertionError("custom versions must not consult the pinned hash database"),
+        ),
+        patch("solidlsp.dependency_provider.FileUtils.download_and_extract_archive_verified") as download,
+    ):
+        dep.download_to(tmp_path)
+
+    download.assert_called_once_with(
+        "https://github.com/EmmyLuaLs/emmylua-analyzer-rust/releases/download/0.26.0/emmylua_ls-linux-x64-glibc.2.17.tar.gz",
+        str(tmp_path),
+        archive_type="gztar",
+        expected_sha256=None,
+        allowed_hosts=EMMYLUA_ALLOWED_HOSTS,
+    )
 
 
 def test_install_dir_is_versioned_after_initial_release(tmp_path: Path) -> None:
@@ -56,26 +83,14 @@ def test_install_dir_is_versioned_after_initial_release(tmp_path: Path) -> None:
     assert _emmylua_ls_install_dir(str(tmp_path), "0.26.0") == tmp_path / "emmylua-0.26.0"
 
 
-def test_ls_path_override_is_used_without_looking_at_path_or_downloading(tmp_path: Path) -> None:
+def test_ls_path_override_is_used_without_downloading(tmp_path: Path) -> None:
     settings = _make_settings(tmp_path, {"ls_path": "/opt/emmylua_ls"})
-    with patch("solidlsp.language_servers.emmylua_ls.shutil.which", side_effect=AssertionError("PATH should not be checked")):
-        with patch.object(
-            EmmyLuaLanguageServer,
-            "_download_emmylua_ls",
-            side_effect=AssertionError("download should not be attempted"),
-        ):
-            assert EmmyLuaLanguageServer._setup_runtime_dependency(settings) == "/opt/emmylua_ls"
-
-
-def test_system_binary_is_preferred_to_managed_install(tmp_path: Path) -> None:
-    settings = _make_settings(tmp_path)
-    with patch("solidlsp.language_servers.emmylua_ls.shutil.which", return_value="/usr/bin/emmylua_ls"):
-        with patch.object(
-            EmmyLuaLanguageServer,
-            "_download_emmylua_ls",
-            side_effect=AssertionError("download should not be attempted"),
-        ):
-            assert EmmyLuaLanguageServer._setup_runtime_dependency(settings) == "/usr/bin/emmylua_ls"
+    with patch.object(
+        EmmyLuaLanguageServer,
+        "_download_emmylua_ls",
+        side_effect=AssertionError("download should not be attempted"),
+    ):
+        assert EmmyLuaLanguageServer._setup_runtime_dependency(settings) == "/opt/emmylua_ls"
 
 
 def test_managed_binary_is_reused(tmp_path: Path) -> None:
@@ -84,13 +99,12 @@ def test_managed_binary_is_reused(tmp_path: Path) -> None:
     managed_path = Path(EmmyLuaLanguageServer.ls_resources_dir(settings)) / "emmylua" / binary_name
     managed_path.parent.mkdir(parents=True)
     managed_path.write_text("binary", encoding="utf-8")
-    with patch("solidlsp.language_servers.emmylua_ls.shutil.which", return_value=None):
-        with patch.object(
-            EmmyLuaLanguageServer,
-            "_download_emmylua_ls",
-            side_effect=AssertionError("download should not be attempted"),
-        ):
-            assert EmmyLuaLanguageServer._setup_runtime_dependency(settings) == str(managed_path)
+    with patch.object(
+        EmmyLuaLanguageServer,
+        "_download_emmylua_ls",
+        side_effect=AssertionError("download should not be attempted"),
+    ):
+        assert EmmyLuaLanguageServer._setup_runtime_dependency(settings) == str(managed_path)
 
 
 def test_download_extracts_and_returns_binary(tmp_path: Path) -> None:
@@ -105,14 +119,14 @@ def test_download_extracts_and_returns_binary(tmp_path: Path) -> None:
     ) -> None:
         assert url.endswith("emmylua_ls-linux-x64-glibc.2.17.tar.gz")
         assert archive_type == "gztar"
-        assert expected_sha256 == _emmylua_ls_sha(DEFAULT_EMMYLUA_LS_VERSION, "emmylua_ls-linux-x64-glibc.2.17.tar.gz")
+        assert expected_sha256 is not None
         assert allowed_hosts is not None
         Path(target_path, "emmylua_ls").write_text("#!/bin/sh\n", encoding="utf-8")
 
     with patch("solidlsp.language_servers.emmylua_ls.platform.system", return_value="Linux"):
         with patch("solidlsp.language_servers.emmylua_ls.platform.machine", return_value="x86_64"):
             with patch(
-                "solidlsp.language_servers.emmylua_ls.FileUtils.download_and_extract_archive_verified",
+                "solidlsp.dependency_provider.FileUtils.download_and_extract_archive_verified",
                 side_effect=fake_extract,
             ):
                 binary_path = EmmyLuaLanguageServer._download_emmylua_ls(settings)
