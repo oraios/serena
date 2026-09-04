@@ -38,6 +38,12 @@ class SolidityLanguageServer(SolidLanguageServer):
     the Nomic Foundation Solidity Language Server (@nomicfoundation/solidity-language-server).
     Supports go-to-definition, find references, document symbols, hover, and diagnostics.
     Requires Node.js and npm to be installed.
+
+    The ``solidity_state_dir`` setting can be used on macOS to choose the writable
+    state root for the managed Solidity language server. By default, Serena uses
+    ``<ls_resources_dir>/solidity-state``. This is needed because Hardhat's
+    ``env-paths`` dependency resolves its Darwin paths from ``os.homedir()`` and
+    ignores the XDG directory variables.
     """
 
     _VALIDATION_COMPLETION_TIMEOUT = 60.0
@@ -84,6 +90,8 @@ class SolidityLanguageServer(SolidLanguageServer):
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
+        _HOMEDIR_PRELOAD = os.path.join(os.path.dirname(__file__), "solidity_homedir_preload.cjs")
+
         def _get_or_install_core_dependency(self) -> str:
             """
             Install @nomicfoundation/solidity-language-server via npm and return the
@@ -174,7 +182,36 @@ class SolidityLanguageServer(SolidLanguageServer):
             forge_version = self._custom_settings.get("forge_version", DEFAULT_FORGE_VERSION)
             solidity_ls_dir = self._resolve_solidity_ls_dir(solidity_language_server_version, forge_version)
             managed_bin_dir = os.path.join(solidity_ls_dir, "node_modules", ".bin")
-            return {"PATH": managed_bin_dir + os.pathsep + os.environ.get("PATH", "")}
+            launch_env = {"PATH": managed_bin_dir + os.pathsep + os.environ.get("PATH", "")}
+
+            if platform.system() == "Darwin":
+                state_dir = self._get_solidity_state_dir()
+                os.makedirs(state_dir, exist_ok=True)
+                launch_env["SERENA_SOLIDITY_STATE_DIR"] = state_dir
+                preload_arg = f"--require {self._quote_node_option_argument(self._HOMEDIR_PRELOAD)}"
+                existing_node_options = os.environ.get("NODE_OPTIONS", "").strip()
+                launch_env["NODE_OPTIONS"] = f"{existing_node_options} {preload_arg}".strip()
+
+            return launch_env
+
+        @staticmethod
+        def _quote_node_option_argument(value: str) -> str:
+            """Quote a value for Node's NODE_OPTIONS parser.
+
+            Node parses NODE_OPTIONS independently from the shell. POSIX single-quote escaping
+            produced by ``shlex.quote`` is therefore not understood by Node. Use double quotes,
+            escaping the two characters that have special meaning inside Node's double-quoted
+            option values.
+            """
+            return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+        def _get_solidity_state_dir(self) -> str:
+            configured_state_dir = self._custom_settings.get("solidity_state_dir", os.path.join(self._ls_resources_dir, "solidity-state"))
+            if not isinstance(configured_state_dir, str):
+                raise TypeError("solidity_state_dir must be a path string")
+            if not configured_state_dir:
+                raise ValueError("solidity_state_dir must not be empty")
+            return os.path.abspath(os.path.expanduser(configured_state_dir))
 
         def _resolve_solidity_ls_dir(self, solidity_language_server_version: str, forge_version: str) -> str:
             # legacy unversioned dir reserved for INITIAL pair; any other combination goes into a versioned subdir
