@@ -6,6 +6,7 @@ import signal
 import subprocess
 import threading
 from collections.abc import Callable
+from time import monotonic
 from typing import IO, TYPE_CHECKING, Any, Generic, TypeVar, cast
 
 import oslex
@@ -281,11 +282,20 @@ class ManagedSubprocessLauncher:
             return process
 
 
-def _signal_process_tree(process: subprocess.Popen[bytes], terminate: bool = True) -> None:
+def _signal_process_tree(
+    process: subprocess.Popen[bytes],
+    terminate: bool = True,
+    descendants: list[psutil.Process] | None = None,
+) -> None:
     """
-    Sends a signal (terminate or kill) to the given process and all its children.
+    Sends a signal (terminate or kill) to the given process and its descendants.
+
+    ``descendants`` is an optional snapshot captured before the leader is signaled.
+    It is needed for kill fallback: the leader may have exited and been reaped before
+    the fallback runs, in which case re-enumerating from ``process.pid`` loses the tree.
 
     :param terminate: if True, signal terminate, otherwise signal kill
+    :param descendants: previously discovered descendants to signal even if the leader is gone
     """
 
     def signal_process(p: subprocess.Popen | psutil.Process) -> None:
@@ -294,24 +304,23 @@ def _signal_process_tree(process: subprocess.Popen[bytes], terminate: bool = Tru
                 p.terminate()
             else:
                 p.kill()
-        except:
+        except (psutil.Error, OSError):
             pass
 
-    # Try to get the parent process
-    parent = None
-    try:
-        parent = psutil.Process(process.pid)
-    except (psutil.NoSuchProcess, psutil.AccessDenied, Exception):
-        pass
+    if descendants is None:
+        descendants = []
+        try:
+            parent = psutil.Process(process.pid)
+            if parent.is_running():
+                descendants = parent.children(recursive=True)
+        except (psutil.Error, OSError):
+            pass
 
-    # If we have the parent process and it's running, signal the entire tree
-    if parent and parent.is_running():
-        for child in parent.children(recursive=True):
-            signal_process(child)
-        signal_process(parent)
-    # Otherwise, fall back to direct process signaling
-    else:
-        signal_process(process)
+    # Signal the snapshot first, then the leader. The snapshot remains usable after
+    # the leader has exited, while newly spawned children are outside its guarantee.
+    for child in descendants:
+        signal_process(child)
+    signal_process(process)
 
 
 def _signal_process_group(pgid: int, terminate: bool = True) -> None:
@@ -335,6 +344,40 @@ def _signal_process_group(pgid: int, terminate: bool = True) -> None:
         log.warning(f"Unexpected error signaling process group {pgid} with {sig.name}: {e}")
 
 
+def _get_process_descendants(process: subprocess.Popen) -> list[psutil.Process]:
+    """Return a snapshot of descendants that should be waited on after signaling."""
+    try:
+        return psutil.Process(process.pid).children(recursive=True)
+    except (psutil.Error, OSError):
+        return []
+
+
+def _wait_for_processes_until(processes: list[psutil.Process], deadline: float) -> bool:
+    """Wait for a process snapshot until an absolute monotonic deadline.
+
+    Descendants are waited in reverse depth-first discovery order so that a child
+    has a chance to exit before its parent is reaped. A process that disappears
+    or cannot be waited by the current OS process is already clean for our
+    purposes; a timeout is returned to trigger the caller's kill fallback.
+    """
+    for child in reversed(processes):
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            return False
+        try:
+            child.wait(timeout=remaining)
+        except psutil.TimeoutExpired:
+            return False
+        except (psutil.Error, OSError):
+            continue
+    return True
+
+
+def _wait_for_processes(processes: list[psutil.Process], timeout: float) -> bool:
+    """Wait for a process snapshot within one shared timeout budget."""
+    return _wait_for_processes_until(processes, monotonic() + timeout)
+
+
 def terminate_process_tree_with_kill_fallback(
     process: subprocess.Popen,
     terminate_timeout: float,
@@ -352,31 +395,41 @@ def terminate_process_tree_with_kill_fallback(
     :param process_name: the name of the process (used for logging purposes); should start with capital letter
     :param process_group_id: if given, the POSIX process group ID that ``process`` leads (i.e. it was
         launched with ``start_new_session=True``, so its PGID equals its PID). When set, cleanup
-        signals the whole group directly via ``os.killpg`` instead of walking the process tree with
-        ``psutil``, which requires system-wide process-table enumeration (``sysctl(KERN_PROC_ALL)`` on
-        macOS) that can be denied even for processes we started and own. Only pass this for a process
-        that was started in its own session: signaling the group of a process that shares ours would
-        also signal us.
+        signals the whole group directly via ``os.killpg`` rather than walking the process tree to
+        signal it. Descendant discovery remains best-effort so cleanup can wait for children after
+        the group is signaled; ``_get_process_descendants`` safely returns an empty list when the
+        platform denies process-table enumeration (for example, ``sysctl(KERN_PROC_ALL)`` on macOS).
+        Only pass this for a process that was started in its own session: signaling the group of a
+        process that shares ours would also signal us.
     """
     log.debug(f"Terminating process {process.pid}, current status: {process.poll()}")
+    descendants = _get_process_descendants(process)
 
     def signal_tree(terminate: bool) -> None:
         if process_group_id is not None:
             _signal_process_group(process_group_id, terminate=terminate)
         else:
-            _signal_process_tree(process, terminate=terminate)
+            _signal_process_tree(process, terminate=terminate, descendants=None if terminate else descendants)
 
     signal_tree(terminate=True)
     try:
         log.debug(f"Waiting for process {process.pid} to terminate...")
-        exit_code = process.wait(timeout=terminate_timeout)
+        terminate_deadline = monotonic() + terminate_timeout
+        descendants_finished = _wait_for_processes_until(descendants, terminate_deadline)
+        remaining = terminate_deadline - monotonic()
+        if not descendants_finished or remaining <= 0:
+            raise subprocess.TimeoutExpired(process.args, terminate_timeout)
+        exit_code = process.wait(timeout=remaining)
         log.info(f"{process_name} terminated successfully with exit code {exit_code}.")
     except subprocess.TimeoutExpired:
         # If termination failed, forcefully kill the process
         log.warning(f"{process_name} (pid={process.pid}) termination timed out, killing process forcefully...")
         signal_tree(terminate=False)
+        kill_deadline = monotonic() + 2.0
+        _wait_for_processes_until(descendants, kill_deadline)
+        remaining = max(kill_deadline - monotonic(), 0.1)
         try:
-            exit_code = process.wait(timeout=2.0)
+            exit_code = process.wait(timeout=remaining)
             log.info(f"{process_name} killed successfully with exit code {exit_code}.")
         except subprocess.TimeoutExpired:
             log.error(f"{process_name} (pid={process.pid}) could not be killed within timeout.")

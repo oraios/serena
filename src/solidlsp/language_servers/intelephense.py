@@ -11,7 +11,6 @@ from overrides import override
 
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, DidChangeConfigurationParams, LocationLink
 from solidlsp.settings import SolidLSPSettings
 
@@ -51,19 +50,6 @@ class Intelephense(SolidLanguageServer):
             """
             Setup runtime dependencies for Intelephense and return the path to the executable.
             """
-            platform_id = PlatformUtils.get_platform_id()
-
-            valid_platforms = [
-                PlatformId.LINUX_x64,
-                PlatformId.LINUX_arm64,
-                PlatformId.OSX,
-                PlatformId.OSX_x64,
-                PlatformId.OSX_arm64,
-                PlatformId.WIN_x64,
-                PlatformId.WIN_arm64,
-            ]
-            assert platform_id in valid_platforms, f"Platform {platform_id} is not supported by Intelephense at the moment"
-
             # Verify both node and npm are installed
             is_node_installed = shutil.which("node") is not None
             assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
