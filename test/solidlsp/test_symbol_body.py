@@ -134,3 +134,22 @@ def test_selection_range_missing_logs_nothing(caplog: pytest.LogCaptureFixture) 
         body = _factory().create_symbol_body(_symbol(0, 0, 2, len(LINES[2])))
     assert body.get_text() == FULL
     assert caplog.records == []
+
+
+def test_repeated_identical_selection_range_mismatch_logs_every_time(caplog: pytest.LogCaptureFixture) -> None:
+    """No deduplication: every other log.warning call site in this file (in SolidLanguageServer -
+    missing containing symbol, corrupt cache, unresolvable location, ...) logs unconditionally on
+    each occurrence; there's no "only once"/cooldown state anywhere in ls.py to match. Introducing
+    a bespoke dedup/cooldown mechanism here, found nowhere else in the file, would have added new
+    state (an unbounded cache keyed by file+symbol+ranges, an arbitrary interval, ...) that would
+    itself need justifying - plain, unconditional logging keeps this warning's behaviour
+    unsurprising instead.
+    """
+    selection_range = _range(5, 0, 5, 3)
+    symbol = _symbol(0, 0, 2, len(LINES[2]), selection_range=selection_range, name="persistent")
+
+    with caplog.at_level("WARNING"):
+        _factory().create_symbol_body(symbol)
+        _factory().create_symbol_body(symbol)
+        _factory().create_symbol_body(symbol)
+    assert len(caplog.records) == 3

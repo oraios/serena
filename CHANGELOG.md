@@ -33,7 +33,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - `SymbolBodyFactory.create_symbol_body` now logs a warning whenever a symbol's `selectionRange`
     falls outside the range its body is sliced from, which is the shape a stale language server index
     produces (correct name, body from a different location); the returned body is unchanged, but the
-    mismatch is no longer silent (#1593)
+    mismatch is no longer silent (#1593). Per the LSP spec, `DocumentSymbol.selectionRange` must
+    always be contained by `range`, so this only fires on a genuine protocol-contract violation, not
+    on any legitimate symbol shape.
   - Fix: Scala cross-file queries waited a fixed 5s after the first file was opened, which on a cold
     Metals is long before its build import, indexing and compilation have finished; the first
     `find_referencing_symbols` of a session could return a fraction of the references with nothing to
