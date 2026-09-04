@@ -648,6 +648,8 @@ class PlatformId(str, Enum):
     LINUX_arm64 = "linux-arm64"
     LINUX_MUSL_x64 = "linux-musl-x64"
     LINUX_MUSL_arm64 = "linux-musl-arm64"
+    FREEBSD_x64 = "freebsd-x64"
+    FREEBSD_arm64 = "freebsd-arm64"
 
     def is_windows(self) -> bool:
         return self.value.startswith("win")
@@ -677,10 +679,11 @@ class PlatformUtils:
         bitness = platform.architecture()[0]
         if system == "Windows" and machine == "":
             machine = cls._determine_windows_machine_type()
-        system_map = {"Windows": "win", "Darwin": "osx", "Linux": "linux"}
+        system_map = {"Windows": "win", "Darwin": "osx", "Linux": "linux", "FreeBSD": "freebsd"}
         machine_map = {
             "AMD64": "x64",
             "x86_64": "x64",
+            "amd64": "x64",
             "i386": "x86",
             "i686": "x86",
             "aarch64": "arm64",
@@ -694,7 +697,10 @@ class PlatformUtils:
                 if libc != "glibc":
                     # Format: linux-musl-arch (e.g., linux-musl-arm64)
                     platform_id = f"{system_map[system]}-{libc}-{machine_map[machine]}"
-            return PlatformId(platform_id)
+            try:
+                return PlatformId(platform_id)
+            except ValueError:
+                raise SolidLSPException(f"Unknown platform: {system=}, {machine=}, {bitness=}") from None
         else:
             raise SolidLSPException(f"Unknown platform: {system=}, {machine=}, {bitness=}")
 

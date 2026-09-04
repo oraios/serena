@@ -4,6 +4,7 @@ Provides TypeScript specific instantiation of the LanguageServer class. Contains
 
 import logging
 import os
+import re
 import shutil
 import threading
 import time
@@ -15,7 +16,9 @@ from sensai.util.logging import LogTime
 from solidlsp import ls_types
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
-from solidlsp.ls_utils import PlatformId, PlatformUtils
+from solidlsp.ls_exceptions import SolidLSPException
+from solidlsp.ls_utils import PlatformUtils
+from solidlsp.lsp_protocol_handler.lsp_types import MessageType
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
@@ -63,6 +66,21 @@ def prefer_non_node_modules_definition(definitions: list[ls_types.Location]) -> 
         if rel_path and "node_modules" not in rel_path:
             return d
     return definitions[0]
+
+
+class TypeScriptServerCrashedError(SolidLSPException):
+    """Raised when tsserver reported its own abnormal exit via window/logMessage.
+
+    typescript-language-server sends a $/progress "end" event for the in-flight
+    token as part of tearing its connection down after tsserver dies, which is
+    otherwise indistinguishable from a normal indexing completion.
+    """
+
+
+# Matches typescript-language-server's window/logMessage notification for an abnormal
+# tsserver exit, e.g. "[lspserver] [tsclient] [tsserver] Exited. Code: null. Signal: SIGABRT".
+# A clean shutdown does not produce this message.
+_TSSERVER_EXITED_PATTERN = re.compile(r"\[tsserver\]\s+Exited\b", re.IGNORECASE)
 
 
 class TypeScriptLanguageServer(SolidLanguageServer):
@@ -114,14 +132,36 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         self._active_progress_tokens: set[str] = set()
         self._indexing_complete = threading.Event()
         self._indexing_complete.set()  # Initially set (no active work)
+        # set from window/logMessage when tsserver reports its own abnormal exit;
+        # a crash mid-indexing still drains _active_progress_tokens via a $/progress
+        # "end" event, so that alone cannot distinguish a crash from real completion
+        self._crash_message: str | None = None
+
+    def _raise_if_crashed(self) -> None:
+        if self._crash_message is not None:
+            raise TypeScriptServerCrashedError(self._crash_message)
+
+    @staticmethod
+    def _tsserver_exit_message(msg: dict) -> str | None:
+        """:return: the log text if ``msg`` is tsserver reporting its own abnormal exit, else None."""
+        if msg.get("type") != MessageType.Error:
+            return None
+        message_text = str(msg.get("message", ""))
+        if _TSSERVER_EXITED_PATTERN.search(message_text):
+            return message_text
+        return None
 
     def wait_for_indexing(self, timeout: float) -> bool:
         """Block until all $/progress tokens complete.
 
         :param timeout: Maximum seconds to wait.
         :return: True if indexing completed, False on timeout.
+        :raises TypeScriptServerCrashedError: if tsserver reported an abnormal exit.
         """
-        return self._indexing_complete.wait(timeout=timeout)
+        result = self._indexing_complete.wait(timeout=timeout)
+        if result:
+            self._raise_if_crashed()
+        return result
 
     def _wait_for_indexing_start_or_completion(self, timeout: float, start_grace: float | None = None) -> bool:
         """Wait until TypeScript indexing has started and drained, or provably never started.
@@ -129,6 +169,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         :param timeout: Maximum seconds to wait once active indexing progress is observed.
         :param start_grace: Maximum seconds to wait for progress to begin after opening files.
         :return: True if indexing completed or no progress began within the grace period, False on timeout.
+        :raises TypeScriptServerCrashedError: if tsserver reported an abnormal exit.
         """
         grace = self.INDEXING_START_GRACE if start_grace is None else start_grace
 
@@ -139,6 +180,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                 if self._active_progress_tokens:
                     break
                 if self._indexing_complete.is_set():
+                    self._raise_if_crashed()
                     return True
             time.sleep(0.05)
 
@@ -147,6 +189,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             has_active_progress = bool(self._active_progress_tokens)
             if not has_active_progress:
                 self._indexing_complete.set()
+                self._raise_if_crashed()
                 return True
 
         # wait for active progress to drain
@@ -224,21 +267,6 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             """
             Setup runtime dependencies for TypeScript Language Server and return the path to the executable.
             """
-            platform_id = PlatformUtils.get_platform_id()
-
-            valid_platforms = [
-                PlatformId.LINUX_x64,
-                PlatformId.LINUX_arm64,
-                PlatformId.OSX,
-                PlatformId.OSX_x64,
-                PlatformId.OSX_arm64,
-                PlatformId.WIN_x64,
-                PlatformId.WIN_arm64,
-            ]
-            assert platform_id in valid_platforms, (
-                f"Platform {platform_id} is not supported for multilspy javascript/typescript at the moment"
-            )
-
             # Get version settings from ls_specific_settings or use defaults
             language_specific_config = self._custom_settings
             typescript_version = language_specific_config.get("typescript_version", DEFAULT_TYPESCRIPT_VERSION)
@@ -382,6 +410,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
 
         def window_log_message(msg: dict) -> None:
             log.info(f"LSP: window/logMessage: {msg}")
+            crash_text = self._tsserver_exit_message(msg)
+            if crash_text is not None:
+                log.warning(f"tsserver reported an abnormal exit: {crash_text}")
+                self._crash_message = f"tsserver exited abnormally: {crash_text}"
 
         def handle_typescript_version(params: dict) -> None:
             """
