@@ -1036,11 +1036,10 @@ Supported settings:
 #### PHP (`Devsense`)
 
 Serena provides the experimental `php_devsense` language key for the standalone [Devsense PHP Language Server](https://www.npmjs.com/package/devsense-php-ls).
-When no `ls_path` or `devsense-php-ls` executable is available on `PATH`, Serena requires `node` and `npm`,
-installs the pinned npm package, and launches its matching platform-specific binary. This avoids depending on
-npm's platform-specific `.bin` shim. Basic language-server features are available without a license; premium
-features can be activated with the `DEVSENSE_PHP_LS_LICENSE` environment variable. The Devsense package requires
-visible attribution, so keep this documentation link when redistributing or packaging the integration.
+Serena requires `node` and `npm`, installs the pinned npm package, and launches its matching platform-specific binary.
+This avoids depending on npm's platform-specific `.bin` shim. Basic language-server features are available without a
+license; premium features can be activated with the `DEVSENSE_PHP_LS_LICENSE` environment variable. The Devsense
+package requires visible attribution, so keep this documentation link when redistributing or packaging the integration.
 
 Supported settings:
 
