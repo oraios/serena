@@ -10,6 +10,7 @@ from serena.config.serena_config import (
     SerenaPaths,
 )
 from serena.constants import SERENA_FILE_ENCODING
+from serena.util.file_system import write_file_atomic
 from serena.util.text_utils import ContentReplacer
 
 from .memory_reference_analysis import (
@@ -215,8 +216,7 @@ class MemoryManager:
         self._check_not_ignored(name)
         self._check_write_access(name, is_tool_context)
         memory_file_path = self.get_memory_file_path(name)
-        with open(memory_file_path, "w", encoding=self._encoding) as f:
-            f.write(content)
+        write_file_atomic(str(memory_file_path), content, encoding=self._encoding)
         return f"Memory {name} written."
 
     class MemoriesList:
@@ -399,8 +399,7 @@ class MemoryManager:
             original_content = f.read()
         replacer = ContentReplacer(mode=mode, allow_multiple_occurrences=allow_multiple_occurrences, regex_multiline=regex_multiline)
         updated_content = replacer.replace(original_content, needle, repl)
-        with open(memory_file_path, "w", encoding=self._encoding) as f:
-            f.write(updated_content)
+        write_file_atomic(str(memory_file_path), updated_content, encoding=self._encoding)
         return f"Memory {name} edited successfully."
 
     def validate_referential_integrity(

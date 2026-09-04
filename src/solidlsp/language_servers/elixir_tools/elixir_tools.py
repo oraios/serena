@@ -97,16 +97,6 @@ class ElixirTools(SolidLanguageServer):
             return expert_in_path
 
         platform_id = PlatformUtils.get_platform_id()
-
-        valid_platforms = [
-            PlatformId.LINUX_x64,
-            PlatformId.LINUX_arm64,
-            PlatformId.OSX_x64,
-            PlatformId.OSX_arm64,
-            PlatformId.WIN_x64,
-        ]
-        assert platform_id in valid_platforms, f"Platform {platform_id} is not supported for Expert at the moment"
-
         expert_dir = os.path.join(cls.ls_resources_dir(solidlsp_settings), "expert")
 
         # Define runtime dependencies inline
@@ -163,6 +153,8 @@ class ElixirTools(SolidLanguageServer):
             ),
         }
 
+        if platform_id not in runtime_deps:
+            raise RuntimeError(f"Platform {platform_id} is not supported for Expert")
         dependency = runtime_deps[platform_id]
         # On Windows, use .exe extension
         executable_name = "expert.exe" if platform_id.value.startswith("win") else "expert"
