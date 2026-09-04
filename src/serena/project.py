@@ -21,7 +21,7 @@ from serena.util.file_proxy import FileCollection, FileProxy
 from serena.util.file_system import GitignoreParser, match_path, scan_directory
 from serena.util.text_utils import MatchedConsecutiveLines, search_files
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerKey
+from solidlsp.ls_config import LanguageServerIdLike
 
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
@@ -567,7 +567,7 @@ class Project(ToStringMixin):
             raise Exception(msg.build())
         return self.language_server_manager
 
-    def add_language_server(self, ls_id: LanguageServerKey) -> None:
+    def add_language_server(self, ls_id: LanguageServerIdLike) -> None:
         """
         Adds a new language server to the project configuration, starting the corresponding
         server instance if the LS manager is active.
@@ -576,21 +576,21 @@ class Project(ToStringMixin):
         :param ls_id: the language server to add
         """
         if ls_id in self.project_config.language_servers:
-            log.info(f"Language server {ls_id.value} is already present in the project configuration.")
+            log.info(f"Language server {ls_id.get_key()} is already present in the project configuration.")
             return
 
         # start the language server (if the LS manager is active)
         if self.language_server_manager is None:
             log.info("Language server manager is not active; skipping language server startup for the new language.")
         else:
-            log.info("Adding and starting the language server '%s' ...", ls_id.value)
+            log.info("Adding and starting the language server '%s' ...", ls_id.get_key())
             self.language_server_manager.add_language_server(ls_id)
 
         # update the project configuration
         self.project_config.language_servers.append(ls_id)
         self.save_config()
 
-    def remove_language_server(self, ls_id: LanguageServerKey) -> None:
+    def remove_language_server(self, ls_id: LanguageServerIdLike) -> None:
         """
         Removes a language server from the project configuration, stopping the corresponding
         server instance if the LS manager is active.
@@ -599,7 +599,7 @@ class Project(ToStringMixin):
         :param ls_id: the language server to remove
         """
         if ls_id not in self.project_config.language_servers:
-            log.info(f"Language {ls_id.value} is not present in the project configuration.")
+            log.info(f"Language {ls_id.get_key()} is not present in the project configuration.")
             return
         # update the project configuration
         self.project_config.language_servers.remove(ls_id)
@@ -609,7 +609,7 @@ class Project(ToStringMixin):
         if self.language_server_manager is None:
             log.info("Language server manager is not active; skipping language server shutdown for the removed language.")
         else:
-            log.info("Removing and stopping the language server for language %s ...", ls_id.value)
+            log.info("Removing and stopping the language server for language %s ...", ls_id.get_key())
             self.language_server_manager.remove_language_server(ls_id)
 
     def ls_sync_file_system_changes(self) -> int:

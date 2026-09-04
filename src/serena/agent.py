@@ -61,7 +61,7 @@ from serena.tools import (
 from serena.util.gui import system_has_usable_display
 from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
-from solidlsp.ls_config import LanguageServerKey
+from solidlsp.ls_config import LanguageServerIdLike
 from solidlsp.util import subprocess_util
 from solidlsp.util.subprocess_util import terminate_process_tree_with_kill_fallback
 
@@ -1081,7 +1081,7 @@ class SerenaAgent:
         else:
             msg = f"The project with name '{proj.project_name}' at {proj.project_root} is activated.\n"
         if self._language_backend == LanguageBackend.LSP:
-            language_servers_str = ", ".join([ls.value for ls in proj.project_config.language_servers])
+            language_servers_str = ", ".join([ls.get_key() for ls in proj.project_config.language_servers])
             msg += f"Active language servers: {language_servers_str}.\n"
         msg += f"File encoding: {proj.project_config.encoding}.\n"
 
@@ -1436,7 +1436,7 @@ class SerenaAgent:
         """
         self.get_active_project_or_raise().create_language_server_manager()
 
-    def add_language_server(self, ls_id: LanguageServerKey) -> None:
+    def add_language_server(self, ls_id: LanguageServerIdLike) -> None:
         """
         Adds a new language server to the active project, spawning the respective language server and updating the project configuration.
         The addition is scheduled via the agent's task executor and executed synchronously, i.e. the method returns
@@ -1444,16 +1444,16 @@ class SerenaAgent:
 
         :param ls_id: the language server to add
         """
-        self.execute_task(lambda: self.get_active_project_or_raise().add_language_server(ls_id), name=f"AddLanguage:{ls_id.value}")
+        self.execute_task(lambda: self.get_active_project_or_raise().add_language_server(ls_id), name=f"AddLanguage:{ls_id.get_key()}")
 
-    def remove_language_server(self, ls_id: LanguageServerKey) -> None:
+    def remove_language_server(self, ls_id: LanguageServerIdLike) -> None:
         """
         Removes a language server from the active project, shutting down the respective server and updating the project configuration.
         The removal is scheduled via the agent's task executor and executed asynchronously.
 
         :param ls_id: the language to remove
         """
-        self.issue_task(lambda: self.get_active_project_or_raise().remove_language_server(ls_id), name=f"RemoveLanguage:{ls_id.value}")
+        self.issue_task(lambda: self.get_active_project_or_raise().remove_language_server(ls_id), name=f"RemoveLanguage:{ls_id.get_key()}")
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self._all_tools[tool_class]
@@ -1498,7 +1498,7 @@ class SerenaAgent:
         tool_class = ToolRegistry().get_tool_class_by_name(tool_name)
         return self.get_tool(tool_class)
 
-    def get_active_language_server_ids(self) -> list[LanguageServerKey]:
+    def get_active_language_server_ids(self) -> list[LanguageServerIdLike]:
         ls_manager = self.get_language_server_manager()
         if ls_manager is None:
             return []

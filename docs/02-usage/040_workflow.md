@@ -47,7 +47,7 @@ The file allows you to configure ...
   * the name by which you want to refer to the project (relevant when telling the LLM to dynamically activate the project)
   * the set of built-in language servers and explicitly registered external adapters for which servers are spawned
     (not relevant when using the JetBrains plugin). External adapter IDs become available after their Python package is installed;
-    see [External Language Server Adapters](../01-about/030_external_language_server_adapters).
+    see [External Language Server Adapters](../03-special-guides/external_language_server_registration.md).
     The [Dashboard](060_dashboard) can dynamically add or remove built-in language servers and installed, registered external
     adapters while Serena is running. It does not install adapter packages or offer unregistered adapter IDs.
   * the [language backend](per-project-language-backend) to use for this project (overriding the global setting)

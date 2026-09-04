@@ -37,17 +37,6 @@ log = logging.getLogger(__name__)
 class VueTypeScriptServer(TypeScriptLanguageServer):
     """TypeScript LS configured with @vue/typescript-plugin for Vue file support."""
 
-    @classmethod
-    @override
-    def get_language_server_id(cls) -> LanguageServerId:
-        """Return TYPESCRIPT since this is a TypeScript language server variant.
-
-        Note: VueTypeScriptServer is a companion server that uses TypeScript's language server
-        with the Vue TypeScript plugin. It reports as TYPESCRIPT to maintain compatibility
-        with the TypeScript language server infrastructure.
-        """
-        return LanguageServerId.TYPESCRIPT
-
     def get_source_fn_matcher(self) -> FilenameMatcher:
         # must override with Vue-specific matcher to ensure .vue files are included (as they can be discovered via references,
         # for instance; otherwise, we may find references in .vue files but then filter the results out, because .vue files are ignored.)

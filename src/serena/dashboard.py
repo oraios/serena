@@ -29,6 +29,7 @@ from serena.util.logging import MemoryLogHandler
 from serena.util.pypi import PyPIPackageInfo
 from serena.util.pywebview import WebViewWithTray
 from serena.util.version import Version
+from solidlsp.ls_config import LanguageServerRegistry
 
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
@@ -513,7 +514,7 @@ class SerenaDashboardAPI:
         active_project_name = project.project_name if project else None
         project_info = {
             "name": active_project_name,
-            "language": ", ".join([l.value for l in project.project_config.language_servers]) if project else None,
+            "language": ", ".join([ls_id.get_key() for ls_id in project.project_config.language_servers]) if project else None,
             "path": str(project.project_root) if project else None,
         }
 
@@ -605,9 +606,9 @@ class SerenaDashboardAPI:
             available_memories = project.memory_manager.list_memories().get_full_list()
 
         # Get list of languages for the active project
-        languages = []
+        ls_ids = []
         if project is not None:
-            languages = [lang.value for lang in project.project_config.language_servers]
+            ls_ids = [ls_id.get_key() for ls_id in project.project_config.language_servers]
 
         # Get file encoding for the active project
         encoding = None
@@ -626,7 +627,7 @@ class SerenaDashboardAPI:
             available_contexts=available_contexts,
             available_memories=available_memories,
             jetbrains_mode=self._agent.get_language_backend().is_jetbrains(),
-            languages=languages,
+            languages=ls_ids,
             encoding=encoding,
             current_client=Tool.get_last_tool_call_client_str(),
             serena_version=self._agent.version,
@@ -637,16 +638,13 @@ class SerenaDashboardAPI:
         self._current_config_overview = self._compute_config_overview().model_dump()
 
     def _get_available_languages(self) -> ResponseAvailableLanguages:
-        from solidlsp.ls_config import LanguageServerId, registered_language_servers
-
         def run() -> ResponseAvailableLanguages:
-            all_languages = [lang.value for lang in LanguageServerId.iter_all(include_experimental=True)]
-            all_languages.extend(lang.value for lang in registered_language_servers())
+            all_languages = LanguageServerRegistry.get_instance().get_keys()
 
             # Filter out already added languages for the active project
             project = self._agent.get_active_project()
             if project:
-                current_languages = [lang.value for lang in project.project_config.language_servers]
+                current_languages = [ls_id.get_key() for ls_id in project.project_config.language_servers]
                 available_languages = [lang for lang in all_languages if lang not in current_languages]
             else:
                 available_languages = all_languages
@@ -776,22 +774,12 @@ class SerenaDashboardAPI:
         return {}
 
     def _add_language(self, request_add_language: RequestAddLanguage) -> None:
-        from solidlsp.ls_config import resolve_language_server_id
-
-        try:
-            language = resolve_language_server_id(request_add_language.language)
-        except ValueError:
-            raise ValueError(f"Invalid language server identifier: {request_add_language.language}")
+        language = LanguageServerRegistry.get_instance().resolve(request_add_language.language)
         # add_language is already thread-safe
         self._agent.add_language_server(language)
 
     def _remove_language(self, request_remove_language: RequestRemoveLanguage) -> None:
-        from solidlsp.ls_config import resolve_language_server_id
-
-        try:
-            language = resolve_language_server_id(request_remove_language.language)
-        except ValueError:
-            raise ValueError(f"Invalid language server identifier: {request_remove_language.language}")
+        language = LanguageServerRegistry.get_instance().resolve(request_remove_language.language)
         # remove_language is already thread-safe
         self._agent.remove_language_server(language)
 

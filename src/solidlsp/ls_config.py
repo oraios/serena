@@ -4,15 +4,17 @@ Configuration objects for language servers
 
 from __future__ import annotations
 
+import importlib
 import logging
 import os
 import re
+import threading
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Protocol, Self
 
 if TYPE_CHECKING:
     from solidlsp import SolidLanguageServer
@@ -89,124 +91,34 @@ class FilenameMatcher:
         return False
 
 
-class RegisteredLanguageServerId(str):
-    """Canonical external language-server ID carrying its matcher and implementation class.
-
-    The registry enforces a one-to-one mapping between IDs and implementation
-    classes across both built-in and external language servers.
+class LanguageServerIdLike(Protocol):
+    """
+    Protocol defining the interface for language server identifiers,
+    which can be either a :class:`LanguageServerId` enum member or any other object that implements the same methods.
+    For language server adapters defined outside the SolidLSP library, use :class:`ExternalLanguageServerId`.
     """
 
-    _matcher: FilenameMatcher
-    _implementation: type["SolidLanguageServer"]
-
-    def __new__(cls, value: str, matcher: FilenameMatcher, implementation: type["SolidLanguageServer"]):
-        canonical_value = value.strip()
-        if not canonical_value:
-            raise ValueError("Language server registration requires a non-empty id")
-        if value != canonical_value:
-            raise ValueError(f"Language server id must be trimmed: {value!r}")
-        if value != value.lower():
-            raise ValueError(f"Language server id must be lowercase: {value!r}")
-        instance = super().__new__(cls, value)
-        instance._matcher: FilenameMatcher = matcher
-        instance._implementation: type["SolidLanguageServer"] = implementation
-        return instance
-
-    def __deepcopy__(self, memo: dict[int, object]) -> "RegisteredLanguageServerId":
-        return self
-
-    @property
-    def value(self) -> str:
-        return str(self)
+    def get_key(self) -> str:
+        """
+        :return: the string key which identifies this language server in configuration files
+        """
 
     def get_source_fn_matcher(self) -> FilenameMatcher:
-        return self._matcher
+        pass
 
     def get_ls_class(self) -> type["SolidLanguageServer"]:
-        return self._implementation
+        pass
 
     def get_priority(self) -> int:
-        return 0
+        pass
 
     def supports_implementation_request(self) -> bool:
         return self.get_ls_class().supports_implementation_request()
 
 
-_registered_language_servers: dict[str, RegisteredLanguageServerId] = {}
-
-
-def register_ls(
-    id: str,
-    matcher: FilenameMatcher,
-    implementation: type["SolidLanguageServer"],
-) -> RegisteredLanguageServerId:
-    """Register an external language server explicitly before project configuration loads.
-
-    A trusted Python host imports the adapter module before Serena resolves the
-    project's ``language_servers``. Project configuration never imports Python code.
-
-    IDs must be non-empty, trimmed, and lowercase. Duplicate IDs and reuse of an
-    implementation class are rejected because runtime identity is derived from
-    both the configured ID and its implementation class.
+class LanguageServerId(Enum):
     """
-    registered_id = RegisteredLanguageServerId(id, matcher, implementation)
-    if id in {language.value for language in LanguageServerId}:
-        raise ValueError(f"Language server id is already built in: {id}")
-    if id in _registered_language_servers:
-        raise ValueError(f"Language server id is already registered: {id}")
-    for built_in_id in LanguageServerId:
-        if built_in_id.get_ls_class() is implementation:
-            raise ValueError(
-                f"Cannot register external language server id {id!r}: implementation {implementation.__name__} "
-                f"is already assigned to built-in id {built_in_id.value!r}"
-            )
-    for existing_id in _registered_language_servers.values():
-        if existing_id.get_ls_class() is implementation:
-            raise ValueError(
-                f"Language server implementation {implementation.__name__} is already registered under external id: {existing_id.value}"
-            )
-    _registered_language_servers[id] = registered_id
-    return registered_id
-
-
-def resolve_language_server_id(value: str) -> LanguageServerKey:
-    """Resolve a built-in or explicitly registered ID without triggering discovery.
-
-    Adapter discovery is owned by the project-configuration loading lifecycle.
-    """
-    try:
-        return LanguageServerId(value)
-    except ValueError:
-        try:
-            return _registered_language_servers[value]
-        except KeyError as error:
-            raise ValueError(f"Unknown language server: {value}") from error
-
-
-def registered_language_servers() -> tuple[RegisteredLanguageServerId, ...]:
-    """Return a snapshot of the explicitly registered external language servers."""
-    return tuple(_registered_language_servers.values())
-
-
-def _reset_registered_language_servers_for_tests() -> None:
-    """Clear explicit registrations for deterministic in-process tests."""
-    _registered_language_servers.clear()
-
-
-def _snapshot_registered_language_servers() -> dict[str, RegisteredLanguageServerId]:
-    """Return the current registrations for transactional adapter discovery."""
-    return dict(_registered_language_servers)
-
-
-def _restore_registered_language_servers(snapshot: dict[str, RegisteredLanguageServerId]) -> None:
-    """Restore registrations after a failing adapter entry point."""
-    _registered_language_servers.clear()
-    _registered_language_servers.update(snapshot)
-
-
-class LanguageServerId(str, Enum):
-    """
-    Enumeration of language servers supported by SolidLSP.
+    Enumeration of language servers directly supported by SolidLSP.
     """
 
     CSHARP = "csharp"
@@ -436,6 +348,9 @@ class LanguageServerId(str, Enum):
             if include_experimental or not lang.is_experimental():
                 if include_non_programming_languages or lang.is_programming_language():
                     yield lang
+
+    def get_key(self) -> str:
+        return self.value
 
     def is_experimental(self) -> bool:
         """
@@ -1055,25 +970,117 @@ class LanguageServerId(str, Enum):
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
+
+class ExternalLanguageServerId(LanguageServerIdLike):
+    """
+    Represents an identifier for a language server that is externally provided and registered.
+    """
+
+    def __init__(self, key: str, matcher: FilenameMatcher, implementation: type["SolidLanguageServer"], priority: int = 0):
+        self._key = key
+        self._matcher = matcher
+        self._implementation = implementation
+        self._priority = priority
+
+    def get_key(self) -> str:
+        return self._key
+
+    def get_source_fn_matcher(self) -> FilenameMatcher:
+        return self._matcher
+
+    def get_ls_class(self) -> type["SolidLanguageServer"]:
+        return self._implementation
+
+    def get_priority(self) -> int:
+        return self._priority
+
+
+class LanguageServerRegistry:
+    """
+    Registry of language servers
+    """
+
+    REGISTRATION_ENTRY_POINT_GROUP = "solidlsp.language_server_registration"
+    """
+    entry point group for language server registration functions; each function should call use 
+    `LanguageServerRegistry.get_instance().register(...)` to register a language server
+    """
+
+    _instance = None
+    _instance_lock = threading.Lock()
+
     @classmethod
-    def from_ls_class(cls, ls_class: type["SolidLanguageServer"]) -> LanguageServerKey:
+    def get_instance(cls):
+        if cls._instance is None:
+            with cls._instance_lock:
+                if cls._instance is None:
+                    cls._instance = cls(True)
+                    cls._discover_language_server_registrations_from_entry_points()
+        return cls._instance
+
+    def __init__(self, _singleton: bool):
+        if not _singleton:
+            raise RuntimeError("LanguageServerRegistry is a singleton. Use get_instance() to access it.")
+        self._registered_language_servers: dict[str, LanguageServerIdLike] = {}
+
+        # auto-register built-in language servers
+        for ls_id in LanguageServerId:
+            self._registered_language_servers[ls_id.get_key()] = ls_id
+
+    @classmethod
+    def _discover_language_server_registrations_from_entry_points(cls) -> None:
         """
-        Get the Language enum value from a SolidLanguageServer class.
-
-        :param ls_class: The SolidLanguageServer class to find the corresponding Language for
-        :return: The Language enum value
-        :raises ValueError: If the language server class is not supported
+        Discover and execute language server adapter registration functions from entry points.
         """
-        for enum_instance in cls:
-            if enum_instance.get_ls_class() == ls_class:
-                return enum_instance
-        for registered_id in registered_language_servers():
-            if registered_id.get_ls_class() == ls_class:
-                return registered_id
-        raise ValueError(f"Unhandled language server class: {ls_class}")
+        log.debug("Discovering language server registration entry points ...")
+        try:
+            entry_points = importlib.metadata.entry_points(group=cls.REGISTRATION_ENTRY_POINT_GROUP)
+        except Exception as error:
+            log.exception("Failed to discover language server registration entry points: %s", error)
+            return
 
+        def get_distribution_name(ep: importlib.metadata.EntryPoint) -> str:
+            distribution = getattr(ep, "dist", None)
+            if distribution is None:
+                return "unknown distribution"
+            return distribution.name or "unknown distribution"
 
-LanguageServerKey = LanguageServerId | RegisteredLanguageServerId
+        log.debug("Found %d language server registration entry points", len(entry_points))
+        for entry_point in entry_points:
+            try:
+                registration = entry_point.load()
+                if not callable(registration):
+                    raise TypeError("entry point must resolve to a callable registration function")
+                registration()
+            except Exception as error:
+                log.exception(
+                    "Failed to load language server adapter entry point '%s' from %s: %s",
+                    entry_point.name,
+                    get_distribution_name(entry_point),
+                    error,
+                )
+
+    def resolve(self, key: str) -> LanguageServerIdLike:
+        if key in self._registered_language_servers:
+            return self._registered_language_servers[key]
+        raise ValueError(f"Unknown language server key: '{key}'; Valid keys: {self.get_keys()}")
+
+    def register(self, ls_id: LanguageServerIdLike, allow_override: bool = False) -> None:
+        """
+        :param ls_id: the identifier to register
+        :param allow_override: whether to allow overriding an existing registration with the same key
+        """
+        log.info("Registering language server: %s (class=%s)", ls_id.get_key(), ls_id.get_ls_class().__name__)
+        key = ls_id.get_key()
+        if key in self._registered_language_servers and not allow_override:
+            raise ValueError(f"Language server id is already registered: {key}")
+        self._registered_language_servers[key] = ls_id
+
+    def get_keys(self) -> list[str]:
+        """
+        :return: the sorted list of all registered string keys
+        """
+        return sorted(self._registered_language_servers.keys())
 
 
 @dataclass(frozen=True)
@@ -1082,7 +1089,7 @@ class LanguageServerConfig:
     Configuration parameters for a language server instance
     """
 
-    ls_id: LanguageServerKey
+    ls_id: LanguageServerIdLike
     """
     defines the language server to use
     """

@@ -95,11 +95,6 @@ class AngularTypeScriptServer(TypeScriptLanguageServer):
     cross-file references that span Angular templates.
     """
 
-    @classmethod
-    @override
-    def get_language_server_id(cls) -> LanguageServerId:
-        return LanguageServerId.TYPESCRIPT
-
     def get_source_fn_matcher(self) -> FilenameMatcher:
         # Use the Angular matcher so .html template files aren't filtered out of
         # reference / search results when the companion is asked about them.
