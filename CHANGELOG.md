@@ -32,8 +32,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     body from the position the symbol used to occupy (#1593)
   - Fix: Vue's `_ensure_vue_files_indexed_on_ts_server` marked indexing complete even when every
     `.vue` file failed to open on the companion TypeScript server, so a transient outage of that
-    server became a silent, permanent loss of Vue cross-file indexing for the rest of the session
-    (#1923)
+    server became a silent, permanent loss of Vue cross-file indexing for the rest of the session.
+    The retry this was meant to enable was itself unreachable in practice, short-circuited by
+    `_ensure_ls_operational`'s own readiness gate before it could ever run; both are now fixed
+    together, with a backoff so a companion server that stays down doesn't turn every request
+    into a fresh full re-index attempt (#1923)
   - Fix: Scala cross-file queries waited a fixed 5s after the first file was opened, which on a cold
     Metals is long before its build import, indexing and compilation have finished; the first
     `find_referencing_symbols` of a session could return a fraction of the references with nothing to
