@@ -25,6 +25,7 @@ import time
 import psutil
 import pytest
 
+from solidlsp.util import subprocess_util
 from solidlsp.util.subprocess_util import _signal_process_group, terminate_process_tree_with_kill_fallback
 
 pytestmark = pytest.mark.skipif(platform.system() == "Windows", reason="process groups / os.killpg are POSIX-specific")
@@ -53,6 +54,14 @@ def _process_alive(pid: int) -> bool:
         return True
     except ProcessLookupError:
         return False
+
+
+def _pid_is_gone(pid: int) -> bool:
+    try:
+        psutil.Process(pid)
+        return False
+    except psutil.NoSuchProcess:
+        return True
 
 
 class _DenyingProcess:
@@ -113,6 +122,157 @@ class TestTerminateProcessTreeWithKillFallback:
             if proc.poll() is None:
                 proc.kill()
                 proc.wait(timeout=2.0)
+
+    def test_graceful_termination_uses_one_shared_deadline(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The descendant wait and leader wait must share ``terminate_timeout``."""
+        now = [0.0]
+        descendant_wait_timeouts: list[float] = []
+        leader_wait_timeouts: list[float] = []
+
+        class FakeDescendant:
+            def wait(self, timeout: float) -> None:
+                descendant_wait_timeouts.append(timeout)
+                now[0] += 3.0
+
+        class FakePopen:
+            pid = 123
+            args = ["fake-language-server"]
+
+            def poll(self) -> None:
+                return None
+
+            def wait(self, timeout: float) -> int:
+                leader_wait_timeouts.append(timeout)
+                return 0
+
+        monkeypatch.setattr(subprocess_util, "monotonic", lambda: now[0])
+        monkeypatch.setattr(subprocess_util, "_get_process_descendants", lambda _process: [FakeDescendant()])
+        monkeypatch.setattr(subprocess_util, "_signal_process_tree", lambda *args, **kwargs: None)
+
+        terminate_process_tree_with_kill_fallback(FakePopen(), terminate_timeout=5.0)
+
+        assert descendant_wait_timeouts == [pytest.approx(5.0)]
+        assert leader_wait_timeouts == [pytest.approx(2.0)]
+
+    def test_kill_fallback_uses_one_shared_deadline(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The forceful descendant wait and leader wait must share the 2s fallback budget."""
+        now = [0.0]
+        descendant_wait_timeouts: list[float] = []
+        leader_wait_timeouts: list[float] = []
+
+        class FakeDescendant:
+            wait_count = 0
+
+            def wait(self, timeout: float) -> None:
+                descendant_wait_timeouts.append(timeout)
+                self.wait_count += 1
+                if self.wait_count == 1:
+                    now[0] += timeout
+                    raise psutil.TimeoutExpired(timeout, 456)
+                now[0] += 1.5
+
+        class FakePopen:
+            pid = 123
+            args = ["fake-language-server"]
+
+            def poll(self) -> None:
+                return None
+
+            def wait(self, timeout: float) -> int:
+                leader_wait_timeouts.append(timeout)
+                return 0
+
+        monkeypatch.setattr(subprocess_util, "monotonic", lambda: now[0])
+        monkeypatch.setattr(subprocess_util, "_get_process_descendants", lambda _process: [FakeDescendant()])
+        monkeypatch.setattr(subprocess_util, "_signal_process_tree", lambda *args, **kwargs: None)
+
+        terminate_process_tree_with_kill_fallback(FakePopen(), terminate_timeout=5.0)
+
+        assert descendant_wait_timeouts == [pytest.approx(5.0), pytest.approx(2.0)]
+        assert leader_wait_timeouts == [pytest.approx(0.5)]
+
+    def test_group_cleanup_kills_descendant_after_leader_exits(self) -> None:
+        """A group leader may exit after SIGTERM while a descendant keeps running.
+
+        Cleanup must snapshot descendants before signaling, wait for them, and use the
+        group kill fallback instead of treating the exited leader as sufficient.
+        """
+        child_code = textwrap.dedent(
+            """
+            import signal, time
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            time.sleep(300)
+            """
+        )
+        leader_code = textwrap.dedent(
+            f"""
+            import subprocess, sys, time
+            subprocess.Popen([sys.executable, "-c", {child_code!r}], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print("READY", flush=True)
+            time.sleep(300)
+            """
+        )
+        proc = _spawn_ready(leader_code)
+        child_pid: int | None = None
+        try:
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                children = psutil.Process(proc.pid).children(recursive=True)
+                if children:
+                    child_pid = children[0].pid
+                    break
+                time.sleep(0.05)
+            assert child_pid is not None, "expected the process-group leader to have a child"
+            child_pid_value = child_pid
+
+            terminate_process_tree_with_kill_fallback(proc, terminate_timeout=0.2, process_group_id=proc.pid)
+
+            assert _wait_until(lambda: not _process_alive(child_pid_value)), "descendant survived group cleanup"
+        finally:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            if proc.poll() is None:
+                proc.wait(timeout=2.0)
+            if child_pid is not None and _process_alive(child_pid):
+                try:
+                    os.kill(child_pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+    def test_kill_fallback_reaps_leader_after_descendant_wait_expires(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The leader must still be reaped if descendants consume the kill budget."""
+        now = [0.0]
+        descendant_wait_timeouts: list[float] = []
+        leader_wait_timeouts: list[float] = []
+
+        class FakeDescendant:
+            def wait(self, timeout: float) -> None:
+                descendant_wait_timeouts.append(timeout)
+                now[0] += timeout
+                if len(descendant_wait_timeouts) == 1:
+                    raise psutil.TimeoutExpired(timeout, 456)
+
+        class FakePopen:
+            pid = 123
+            args = ["fake-language-server"]
+
+            def poll(self) -> None:
+                return None
+
+            def wait(self, timeout: float) -> int:
+                leader_wait_timeouts.append(timeout)
+                return -signal.SIGKILL
+
+        monkeypatch.setattr(subprocess_util, "monotonic", lambda: now[0])
+        monkeypatch.setattr(subprocess_util, "_get_process_descendants", lambda _process: [FakeDescendant()])
+        monkeypatch.setattr(subprocess_util, "_signal_process_tree", lambda *args, **kwargs: None)
+
+        terminate_process_tree_with_kill_fallback(FakePopen(), terminate_timeout=5.0)
+
+        assert descendant_wait_timeouts == [pytest.approx(5.0), pytest.approx(2.0)]
+        assert leader_wait_timeouts == [pytest.approx(0.1)]
 
     def test_falls_back_to_kill_when_group_ignores_sigterm(self) -> None:
         src = textwrap.dedent(
@@ -225,3 +385,119 @@ class TestPsutilDenialConsequences:
                     pass
             if proc.poll() is None:
                 proc.wait(timeout=2.0)
+
+
+class TestProcessTreeDescendantReaping:
+    def test_kill_fallback_signals_snapshot_after_leader_exits(self) -> None:
+        """A leader can exit before the fallback runs while a child ignores SIGTERM.
+
+        The fallback must use the pre-signal descendant snapshot; re-enumerating from
+        the exited leader would leave the child and its zombie grandchild behind.
+        """
+        child_code = textwrap.dedent(
+            """
+            import signal, subprocess, sys, time
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            subprocess.Popen([sys.executable, "-c", "import sys; sys.exit(17)"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(300)
+            """
+        )
+        leader_code = textwrap.dedent(
+            f"""
+            import subprocess, sys, time
+            subprocess.Popen([sys.executable, "-c", {child_code!r}], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print("READY", flush=True)
+            time.sleep(300)
+            """
+        )
+        proc = _spawn_ready(leader_code)
+        try:
+            descendants: list[psutil.Process] = []
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                descendants = psutil.Process(proc.pid).children(recursive=True)
+                if len(descendants) >= 2 and any(child.status() == psutil.STATUS_ZOMBIE for child in descendants):
+                    break
+                time.sleep(0.05)
+            assert len(descendants) >= 2, "expected leader, child, and grandchild processes"
+            assert any(child.status() == psutil.STATUS_ZOMBIE for child in descendants), "expected a zombie grandchild"
+
+            terminate_process_tree_with_kill_fallback(proc, terminate_timeout=0.2, process_name="leader")
+
+            assert _wait_until(lambda: all(_pid_is_gone(child.pid) for child in descendants)), (
+                "kill fallback must not leave the saved child or zombie grandchild behind"
+            )
+        finally:
+            for child in descendants:
+                try:
+                    child.kill()
+                except psutil.Error:
+                    pass
+            if proc.poll() is None:
+                proc.kill()
+            proc.wait(timeout=2.0)
+
+    def test_waits_for_discovered_descendants_after_signaling(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        events: list[str] = []
+
+        class FakeDescendant:
+            def __init__(self, name: str) -> None:
+                self.name = name
+
+            def terminate(self) -> None:
+                events.append(f"terminate:{self.name}")
+
+            def kill(self) -> None:
+                events.append(f"kill:{self.name}")
+
+            def wait(self, timeout: float) -> None:
+                events.append(f"wait:{self.name}")
+
+        descendants = [FakeDescendant("child"), FakeDescendant("grandchild")]
+
+        class FakePsutilProcess:
+            def __init__(self, pid: int) -> None:
+                self.pid = pid
+
+            def is_running(self) -> bool:
+                return True
+
+            def children(self, recursive: bool) -> list[FakeDescendant]:
+                assert recursive
+                return descendants
+
+            def terminate(self) -> None:
+                events.append("terminate:leader")
+
+            def kill(self) -> None:
+                events.append("kill:leader")
+
+        class FakePopen:
+            pid = 123
+            args = ["fake-language-server"]
+
+            def poll(self) -> None:
+                return None
+
+            def terminate(self) -> None:
+                events.append("terminate:leader")
+
+            def kill(self) -> None:
+                events.append("kill:leader")
+
+            def wait(self, timeout: float) -> int:
+                events.append("wait:leader")
+                return 0
+
+        monkeypatch.setattr(subprocess_util.psutil, "Process", FakePsutilProcess)
+
+        subprocess_util.terminate_process_tree_with_kill_fallback(FakePopen(), terminate_timeout=1.0)
+
+        assert events == [
+            "terminate:child",
+            "terminate:grandchild",
+            "terminate:leader",
+            "wait:grandchild",
+            "wait:child",
+            "wait:leader",
+        ]
