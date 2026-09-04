@@ -10,7 +10,7 @@ assignees: ''
 Preconditions:
 
 - [ ] I have made sure it's an actual issue, not a question (use [GitHub Discussions](https://github.com/oraios/serena/discussions) instead).
-- [ ] I have consulted the [user guide](https://oraios.github.io/serena/02-usage/) and verified that the issue cannot be resolved by adjusting configuration/following recommended workflows.
+- [ ] I have consulted the [user guide](https://oraios.github.io/serena/02-usage/000_intro.html) and verified that the issue cannot be resolved by adjusting configuration/following recommended workflows.
 - [ ] I have looked for similar issues and discussions, including closed ones.
 
 Issue details:

@@ -12,7 +12,6 @@ from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
-from solidlsp.ls_utils import PlatformId, PlatformUtils
 from solidlsp.lsp_protocol_handler.lsp_types import DidChangeConfigurationParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -84,18 +83,6 @@ class PerlLanguageServer(SolidLanguageServer):
         Check if required Perl runtime dependencies are available.
         Raises RuntimeError with helpful message if dependencies are missing.
         """
-        platform_id = PlatformUtils.get_platform_id()
-
-        valid_platforms = [
-            PlatformId.LINUX_x64,
-            PlatformId.LINUX_arm64,
-            PlatformId.OSX,
-            PlatformId.OSX_x64,
-            PlatformId.OSX_arm64,
-        ]
-        if platform_id not in valid_platforms:
-            raise RuntimeError(f"Platform {platform_id} is not supported for Perl at the moment")
-
         perl_version = cls._get_perl_version()
         if not perl_version:
             raise RuntimeError(
