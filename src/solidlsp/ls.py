@@ -3179,7 +3179,17 @@ class SolidLanguageServer(ABC):
         """
         log.info(f"Starting language server {self.language_server.ls_id} for {self.language_server.repository_root_path}")
         self.server_started = True
-        self._start_server()
+        try:
+            self._start_server()
+        except Exception:
+            # `_start_server()` may raise after already spawning the underlying process (a
+            # capability assertion or an initialize() timeout firing post-spawn). Stop it here
+            # so a failed start never leaves an orphaned process behind, regardless of caller.
+            if self.is_running():
+                self.stop()
+            else:
+                self.server_started = False
+            raise
         return self
 
     def stop(self, shutdown_timeout: float = 2.0) -> None:

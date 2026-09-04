@@ -98,7 +98,10 @@ Some languages require additional installations or setup steps, as noted.
 * **Java**  
 * **JavaScript**  
   (supported via the TypeScript language server, i.e. use language `typescript` for both JavaScript and TypeScript)
-* **Julia**
+* **Julia**  
+  (by default, uses LanguageServer.jl (language `julia`); the
+  [Fatou](https://github.com/jolars/fatou) alternative (language `julia_fatou`) is installed
+  automatically and requires `uv`/`uvx` in PATH)
 * **Kotlin**  
   (uses the pre-alpha [official kotlin LS](https://github.com/Kotlin/kotlin-lsp), some issues may appear)
 * **LaTeX**  
