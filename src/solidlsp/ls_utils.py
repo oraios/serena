@@ -237,23 +237,6 @@ class TextUtils:
         return text_stepper.line_start_idx + col
 
     @staticmethod
-    def _get_updated_position_from_line_and_column_and_edit(l: int, c: int, text_to_be_inserted: str) -> tuple[int, int]:
-        """
-        :param l: the 0-based line number before the edit
-        :param c: the 0-based column number before the edit
-        :param text_to_be_inserted: the text that was inserted at the given position
-        :return: the updated 0-based line and column numbers after the edit (end of insertion)
-        """
-        text_stepper = TextStepper(text_to_be_inserted)
-        text_stepper.process_all()
-        if text_stepper.line > 0:
-            l += text_stepper.line
-            c = text_stepper.col
-        else:
-            c += text_stepper.col
-        return l, c
-
-    @staticmethod
     def delete_text_between_positions(text: str, start_line: int, start_col: int, end_line: int, end_col: int) -> tuple[str, str]:
         """
         Deletes the text between the given start and end positions.
@@ -289,14 +272,18 @@ class TextUtils:
     @staticmethod
     def insert_text_at_position(text: str, line: int, col: int, text_to_be_inserted: str) -> tuple[str, int, int]:
         """
-        Inserts the given text at the given position and returns the
+        Inserts the given text at the given position.
 
         :param text: the original text
         :param line: the 0-based line number where the text should be inserted
-        :param col: the 0-based column number where the text should be inserted
+        :param col: the 0-based column number where the text should be inserted; a column pointing
+            beyond the end of the text is clamped to its end
         :param text_to_be_inserted: the text to be inserted
         :return: a tuple containing the modified text, the updated line number, and the updated column number
-            (position after the inserted text)
+            (position after the inserted text). As everywhere in this class, columns are offsets into
+            the Python string (code points), not UTF-16 code units.
+        :raises InvalidTextLocationError: if the given line does not exist in the text (other than the
+            position one line past the last line, which is handled as an append)
         """
         try:
             change_index = TextUtils.get_index_from_line_col(text, line, col)
@@ -306,16 +293,20 @@ class TextUtils:
             num_lines_in_text = text_stepper.line + 1
             max_line = num_lines_in_text - 1
             if line == max_line + 1 and col == 0:  # trying to insert at new line after full text
-                # insert at end, adding missing newline and adjusting insertion position
-                # to the actual end coordinates of the text
+                # insert at end, adding the missing newline
                 change_index = len(text)
                 text_to_be_inserted = "\n" + text_to_be_inserted
-                line = text_stepper.line
-                col = text_stepper.col
             else:
                 raise
+        # apply the insertion, clamping a column that points beyond the end of the text
+        # (the slicing clamps implicitly; making it explicit lets the position use the same index)
+        change_index = min(change_index, len(text))
         new_text = text[:change_index] + text_to_be_inserted + text[change_index:]
-        new_l, new_c = TextUtils._get_updated_position_from_line_and_column_and_edit(line, col, text_to_be_inserted)
+
+        # determine the end position from the resulting text, because the insertion can merge with
+        # an adjacent character into a single newline sequence (a "\n" inserted directly after an
+        # existing "\r" forms one "\r\n"), which stepping the inserted text alone cannot observe
+        new_l, new_c = TextUtils.get_line_col_from_index(new_text, change_index + len(text_to_be_inserted))
         return new_text, new_l, new_c
 
     @staticmethod
