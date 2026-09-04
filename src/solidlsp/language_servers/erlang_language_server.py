@@ -2,17 +2,19 @@
 
 import logging
 import os
-import shutil
 import subprocess
-import threading
 import time
 from collections.abc import Hashable
 from typing import ClassVar
 
 from overrides import override
 
-from solidlsp.dependency_provider import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath
-from solidlsp.language_servers.common import RuntimeDependency, RuntimeDependencyCollection
+from solidlsp.dependency_provider import (
+    DownloadedDependency,
+    DownloadedDependencyHashDatabase,
+    LanguageServerDependencyProvider,
+    LanguageServerDependencyProviderSinglePath,
+)
 from solidlsp.ls import RawDocumentSymbol, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_utils import PlatformId, PlatformUtils, is_running_in_ci
@@ -29,9 +31,11 @@ The character that replaces the `/` in the `name/arity` identifiers reported by 
 real function, type or macro name (unlike `@`, which is a legal atom character).
 """
 
+# NOTE: after bumping the ELP version, re-run scripts/update_downloaded_dependency_hashes.py and
+# commit the resulting changes to src/solidlsp/resources/downloaded_dependency_hashes.json; a stale
+# hash database means unverified downloads locally and a CI failure.
 ELP_VERSION = "2026-08-10"
 ELP_OTP_BUILD = "27.3"
-ELP_BASE_URL = f"https://github.com/WhatsApp/erlang-language-platform/releases/download/{ELP_VERSION}"
 ELP_ALLOWED_HOSTS = (
     "github.com",
     "release-assets.githubusercontent.com",
@@ -48,12 +52,8 @@ ELP_ASSET_PLATFORM_BY_ID: dict[PlatformId, str] = {
     PlatformId.WIN_x64: "windows-x86_64-pc-windows-msvc",
 }
 
-ELP_SHA256_BY_ASSET: dict[str, str] = {
-    "elp-linux-x86_64-unknown-linux-gnu-otp-27.3.tar.gz": "c0e672a8381b5ea787e94a872847567b10d9b4d0053ca1148f4b236f61af3c63",
-    "elp-linux-aarch64-unknown-linux-gnu-otp-27.3.tar.gz": "0af71bd62e95998b7e57edd2083141b60edab51d0a2da988e6e71abb88cd3f34",
-    "elp-macos-x86_64-apple-darwin-otp-27.3.tar.gz": "d7c739a6b23ba7bfc0fc8481619ec55e41257d08cb7aa8b16499fb4c4f5e38e2",
-    "elp-macos-aarch64-apple-darwin-otp-27.3.tar.gz": "7317a9934edc411e94392d5cc720f2e0c18112e7959060678aaef4d6dacdd9f2",
-    "elp-windows-x86_64-pc-windows-msvc-otp-27.3.tar.gz": "6c4ed9ab76c9cbb2f6ae7b3a8dc06121a4ac6eda94d13bf7a638d3cb111b7f4e",
+ELP_EXECUTABLE_NAME_BY_PLATFORM_ID: dict[PlatformId, str] = {
+    platform_id: "elp.exe" if platform_id.is_windows() else "elp" for platform_id in ELP_ASSET_PLATFORM_BY_ID
 }
 
 
@@ -61,17 +61,30 @@ class ErlangLanguageServer(SolidLanguageServer):
     """Language server for Erlang using the official Erlang Language Platform."""
 
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
-        """Resolves ELP from PATH or downloads the pinned official release asset."""
+        """Downloads the pinned official ELP release asset for the current platform."""
 
         _SUPPORTED_PLATFORM_IDS: ClassVar[frozenset[PlatformId]] = frozenset(ELP_ASSET_PLATFORM_BY_ID)
 
-        def _get_or_install_core_dependency(self) -> str:
-            """Return an ELP executable, preferring a user-managed executable on PATH."""
-            elp_in_path = shutil.which("elp")
-            if elp_in_path:
-                log.info("Found ELP in PATH: %s", elp_in_path)
-                return elp_in_path
+        @classmethod
+        def _create_dep_elp(cls, platform_id: PlatformId, elp_version: str | None = None) -> DownloadedDependency:
+            elp_version = elp_version or ELP_VERSION
+            asset_platform = ELP_ASSET_PLATFORM_BY_ID[platform_id]
+            asset_name = f"elp-{asset_platform}-otp-{ELP_OTP_BUILD}.tar.gz"
+            return DownloadedDependency(
+                url=f"https://github.com/WhatsApp/erlang-language-platform/releases/download/{elp_version}/{asset_name}",
+                archive_type="gztar",
+                allowed_hosts=ELP_ALLOWED_HOSTS,
+            )
 
+        @classmethod
+        def update_dep_hashes(cls) -> None:
+            deps = [cls._create_dep_elp(platform_id) for platform_id in ELP_ASSET_PLATFORM_BY_ID]
+            with DownloadedDependencyHashDatabase.get_instance().update_context() as db:
+                for dep in deps:
+                    db.update(dep)
+
+        def _get_or_install_core_dependency(self) -> str:
+            """Return the managed ELP executable, downloading the pinned release asset if necessary."""
             platform_id = PlatformUtils.get_platform_id()
             if platform_id not in self._SUPPORTED_PLATFORM_IDS:
                 raise RuntimeError(
@@ -80,14 +93,12 @@ class ErlangLanguageServer(SolidLanguageServer):
                     "ls_specific_settings.erlang.ls_path."
                 )
 
-            dependency = self._runtime_dependency(platform_id)
             install_dir = os.path.join(self._ls_resources_dir, f"elp-{ELP_VERSION}-{platform_id.value}")
-            assert dependency.binary_name is not None
-            executable_path = os.path.join(install_dir, dependency.binary_name)
+            executable_path = os.path.join(install_dir, ELP_EXECUTABLE_NAME_BY_PLATFORM_ID[platform_id])
 
             if not os.path.exists(executable_path):
-                log.info("Downloading ELP from %s", dependency.url)
-                RuntimeDependencyCollection([dependency]).install(install_dir)
+                log.info("Downloading ELP %s for %s", ELP_VERSION, platform_id.value)
+                self._create_dep_elp(platform_id).download_to(install_dir)
 
             if not os.path.exists(executable_path):
                 raise FileNotFoundError(f"ELP executable not found at {executable_path} after installation")
@@ -98,22 +109,6 @@ class ErlangLanguageServer(SolidLanguageServer):
             log.info("ELP binary ready at: %s", executable_path)
             return executable_path
 
-        @staticmethod
-        def _runtime_dependency(platform_id: PlatformId) -> RuntimeDependency:
-            asset_platform = ELP_ASSET_PLATFORM_BY_ID[platform_id]
-            executable_name = "elp.exe" if platform_id.is_windows() else "elp"
-            asset_name = f"elp-{asset_platform}-otp-{ELP_OTP_BUILD}.tar.gz"
-            return RuntimeDependency(
-                id="elp",
-                description=f"Erlang Language Platform for {platform_id.value}",
-                platform_id=platform_id.value,
-                url=f"{ELP_BASE_URL}/{asset_name}",
-                archive_type="gztar",
-                binary_name=executable_name,
-                sha256=ELP_SHA256_BY_ASSET[asset_name],
-                allowed_hosts=ELP_ALLOWED_HOSTS,
-            )
-
         def _create_launch_command(self, core_path: str) -> list[str]:
             return [core_path, "server"]
 
@@ -122,8 +117,8 @@ class ErlangLanguageServer(SolidLanguageServer):
         Creates an ErlangLanguageServer instance. This class is not meant to be instantiated directly.
         Use LanguageServer.create() instead.
 
-        ELP is taken from PATH when available; otherwise Serena downloads the pinned release asset.
-        The ``ls_path`` setting under ``ls_specific_settings.erlang`` can override both choices.
+        Serena manages the ELP installation and downloads the pinned official release asset.
+        The ``ls_path`` setting under ``ls_specific_settings.erlang`` can override the executable.
         """
         if not self._check_erlang_installation():
             raise RuntimeError("Erlang/OTP not found. Install from: https://www.erlang.org/downloads")
@@ -136,7 +131,6 @@ class ErlangLanguageServer(SolidLanguageServer):
             solidlsp_settings,
         )
 
-        self.server_ready = threading.Event()
         self.set_request_timeout(120.0)
 
     @override
@@ -219,36 +213,14 @@ class ErlangLanguageServer(SolidLanguageServer):
 
         def window_log_message(msg: dict) -> None:
             """Handle window/logMessage notifications from ELP."""
-            message_text = msg.get("message", "")
-            log.info("LSP: window/logMessage: %s", message_text)
-
-            readiness_signals = [
-                "ELP server",
-                "server started",
-                "initialized",
-                "ready to serve requests",
-                "compilation finished",
-                "indexing complete",
-            ]
-            message_lower = message_text.lower()
-            if any(signal_text.lower() in message_lower for signal_text in readiness_signals):
-                log.info("ELP readiness signal detected: %s", message_text)
-                self.server_ready.set()
+            log.info("LSP: window/logMessage: %s", msg.get("message", ""))
 
         def do_nothing(params: dict) -> None:
             return
 
-        def check_server_ready(params: dict) -> None:
-            """Handle progress notifications from ELP as a fallback readiness signal."""
-            value = params.get("value", {})
-            if value.get("kind") == "end":
-                message = value.get("message", "")
-                if any(word in message.lower() for word in ["initialized", "ready", "complete"]):
-                    self.server_ready.set()
-
         self.server.on_request("client/registerCapability", register_capability_handler)
         self.server.on_notification("window/logMessage", window_log_message)
-        self.server.on_notification("$/progress", check_server_ready)
+        self.server.on_notification("$/progress", do_nothing)
         self.server.on_notification("window/workDoneProgress/create", do_nothing)
         self.server.on_notification("$/workDoneProgress", do_nothing)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
@@ -262,7 +234,6 @@ class ErlangLanguageServer(SolidLanguageServer):
             log.info("ELP capabilities: %s", list(init_response["capabilities"].keys()))
 
         self.server.notify.initialized({})
-        self.server_ready.set()
 
         # The initialize response means the LSP is ready to receive requests. ELP continues its
         # project indexing asynchronously, so retain a short settling period without the old

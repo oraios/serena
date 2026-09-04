@@ -548,7 +548,7 @@ Supported settings:
 
 #### Erlang
 
-Serena uses the [Erlang Language Platform](https://github.com/WhatsApp/erlang-language-platform) (ELP) for Erlang support. Serena uses an `elp` executable from PATH when available; otherwise it downloads the pinned official release asset for the current platform.
+Serena uses the [Erlang Language Platform](https://github.com/WhatsApp/erlang-language-platform) (ELP) for Erlang support. Serena downloads the pinned official release asset for the current platform.
 
 Supported settings:
 

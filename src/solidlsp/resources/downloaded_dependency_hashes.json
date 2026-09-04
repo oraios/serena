@@ -16,5 +16,10 @@
   "https://download-cdn.jetbrains.com/language-server/kotlin-server/262.9593.0/kotlin-server-262.9593.0.tar.gz": "2d99d8e198fbe4aa8f4481e37799724ce94803b4ea12a60b416040e3fcd7cc5e",
   "https://download-cdn.jetbrains.com/language-server/kotlin-server/262.9593.0/kotlin-server-262.9593.0-aarch64.tar.gz": "2317831c6e5607d05b7ebc1da655330125ce0e3d66fbf24517dfce442debc14e",
   "https://download-cdn.jetbrains.com/language-server/kotlin-server/262.9593.0/kotlin-server-262.9593.0.sit": "17369fda97c85418ac24ab38a9df56b21522a3468dfe193832fe455c13920745",
-  "https://download-cdn.jetbrains.com/language-server/kotlin-server/262.9593.0/kotlin-server-262.9593.0-aarch64.sit": "6ba6021a706b21e64cef33f7e2b79f187c0910320722bb2d3ed05ad1115ec43f"
+  "https://download-cdn.jetbrains.com/language-server/kotlin-server/262.9593.0/kotlin-server-262.9593.0-aarch64.sit": "6ba6021a706b21e64cef33f7e2b79f187c0910320722bb2d3ed05ad1115ec43f",
+  "https://github.com/WhatsApp/erlang-language-platform/releases/download/2026-08-10/elp-linux-x86_64-unknown-linux-gnu-otp-27.3.tar.gz": "c0e672a8381b5ea787e94a872847567b10d9b4d0053ca1148f4b236f61af3c63",
+  "https://github.com/WhatsApp/erlang-language-platform/releases/download/2026-08-10/elp-linux-aarch64-unknown-linux-gnu-otp-27.3.tar.gz": "0af71bd62e95998b7e57edd2083141b60edab51d0a2da988e6e71abb88cd3f34",
+  "https://github.com/WhatsApp/erlang-language-platform/releases/download/2026-08-10/elp-macos-x86_64-apple-darwin-otp-27.3.tar.gz": "d7c739a6b23ba7bfc0fc8481619ec55e41257d08cb7aa8b16499fb4c4f5e38e2",
+  "https://github.com/WhatsApp/erlang-language-platform/releases/download/2026-08-10/elp-macos-aarch64-apple-darwin-otp-27.3.tar.gz": "7317a9934edc411e94392d5cc720f2e0c18112e7959060678aaef4d6dacdd9f2",
+  "https://github.com/WhatsApp/erlang-language-platform/releases/download/2026-08-10/elp-windows-x86_64-pc-windows-msvc-otp-27.3.tar.gz": "6c4ed9ab76c9cbb2f6ae7b3a8dc06121a4ac6eda94d13bf7a638d3cb111b7f4e"
 }
