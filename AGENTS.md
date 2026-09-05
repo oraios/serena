@@ -1,3 +1,4 @@
-Relevant information about the project is in .serena/memories. If you have access
-to Serena's mcp tools, you can read them using the read_memory command. Otherwise
-you can just read them using normal file reading tools. 
+Relevant project information is in `.serena/memories`. Read only the memories
+relevant to the current task, using Serena's `read_memory` tool when available
+or ordinary file reads. A small edit does not require loading the whole index
+or every memory.
