@@ -14,7 +14,7 @@ from copy import copy
 from dataclasses import dataclass
 from pathlib import Path, PurePath
 from time import monotonic, perf_counter, sleep
-from typing import Any, Self, Union, cast
+from typing import Any, NamedTuple, Self, Union, cast
 
 import pathspec
 from sensai.util.helper import mark_used
@@ -221,6 +221,33 @@ class LSPFileBuffer:
         return self.contents.split("\n")
 
 
+class SelectionRangeMismatch(NamedTuple):
+    """
+    Records that a symbol's selectionRange fell outside its body range (see #1968). Logged both
+    at the point of detection (SymbolBodyFactory.create_symbol_body, unconditionally) and again
+    from SymbolBody.get_text() on every subsequent read - see the two call sites for why one
+    location alone isn't enough.
+    """
+
+    symbol_name: str | None
+    relative_path: str | None
+    selection_range: ls_types.Range
+
+    def log(self, start_line: int, start_col: int, end_line: int, end_col: int) -> None:
+        log.warning(
+            "Symbol '%s' in %s has a selectionRange %s outside of its body range "
+            "(line %d, col %d) to (line %d, col %d); the extracted body may belong to a "
+            "different symbol (stale language server index?)",
+            self.symbol_name,
+            self.relative_path,
+            self.selection_range,
+            start_line,
+            start_col,
+            end_line,
+            end_col,
+        )
+
+
 class SymbolBody(ToStringMixin):
     """
     Representation of the body of a symbol, which allows the extraction of the symbol's text
@@ -231,17 +258,36 @@ class SymbolBody(ToStringMixin):
     i.e. a core representation of only about 40 bytes per body.
     """
 
-    def __init__(self, lines: list[str], start_line: int, start_col: int, end_line: int, end_col: int) -> None:
+    def __init__(
+        self,
+        lines: list[str],
+        start_line: int,
+        start_col: int,
+        end_line: int,
+        end_col: int,
+        selection_range_mismatch: SelectionRangeMismatch | None = None,
+    ) -> None:
         self._lines = lines
         self._start_line = start_line
         self._start_col = start_col
         self._end_line = end_line
         self._end_col = end_col
+        self._selection_range_mismatch = selection_range_mismatch
 
     def _tostring_excludes(self) -> list[str]:
         return ["_lines"]
 
     def get_text(self) -> str:
+        # Re-emit the stale-index warning (if any) on every read, in addition to the
+        # unconditional one already logged at construction (SymbolBodyFactory.create_symbol_body):
+        # this SymbolBody is also what ends up cached in DocumentSymbols - in memory and
+        # persisted to disk, keyed by file content hash - so a cache hit returns it without ever
+        # reaching the factory again. Without this, a caller that reads the body across a cache
+        # hit (same session or a later one) would see the warning fire at most once per file
+        # content. See #1968 review and the analogous constructor-vs-cached-instance fix in #1701.
+        if self._selection_range_mismatch is not None:
+            self._selection_range_mismatch.log(self._start_line, self._start_col, self._end_line, self._end_col)
+
         end_line = self._end_line
         end_col = self._end_col
         if end_line >= len(self._lines):
@@ -301,23 +347,33 @@ class SymbolBodyFactory:
 
         # detect a language server response where the identifier position (selectionRange) falls
         # outside the range the body is sliced from; such a mismatch typically indicates a stale
-        # index on the server side and would otherwise silently yield a body for the wrong symbol
+        # index on the server side and would otherwise silently yield a body for the wrong symbol.
+        #
+        # Logged in *two* places, deliberately, not just one:
+        #  - Here, unconditionally, so the mismatch is visible even for callers that never read
+        #    the body text at all. request_document_symbols() builds a SymbolBody (and therefore
+        #    runs this check) for every symbol regardless of the include_body flags further up
+        #    the stack (Symbol.body / to_dict(body=...) / request_referencing_symbols(...)), and
+        #    those default to False in every tool-facing call site - a get_text()-only warning
+        #    would then only ever fire for the minority of calls that explicitly opt into body
+        #    text, silently missing it for the rest.
+        #  - Again, from SymbolBody.get_text() (see there), because this SymbolBody is also what
+        #    ends up cached in DocumentSymbols - in memory and persisted to disk, keyed by file
+        #    content hash - so a cache hit in request_document_symbols() returns it without ever
+        #    reaching this method again. For callers that *do* read the body, logging here alone
+        #    would still make the warning fire at most once per file content, even across
+        #    sessions.
         selection_range = symbol.get("selectionRange")
+        mismatch = None
         if selection_range is not None and not self._range_contains(selection_range, start_line, start_col, end_line, end_col):
-            log.warning(
-                "Symbol '%s' in %s has a selectionRange %s outside of its body range "
-                "(line %d, col %d) to (line %d, col %d); the extracted body may belong to a "
-                "different symbol (stale language server index?)",
-                symbol.get("name"),
-                symbol["location"].get("relativePath"),
-                selection_range,
-                start_line,
-                start_col,
-                end_line,
-                end_col,
+            mismatch = SelectionRangeMismatch(
+                symbol_name=symbol.get("name"),
+                relative_path=symbol["location"].get("relativePath"),
+                selection_range=selection_range,
             )
+            mismatch.log(start_line, start_col, end_line, end_col)
 
-        return SymbolBody(self._lines, start_line, start_col, end_line, end_col)
+        return SymbolBody(self._lines, start_line, start_col, end_line, end_col, selection_range_mismatch=mismatch)
 
     @staticmethod
     def _range_contains(inner: ls_types.Range, start_line: int, start_col: int, end_line: int, end_col: int) -> bool:
