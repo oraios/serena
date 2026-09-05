@@ -65,6 +65,7 @@ class TestLaunchAndWaitForPluginServer:
             mock.patch.object(jetbrains_plugin_client.JetBrainsPluginClient, "from_project", side_effect=from_project),
             mock.patch.object(launch_coordinator, "_lock_path_for_launch_command", return_value=tmp_path / "lock"),
             mock.patch("serena.jetbrains.launch_coordinator.subprocess.Popen", return_value=_fake_process()) as popen,
+            mock.patch("serena.jetbrains.launch_coordinator.time.monotonic", side_effect=[0.0, 0.01, 0.02]),
             mock.patch("serena.jetbrains.launch_coordinator.time.sleep") as sleep,
         ):
             launch_coordinator.launch_and_wait_for_plugin_server(
