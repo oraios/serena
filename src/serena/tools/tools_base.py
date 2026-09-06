@@ -22,6 +22,7 @@ from serena.prompt_factory import PromptFactory
 from serena.util.class_decorators import singleton
 from serena.util.inspection import iter_subclasses
 from serena.util.ls_diagnostics import DiagnosticsDiff, EditedFilePath, PublishedDiagnosticsSnapshot
+from serena.util.text_utils import TextOutputUtils
 from solidlsp.ls_exceptions import SolidLSPException
 
 if TYPE_CHECKING:
@@ -296,21 +297,9 @@ class Tool(Component):
         """
         if max_answer_chars == -1:
             max_answer_chars = self.agent.serena_config.default_max_tool_answer_chars
-        if max_answer_chars <= 0:
-            raise ValueError(f"Must be positive or the default (-1), got: {max_answer_chars=}")
-        if (n_chars := len(result)) > max_answer_chars:
-            too_long_msg = (
-                f"The answer is too long ({n_chars} characters). " + "You can adjust your query or raise the max_answer_chars parameter."
-            )
-            if shortened_result_factories is not None:
-                # try each shortening closure in order;
-                for make_shorter in shortened_result_factories:
-                    shortened = make_shorter()
-                    candidate = f"{too_long_msg}\n{shortened}"
-                    if len(candidate) <= max_answer_chars:
-                        return candidate
-            result = too_long_msg
-        return result
+        return TextOutputUtils.limit_length(
+            result=result, max_answer_chars=max_answer_chars, shortened_result_factories=shortened_result_factories
+        )
 
     def is_active(self) -> bool:
         return self.agent.tool_is_active(self.get_name())
@@ -444,7 +433,7 @@ class Tool(Component):
 
     @staticmethod
     def _to_json(x: Any) -> str:
-        return json.dumps(x, ensure_ascii=False)
+        return TextOutputUtils.to_json(x)
 
     def _wrapped_tool_response(self, response: Any, message: str) -> str:
         """

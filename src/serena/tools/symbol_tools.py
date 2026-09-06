@@ -6,9 +6,10 @@ Language server-related tools
 import copy
 import os
 from collections import Counter, defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 
+from serena.facades.api.lsp import LspApi
 from serena.symbol import LanguageServerSymbol, LanguageServerSymbolDictGrouper
 from serena.tools import (
     SUCCESS_RESULT,
@@ -79,6 +80,7 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
         def make_kind_counts() -> str:
             return f"Symbol counts by kind:\n{self._to_json(Counter(kind_names))}"
 
+        shortened_results: list[Callable[[], str]]
         if depth == 0:
             shortened_results = [make_kind_counts]
         else:
@@ -137,9 +139,11 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
     Performs a global (or local) search using the language server backend.
     """
 
-    # group children by kind, keeping just the name (the parent's name_path makes it unambiguous);
-    # we don't group the top-level result list because many tests rely on it being a flat list of symbol dicts
-    symbol_dict_grouper = LanguageServerSymbolDictGrouper([], ["kind"], collapse_singleton=True)
+    symbol_dict_grouper = LspApi.find_symbol_dict_grouper_
+    """
+    Reference to the grouper that is indirectly used by this tool.
+    Made explicit such that grouping behaviour for this tool can be modified dynamically.
+    """
 
     # noinspection PyDefaultArgument
     def apply(
@@ -188,62 +192,23 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         :param substring_matching: If True, use substring matching for the last element of the pattern, such that
             "Foo/get" would match "Foo/getValue" and "Foo/getData".
         :param max_matches: maximum number of permitted matches. If exceeded, a shortened result is returned
-             which allows refining the search. -1 (default) means no limit. Set to 1 if you search for a single symbol.
+             which allows refining the search. -1 (default) means no limit. Set to 1 to search for a unique symbol.
         :param max_answer_chars: max result length; -1 for default
         :return: symbols (with locations) matching the name.
         """
-        # Note: file system sync not required; the symbol finder opens all relevant source files explicitly in the case of changes
-
-        if include_body:
-            depth = 0  # ignore user-specified depth if include_body is True
-        assert max_matches != 0, "max_matches must be > 0 or equal to -1."
-        parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
-        parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
-        symbol_retriever = self.create_language_server_symbol_retriever()
-        symbols = symbol_retriever.find(
+        collection = LspApi(self.agent).find_symbol(
             name_path_pattern,
-            include_kinds=parsed_include_kinds,
-            exclude_kinds=parsed_exclude_kinds,
+            depth=depth,
+            relative_path=relative_path,
+            include_body=include_body,
+            include_info=include_info,
+            include_kinds=include_kinds,
+            exclude_kinds=exclude_kinds,
             substring_matching=substring_matching,
-            within_relative_path=relative_path,
+            max_matches=max_matches,
+            max_answer_chars=max_answer_chars,
         )
-        n_matches = len(symbols)
-
-        def create_short_result_relative_path_to_name_paths() -> str:
-            relative_path_to_name_paths: defaultdict[str, list[str]] = defaultdict(list)
-            for s in symbols:
-                relative_path_to_name_paths[s.location.relative_path or "unknown"].append(s.get_name_path())
-            return f"Shortened result:\n{self._to_json(relative_path_to_name_paths)}"
-
-        if 0 < max_matches < n_matches:
-            return f"Matched {n_matches}>{max_matches=} symbols.\n" + create_short_result_relative_path_to_name_paths()
-
-        symbol_dicts = [
-            s.to_dict(
-                kind=True,
-                name_path=True,
-                name=False,
-                relative_path=True,
-                body_location=True,
-                depth=depth,
-                body=include_body,
-                children_name=True,
-                children_name_path=False,
-            )
-            for s in symbols
-        ]
-        if not include_body and include_info:
-            info_by_symbol = symbol_retriever.request_info_for_symbol_batch(symbols)
-            for s, s_dict in zip(symbols, symbol_dicts, strict=True):
-                if symbol_info := info_by_symbol.get(s):
-                    # In python 3.15 we could specify extra_items=True in the TypedDict definition,
-                    # https://peps.python.org/pep-0728/
-                    # If we ever upgrade to 3.15, we can remove the type: ignore[typeddict-unknown-key]
-                    s_dict["info"] = symbol_info
-
-        grouped_symbol_dicts = self.symbol_dict_grouper.group(symbol_dicts)
-        result = self._to_json(grouped_symbol_dicts)
-        return self._limit_length(result, max_answer_chars, shortened_result_factories=[create_short_result_relative_path_to_name_paths])
+        return collection.represent()
 
     @classmethod
     def get_param_aliases(cls) -> dict[str, str]:
@@ -334,7 +299,7 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
         def make_summary() -> str:
             return f"Found {len(ref_summaries)} references."
 
-        shortened_results = [make_refs_without_context, make_per_file_counts, make_summary]
+        shortened_results: list[Callable[[], str]] = [make_refs_without_context, make_per_file_counts, make_summary]
 
         result_json = self._to_json(result)
         return self._limit_length(result_json, max_answer_chars, shortened_result_factories=shortened_results)

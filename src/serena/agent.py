@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from logging import Logger
-from typing import TYPE_CHECKING, Optional, TypeVar
+from typing import TYPE_CHECKING, Optional, TypeVar, cast
 
 import requests
 import webview
@@ -42,6 +42,9 @@ from serena.config.serena_config import (
     ToolInclusionDefinition,
 )
 from serena.dashboard import SerenaDashboardAPI, SerenaDashboardTrayManager, SerenaDashboardViewer, open_url_in_browser
+from serena.facades.api.lsp import LspApi
+from serena.facades.facade import Facade
+from serena.facades.repl import SerenaRepl
 from serena.jetbrains import launch_coordinator as jetbrains_launch_coordinator
 from serena.ls_manager import LanguageServerManager
 from serena.memories.memory_manager import MemoryManager
@@ -570,6 +573,7 @@ class SerenaAgent:
         self._session_mode_selection_definition = modes
         self.version = serena_version()
         self._config_changed_callbacks: list[Callable[[], None]] = []
+        self._repl: SerenaRepl | None = None
 
         # obtain serena configuration using the decoupled factory function
         self.serena_config = serena_config or SerenaConfig.from_config_file()
@@ -1158,6 +1162,17 @@ class SerenaAgent:
                 "Consider adjusting your configuration to include these tools if you want to use them."
             )
 
+    def get_repl(self) -> SerenaRepl:
+        """
+        :return: the REPL instance for this agent, creating it if necessary
+        """
+        if self._repl is None:
+            facades = []
+            if self._language_backend.is_lsp():
+                facades.append(Facade.from_api(LspApi(self)))
+            self._repl = SerenaRepl(facades)
+        return self._repl
+
     def issue_task(
         self, task: Callable[[], T], name: str | None = None, logged: bool = True, timeout: float | None = None
     ) -> TaskExecutor.Task[T]:
@@ -1251,6 +1266,9 @@ class SerenaAgent:
             newly_activated_mode_names = None
 
         self._project_prompt_status = ProjectPromptProvisionStatus(newly_activated_mode_names=newly_activated_mode_names)
+
+        # reset the REPL to ensure that the new project's configuration is considered
+        self._repl = None
 
         if update_active_tools:
             self._update_active_tools()
@@ -1457,7 +1475,7 @@ class SerenaAgent:
         self.issue_task(lambda: self.get_active_project_or_raise().remove_language_server(ls_id), name=f"RemoveLanguage:{ls_id.get_key()}")
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
-        return self._all_tools[tool_class]
+        return cast(TTool, self._all_tools[tool_class])
 
     def print_tool_overview(self) -> None:
         ToolRegistry().print_tool_overview(self._active_tools.tools)

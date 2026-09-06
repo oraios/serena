@@ -1,6 +1,7 @@
 """Tests for the mcp.py module in serena."""
 
 import pytest
+from mcp.server.fastmcp import Context
 from mcp.server.fastmcp.tools.base import Tool as MCPTool
 
 from serena import __version__
@@ -46,6 +47,7 @@ class BasicTool(BaseMockTool):
         self,
         log_call: bool = True,
         catch_exceptions: bool = True,
+        mcp_ctx: Context | None = None,
         **kwargs,
     ) -> str:
         """Mock implementation of apply_ex."""

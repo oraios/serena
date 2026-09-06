@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import hashlib
+import json
 import logging
 import re
 from collections.abc import Callable
@@ -676,3 +677,39 @@ def find_text_coordinates(content: str, regex: str, require_unique: bool = False
         index_in_content = match.start(1)
         line, col = TextUtils.get_line_col_from_index(content, index_in_content)
         return TextCoords(line, col)
+
+
+class TextOutputUtils:
+    @staticmethod
+    def to_json(x: Any) -> str:
+        return json.dumps(x, ensure_ascii=False)
+
+    @staticmethod
+    def limit_length(
+        result: str,
+        max_answer_chars: int,
+        shortened_result_factories: list[Callable[[], str]] | None = None,
+    ) -> str:
+        """Limit the length of the result string, optionally trying progressively shorter versions.
+
+        :param result: the full result string
+        :param max_answer_chars: maximum allowed characters; if exceeded, attempt to use shortened versions
+        :param shortened_result_factories: optional list of closures, each producing a progressively shorter
+            version of the result. They are tried in order until one fits within ``max_answer_chars``.
+        :return: the result string, potentially replaced by a shortened version
+        """
+        if max_answer_chars <= 0:
+            raise ValueError(f"max_answer_chars must be positive; got: {max_answer_chars=}")
+        if (n_chars := len(result)) > max_answer_chars:
+            too_long_msg = (
+                f"The answer is too long ({n_chars} characters). " + "You can adjust your query or raise the max_answer_chars parameter."
+            )
+            if shortened_result_factories is not None:
+                # try each shortening closure in order;
+                for make_shorter in shortened_result_factories:
+                    shortened = make_shorter()
+                    candidate = f"{too_long_msg}\n{shortened}"
+                    if len(candidate) <= max_answer_chars:
+                        return candidate
+            result = too_long_msg
+        return result
