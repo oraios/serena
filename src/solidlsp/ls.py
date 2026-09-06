@@ -3206,13 +3206,18 @@ class SolidLanguageServer(ABC):
         try:
             self._start_server()
         except Exception:
-            # `_start_server()` may raise after already spawning the underlying process (a
-            # capability assertion or an initialize() timeout firing post-spawn). Stop it here
-            # so a failed start never leaves an orphaned process behind, regardless of caller.
-            if self.is_running():
-                self.stop()
-            else:
-                self.server_started = False
+            # `_start_server()` may raise before the process is ever considered running (Popen
+            # failing to spawn, or a subclass acquiring some other resource in __init__/
+            # create_launch_command before the process exists) as well as after it has already
+            # spawned (a capability assertion or an initialize() timeout firing post-spawn).
+            # Always call stop() here rather than gating on is_running() -- it's documented to
+            # never raise, and ls_manager.py's multi-server startup depends on this exact
+            # contract ("SolidLanguageServer.start() cleans up after itself on failure") to
+            # avoid separately tracking and stopping servers that failed before ever running.
+            # Gating on is_running() skipped this entirely for a pre-spawn failure, which is
+            # exactly the case a resource acquired in __init__ (e.g. Eclipse JDTLS's workspace
+            # lock) needs cleaned up.
+            self.stop()
             raise
         return self
 

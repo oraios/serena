@@ -18,6 +18,7 @@ from pathlib import Path, PurePath
 from time import sleep
 from typing import Any
 
+from filelock import FileLock, Timeout
 from overrides import override
 
 from solidlsp import ls_types
@@ -207,6 +208,22 @@ class EclipseJDTLS(SolidLanguageServer):
         self._service_ready_event = threading.Event()
         self._project_ready_event = threading.Event()
 
+    @override
+    def stop(self, shutdown_timeout: float = 2.0) -> None:
+        # release the workspace lock (if we hold one; see DependencyProvider.create_launch_command)
+        # before stopping the process, so a fast-following relaunch on the same workspace doesn't
+        # spuriously see it as still held
+        assert isinstance(self._dependency_provider, self.DependencyProvider)
+        lock = self._dependency_provider.workspace_lock
+        if lock is not None:
+            try:
+                lock.release()
+            except Exception as e:
+                log.warning(f"Error releasing Eclipse JDTLS workspace lock: {e}")
+            finally:
+                self._dependency_provider.workspace_lock = None
+        super().stop(shutdown_timeout)
+
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         ls_resources_dir = self.ls_resources_dir(self._solidlsp_settings)
         return self.DependencyProvider(self._custom_settings, ls_resources_dir, self._solidlsp_settings, self.repository_root_path)
@@ -271,6 +288,10 @@ class EclipseJDTLS(SolidLanguageServer):
             self._solidlsp_settings = solidlsp_settings
             self._repository_root_path = repository_root_path
             self.runtime_dependency_paths = self._setup_runtime_dependencies(ls_resources_dir, custom_settings)
+            self.workspace_lock: FileLock | None = None
+            """Held for as long as this JDTLS instance is running, once acquired in
+            create_launch_command(); released by EclipseJDTLS.stop(). None if another live
+            instance already held the lock at launch time (see create_launch_command)."""
 
         @classmethod
         def _create_dep_gradle(cls, gradle_version: str | None = None) -> DownloadedDependency:
@@ -723,6 +744,90 @@ class EclipseJDTLS(SolidLanguageServer):
                 ws_hash_input = (repository_root_path + "|" + jdtls_launcher_jar_path + "|" + workspace_settings_json).encode()
             return hashlib.md5(ws_hash_input).hexdigest()
 
+        @staticmethod
+        def _try_acquire_workspace_lock(ws_dir: str) -> FileLock | None:
+            """
+            Attempt to acquire an exclusive, non-blocking lock on a JDTLS workspace directory.
+
+            Purely mechanical; callers decide what acquisition failure means for them (see
+            :meth:`_acquire_workspace_dir`) and log accordingly, so this does not log anything
+            itself. OS-level: the lock is automatically released if the holding process dies, so a
+            crashed JDTLS never leaves a stale lock behind for the next launch to trip over.
+
+            :param ws_dir: the JDTLS workspace directory to lock. Must already exist.
+            :return: the acquired, held lock, or None if another live process already holds it.
+            """
+            lock = FileLock(str(PurePath(ws_dir, ".serena-workspace.lock")), timeout=0)
+            try:
+                lock.acquire()
+                return lock
+            except Timeout:
+                return None
+
+        @staticmethod
+        def _acquire_workspace_dir(ls_resources_dir: str, project_hash: str) -> tuple[str, FileLock | None]:
+            """
+            Choose and lock a JDTLS workspace directory for `project_hash`, falling back to a
+            per-instance directory if the normal, shared one is already in use.
+
+            Eclipse's `-data` workspace is single-writer, but its directory name is derived only
+            from the project (path + a few settings) via `project_hash`, so two concurrent
+            sessions on the same project (the default for two stdio MCP clients sharing a
+            repository, before opting into HTTP/SSE mode) would otherwise hand their JDTLS
+            processes the identical directory. Neither settles: both continuously invalidate each
+            other's index, burning CPU/RAM indefinitely with nothing surfaced through MCP (GH
+            #1944).
+
+            The normal, shared directory is always tried first, so the common case (one session,
+            possibly restarting) keeps reusing its cached index exactly as before this method
+            existed. Only when that directory's lock is already held by another live process does
+            this fall back to a directory namespaced by this process's PID -- safe as a
+            disambiguator precisely because PIDs are unique among concurrently running processes,
+            which is the only scenario this fallback path is for. The fallback session pays for
+            indexing from scratch rather than reusing the shared cache; that is the accepted cost
+            of avoiding the corruption, not a bug.
+
+            If even the fallback cannot be locked (found to already be numerically colliding,
+            which would require another process to independently pick the same PID-derived
+            directory), this proceeds unlocked on the shared directory rather than refuse to start
+            -- the lock is a safety measure, not a hard precondition, matching the fact that Serena
+            ran (imperfectly) without it before this fix existed.
+
+            :param ls_resources_dir: the root Serena language-server resources directory.
+            :param project_hash: the project's workspace hash, as returned by
+                :meth:`_compute_workspace_hash`.
+            :return: the workspace directory to launch JDTLS with (already created), and the lock
+                held on it, or None if launching unlocked because even the fallback collided.
+            """
+            workspaces_root = PurePath(ls_resources_dir, "EclipseJDTLS", "workspaces")
+
+            primary_ws_dir = str(PurePath(workspaces_root, project_hash))
+            os.makedirs(primary_ws_dir, exist_ok=True)
+            lock = EclipseJDTLS.DependencyProvider._try_acquire_workspace_lock(primary_ws_dir)
+            if lock is not None:
+                return primary_ws_dir, lock
+
+            fallback_ws_dir = str(PurePath(workspaces_root, f"{project_hash}-instance-{os.getpid()}"))
+            os.makedirs(fallback_ws_dir, exist_ok=True)
+            fallback_lock = EclipseJDTLS.DependencyProvider._try_acquire_workspace_lock(fallback_ws_dir)
+            if fallback_lock is not None:
+                log.warning(
+                    f"Eclipse JDTLS workspace {primary_ws_dir} is already held by another live "
+                    "process (likely a concurrent Serena session on the same project); using a "
+                    f"separate per-instance workspace at {fallback_ws_dir} instead, so this "
+                    "session indexes independently rather than corrupting the shared one. See "
+                    "https://github.com/oraios/serena/issues/1944."
+                )
+                return fallback_ws_dir, fallback_lock
+
+            log.warning(
+                f"Could not acquire either the shared Eclipse JDTLS workspace {primary_ws_dir} or "
+                f"a per-instance fallback at {fallback_ws_dir}; proceeding without a workspace "
+                "lock. Concurrent sessions may corrupt each other's index. See "
+                "https://github.com/oraios/serena/issues/1944."
+            )
+            return primary_ws_dir, None
+
         def create_launch_command(self) -> list[str]:
             # ws_dir is the workspace directory for the EclipseJDTLS server.
             project_hash = EclipseJDTLS.DependencyProvider._compute_workspace_hash(
@@ -730,19 +835,11 @@ class EclipseJDTLS(SolidLanguageServer):
                 self.runtime_dependency_paths.jdtls_launcher_jar_path,
                 self._custom_settings,
             )
-            ws_dir = str(
-                PurePath(
-                    self._solidlsp_settings.ls_resources_dir,
-                    "EclipseJDTLS",
-                    "workspaces",
-                    project_hash,
-                )
-            )
+            ws_dir, self.workspace_lock = self._acquire_workspace_dir(self._solidlsp_settings.ls_resources_dir, project_hash)
 
             # shared_cache_location is the global cache used by Eclipse JDTLS across all workspaces
             shared_cache_location = str(PurePath(self._solidlsp_settings.ls_resources_dir, "lsp", "EclipseJDTLS", "sharedIndex"))
             os.makedirs(shared_cache_location, exist_ok=True)
-            os.makedirs(ws_dir, exist_ok=True)
 
             jre_path = self.runtime_dependency_paths.jre_path
             lombok_jar_path = self.runtime_dependency_paths.lombok_jar_path
