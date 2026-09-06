@@ -1442,7 +1442,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         """
         Propagate settings from this configuration to individual components that are statically configured
         """
-        from serena.tools import JetBrainsPluginClient
+        from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
 
         JetBrainsPluginClient.set_server_address(self.jetbrains_plugin_server_address)
 

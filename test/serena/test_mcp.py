@@ -8,6 +8,7 @@ from serena import __version__
 from serena.agent import Tool, ToolRegistry
 from serena.config.context_mode import SerenaAgentContext
 from serena.config.serena_config import SerenaConfig
+from serena.facades.repl import SerenaRepl
 from serena.mcp import SerenaMCPFactory
 
 make_tool = SerenaMCPFactory.make_mcp_tool
@@ -22,6 +23,10 @@ class MockAgent:
     @staticmethod
     def get_context() -> SerenaAgentContext:
         return SerenaAgentContext.load_default()
+
+    @staticmethod
+    def get_repl() -> SerenaRepl:
+        return SerenaRepl([])
 
 
 class BaseMockTool(Tool):

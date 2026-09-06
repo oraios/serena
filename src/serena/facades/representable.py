@@ -74,3 +74,22 @@ class RepresentableViaRenderer(Representable):
 
     def represent(self) -> str:
         return self._renderer.render(self)
+
+
+class JsonObject(RepresentableViaRenderer):
+    """
+    A JSON-serializable result (dict, list, etc.) which is rendered as JSON, subject to length limitation.
+    """
+
+    def __init__(self, data: Any, renderer: "JsonObjectRenderer"):
+        """
+        :param data: the JSON-serializable data
+        :param renderer: the renderer to use for representing the data
+        """
+        super().__init__(renderer)
+        self.data = data
+
+
+class JsonObjectRenderer(Renderer[JsonObject]):
+    def render(self, obj: JsonObject) -> str:
+        return self._limit_length(self._to_json(obj.data))

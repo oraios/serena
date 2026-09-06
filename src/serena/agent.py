@@ -42,6 +42,7 @@ from serena.config.serena_config import (
     ToolInclusionDefinition,
 )
 from serena.dashboard import SerenaDashboardAPI, SerenaDashboardTrayManager, SerenaDashboardViewer, open_url_in_browser
+from serena.facades.api.jb import JetBrainsApi
 from serena.facades.api.lsp import LspApi
 from serena.facades.facade import Facade
 from serena.facades.repl import SerenaRepl
@@ -1170,6 +1171,8 @@ class SerenaAgent:
             facades = []
             if self._language_backend.is_lsp():
                 facades.append(Facade.from_api(LspApi(self)))
+            elif self._language_backend.is_jetbrains():
+                facades.append(Facade.from_api(JetBrainsApi(self)))
             self._repl = SerenaRepl(facades)
         return self._repl
 
