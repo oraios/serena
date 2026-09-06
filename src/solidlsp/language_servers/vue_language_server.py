@@ -10,7 +10,7 @@ import shutil
 import threading
 from collections.abc import Callable
 from pathlib import Path, PurePath
-from time import sleep
+from time import monotonic, sleep
 from typing import Any
 
 from overrides import override
@@ -166,6 +166,10 @@ class VueLanguageServer(SolidLanguageServer):
 
     TS_SERVER_READY_TIMEOUT = 5.0
     VUE_SERVER_READY_TIMEOUT = 3.0
+    # a companion server that never recovers must not turn every future request into a fresh
+    # full re-index (opening every .vue file again); this puts a floor under how often a
+    # failed attempt is retried
+    VUE_INDEX_RETRY_BACKOFF_SECONDS = 30.0
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         vue_lsp_executable_path, self.tsdk_path, self._ts_ls_cmd = self._setup_runtime_dependencies(config, solidlsp_settings)
@@ -184,6 +188,7 @@ class VueLanguageServer(SolidLanguageServer):
         self._ts_server_started = False
         self._vue_files_indexed = False
         self._indexed_vue_file_uris: list[str] = []
+        self._vue_index_retry_after: float = 0.0
         self._ls_operational_ready_event = threading.Event()
         self._ls_operational_lock = threading.Lock()
         self._ls_operational_thread: threading.Thread | None = None
@@ -201,15 +206,36 @@ class VueLanguageServer(SolidLanguageServer):
         except Exception:
             log.exception("Error while warming up Vue language server operational state")
 
+    def _retry_vue_indexing_if_due(self) -> None:
+        """Retry Vue indexing if a previous attempt failed and the backoff window has elapsed.
+
+        Must be called while holding `_ls_operational_lock`.
+        """
+        if self._vue_files_indexed:
+            return
+        if monotonic() < self._vue_index_retry_after:
+            return
+        self._ensure_vue_files_indexed_on_ts_server()
+
     def _ensure_ls_operational(self) -> None:
-        # short-circuit completed warm-up
+        # short-circuit the one-time warm-up (server-availability check + the cross-file-
+        # reference wait) once it has completed. Vue indexing is retried below independently
+        # of this gate: a companion-server hiccup on the first attempt must not force every
+        # later request to repeat the warm-up wait just to get another indexing attempt.
         if self._ls_operational_ready_event.is_set():
+            # always take the lock rather than checking _vue_files_indexed first: an uncontended
+            # acquisition here is negligible next to the LSP request this guards, and it avoids
+            # relying on any implementation-specific guarantee about unlocked reads of shared
+            # state. _retry_vue_indexing_if_due() itself returns immediately once indexed.
+            with self._ls_operational_lock:
+                self._retry_vue_indexing_if_due()
             return
 
         # serialize the warm-up sequence
         with self._ls_operational_lock:
             # short-circuit repeated callers after waiting for the lock
             if self._ls_operational_ready_event.is_set():
+                self._retry_vue_indexing_if_due()
                 return
 
             # validate server availability
@@ -221,10 +247,16 @@ class VueLanguageServer(SolidLanguageServer):
                 sleep(self._get_wait_time_for_cross_file_referencing())
                 self._has_waited_for_cross_file_references = True
 
-            # index Vue files on the companion TypeScript server
+            # index Vue files on the companion TypeScript server; a total failure here does
+            # not block operational readiness (below) - it is retried (subject to backoff) on
+            # a later call instead
             self._ensure_vue_files_indexed_on_ts_server()
 
-            # publish operational readiness
+            # publish operational readiness. This does not wait on Vue indexing having
+            # succeeded: other request types (TS/JS definitions, renames, diagnostics) would
+            # otherwise re-run this whole method - including a full vue re-index attempt -
+            # on every single call for as long as the companion server stays down, instead of
+            # paying that cost once and proceeding.
             self._ls_operational_ready_event.set()
 
     @override
@@ -289,6 +321,18 @@ class VueLanguageServer(SolidLanguageServer):
                     self._indexed_vue_file_uris.append(file_buffer.uri)
             except Exception as e:
                 log.debug(f"Failed to open {vue_file} on TS server: {e}")
+
+        # a companion server that is down or unresponsive fails every open above; leave the
+        # flag unset so a later call retries instead of permanently treating a zero-file
+        # index as complete (files being found but none of them opening is the failure case
+        # to catch here, not the ordinary "no .vue files in this repo" case)
+        if vue_files and not self._indexed_vue_file_uris:
+            self._vue_index_retry_after = monotonic() + self.VUE_INDEX_RETRY_BACKOFF_SECONDS
+            log.warning(
+                f"Failed to open any of the {len(vue_files)} .vue file(s) on the companion TypeScript server; "
+                f"will not retry indexing again for at least {self.VUE_INDEX_RETRY_BACKOFF_SECONDS:.0f}s"
+            )
+            return
 
         self._vue_files_indexed = True
         log.info("Vue file indexing on TypeScript server complete, waiting for TS server to finish processing")
