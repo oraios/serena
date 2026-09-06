@@ -32,6 +32,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     successful Serena call. Add a `serena-hooks reset` command and a `PostToolUse` example matched to
     Serena's own tools to close the gap (#1852)
 
+* Hooks:
+  - Add opt-in `serena-hooks enforce` hard-block mode with directive Serena replacement calls for direct
+    code searches and reads, plus configurable code-file extensions (#1470)
+
 * Language Servers:
   - Add FreeBSD mapping to platform detection
   - Remove unnecessary platform checks from the following language servers, expanding the set of

@@ -12,6 +12,7 @@ from serena.hooks import (
     HookClient,
     PostToolUseResetSymbolicToolCounterHook,
     PreToolUseAutoApproveSerenaHook,
+    PreToolUseEnforceSymbolicToolsHook,
     PreToolUseHook,
     PreToolUseRemindAboutSymbolicToolsHook,
     SessionEndCleanupHook,
@@ -1339,3 +1340,81 @@ class TestHookCli:
         with patch("serena.hooks.serena_home_dir", str(tmp_path)):
             result = runner.invoke(hook_commands, ["activate", "--client", "claude-code"], input="not json")
         assert result.exit_code != 0
+
+
+def _execute_enforce_hook(client: HookClient, payload: dict, tmp_path: Path) -> None:
+    with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+        PreToolUseEnforceSymbolicToolsHook(client).execute()
+
+
+class TestPreToolUseEnforceSymbolicToolsHook:
+    """Tests for the opt-in hard-block symbolic-tools hook."""
+
+    def test_code_file_read_is_denied_with_exact_serena_replacement(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        _execute_enforce_hook(
+            HookClient.CLAUDE_CODE,
+            _read_input(file_path="src/foo.py") | {"tool_input": {"file_path": "src/foo.py", "start_line": 120, "end_line": 159}},
+            tmp_path,
+        )
+
+        output = json.loads(capsys.readouterr().out)
+        reason = output["hookSpecificOutput"]["permissionDecisionReason"]
+        assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert 'mcp__serena__read_file(relative_path="src/foo.py", start_line=120, end_line=159)' in reason
+        assert 'mcp__serena__find_symbol(name_path="<symbol>", include_body=True)' in reason
+
+    def test_serena_replacement_calls_are_not_denied(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        _execute_enforce_hook(
+            HookClient.CLAUDE_CODE,
+            _base_input(tool_name="mcp__serena__read_file", tool_input={"relative_path": "src/foo.py"}),
+            tmp_path,
+        )
+        _execute_enforce_hook(
+            HookClient.CLAUDE_CODE,
+            _base_input(tool_name="mcp__serena__search_for_pattern", tool_input={"substring_pattern": "needle"}),
+            tmp_path,
+        )
+
+        assert capsys.readouterr().out == ""
+
+    def test_grep_is_denied_with_pattern_and_scope_replacement(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        _execute_enforce_hook(
+            HookClient.CLAUDE_CODE,
+            _base_input(tool_name="grep", tool_input={"query": "needle", "path": "src"}),
+            tmp_path,
+        )
+
+        output = json.loads(capsys.readouterr().out)
+        reason = output["hookSpecificOutput"]["permissionDecisionReason"]
+        assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert 'mcp__serena__search_for_pattern(substring_pattern="needle", relative_path="src")' in reason
+
+    def test_non_code_file_read_is_allowed(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        _execute_enforce_hook(HookClient.CLAUDE_CODE, _read_input(file_path="notes.txt"), tmp_path)
+
+        assert capsys.readouterr().out == ""
+
+    def test_code_file_extensions_can_be_overridden(self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch) -> None:
+        monkeypatch.setenv("SERENA_HOOK_CODE_FILE_EXTENSIONS", "md,txt")
+        _execute_enforce_hook(HookClient.CLAUDE_CODE, _read_input(file_path="notes.txt"), tmp_path)
+
+        output = json.loads(capsys.readouterr().out)
+        assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_codex_omits_additional_context(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        payload = _base_input(tool_name="exec_command", tool_input={"cmd": "rg -n needle src/foo.py"})
+        _execute_enforce_hook(HookClient.CODEX, payload, tmp_path)
+
+        output = json.loads(capsys.readouterr().out)
+        hook_output = output["hookSpecificOutput"]
+        assert hook_output["permissionDecision"] == "deny"
+        assert "additionalContext" not in hook_output
+        assert "mcp__serena__search_for_pattern" in hook_output["permissionDecisionReason"]
+
+    def test_cli_registers_enforce_command(self, tmp_path: Path) -> None:
+        payload = _read_input(file_path="src/foo.py")
+        with patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            result = CliRunner().invoke(hook_commands, ["enforce", "--client", "claude-code"], input=json.dumps(payload))
+
+        assert result.exit_code == 0, result.output
+        assert 'permissionDecision": "deny"' in result.output

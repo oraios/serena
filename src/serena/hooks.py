@@ -444,12 +444,24 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         return arguments
 
     @classmethod
+    def _code_file_extensions(cls) -> frozenset[str]:
+        """Return the configured source-file extensions used by the hook."""
+        configured = os.getenv("SERENA_HOOK_CODE_FILE_EXTENSIONS", "").strip()
+        if not configured:
+            return cls._CODE_FILE_EXTENSIONS
+        return frozenset(
+            extension if extension.startswith(".") else f".{extension}"
+            for extension in (item.strip().lower() for item in configured.split(","))
+            if extension
+        )
+
+    @classmethod
     def _is_code_file_path(cls, file_path: str) -> bool:
         """:return: whether ``file_path`` has a source-like suffix."""
         cleaned_path = file_path.strip().strip("'\"")
         if not cleaned_path:
             return False
-        return Path(cleaned_path).suffix.lower() in cls._CODE_FILE_EXTENSIONS
+        return Path(cleaned_path).suffix.lower() in cls._code_file_extensions()
 
     def execute(self) -> None:
         # gate the entire hook on the rate-limit window: while we are within
@@ -525,6 +537,66 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
                 "now if needed, the counter was reset."
             ),
         )
+
+
+class PreToolUseEnforceSymbolicToolsHook(PreToolUseRemindAboutSymbolicToolsHook):
+    """Hard-block direct code searches and reads in favor of Serena's symbolic tools.
+
+    Unlike the reminder hook, this hook emits a deny response on every matching call. It is
+    opt-in and leaves the existing ``remind`` behavior unchanged. The default code-file suffix
+    set can be replaced for a process by setting ``SERENA_HOOK_CODE_FILE_EXTENSIONS`` to a
+    comma-separated list such as ``py,pyi,rs``.
+    """
+
+    def _replacement_call(self) -> str:
+        if self.is_read_code_file_call():
+            file_path = self._file_path
+            if file_path is None:
+                file_path = next(
+                    (argument for argument in self._iter_shell_path_arguments() if self._is_code_file_path(argument)),
+                    "<relative_path>",
+                )
+            arguments = [f"relative_path={json.dumps(file_path)}"]
+            if self._tool_input is not None:
+                for key in ("start_line", "end_line", "max_answer_chars"):
+                    value = self._tool_input.get(key)
+                    if value is not None:
+                        arguments.append(f"{key}={json.dumps(value)}")
+            return f"mcp__serena__read_file({', '.join(arguments)})"
+
+        pattern = "<pattern>"
+        relative_path: str | None = None
+        if self._tool_input is not None:
+            for key in ("pattern", "query", "substring_pattern", "search_query"):
+                value = self._tool_input.get(key)
+                if value is not None:
+                    pattern = str(value)
+                    break
+            for key in ("relative_path", "path", "file_path"):
+                value = self._tool_input.get(key)
+                if value is not None:
+                    relative_path = str(value)
+                    break
+        arguments = [f"substring_pattern={json.dumps(pattern)}"]
+        if relative_path:
+            arguments.append(f"relative_path={json.dumps(relative_path)}")
+        return f"mcp__serena__search_for_pattern({', '.join(arguments)})"
+
+    def execute(self) -> None:
+        # The replacement calls are themselves non-symbolic Serena tools. They must be allowed,
+        # otherwise the denial creates an infinite retry loop in the client.
+        if "serena" in self._tool_name:
+            return
+        if not self.is_read_code_file_call() and not self.is_grep_call():
+            return
+
+        replacement = self._replacement_call()
+        reason = (
+            "Forbidden: direct code-file search/read. Use Serena's symbolic tools instead.\n"
+            f"Retry with: {replacement}\n"
+            'For a named symbol, use: mcp__serena__find_symbol(name_path="<symbol>", include_body=True)'
+        )
+        click.echo(self.OutputData(permission_decision="deny", permission_decision_reason=reason).to_json_string(self._client))
 
 
 class PostToolUseResetSymbolicToolCounterHook(Hook):
@@ -667,6 +739,15 @@ class HookCommands(AutoRegisteringGroup):
     @_client_option
     def remind(client: str) -> None:
         PreToolUseRemindAboutSymbolicToolsHook(HookClient(client)).execute()
+
+    @staticmethod
+    @click.command(
+        "enforce",
+        help="Set this as hook at PreToolUse to block direct code searches and reads and suggest Serena symbolic replacements.",
+    )
+    @_client_option
+    def enforce(client: str) -> None:
+        PreToolUseEnforceSymbolicToolsHook(HookClient(client)).execute()
 
     @staticmethod
     @click.command(

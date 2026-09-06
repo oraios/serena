@@ -222,6 +222,14 @@ The hooks will:
   permission mode (`acceptEdits` or `auto`), so blanket approvals cover Serena's destructive
   tools (e.g. `replace_symbol_body`, `rename_symbol`) instead of prompting on every call.
 
+For a stricter workflow, replace `serena-hooks remind --client=claude-code` with
+`serena-hooks enforce --client=claude-code`. The enforce hook denies every direct grep or code-file read and includes a
+ready-to-use `mcp__serena__search_for_pattern` or `mcp__serena__read_file` call in the denial reason, preserving any
+available pattern, relative path, and read line range. Calls that already target Serena are left untouched so the
+suggested retry cannot enter a denial loop. It is opt-in; the existing reminder behavior is unchanged. The default
+source-file extension list can be overridden for the hook process with `SERENA_HOOK_CODE_FILE_EXTENSIONS=py,pyi,rs`
+(a comma-separated list).
+
 For more details on Claude Code's hook system, see the
 [Claude Code hooks documentation](https://code.claude.com/docs/en/hooks).
 
