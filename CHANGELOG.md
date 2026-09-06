@@ -79,6 +79,7 @@ CLI:
 
 * Dependencies:
   - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
+  - Upgrade the `mcp` SDK from 1.28.1 to 2.1.1
 
 # v1.7.0 (2026-08-09)
 
@@ -230,7 +231,6 @@ CLI:
   - PreToolUse remind hook: coerce non-string shell command values instead of failing, and recognize
     `target_file`/`targetFile` file-path keys (shared payload parsing, applies to all hook clients).
   - Fix hook input parsing for clients that emit raw control characters in JSON string values #1743.
-
 
 # v1.6.1 (2026-07-21)
 

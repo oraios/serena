@@ -379,8 +379,6 @@ class TopLevelCommands(AutoRegisteringGroup):
 
         factory = SerenaMCPFactory(transport=transport, context=context, project=project_file, memory_log_handler=memory_log_handler)
         server = factory.create_mcp_server(
-            host=host,
-            port=port,
             mode_selection_def=mode_selection_def,
             language_backend=LanguageBackend.from_str(language_backend) if language_backend else None,
             enable_web_dashboard=enable_web_dashboard,
@@ -397,7 +395,13 @@ class TopLevelCommands(AutoRegisteringGroup):
                 project_file,
             )
         log.info("Starting MCP server …")
-        server.run(transport=transport)
+        run_kwargs: dict[str, Any] = {"transport": transport}
+        if transport != "stdio":
+            # host/port are transport-specific run() kwargs as of mcp>=2.0 (no longer
+            # accepted at server construction time); stdio has no host/port concept.
+            run_kwargs["host"] = host
+            run_kwargs["port"] = port
+        server.run(**run_kwargs)
 
     @staticmethod
     @click.command(
