@@ -10,6 +10,7 @@ import logging
 import platform
 import shutil
 import subprocess
+from collections.abc import Hashable
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -184,16 +185,22 @@ class NixLanguageServer(SolidLanguageServer):
         return symbol
 
     @override
-    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
+    def _document_symbols_cache_fingerprint(self) -> Hashable | None:
+        build_document_symbols_version = 2
+        return build_document_symbols_version
+
+    @override
+    def _build_document_symbols_from_raw_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer) -> DocumentSymbols:
         # Override to extend Nix symbol ranges to include trailing semicolons.
         # nixd provides expression-level ranges (excluding semicolons) but serena needs
         # statement-level ranges (including semicolons) for proper symbol replacement.
+        # IMPORTANT: Update _document_symbols_cache_fingerprint() when changing this method.
 
         # Get symbols from parent implementation
-        document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
+        document_symbols = super()._build_document_symbols_from_raw_symbols(relative_file_path, file_buffer=file_buffer)
 
         # Get file content for range extension
-        file_content = self.language_server.retrieve_full_file_content(relative_file_path)
+        file_content = file_buffer.contents
 
         # Extend ranges for all symbols recursively
         def extend_symbol_and_children(symbol: ls_types.UnifiedSymbolInformation) -> ls_types.UnifiedSymbolInformation:

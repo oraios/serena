@@ -169,16 +169,16 @@ class Marksman(SolidLanguageServer):
         return request_document_symbols_override_version
 
     @override
-    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
-        """Override to remap Marksman's heading symbol kinds from String to Namespace.
+    def _build_document_symbols_from_raw_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer) -> DocumentSymbols:
+        # Override to remap Marksman's heading symbol kinds from String to Namespace.
+        #
+        # Marksman LSP returns all markdown headings (h1-h6) with SymbolKind.String (15).
+        # This is problematic because String (15) >= Variable (13), so headings are
+        # classified as "low-level" and filtered out of symbol overviews.
+        # Remapping to Namespace (3) fixes this and is semantically appropriate
+        # (headings are named sections containing other content).
 
-        Marksman LSP returns all markdown headings (h1-h6) with SymbolKind.String (15).
-        This is problematic because String (15) >= Variable (13), so headings are
-        classified as "low-level" and filtered out of symbol overviews.
-        Remapping to Namespace (3) fixes this and is semantically appropriate
-        (headings are named sections containing other content).
-        """
-        document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
+        document_symbols = super()._build_document_symbols_from_raw_symbols(relative_file_path, file_buffer=file_buffer)
 
         # NOTE: When changing this method, also update the cache fingerprint method above
 

@@ -494,7 +494,7 @@ class MatlabLanguageServer(SolidLanguageServer):
             "helperFiles",  # Common helper file directories
         ]
 
-    def _request_document_symbols(
+    def _request_raw_document_symbols(
         self, relative_file_path: str, file_data: LSPFileBuffer | None
     ) -> list[SymbolInformation] | list[DocumentSymbol] | None:
         """
@@ -504,7 +504,7 @@ class MatlabLanguageServer(SolidLanguageServer):
         particularly for script sections (cell mode markers like %%). This method
         normalizes the names to strings for compatibility with the unified symbol format.
         """
-        symbols = super()._request_document_symbols(relative_file_path, file_data)
+        symbols = super()._request_raw_document_symbols(relative_file_path, file_data)
 
         if symbols is None or len(symbols) == 0:
             return symbols

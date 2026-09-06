@@ -176,6 +176,7 @@ class VueLanguageServer(SolidLanguageServer):
             ProcessLaunchInfo(cmd=vue_lsp_executable_path, cwd=repository_root_path),
             "vue",
             solidlsp_settings,
+            cache_version_raw_document_symbols=2,
         )
         self.server_ready = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
@@ -868,7 +869,7 @@ class VueLanguageServer(SolidLanguageServer):
         return prefer_non_node_modules_definition(definitions)
 
     @override
-    def _request_document_symbols(
+    def _request_raw_document_symbols(
         self, relative_file_path: str, file_data: LSPFileBuffer | None
     ) -> list[SymbolInformation] | list[DocumentSymbol] | None:
         """
@@ -883,7 +884,7 @@ class VueLanguageServer(SolidLanguageServer):
         We filter out Property symbols that have a matching Variable with the same name
         at a different location (the definition), keeping only the definition.
         """
-        symbols = super()._request_document_symbols(relative_file_path, file_data)
+        symbols = super()._request_raw_document_symbols(relative_file_path, file_data)
 
         if symbols is None or len(symbols) == 0:
             return symbols
