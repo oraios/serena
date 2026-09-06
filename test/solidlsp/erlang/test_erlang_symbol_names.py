@@ -1,6 +1,6 @@
 """Normalization of Erlang's ``name/arity`` symbol identifiers.
 
-Reproduces https://github.com/oraios/serena/issues/1797: Erlang LS names functions, types and
+Reproduces https://github.com/oraios/serena/issues/1797: ELP names functions, types and
 parameterised macros ``name/arity`` (e.g. ``create_user/4``), but ``/`` separates the components of
 a Serena name path. Such a name was therefore parsed as "symbol ``4`` nested inside ``create_user``"
 and could never be matched -- not even by the very name path Serena itself reported for the symbol.
