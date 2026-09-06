@@ -992,25 +992,19 @@ class ALLanguageServer(SolidLanguageServer):
 
     @override
     def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
-        """
-        Override to normalize AL symbol names by stripping object type and ID metadata.
-
-        AL Language Server returns symbol names with full object format like
-        'Table 50000 "TEST Customer"', but symbol names should be pure without metadata.
-        This follows the same pattern as Java LS which strips type information from names.
-
-        Metadata (object type, ID) is available via the hover LSP method when using
-        include_info=True in find_symbol.
-        """
-        # Normalize path separators for cross-platform compatibility (backslash → forward slash)
         relative_file_path = self._normalize_path(relative_file_path)
-
-        # Get symbols from parent implementation
-        document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
-
-        return document_symbols
+        return super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
 
     def _normalize_symbol_name(self, symbol: RawDocumentSymbol, relative_file_path: str) -> str:
+        # Override to normalize AL symbol names by stripping object type and ID metadata.
+        # IMPORTANT: Update _document_symbols_cache_fingerprint if this normalization logic changes.
+        #
+        # AL Language Server returns symbol names with full object format like
+        # 'Table 50000 "TEST Customer"', but symbol names should be pure without metadata.
+        # This follows the same pattern as Java LS which strips type information from names.
+        #
+        # Metadata (object type, ID) is available via the hover LSP method when using
+        # include_info=True in find_symbol.
         original_name = symbol["name"]
         normalized_name = self._extract_al_display_name(original_name)
 

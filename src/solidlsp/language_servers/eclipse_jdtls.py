@@ -1406,10 +1406,10 @@ class EclipseJDTLS(SolidLanguageServer):
 
         return best_result
 
-    def _request_document_symbols(
+    def _request_raw_document_symbols(
         self, relative_file_path: str, file_data: LSPFileBuffer | None
     ) -> list[SymbolInformation] | list[DocumentSymbol] | None:
-        result = super()._request_document_symbols(relative_file_path, file_data=file_data)
+        result = super()._request_raw_document_symbols(relative_file_path, file_data=file_data)
         if result is None:
             return None
 

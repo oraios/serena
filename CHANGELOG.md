@@ -73,6 +73,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     storage directory via a lock; a single instance (including across restarts) still gets the
     same directory, and a second concurrent instance gets a directory of its own instead of
     contending for the first one's (#1966)
+  - Fix: document symbol caching did not account for language-server-specific post-processing of
+    symbols, which was applied outside the caches; the processing of language servers that post-process
+    symbols (e.g. Go, Nix, Fortran, F#, Vue) was therefore repeated on every request or, if it mutated
+    symbols in place, re-applied to already processed cached results
 
 CLI:
   - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)
