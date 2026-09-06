@@ -13,6 +13,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     which could leave grandchildren as zombies; cleanup now waits for the discovered descendants (#1464)
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
 
+* CLI:
+  - Fix: `project health-check` reported `Health check passed - All tools working correctly` and
+    exited 0 even when `FindReferencingSymbolsTool` had raised, because that failure was logged as
+    a warning while the verdict checked `FindSymbolTool` only. A reference-search failure now fails
+    the check; a symbol with no references is still a pass
+
 * Memories:
   - Fix: `save_memory`/`edit_memory` wrote directly to the memory file with `open(path, "w")`, which
     truncates it before the new content is written; a crash, OOM kill, or full disk partway through
