@@ -78,6 +78,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     symbols (e.g. Go, Nix, Fortran, F#, Vue) was therefore repeated on every request or, if it mutated
     symbols in place, re-applied to already processed cached results
 
+* Hooks:
+  - Fix: Claude Code and CodeBuddy Bash payloads now classify common shell searches and source-file
+    reads, including compound commands, so native shell traffic reaches the symbolic-tool reminder (#1845)
 CLI:
   - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)
 
