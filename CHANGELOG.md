@@ -32,6 +32,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     successful Serena call. Add a `serena-hooks reset` command and a `PostToolUse` example matched to
     Serena's own tools to close the gap (#1852)
 
+* CLI:
+  - Add `download-ls-dependencies` to prefetch runtime dependencies for selected language servers, or all
+    non-experimental servers with `--all`, for environments with restricted network access (#664)
+
 * Language Servers:
   - Add FreeBSD mapping to platform detection
   - Remove unnecessary platform checks from the following language servers, expanding the set of

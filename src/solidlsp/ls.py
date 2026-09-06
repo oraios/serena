@@ -616,6 +616,15 @@ class SolidLanguageServer(ABC):
             self._dependency_provider = self._create_dependency_provider()
         return self._dependency_provider
 
+    def install_dependencies(self) -> None:
+        """Install all runtime dependencies managed by this language server."""
+        # Providers are normally created lazily when a launch command is needed. The
+        # prefetch CLI calls this method before launching, so create the provider here
+        # for dependency-managed servers. Legacy servers with a fixed launch command
+        # do not have a provider and intentionally require no prefetch work.
+        if self._process_launch_info is None:
+            self._get_dependency_provider().install_dependencies()
+
     def _create_process_launch_info(self) -> ProcessLaunchInfo:
         dependency_provider = self._get_dependency_provider()
         cmd = dependency_provider.create_launch_command()
