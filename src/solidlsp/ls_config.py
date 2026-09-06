@@ -116,6 +116,8 @@ class LanguageServerId(str, Enum):
     CUE = "cue"
     ZIG = "zig"
     LUA = "lua"
+    LUA_EMMYLUA = "lua_emmylua"
+    """Experimental EmmyLua Analyzer Rust backend for Lua projects."""
     LUAU = "luau"
     """Luau Language Server for Roblox's Luau language (typed Lua 5.1 superset).
     Uses luau-lsp by JohnnyMorganz. Automatically downloads the binary if not found.
@@ -349,6 +351,7 @@ class LanguageServerId(str, Enum):
             self.SCSS,
             self.ANGULAR,
             self.DENO,
+            self.LUA_EMMYLUA,
         }
 
     def is_programming_language(self) -> bool:
@@ -513,7 +516,7 @@ class LanguageServerId(str, Enum):
                 return FilenameMatcher(".toml")
             case self.ZIG:
                 return FilenameMatcher(".zig", ".zon")
-            case self.LUA:
+            case self.LUA | self.LUA_EMMYLUA:
                 return FilenameMatcher(".lua")
             case self.LUAU:
                 return FilenameMatcher(".luau")
@@ -789,6 +792,10 @@ class LanguageServerId(str, Enum):
                 from solidlsp.language_servers.lua_ls import LuaLanguageServer
 
                 return LuaLanguageServer
+            case self.LUA_EMMYLUA:
+                from solidlsp.language_servers.emmylua_ls import EmmyLuaLanguageServer
+
+                return EmmyLuaLanguageServer
 
             case self.LUAU:
                 from solidlsp.language_servers.luau_lsp import LuauLanguageServer
