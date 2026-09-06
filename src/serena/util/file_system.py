@@ -4,7 +4,7 @@ import re
 import stat
 import tempfile
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
@@ -215,14 +215,21 @@ class GitignoreParser:
     and provides methods to check if paths should be ignored.
     """
 
-    def __init__(self, repo_root: str) -> None:
+    def __init__(self, repo_root: str, additional_ignore_patterns: Sequence[str] = ()) -> None:
         """
         Initialize the parser for a repository.
 
         :param repo_root: Root directory of the repository
+        :param additional_ignore_patterns: gitignore-style patterns, relative to `repo_root`, naming
+            directories that the search for .gitignore files shall not descend into. They only prune
+            that search: they are not returned by :meth:`get_ignore_specs` and do not affect
+            :meth:`should_ignore`.
         """
         self.repo_root = os.path.abspath(repo_root)
         self.ignore_specs: list[GitignoreSpec] = []
+        self._additional_ignore_spec = PathSpec.from_lines(
+            pathspec.patterns.GitWildMatchPattern, [p.replace(os.path.sep, "/") for p in additional_ignore_patterns]
+        )
         self._load_gitignore_files()
 
     def _load_gitignore_files(self) -> None:
@@ -237,7 +244,8 @@ class GitignoreParser:
     def _iter_gitignore_files(self, follow_symlinks: bool = False) -> Iterator[str]:
         """
         Iteratively discover .gitignore files in a top-down fashion, starting from the repository root.
-        Directory paths are skipped if they match any already loaded ignore patterns.
+        Directory paths are skipped if they match any already loaded ignore patterns or any of the
+        additional ignore patterns passed to the constructor.
 
         :return: an iterator yielding paths to .gitignore files (top-down)
         """
@@ -270,7 +278,7 @@ class GitignoreParser:
                 except ValueError:
                     # If the path is on a different drive (Windows) or cannot be made relative for another reason, we ignore it
                     continue
-                if self.should_ignore(rel_path):
+                if self.should_ignore(rel_path) or match_path(rel_path, self._additional_ignore_spec, root_path=self.repo_root):
                     continue
             yield from scan(next_abs_path)
 

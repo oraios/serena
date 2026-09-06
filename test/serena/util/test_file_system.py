@@ -920,3 +920,58 @@ class TestGitignoreParserPermissionError:
         finally:
             # Restore permissions so teardown can clean up
             os.chmod(unreadable, old_mode)
+
+
+class TestGitignoreParserAdditionalIgnorePatterns:
+    """Test the additional ignore patterns that prune the search for .gitignore files."""
+
+    def setup_method(self):
+        self.test_dir = tempfile.mkdtemp()
+        self.repo_path = Path(self.test_dir)
+
+        (self.repo_path / "src").mkdir()
+        (self.repo_path / "src" / "main.py").touch()
+        (self.repo_path / ".gitignore").write_text("*.log\n")
+
+        # A .gitignore inside the directory the caller wants ignored: loading it is direct
+        # evidence that the search descended into that directory.
+        nested = self.repo_path / "vendor" / "pkg"
+        nested.mkdir(parents=True)
+        (nested / ".gitignore").write_text("*.tmp\n")
+
+    def teardown_method(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    def _scanned_dirs(self, monkeypatch, **kwargs) -> tuple[list[str], GitignoreParser]:
+        """Build a parser, recording every directory os.scandir was called on."""
+        scanned: list[str] = []
+        real_scandir = os.scandir
+
+        def recording_scandir(path=".", *args, **more):
+            scanned.append(str(path))
+            return real_scandir(path, *args, **more)
+
+        monkeypatch.setattr(os, "scandir", recording_scandir)
+        parser = GitignoreParser(str(self.repo_path), **kwargs)
+        return scanned, parser
+
+    def test_additional_patterns_prune_the_search(self, monkeypatch):
+        scanned, parser = self._scanned_dirs(monkeypatch, additional_ignore_patterns=["vendor/"])
+
+        assert not [p for p in scanned if "vendor" in p]
+        loaded = [os.path.relpath(spec.file_path, self.repo_path) for spec in parser.get_ignore_specs()]
+        assert loaded == [".gitignore"]
+
+    def test_search_is_unpruned_without_additional_patterns(self, monkeypatch):
+        scanned, parser = self._scanned_dirs(monkeypatch)
+
+        assert [p for p in scanned if "vendor" in p]
+        loaded = {os.path.relpath(spec.file_path, self.repo_path) for spec in parser.get_ignore_specs()}
+        assert loaded == {".gitignore", os.path.join("vendor", "pkg", ".gitignore")}
+
+    def test_additional_patterns_are_not_part_of_the_parsed_gitignore_rules(self):
+        parser = GitignoreParser(str(self.repo_path), additional_ignore_patterns=["vendor/"])
+
+        assert [os.path.basename(spec.file_path) for spec in parser.get_ignore_specs()] == [".gitignore"]
+        assert not parser.should_ignore("vendor/pkg")
+        assert parser.should_ignore("debug.log")

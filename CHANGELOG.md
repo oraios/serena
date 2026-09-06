@@ -12,6 +12,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: process-tree cleanup signaled descendant language-server processes without waiting for them,
     which could leave grandchildren as zombies; cleanup now waits for the discovered descendants (#1464)
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
+  - Fix: `ignored_paths` did not prune the search for `.gitignore` files, so activating a project
+    walked every directory the user had asked to ignore; the search now skips them (#1991)
 
 * Memories:
   - Fix: `save_memory`/`edit_memory` wrote directly to the memory file with `open(path, "w")`, which

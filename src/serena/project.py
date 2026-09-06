@@ -90,7 +90,7 @@ class Project(ToStringMixin):
                     log.debug(f"Project ignored paths: {self.project_config.ignored_paths}")
                 log.debug(f"Combined ignored patterns: {ignored_patterns}")
                 if self.project_config.ignore_all_files_in_gitignore:
-                    gitignore_parser = GitignoreParser(self.project_root)
+                    gitignore_parser = GitignoreParser(self.project_root, additional_ignore_patterns=ignored_patterns)
                     for spec in gitignore_parser.get_ignore_specs():
                         log.debug(f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths.")
                         ignored_patterns.extend(spec.patterns)
