@@ -62,6 +62,22 @@ Status of the `main` branch. Changes prior to the next official version change w
     indicate it was incomplete. Serena now declares work-done progress support and waits for the work
     Metals reports, bounded by the new `indexing_timeout`, `indexing_start_grace` and
     `indexing_quiet_period` settings
+  - Fix: the Angular language server waited for ngserver's `projectLoadingFinish` after `initialized`,
+    but ngserver loads the project lazily, on the first document open — so the notification could not
+    arrive, every startup burned the full wait, and the first symbol query of a session ran against an
+    unresolved project, silently returning incomplete cross-file references. Serena now opens one `.ts`
+    file to trigger the load before waiting (skipped for projects without a `tsconfig.json`, where
+    ngserver loads nothing)
+  - The Angular language server now supports `additional_workspace_folders`: the extra folders are
+    activated at startup and the companion TypeScript server is given the same workspace folders,
+    ignore patterns and encoding as the main server, so cross-package queries reach code outside the
+    app. `.ts` references are now the union of what ngserver reports (template usages) and what the
+    companion reports (callers in another project — an extra workspace folder, or a second
+    `tsconfig.json` in a monorepo); neither is complete on its own
+  - Fix: Angular post-edit diagnostics for `.ts` files waited out the 2.5s publish timeout on every
+    edited file, because ngserver never publishes for an ordinary TypeScript error (it publishes for
+    `.html` templates, and for a `.ts` file whose inline template has an error); they are now read
+    from the companion TypeScript server, which publishes for both
   - Fix: a `tsserver` crash mid-indexing (e.g. a V8 heap OOM) sent the same `$/progress` "end"
     event as a normal completion, so `find_referencing_symbols` and other cross-file queries
     silently returned an empty result instead of surfacing the crash. The crash is now detected

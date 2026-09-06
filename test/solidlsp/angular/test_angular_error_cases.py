@@ -14,6 +14,7 @@ upstream LSPs are known to differ (Windows TS server tends to swallow malformed
 positions instead of raising).
 """
 
+import logging
 import os
 import sys
 import time
@@ -367,3 +368,77 @@ class TestAngularStartupCleanup:
                 ls.stop(shutdown_timeout=2.0)
             except Exception:
                 pass
+
+
+class TestAngularProjectWarmUp:
+    """Regression: ngserver must have resolved the Angular project by the time ``start()`` returns.
+
+    ngserver loads the project lazily on the first ``didOpen``, not on ``initialized``. Before the
+    warm-up landed, ``angular/projectLoadingFinish`` therefore never arrived during startup: the wait
+    always ran into its timeout (10s of dead latency) and the first symbol query of the session ran
+    against an unresolved project, silently returning incomplete cross-file references.
+    """
+
+    def test_project_load_completes_during_startup(self, caplog: pytest.LogCaptureFixture) -> None:
+        ls = _create_ls(LanguageServerId.ANGULAR)
+        logger = "solidlsp.language_servers.angular_language_server"
+        try:
+            with caplog.at_level(logging.INFO, logger=logger):
+                ls.start()
+            messages = [r.getMessage() for r in caplog.records if r.name == logger]
+        finally:
+            ls.stop(shutdown_timeout=2.0)
+
+        assert any("Angular project loading finished" in m for m in messages), (
+            f"ngserver never signalled projectLoadingFinish during startup; log was: {messages}"
+        )
+        assert not any("Timeout waiting for ngserver project load" in m for m in messages), (
+            f"Startup fell back to the timeout path; log was: {messages}"
+        )
+
+
+class TestAngularReferencesCompanionFailure:
+    """Regression: a broken companion must not discard ngserver's own reference answer.
+
+    ``.ts`` references are the union of the two servers, and ngserver's half is the primary one
+    (it is the only one that sees template usages). Before the guard, any companion failure —
+    a tsserver V8 heap OOM being the documented one — propagated out of a request that already
+    had a perfectly usable answer in hand.
+    """
+
+    # ``GreetingService`` on line 5 (0-based 4), column 13 — referenced from app.component.ts.
+    SERVICE_CLASS_LINE = 4
+    SERVICE_CLASS_COL = 13
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
+    def test_companion_error_falls_back_to_ngserver_references(
+        self, language_server: SolidLanguageServer, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        baseline = language_server.request_references(SERVICE_FILE, self.SERVICE_CLASS_LINE, self.SERVICE_CLASS_COL)
+        assert baseline, "Fixture problem: no references found even with a working companion"
+
+        calls: list[object] = []
+
+        def boom(*_args: object, **_kwargs: object) -> list:
+            calls.append(None)
+            raise SolidLSPException("simulated companion failure")
+
+        monkeypatch.setattr(language_server._ts_server, "request_references", boom)
+        refs = language_server.request_references(SERVICE_FILE, self.SERVICE_CLASS_LINE, self.SERVICE_CLASS_COL)
+        assert calls, "The companion was never consulted, so this test would pass even without the guard"
+        assert refs, "ngserver's references were discarded when the companion failed"
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
+    def test_terminated_companion_still_propagates(self, language_server: SolidLanguageServer, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A dead language server must keep propagating so tools_base can restart the LS and retry."""
+        from solidlsp.ls_process import LanguageServerTerminatedException
+
+        def terminated(*_args: object, **_kwargs: object) -> list:
+            raise SolidLSPException(
+                "simulated termination",
+                cause=LanguageServerTerminatedException("companion died", LanguageServerId.TYPESCRIPT),
+            )
+
+        monkeypatch.setattr(language_server._ts_server, "request_references", terminated)
+        with pytest.raises(SolidLSPException):
+            language_server.request_references(SERVICE_FILE, self.SERVICE_CLASS_LINE, self.SERVICE_CLASS_COL)
