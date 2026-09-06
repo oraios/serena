@@ -69,6 +69,15 @@ class VtsLanguageServer(SolidLanguageServer):
             "build",
         ]
 
+    def _get_language_id_for_file(self, relative_file_path: str) -> str:
+        # JSX is parsed as TS without this, which silently truncates symbol
+        # ranges at the first multi-line JSX expression.
+        if relative_file_path.endswith(".tsx"):
+            return "typescriptreact"
+        if relative_file_path.endswith(".jsx"):
+            return "javascriptreact"
+        return self.language_id
+
     @classmethod
     def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> str:
         """
