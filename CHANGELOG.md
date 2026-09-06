@@ -33,6 +33,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     Serena's own tools to close the gap (#1852)
 
 * Language Servers:
+  - Add `java.custom_jre_path` to launch JDTLS with a validated external Java executable when the bundled
+    JRE is too old for the installed JDTLS or project (#1469)
   - Add FreeBSD mapping to platform detection
   - Remove unnecessary platform checks from the following language servers, expanding the set of
     supported platforms accordingly: Elixir Tools, Intelephense, Perl, TypeScript, VTS
