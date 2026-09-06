@@ -1,6 +1,7 @@
 """
 Provides TypeScript specific instantiation of the LanguageServer class. Contains various configurations and settings specific to TypeScript.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

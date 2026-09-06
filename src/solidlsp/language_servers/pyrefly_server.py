@@ -8,6 +8,7 @@ You can pass the following entries in ``ls_specific_settings["python_pyrefly"]``
     - indexing_mode: Override pyrefly's LSP indexing mode (e.g. ``lazy-blocking``).
     - workspace_indexing_limit: Override pyrefly's workspace indexing limit.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

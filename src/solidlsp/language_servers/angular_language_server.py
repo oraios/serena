@@ -49,6 +49,7 @@ Hard project requirements (failure modes if violated):
       run in the project. Without it, ngserver's `isInAngularProject` returns
       false for every file and template features silently return empty.
 """
+# SPDX-License-Identifier: MIT
 
 from __future__ import annotations
 

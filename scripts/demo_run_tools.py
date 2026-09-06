@@ -2,6 +2,7 @@
 This script demonstrates how to use Serena's tools locally, useful
 for testing or development. Here the tools will be operation the serena repo itself.
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import json
 from pathlib import Path

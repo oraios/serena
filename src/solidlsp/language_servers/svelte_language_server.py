@@ -2,6 +2,7 @@
 Provides Svelte-specific instantiation of the LanguageServer class using
 ``svelte-language-server`` from Svelte Language Tools.
 """
+# SPDX-License-Identifier: MIT
 
 from __future__ import annotations
 

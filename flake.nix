@@ -178,7 +178,8 @@
             homepage = "https://oraios.github.io/serena";
             changelog = "https://github.com/oraios/serena/blob/main/CHANGELOG.md";
             mainProgram = "serena";
-            license = pkgs.lib.licenses.mit;
+            # The package as a whole is GPL-3.0-or-later; the bundled SolidLSP files remain MIT (see LICENSE)
+            license = pkgs.lib.licenses.gpl3Plus;
             platforms = lib.platforms.all;
           };
         };

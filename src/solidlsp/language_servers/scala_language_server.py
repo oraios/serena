@@ -1,6 +1,7 @@
 """
 Provides Scala specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Scala.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

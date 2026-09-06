@@ -1,6 +1,7 @@
 """
 Configuration objects for language servers
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

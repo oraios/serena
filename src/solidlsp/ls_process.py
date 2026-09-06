@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 import asyncio
 import json
 import logging

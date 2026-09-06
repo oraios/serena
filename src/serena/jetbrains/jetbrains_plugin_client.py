@@ -1,6 +1,7 @@
 """
 Client for the Serena JetBrains Plugin
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import concurrent
 import json

@@ -2,6 +2,7 @@
 Vue Language Server implementation using @vue/language-server (Volar) with companion TypeScript LS.
 Operates in hybrid mode: Vue LS handles .vue files, TypeScript LS handles .ts/.js files.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os
