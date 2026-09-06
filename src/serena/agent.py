@@ -44,7 +44,7 @@ from serena.config.serena_config import (
 from serena.dashboard import SerenaDashboardAPI, SerenaDashboardTrayManager, SerenaDashboardViewer, open_url_in_browser
 from serena.facades.api.jb import JetBrainsApi
 from serena.facades.api.lsp import LspApi
-from serena.facades.facade import Facade
+from serena.facades.facade import ApiScope, Facade
 from serena.facades.repl import SerenaRepl
 from serena.jetbrains import launch_coordinator as jetbrains_launch_coordinator
 from serena.ls_manager import LanguageServerManager
@@ -1154,6 +1154,9 @@ class SerenaAgent:
         self._active_tools = tool_set.to_available_tools(self._all_tools)
         log.info(f"Active tools ({len(self._active_tools)}): {', '.join(self._active_tools.tool_names)}")
 
+        # reset the REPL, which depends on the same configuration (it is re-created on demand)
+        self._repl = None
+
         # check if a tool was activated that is not in the exposed tool set and issue a warning if so
         active_tools_not_exposed = set(self._active_tools.tool_names) - set(self._exposed_tools.tool_names)
         if active_tools_not_exposed:
@@ -1168,12 +1171,25 @@ class SerenaAgent:
         :return: the REPL instance for this agent, creating it if necessary
         """
         if self._repl is None:
+            # determine API scope
+            api_scope = ApiScope()
+            api_scope.process(self.serena_config)
+            api_scope.process(self._context)
+            for mode in self._active_modes.get_modes():
+                api_scope.process(mode)
+            if self._active_project:
+                api_scope.process(self._active_project.project_config)
+                if self._active_project.project_config.read_only:
+                    api_scope.exclude_editing()
+
+            # gather facades
             facades = []
             if self._language_backend.is_lsp():
-                facades.append(Facade.from_api(LspApi(self)))
+                facades.append(Facade.from_api(LspApi(self), api_scope))
             elif self._language_backend.is_jetbrains():
-                facades.append(Facade.from_api(JetBrainsApi(self)))
-            self._repl = SerenaRepl(facades)
+                facades.append(Facade.from_api(JetBrainsApi(self), api_scope))
+
+            self._repl = SerenaRepl(facades, api_scope)
         return self._repl
 
     def issue_task(
@@ -1269,9 +1285,6 @@ class SerenaAgent:
             newly_activated_mode_names = None
 
         self._project_prompt_status = ProjectPromptProvisionStatus(newly_activated_mode_names=newly_activated_mode_names)
-
-        # reset the REPL to ensure that the new project's configuration is considered
-        self._repl = None
 
         if update_active_tools:
             self._update_active_tools()

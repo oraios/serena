@@ -15,7 +15,7 @@ from serena.jetbrains.jetbrains_types import SymbolDTO, SymbolDTOUtil
 from serena.symbol import JetBrainsSymbolDictGrouper
 from serena.util.text_utils import find_text_coordinates
 
-from ..facade import FacadeApi
+from ..facade import FacadeApi, facade_method
 from ..representable import JsonObject, JsonObjectRenderer, Renderer, RepresentableViaRenderer
 
 if TYPE_CHECKING:
@@ -178,6 +178,7 @@ class JetBrainsApi(FacadeApi):
 
     # read operations
 
+    @facade_method()
     def find_symbol(
         self,
         name_path_pattern: str,
@@ -261,6 +262,7 @@ class JetBrainsApi(FacadeApi):
             raise ValueError(f"Matched {n_matches}>{max_matches=} symbols.\n" + renderer.render_identifiers(collection))
         return collection
 
+    @facade_method()
     def find_referencing_symbols(self, name_path: str, relative_path: str, max_answer_chars: int = -1) -> JetBrainsSymbolCollection:
         """
         Finds all symbols that reference the given symbol — its callers / usages / dependents, i.e. the
@@ -293,6 +295,7 @@ class JetBrainsApi(FacadeApi):
         renderer = JetBrainsReferencesRenderer(self._agent, max_answer_chars, grouper=self.references_grouper_)
         return JetBrainsSymbolCollection(symbol_dicts, renderer)
 
+    @facade_method()
     def get_symbols_overview(
         self, relative_path: str, depth: int = -1, max_answer_chars: int = -1, include_file_documentation: bool = False
     ) -> JetBrainsSymbolsOverview:
@@ -338,6 +341,7 @@ class JetBrainsApi(FacadeApi):
                 result[rel_path].append(name_path)
         return dict(result)
 
+    @facade_method()
     def get_type_hierarchy(
         self,
         name_path: str,
@@ -376,6 +380,7 @@ class JetBrainsApi(FacadeApi):
             result["levels_not_included"] = levels_not_included
         return self._json_object(result, max_answer_chars)
 
+    @facade_method()
     def find_declaration(self, relative_path: str, regex: str, include_body: bool = False) -> JetBrainsSymbolCollection:
         r"""
         Finds the declaration of a symbol.
@@ -398,6 +403,7 @@ class JetBrainsApi(FacadeApi):
             )
         return JetBrainsSymbolCollection(response["symbols"], JetBrainsSymbolCollectionRenderer(self._agent, -1))
 
+    @facade_method()
     def find_implementations(self, relative_path: str, name_path: str) -> JetBrainsSymbolCollection:
         """
         Finds the implementations of a symbol.
@@ -412,6 +418,7 @@ class JetBrainsApi(FacadeApi):
 
     # edit operations
 
+    @facade_method(can_edit=True)
     def rename(
         self,
         relative_path: str,
@@ -442,6 +449,7 @@ class JetBrainsApi(FacadeApi):
         )
         return self._json_object(result)
 
+    @facade_method(beta=True, can_edit=True)
     def move(
         self,
         relative_path: str,
@@ -482,6 +490,7 @@ class JetBrainsApi(FacadeApi):
             )
         return self._json_object(result)
 
+    @facade_method(beta=True, can_edit=True)
     def safe_delete(
         self, relative_path: str, name_path: str | None = None, delete_even_if_used: bool = False, propagate: bool = False
     ) -> JsonObject:
@@ -508,6 +517,7 @@ class JetBrainsApi(FacadeApi):
             )
         return self._json_object(result)
 
+    @facade_method(beta=True, can_edit=True)
     def inline_symbol(self, name_path: str, relative_path: str, keep_definition: bool = False) -> JsonObject:
         """
         Inlines a symbol (usually a method/function, but also classes may be amenable to inlining,
@@ -528,6 +538,7 @@ class JetBrainsApi(FacadeApi):
 
     # inspections
 
+    @facade_method()
     def run_inspections(
         self,
         relative_path: str,
@@ -563,6 +574,7 @@ class JetBrainsApi(FacadeApi):
             )
         return self._json_object(result, max_answer_chars)
 
+    @facade_method()
     def list_inspections(
         self, language: str | None = None, group_path_contains: str | None = None, max_answer_chars: int = -1
     ) -> JsonObject:
@@ -583,6 +595,7 @@ class JetBrainsApi(FacadeApi):
 
     # debugging
 
+    @facade_method(beta=True)
     def debug_eval_info(self) -> str:
         """
         Provides usage information for the debug REPL (method `debug_eval`)
@@ -591,6 +604,7 @@ class JetBrainsApi(FacadeApi):
         """
         return self._agent.prompt_factory.create_info_jet_brains_debug_repl()
 
+    @facade_method(beta=True)
     def debug_eval(self, expression: str, repl_key: str = "default") -> str:
         """
         Provides debugging functionality (run configs, breakpoints, stepping, inspection, and evaluation)

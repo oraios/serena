@@ -131,6 +131,15 @@ included_optional_tools: []
 # Find the list of tools here: https://oraios.github.io/serena/01-about/035_tools.html
 fixed_tools: []
 
+# list of APIs (facades or facade methods, e.g. "lsp" or "lsp.find_symbol") to exclude from the REPL.
+# This extends the existing exclusions (e.g. from the global configuration).
+excluded_apis: []
+
+# list of APIs (facades or facade methods, e.g. "lsp" or "lsp.get_diagnostics_for_symbol") to include in the REPL
+# that would otherwise be disabled (particularly optional methods, which are disabled by default).
+# This extends the existing inclusions (e.g. from the global configuration).
+included_apis: []
+
 # list of mode names that are to be activated by default, overriding the setting in the global configuration.
 # The full set of modes to be activated is base_modes (from global config) + default_modes + added_modes.
 # If the setting is undefined/empty, the default_modes from the global configuration (serena_config.yml) apply.

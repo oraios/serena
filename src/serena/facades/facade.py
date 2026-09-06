@@ -5,31 +5,83 @@ The facade, i.e. the object through which REPL code accesses a group of related 
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import inspect
+import logging
 from abc import ABC
 from collections.abc import Callable, Iterable
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, TypeVar
 
+from serena.config.serena_config import ApiInclusionDefinition
 from serena.project import Project
 
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
 
+log = logging.getLogger(__name__)
+TCallable = TypeVar("TCallable", bound=Callable[..., Any])
+
 SUCCESS_RESULT = "OK"
 """the result returned by operations which have no result other than their success"""
+
+
+@dataclass(kw_only=True, frozen=True)
+class FacadeMethodInfo:
+    """
+    The metadata of a method exposed through a facade (see `facade_method`), mirroring the tool markers.
+    """
+
+    name: str
+    """the name of the method"""
+    optional: bool = False
+    """whether the method is disabled by default and must be enabled explicitly"""
+    beta: bool = False
+    """whether the method is in beta (not yet fully stable)"""
+    can_edit: bool = False
+    """whether the method can modify the codebase (relevant for read-only contexts)"""
+
+
+_FACADE_METHOD_INFO_ATTR = "__facade_method_info__"
+
+
+def facade_method(*, optional: bool = False, beta: bool = False, can_edit: bool = False) -> Callable[[TCallable], TCallable]:
+    """
+    Marks a method of a `FacadeApi` as exposed through the facade, attaching the given metadata.
+    The decorator only annotates the method (it does not wrap it), such that signature and docstring remain intact.
+
+    :param optional: whether the method is disabled by default and must be enabled explicitly
+    :param beta: whether the method is in beta
+    :param can_edit: whether the method can modify the codebase
+    :return: the decorator
+    """
+
+    def decorator(method: TCallable) -> TCallable:
+        setattr(method, _FACADE_METHOD_INFO_ATTR, FacadeMethodInfo(name=method.__name__, optional=optional, beta=beta, can_edit=can_edit))
+        return method
+
+    return decorator
+
+
+def get_facade_method_info(method: Callable[..., Any]) -> FacadeMethodInfo | None:
+    """
+    :param method: a (bound or unbound) method
+    :return: the metadata attached via `facade_method`, or None if the method is not exposed
+    """
+    return getattr(method, _FACADE_METHOD_INFO_ATTR, None)
 
 
 class FacadeApi(ABC):
     """
     The implementation of a facade's functionality.
 
-    API design principle: a member's name determines its visibility to the LLM.
+    API design principles:
 
-      * Names without a leading underscore and without a trailing underscore (e.g. `find_symbol`) constitute the
-        LLM-facing interface. Every such method of a concrete implementation is a candidate for exposure through
-        a `Facade`; which of them are actually exposed is decided by the facade.
-      * Names with a trailing underscore (e.g. `symbols_`, `to_dict_`) are public within Serena (e.g. for use by
-        classic tools or other facade implementations) but are never exposed to the LLM. Use this for functionality
-        which is not meant to be called from REPL code, in particular on the objects returned by API methods.
+      * A method is exposed to the LLM if and only if it is decorated with `facade_method`, which also carries
+        the method's metadata (optional, beta, can_edit). Undecorated methods are never exposed, regardless of their name.
+      * On the objects returned by API methods (which are not decorated), the name determines visibility:
+        names with a trailing underscore (e.g. `symbols_`, `to_dict_`) are public within Serena (e.g. for use by
+        classic tools or other facade implementations) but are not meant to be called from REPL code, whereas
+        names without leading or trailing underscore constitute the LLM-facing interface.
+        The same convention applies to non-exposed helper methods of API classes.
       * Names with a leading underscore are private, as usual.
     """
 
@@ -59,9 +111,16 @@ class FacadeMethod:
     enabled or disabled; only enabled methods are accessible from REPL code.
     """
 
-    def __init__(self, name: str, implementation: Callable[..., Any], enabled: bool = True) -> None:
+    def __init__(self, name: str, implementation: Callable[..., Any], info: FacadeMethodInfo, enabled: bool) -> None:
+        """
+        :param name: the method's name
+        :param implementation: the implementation to delegate to
+        :param info: the method's metadata
+        :param enabled: whether the method is initially enabled
+        """
         self.name = name
         self._implementation = implementation
+        self.info = info
         self.enabled = enabled
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
@@ -77,6 +136,101 @@ class FacadeMethod:
         return f"{facade_name}.{self.name}{signature}\n{doc}\n"
 
 
+class ApiScope:
+    """
+    The scope of APIs available to the LLM, i.e. which facade methods are enabled, as determined by
+    applying a sequence of inclusion/exclusion definitions (from the global configuration, the context,
+    the active modes and the project configuration) to the methods' default enablement.
+    """
+
+    class FacadeScope:
+        """
+        The scope of a single facade: whether the facade as a whole is included, and which of its methods
+        were explicitly included/excluded (a method is never in both sets).
+        If the facade is not included, it is opt-in, i.e. only explicitly included methods are enabled.
+        """
+
+        def __init__(self) -> None:
+            self.is_included = True
+            self.method_inclusions: set[str] = set()
+            self.method_exclusions: set[str] = set()
+
+        def exclude_facade(self) -> None:
+            self.is_included = False
+            self.method_inclusions = set()
+            self.method_exclusions = set()
+
+        def include_facade(self) -> None:
+            self.is_included = True
+
+        def exclude_method(self, method_name: str) -> None:
+            self.method_inclusions.discard(method_name)
+            self.method_exclusions.add(method_name)
+
+        def include_method(self, method_name: str) -> None:
+            self.method_exclusions.discard(method_name)
+            self.method_inclusions.add(method_name)
+
+    def __init__(self) -> None:
+        self._facade_scopes: dict[str, ApiScope.FacadeScope] = {}
+        self._editing_excluded = False
+
+    def _get_facade_scope(self, facade_name: str) -> "ApiScope.FacadeScope":
+        if facade_name not in self._facade_scopes:
+            self._facade_scopes[facade_name] = ApiScope.FacadeScope()
+        return self._facade_scopes[facade_name]
+
+    def process(self, definition: ApiInclusionDefinition) -> None:
+        """
+        Applies the given definition, exclusions first, then inclusions (such that inclusions take precedence
+        within a definition; across definitions, later definitions take precedence).
+
+        :param definition: the definition to apply
+        """
+
+        def apply(api_ref: str, *, excluded: bool) -> None:
+            components = api_ref.split(".")
+            if len(components) > 2:
+                log.warning("Ignoring invalid API reference '%s' in %s (expected 'facade' or 'facade.method')", api_ref, definition)
+                return
+            facade_scope = self._get_facade_scope(components[0])
+            if len(components) == 1:
+                facade_scope.exclude_facade() if excluded else facade_scope.include_facade()
+            else:
+                facade_scope.exclude_method(components[1]) if excluded else facade_scope.include_method(components[1])
+
+        for api_exclusion in definition.excluded_apis:
+            apply(api_exclusion, excluded=True)
+        for api_inclusion in definition.included_apis:
+            apply(api_inclusion, excluded=False)
+
+    def exclude_editing(self) -> None:
+        """
+        Excludes all methods which can edit the codebase (read-only operation), regardless of other inclusions.
+        """
+        self._editing_excluded = True
+
+    def is_facade_enabled(self, facade_name: str) -> bool:
+        facade_scope = self._get_facade_scope(facade_name)
+        return facade_scope.is_included or len(facade_scope.method_inclusions) > 0
+
+    def is_method_enabled(self, facade_name: str, method_info: FacadeMethodInfo) -> bool:
+        """
+        :param facade_name: the name of the facade
+        :param method_info: the method's metadata
+        :return: whether the method is enabled: optional methods (and all methods of an excluded facade) must be
+            explicitly included, other methods are enabled unless explicitly excluded; if editing is excluded,
+            editing methods are always disabled
+        """
+        if self._editing_excluded and method_info.can_edit:
+            return False
+        facade_scope = self._get_facade_scope(facade_name)
+        if method_info.optional or not facade_scope.is_included:
+            return method_info.name in facade_scope.method_inclusions
+        else:
+            return method_info.name not in facade_scope.method_exclusions
+
+
 class Facade:
     """
     A named group of related operations which an LLM can invoke from REPL code.
@@ -89,29 +243,22 @@ class Facade:
         object.__setattr__(self, "_methods", {m.name: m for m in methods})
 
     @staticmethod
-    def _is_exposable_member_name(name: str) -> bool:
-        """
-        :param name: the name of a member of a facade implementation
-        :return: whether the member may be exposed through a facade, i.e. whether its name has neither a leading
-            nor a trailing underscore (see `FacadeApi` for the naming principle)
-        """
-        return not name.startswith("_") and not name.endswith("_")
-
-    @staticmethod
-    def from_api(api: FacadeApi, enabled_methods: Iterable[str] | None = None) -> "Facade":
+    def from_api(api: FacadeApi, api_scope: ApiScope) -> "Facade":
         """
         Creates a facade wrapping the given implementation.
 
-        :param api: the implementation; each of its LLM-facing methods (see `_is_exposable_member_name`) becomes a facade method
-        :param enabled_methods: the names of the methods to enable; if None, all methods are enabled
+        :param api: the implementation; each of its methods decorated with `facade_method` becomes a facade method
+        :param api_scope: API scope definition determining which methods are enabled
         :return: the facade
         """
-        enabled = None if enabled_methods is None else set(enabled_methods)
-        methods = [
-            FacadeMethod(name, member, enabled=enabled is None or name in enabled)
-            for name, member in inspect.getmembers(api, predicate=inspect.ismethod)
-            if Facade._is_exposable_member_name(name)
-        ]
+        facade_name = api.get_name_()
+        methods = []
+        for name, member in inspect.getmembers(api, predicate=inspect.ismethod):
+            method_info = get_facade_method_info(member)
+            if method_info is None:
+                continue
+            is_enabled = api_scope.is_method_enabled(facade_name, method_info)
+            methods.append(FacadeMethod(name, member, method_info, enabled=is_enabled))
         return Facade(api.get_name_(), api.get_description_(), methods)
 
     @property

@@ -4,13 +4,15 @@ The REPL through which an LLM executes Python code against Serena's facades.
 
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+import logging
 import textwrap
 import traceback
-from collections.abc import Iterable
 from typing import Any
 
-from .facade import Facade
+from .facade import ApiScope, Facade
 from .representable import Representable
+
+log = logging.getLogger(__name__)
 
 
 class SerenaReplEntrypoint:
@@ -19,10 +21,18 @@ class SerenaReplEntrypoint:
     and offers progressive disclosure of their interfaces via `info`.
     """
 
-    def __init__(self, facades: Iterable[Facade]) -> None:
+    def __init__(self, facades: list[Facade], api_scope: ApiScope) -> None:
+        """
+        :param facades: the candidate facades
+        :param api_scope: the API scope, which determines which of the facades are made available
+        """
         self._facades: dict[str, Facade] = {}
+        registered_facade_names = []
         for facade in facades:
-            self._register(facade)
+            if api_scope.is_facade_enabled(facade.name):
+                self._register(facade)
+                registered_facade_names.append(facade.name)
+        log.info("Registered %d/%d facades: %s", len(registered_facade_names), len(facades), registered_facade_names)
 
     def _register(self, facade: Facade) -> None:
         if facade.name in self._facades:
@@ -75,11 +85,12 @@ class SerenaRepl:
     ENTRYPOINT_NAME = "s"
     _FUNCTION_NAME = "__serena_repl_fn__"
 
-    def __init__(self, facades: Iterable[Facade]) -> None:
+    def __init__(self, facades: list[Facade], api_scope: ApiScope) -> None:
         """
-        :param facades: the facades to make available through the entrypoint
+        :param facades: the candidate facades
+        :param api_scope: the API scope, which determines which of the facades are made available
         """
-        self._entrypoint = SerenaReplEntrypoint(facades)
+        self._entrypoint = SerenaReplEntrypoint(facades, api_scope)
 
     @property
     def entrypoint(self) -> SerenaReplEntrypoint:

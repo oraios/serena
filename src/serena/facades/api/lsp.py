@@ -21,7 +21,7 @@ from serena.symbol import (
 from serena.util.text_utils import TextOutputUtils, find_text_coordinates
 from solidlsp.lsp_protocol_handler.lsp_types import SymbolKind
 
-from ..facade import SUCCESS_RESULT, FacadeApi
+from ..facade import SUCCESS_RESULT, FacadeApi, facade_method
 from ..representable import Renderer, RepresentableViaRenderer
 
 if TYPE_CHECKING:
@@ -311,6 +311,7 @@ class LspApi(FacadeApi):
 
     # language server management
 
+    @facade_method(optional=True)
     def restart_language_server(self) -> str:
         """
         Restarts the language server(s). Use this only on explicit user request or after confirmation;
@@ -323,6 +324,7 @@ class LspApi(FacadeApi):
 
     # read operations
 
+    @facade_method()
     def get_symbols_overview(self, relative_path: str, depth: int = -1, max_answer_chars: int = -1) -> LspSymbolCollection:
         """
         Gets an overview of the top-level symbols defined in the given file (classes, methods, fields) — its
@@ -368,6 +370,7 @@ class LspApi(FacadeApi):
         )
         return LspSymbolCollection(symbols, renderer)
 
+    @facade_method()
     def find_symbol(
         self,
         name_path_pattern: str,
@@ -460,6 +463,7 @@ class LspApi(FacadeApi):
 
         return symbol_collection
 
+    @facade_method()
     def find_referencing_symbols(
         self,
         name_path: str,
@@ -493,6 +497,7 @@ class LspApi(FacadeApi):
         )
         return LspReferenceCollection(references, LspReferenceCollectionRenderer(self._agent, max_answer_chars, self.references_grouper_))
 
+    @facade_method()
     def find_implementations(
         self,
         name_path: str,
@@ -528,6 +533,7 @@ class LspApi(FacadeApi):
         output_params = SymbolOutputParams(kind=True, relative_path=True, body_location=True, include_info=include_info)
         return LspSymbolCollection(symbols, LspSymbolCollectionRenderer(self._agent, max_answer_chars, symbol_retriever, output_params))
 
+    @facade_method()
     def find_declaration(
         self,
         relative_path: str,
@@ -582,6 +588,7 @@ class LspApi(FacadeApi):
         collection_renderer = LspSymbolCollectionRenderer(self._agent, -1, symbol_retriever, output_params)
         return LspSymbol(defining_symbol, LspSymbolRenderer(self._agent, -1, collection_renderer))
 
+    @facade_method()
     def get_diagnostics_for_file(
         self, relative_path: str, start_line: int = 0, end_line: int = -1, min_severity: int = 4, max_answer_chars: int = -1
     ) -> LspDiagnostics:
@@ -615,6 +622,7 @@ class LspApi(FacadeApi):
 
         return self._create_diagnostics(grouped_diagnostics, max_answer_chars)
 
+    @facade_method(optional=True)
     def get_diagnostics_for_symbol(
         self,
         name_path: str,
@@ -658,6 +666,7 @@ class LspApi(FacadeApi):
 
     # edit operations
 
+    @facade_method(can_edit=True)
     def replace_symbol_body(self, name_path: str, relative_path: str, body: str) -> str:
         """
         Replaces the body of the given symbol.
@@ -675,6 +684,7 @@ class LspApi(FacadeApi):
         self._create_code_editor().replace_body(name_path, relative_file_path=relative_path, body=body)
         return SUCCESS_RESULT
 
+    @facade_method(can_edit=True)
     def insert_after_symbol(self, name_path: str, relative_path: str, body: str) -> str:
         """
         Inserts code after a class/method/function definition.
@@ -689,6 +699,7 @@ class LspApi(FacadeApi):
         self._create_code_editor().insert_after_symbol(name_path, relative_file_path=relative_path, body=body)
         return SUCCESS_RESULT
 
+    @facade_method(can_edit=True)
     def insert_before_symbol(self, name_path: str, relative_path: str, body: str) -> str:
         """
         Inserts the given content before the beginning of the definition of the given symbol (via the symbol's location).
@@ -703,6 +714,7 @@ class LspApi(FacadeApi):
         self._create_code_editor().insert_before_symbol(name_path, relative_file_path=relative_path, body=body)
         return SUCCESS_RESULT
 
+    @facade_method(can_edit=True)
     def rename_symbol(self, name_path: str, relative_path: str, new_name: str) -> str:
         """
         Renames the symbol with the given `name_path` to `new_name` throughout the entire codebase.
@@ -717,6 +729,7 @@ class LspApi(FacadeApi):
         self._get_project().ls_sync_file_system_changes()
         return self._create_code_editor().rename_symbol(name_path, relative_path=relative_path, new_name=new_name)
 
+    @facade_method(can_edit=True)
     def safe_delete_symbol(self, name_path_pattern: str, relative_path: str) -> str:
         """
         Deletes the symbol if it is safe to do so (i.e., if there are no references to it)

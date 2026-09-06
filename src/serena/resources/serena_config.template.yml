@@ -151,6 +151,13 @@ included_optional_tools: []
 # This cannot be combined with non-empty excluded_tools or included_optional_tools.
 fixed_tools: []
 
+# list of APIs (facades or facade methods, e.g. "lsp" or "lsp.find_symbol") to be globally excluded from the REPL
+excluded_apis: []
+
+# list of APIs (facades or facade methods, e.g. "lsp.get_diagnostics_for_symbol") to be included in the REPL
+# (particularly optional methods, which are disabled by default)
+included_apis: []
+
 # list of mode names to that are always to be included in the set of active modes.
 # The full set of modes to be activated is base_modes + default_modes + added_modes,
 # where added_modes can be defined by projects/CLI parameters.

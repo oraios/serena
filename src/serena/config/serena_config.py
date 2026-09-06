@@ -179,6 +179,18 @@ class NamedToolInclusionDefinition(ToolInclusionDefinition):
 
 
 @dataclass
+class ApiInclusionDefinition:
+    """
+    Defines which APIs to include/exclude in Serena's operation.
+    A single API inclusion/exclusion can either be a full facade (facade name, which encompasses all of its methods, e.g. "lsp")
+    or a method of a facade (facade name + method name, e.g. "lsp.find_symbol").
+    """
+
+    included_apis: Sequence[str] = ()
+    excluded_apis: Sequence[str] = ()
+
+
+@dataclass
 class ModeSelectionDefinition:
     default_modes: Sequence[str] | None = None
 
@@ -274,7 +286,7 @@ class LineEnding(Enum):
 
 
 @dataclass
-class SharedConfig(ToolInclusionDefinition, ToStringMixin):
+class SharedConfig(ToolInclusionDefinition, ApiInclusionDefinition, ToStringMixin):
     """Shared between SerenaConfig and ProjectConfig, the latter used to override values in the form
     (same as in ModeSelectionDefinition).
     The defaults here shall be none and should be set to the global default values in SerenaConfig.
@@ -621,6 +633,8 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         fixed_tools = data["fixed_tools"] or []
         excluded_tools = data["excluded_tools"] or []
         included_optional_tools = data["included_optional_tools"] or []
+        excluded_apis = data.get("excluded_apis") or []
+        included_apis = data.get("included_apis") or []
         additional_workspace_folders = data.get("ls_additional_workspace_folders") or []
 
         if "base_modes" in data and data["base_modes"] is not None:
@@ -635,6 +649,8 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
             excluded_tools=excluded_tools,
             fixed_tools=fixed_tools,
             included_optional_tools=included_optional_tools,
+            excluded_apis=excluded_apis,
+            included_apis=included_apis,
             read_only=data["read_only"],
             read_only_memory_patterns=data.get("read_only_memory_patterns", []),
             ignored_memory_patterns=data.get("ignored_memory_patterns", []),

@@ -8,6 +8,7 @@ from serena import __version__
 from serena.agent import Tool, ToolRegistry
 from serena.config.context_mode import SerenaAgentContext
 from serena.config.serena_config import SerenaConfig
+from serena.facades.facade import ApiScope
 from serena.facades.repl import SerenaRepl
 from serena.mcp import SerenaMCPFactory
 
@@ -26,7 +27,7 @@ class MockAgent:
 
     @staticmethod
     def get_repl() -> SerenaRepl:
-        return SerenaRepl([])
+        return SerenaRepl([], ApiScope())
 
 
 class BaseMockTool(Tool):
