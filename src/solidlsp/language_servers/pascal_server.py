@@ -462,6 +462,11 @@ class PascalLanguageServer(SolidLanguageServer):
         if ".." in member.name.split("/") or ".." in member.name.split("\\"):
             return False
 
+        # A member-name containment check does not constrain link targets.
+        # Reject symlinks, hardlinks, and special files before extraction.
+        if member.issym() or member.islnk() or not (member.isdir() or member.isfile()):
+            return False
+
         # Check extracted path is within target directory
         abs_target = os.path.abspath(target_dir)
         abs_member = os.path.abspath(os.path.join(target_dir, member.name))
@@ -480,7 +485,12 @@ class PascalLanguageServer(SolidLanguageServer):
                         if not cls._is_safe_tar_member(member, target_dir):
                             log.error(f"Unsafe tar member detected (path traversal): {member.name}")
                             return False
-                    tar.extractall(target_dir)
+                    try:
+                        tar.extractall(target_dir, filter="data")
+                    except TypeError:
+                        # Python < 3.12 has no filter argument; links and
+                        # special files were rejected above.
+                        tar.extractall(target_dir)
 
             elif archive_type == "zip":
                 with zipfile.ZipFile(archive_path, "r") as zip_ref:

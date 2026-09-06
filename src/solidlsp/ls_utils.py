@@ -632,8 +632,25 @@ class FileUtils:
         with tarfile.open(archive_path, tar_mode) as tar_ref:
             for tar_member in tar_ref.getmembers():
                 FileUtils._validate_extraction_path(tar_member.name, target_path)
+                # A safe member-name check does not protect against links: a
+                # symlink/hardlink can redirect a later extraction outside the
+                # destination directory. Reject links and special files.
+                if (
+                    tar_member.issym()
+                    or tar_member.islnk()
+                    or not (tar_member.isdir() or tar_member.isfile())
+                ):
+                    raise SolidLSPException(
+                        f"Unsafe archive member '{tar_member.name}': "
+                        "links and special files are not allowed"
+                    )
 
-            tar_ref.extractall(target_path)
+            try:
+                tar_ref.extractall(target_path, filter="data")
+            except TypeError:
+                # Python < 3.12 has no filter argument. Links were already
+                # rejected above, so the legacy call remains confined.
+                tar_ref.extractall(target_path)
 
 
 class PlatformId(str, Enum):
