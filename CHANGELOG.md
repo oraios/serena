@@ -219,6 +219,8 @@ CLI:
     detection #1766
 
 * Dashboard:
+  - Add optional `web_dashboard_advertised_host` configuration so local users can give the dashboard
+    a dedicated browser origin without changing its loopback bind address
   - Fix: Serena PyPI version check triggered by callback on main thread could delay agent startup #1774
   - Improvements in `tray_manager` interface mode:
     - Fix: on macOS, the `tray_manager` interface put an icon in the Dock and in the app switcher

@@ -69,6 +69,11 @@ web_dashboard_interface:
 # the address the web dashboard will listen on (bind address).
 web_dashboard_listen_address: 127.0.0.1
 
+# optional hostname to use in generated dashboard URLs. This does not change the bind address;
+# for example, use `serena.localhost` to keep the dashboard's browser origin separate from other
+# local applications. Add the hostname to `web_dashboard_trusted_hosts` when using this setting.
+web_dashboard_advertised_host:
+
 # trusted hosts used to access the web dashboard.
 # By default, only allow access via local addresses for security reasons.
 # If you want to allow access from remote machines, add the hostname used to access the dashboard to this list.

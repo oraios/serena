@@ -410,6 +410,7 @@ class DashboardManager:
         open_dashboard_on_launch: bool,
         active_project: Project | None = None,
         mode_str: str | None = None,
+        advertised_host: str | None = None,
     ):
         # determine requested mode
         if mode_str is not None:
@@ -435,7 +436,7 @@ class DashboardManager:
         self._dashboard_viewer_process: multiprocessing.Process | None = None
         self._tray_manager_lock = threading.Lock()
 
-        dashboard_host = host_listen_address
+        dashboard_host = advertised_host or host_listen_address
         if dashboard_host == "0.0.0.0":
             dashboard_host = "localhost"
         self.url = f"http://{dashboard_host}:{port}/dashboard/index.html"
@@ -713,6 +714,7 @@ class SerenaAgent:
                 self.serena_config.web_dashboard_open_on_launch,
                 self._active_project,
                 mode_str=self.serena_config.web_dashboard_interface,
+                advertised_host=self.serena_config.web_dashboard_advertised_host,
             )
             log.info("Serena web dashboard started at %s", self._dashboard_manager.url)
             # inform the GUI window (if any)
