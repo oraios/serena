@@ -1265,6 +1265,22 @@ class TestHookCli:
         assert result.exit_code == 0
         assert result.output == ""
 
+    def test_auto_approve_command_dsh_stays_silent(self, tmp_path: Path):
+        """DSH's Claude-compatible bridge does not treat ``allow`` as pre-approval."""
+        stdin_json = json.dumps(
+            {
+                "session_id": "cli-auto-approve-dsh",
+                "tool_name": "mcp__serena__find_symbol",
+                "tool_input": {},
+                "permission_mode": "auto",
+            }
+        )
+        runner = CliRunner()
+        with patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            result = runner.invoke(hook_commands, ["auto-approve", "--client", "dsh"], input=stdin_json)
+        assert result.exit_code == 0
+        assert result.output == ""
+
     def test_auto_approve_command_grok_uses_native_output(self, tmp_path: Path):
         """The ``auto-approve`` CLI command accepts ``--client=grok`` and emits Grok-native JSON."""
         stdin_json = json.dumps(
@@ -1339,3 +1355,34 @@ class TestHookCli:
         with patch("serena.hooks.serena_home_dir", str(tmp_path)):
             result = runner.invoke(hook_commands, ["activate", "--client", "claude-code"], input="not json")
         assert result.exit_code != 0
+
+
+class TestDSHHookClient:
+    """DSH uses the Claude Code-compatible hooks bridge documented in issue #1869."""
+
+    def test_dsh_client_detects_grep_and_read_tools(self, tmp_path: Path) -> None:
+        with patch("sys.stdin", _make_stdin(_base_input("grep"))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            grep_hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.DSH)
+        with patch("sys.stdin", _make_stdin(_read_input())), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            read_hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.DSH)
+
+        assert grep_hook._client is HookClient.DSH
+        assert grep_hook.is_grep_call()
+        assert read_hook.is_read_code_file_call()
+
+    def test_dsh_uses_claude_compatible_deny_payload(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
+            _execute_remind_hook(HookClient.DSH, _base_input("grep"), tmp_path)
+
+        result = json.loads(capsys.readouterr().out.strip())
+        output = result["hookSpecificOutput"]
+        assert output["hookEventName"] == "PreToolUse"
+        assert output["permissionDecision"] == "deny"
+        assert "additionalContext" in output
+        assert "grep" in output["additionalContext"].lower()
+
+    def test_dsh_is_accepted_by_cli_client_choice(self) -> None:
+        result = CliRunner().invoke(hook_commands, ["remind", "--help"])
+
+        assert result.exit_code == 0
+        assert "dsh" in result.output

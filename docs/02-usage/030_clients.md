@@ -225,6 +225,45 @@ The hooks will:
 For more details on Claude Code's hook system, see the
 [Claude Code hooks documentation](https://code.claude.com/docs/en/hooks).
 
+## DeepSeek Harness (DSH)
+
+DSH can run Serena through its Claude Code-compatible hooks bridge. Install and enable
+`@deepseek-ai/dsh-hooks-claude-code`, then configure the bridge with the path to the hooks file. For example,
+add the following plugin entry to the DSH Cordis configuration (the exact file location depends on your DSH setup):
+
+```yaml
+- dsh-hooks-claude-code:
+    # Use an absolute path; relative paths resolve against DSH's process launch directory.
+    configPath: /absolute/path/to/.dsh/hooks.json
+```
+
+The bridge accepts either a bare event map or a settings file with a top-level `hooks` key. Create the file at the
+absolute path used above with the following content:
+
+```json
+{
+  "SessionStart": [{
+    "matcher": "",
+    "hooks": [{ "type": "command", "command": "serena-hooks activate --client dsh" }]
+  }],
+  "PreToolUse": [{
+    "matcher": "",
+    "hooks": [{ "type": "command", "command": "serena-hooks remind --client dsh" }]
+  }],
+  "Stop": [{
+    "matcher": "",
+    "hooks": [{ "type": "command", "command": "serena-hooks cleanup --client dsh" }]
+  }]
+}
+```
+
+The DSH bridge uses `SessionStart`, `PreToolUse`, and `Stop`; therefore Serena maps cleanup to `Stop` because
+DSH does not currently expose a separate `SessionEnd` event. Serena's DSH output follows the same
+`hookSpecificOutput` shape as Claude Code, so the bridge can consume `permissionDecision` and
+`permissionDecisionReason` without a client-specific wrapper. The bridge supports deny/ask responses for
+`PreToolUse`, but does not use Claude Code's `allow` response for pre-approval, so Serena's `auto-approve`
+hook is intentionally not configured for DSH.
+
 ## VSCode
 
 You can add Serena to VSCode by running the MCP: Add Server command.
