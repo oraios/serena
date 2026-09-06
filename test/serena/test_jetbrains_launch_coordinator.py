@@ -65,15 +65,17 @@ class TestLaunchAndWaitForPluginServer:
             mock.patch.object(jetbrains_plugin_client.JetBrainsPluginClient, "from_project", side_effect=from_project),
             mock.patch.object(launch_coordinator, "_lock_path_for_launch_command", return_value=tmp_path / "lock"),
             mock.patch("serena.jetbrains.launch_coordinator.subprocess.Popen", return_value=_fake_process()) as popen,
-            mock.patch("serena.jetbrains.launch_coordinator.time.sleep") as sleep,
+            # leave the shared time module unchanged for filelock and other threads
+            mock.patch.object(launch_coordinator, "time", wraps=time) as clock,
         ):
+            clock.sleep.return_value = None
             launch_coordinator.launch_and_wait_for_plugin_server(
                 project, "pycharm", plugin_server_wait_timeout=5.0, plugin_server_poll_interval=0.01
             )
         popen.assert_called_once()
         # 1 check right after acquiring the lock (raises) + 3 polls (2 raise, the 3rd succeeds)
         assert calls["n"] == 4
-        assert sleep.call_count == 2
+        assert clock.sleep.call_count == 2
 
     def test_gives_up_after_the_wait_timeout_without_raising(self, tmp_path) -> None:
         project = _make_project()
