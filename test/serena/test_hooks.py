@@ -15,6 +15,7 @@ from serena.hooks import (
     PreToolUseHook,
     PreToolUseRemindAboutSymbolicToolsHook,
     SessionEndCleanupHook,
+    SessionStartActivateProjectHook,
     hook_commands,
 )
 
@@ -1111,6 +1112,40 @@ class TestSessionEndCleanupHook:
         with patch("sys.stdin", _make_stdin(stdin_data)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
             SessionEndCleanupHook(HookClient.CLAUDE_CODE).execute()
 
+    def test_missing_session_id_does_not_raise(self, tmp_path: Path):
+        """Unlike other hooks, cleanup tolerates a missing session id (#1533)."""
+        stdin_data = {"hookEventName": "stop"}
+        with patch("sys.stdin", _make_stdin(stdin_data)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            SessionEndCleanupHook(HookClient.CODEX).execute()
+
+    def test_empty_stdin_does_not_raise(self, tmp_path: Path):
+        """A cleanup hook invoked with no stdin is a no-op, not a crash (#1533)."""
+        with patch("sys.stdin", StringIO("")), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            SessionEndCleanupHook(HookClient.CODEX).execute()
+
+
+class TestSessionStartActivateProjectHook:
+    def test_missing_session_id_does_not_raise(self, tmp_path: Path):
+        """Activate only emits a static reminder and never touches session_persistence_dir,
+        so a missing session id must not abort it, mirroring cleanup's tolerance (PR #1738 review).
+        """
+        stdin_data = {"hookEventName": "SessionStart"}
+        with patch("sys.stdin", _make_stdin(stdin_data)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            SessionStartActivateProjectHook(HookClient.CODEX).execute()
+
+    def test_empty_stdin_does_not_raise(self, tmp_path: Path):
+        """Activate invoked with no stdin must not crash."""
+        with patch("sys.stdin", StringIO("")), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            SessionStartActivateProjectHook(HookClient.CODEX).execute()
+
+    def test_with_session_id_still_works(self, tmp_path: Path):
+        """A present session id is still accepted and stored as before."""
+        stdin_data = {"session_id": "activate-session"}
+        with patch("sys.stdin", _make_stdin(stdin_data)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            hook = SessionStartActivateProjectHook(HookClient.CLAUDE_CODE)
+            assert hook.session_persistence_dir is not None
+            hook.execute()
+
 
 class TestHookCli:
     """Tests for the Click CLI entry point (serena-hooks)."""
@@ -1139,6 +1174,29 @@ class TestHookCli:
             result = runner.invoke(hook_commands, ["cleanup", "--client", "grok"], input=stdin_json)
         assert result.exit_code == 0
         assert not session_dir.exists()
+
+    def test_cleanup_command_codex_emits_continue_json(self, tmp_path: Path):
+        """Codex requires the Stop hook's stdout to be valid JSON (#1533)."""
+        session_id = "cli-codex-cleanup"
+        session_dir = tmp_path / "hook_data" / session_id
+        session_dir.mkdir(parents=True)
+        (session_dir / "somefile").write_text("data")
+
+        stdin_json = json.dumps({"session_id": session_id})
+        runner = CliRunner()
+        with patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            result = runner.invoke(hook_commands, ["cleanup", "--client", "codex"], input=stdin_json)
+        assert result.exit_code == 0
+        assert not session_dir.exists()
+        assert json.loads(result.output) == {"continue": True}
+
+    def test_cleanup_command_codex_without_session_id(self, tmp_path: Path):
+        """Codex cleanup still emits valid JSON when no session id is present (#1533)."""
+        runner = CliRunner()
+        with patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            result = runner.invoke(hook_commands, ["cleanup", "--client", "codex"], input=json.dumps({"hookEventName": "stop"}))
+        assert result.exit_code == 0
+        assert json.loads(result.output) == {"continue": True}
 
     def test_remind_command(self, tmp_path: Path):
         """Invoke the remind command enough times to trigger a deny."""
@@ -1318,6 +1376,14 @@ class TestHookCli:
             assert result.output == ""
         else:
             assert json.loads(result.output) == expected_output
+
+    def test_activate_command_without_session_id_does_not_raise(self, tmp_path: Path):
+        """Activate must not crash if a client omits session_id on SessionStart (PR #1738 review)."""
+        stdin_json = json.dumps({"hookEventName": "SessionStart"})
+        runner = CliRunner()
+        with patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            result = runner.invoke(hook_commands, ["activate", "--client", "codex"], input=stdin_json)
+        assert result.exit_code == 0
 
     def test_client_default_is_claude_code(self, tmp_path: Path):
         """When --client is omitted, it defaults to claude-code."""
