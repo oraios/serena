@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from functools import cached_property
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Optional, Protocol, Self, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Protocol, Self, TypeVar, cast
 
 from mcp import Implementation
 from mcp.server.fastmcp import Context
@@ -16,12 +16,13 @@ from sensai.util import logging
 from sensai.util.string import dict_string
 
 from serena.config.serena_config import LanguageBackend
+from serena.facades.facade import SUCCESS_RESULT  # noqa: F401  (re-exported for tools)
+from serena.lsp.lsp_diagnostics import DiagnosticsContext
 from serena.memories.memory_manager import MemoryManager
 from serena.project import Project
 from serena.prompt_factory import PromptFactory
 from serena.util.class_decorators import singleton
 from serena.util.inspection import iter_subclasses
-from serena.util.ls_diagnostics import DiagnosticsDiff, EditedFilePath, PublishedDiagnosticsSnapshot
 from serena.util.text_utils import TextOutputUtils
 from solidlsp.ls_exceptions import SolidLSPException
 
@@ -32,7 +33,6 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 T = TypeVar("T")
-SUCCESS_RESULT = "OK"
 
 
 class Component(ABC):
@@ -467,47 +467,16 @@ class EditingToolWithDiagnostics(Tool, ToolMarkerCanEdit):
     are then resolved in subsequent edits.
     """
 
-    DIAGNOSTICS_KEY = "diagnostics[warning-or-higher]"
+    def diagnostics_context(self, *edited_relative_paths: str) -> DiagnosticsContext:
+        """
+        Creates a context for use with the `with` statement, which captures the diagnostics before the edit,
+        such that changes can be reported
 
-    class DiagnosticsContext:
-        def __init__(self, tool: "EditingToolWithDiagnostics", *edited_relative_paths: str) -> None:
-            self._tool = tool
-            self._is_diagnostics_enabled = tool.ENABLE_DIAGNOSTICS and tool.agent.is_using_language_server()
-            self._edited_files = [EditedFilePath(path, path) for path in edited_relative_paths]
-            self._before_edit_diagnostics_snapshot: PublishedDiagnosticsSnapshot | None = None
-            self._symbol_retriever: Optional["LanguageServerSymbolRetriever"] | None = None
-            if self._is_diagnostics_enabled:
-                self._symbol_retriever = tool.create_language_server_symbol_retriever()
-                self._before_edit_diagnostics_snapshot = PublishedDiagnosticsSnapshot(self._edited_files, self._symbol_retriever)
-
-        def __enter__(self) -> Self:
-            return self
-
-        def __exit__(self, exc_type, exc_val, exc_tb):
-            pass
-
-        def format_result(
-            self,
-            base_result: str,
-        ) -> str:
-            if not self._is_diagnostics_enabled:
-                return base_result
-
-            if self._before_edit_diagnostics_snapshot is None:
-                return base_result
-
-            assert self._symbol_retriever is not None
-            diagnostics_diff = DiagnosticsDiff(self._before_edit_diagnostics_snapshot, self._edited_files, self._symbol_retriever)
-            grouped_diagnostics = diagnostics_diff.get_grouped_diagnostics().get_dict()
-
-            if not grouped_diagnostics:
-                return base_result
-            else:
-                result_dict = {
-                    "result": base_result,
-                    EditingToolWithDiagnostics.DIAGNOSTICS_KEY: grouped_diagnostics,
-                }
-                return self._tool._to_json(result_dict)
+        :param edited_relative_paths: the relative paths of the files that are to be edited within the context
+        :return: a context which captures the diagnostics before the edit, such that changes can be reported
+            via `format_result`
+        """
+        return DiagnosticsContext(self.agent, *edited_relative_paths, enable=self.ENABLE_DIAGNOSTICS)
 
 
 class EditedFileContext:

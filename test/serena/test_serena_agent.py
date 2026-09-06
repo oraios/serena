@@ -15,11 +15,11 @@ from _pytest.mark import Mark, MarkDecorator, ParameterSet
 from serena.agent import SerenaAgent
 from serena.config.context_mode import SerenaAgentContext
 from serena.config.serena_config import ProjectConfig, RegisteredProject, SerenaConfig
+from serena.lsp.lsp_diagnostics import DiagnosticsContext
 from serena.project import Project
 from serena.tools import (
     SUCCESS_RESULT,
     ActivateProjectTool,
-    EditingToolWithDiagnostics,
     FindDeclarationTool,
     FindImplementationsTool,
     FindReferencingSymbolsTool,
@@ -824,9 +824,9 @@ def read_project_file(project: Project, relative_path: str) -> str:
 
 def parse_edit_diagnostics_result(result: str) -> dict:
     """Utility function to parse the diagnostic payload returned by edit tools."""
-    assert EditingToolWithDiagnostics.DIAGNOSTICS_KEY in result
+    assert DiagnosticsContext.DIAGNOSTICS_KEY in result
     d = json.loads(result)
-    return d[EditingToolWithDiagnostics.DIAGNOSTICS_KEY]
+    return d[DiagnosticsContext.DIAGNOSTICS_KEY]
 
 
 @contextmanager

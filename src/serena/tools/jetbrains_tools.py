@@ -1,24 +1,29 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import logging
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from serena.facades.api.jb import JetBrainsApi
 from serena.tools import Tool, ToolMarkerBeta, ToolMarkerOptional, ToolMarkerSymbolicEdit, ToolMarkerSymbolicRead
 
+if TYPE_CHECKING:
+    from serena.agent import SerenaAgent
+
 log = logging.getLogger(__name__)
 
 
-class JetBrainsTool(Tool):
+class JetBrainsApiMixin:
     """
-    Base class for tools which delegate to the JetBrains API
+    Mixin for tools which delegate to the JetBrains API
     """
+
+    agent: "SerenaAgent"
 
     def _api(self) -> JetBrainsApi:
         return JetBrainsApi(self.agent)
 
 
-class JetBrainsFindSymbolTool(JetBrainsTool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Performs a global (or local) search for symbols using the JetBrains backend
     """
@@ -106,7 +111,7 @@ class JetBrainsFindSymbolTool(JetBrainsTool, ToolMarkerSymbolicRead, ToolMarkerO
         return {"name_path": "name_path_pattern"}
 
 
-class JetBrainsMoveTool(JetBrainsTool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMarkerBeta):
+class JetBrainsMoveTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMarkerBeta, JetBrainsApiMixin):
     """
     Moves a symbol, file or directory to a new location using the JetBrains backend, updating all references
     """
@@ -146,7 +151,7 @@ class JetBrainsMoveTool(JetBrainsTool, ToolMarkerSymbolicEdit, ToolMarkerOptiona
         return self._api().move(relative_path, name_path, target_relative_path, target_parent_name_path).represent()
 
 
-class JetBrainsSafeDeleteTool(JetBrainsTool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMarkerBeta):
+class JetBrainsSafeDeleteTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMarkerBeta, JetBrainsApiMixin):
     """
     Safely deletes a symbol using the JetBrains backend, checking for remaining usages first
     """
@@ -178,7 +183,7 @@ class JetBrainsSafeDeleteTool(JetBrainsTool, ToolMarkerSymbolicEdit, ToolMarkerO
         return self._api().safe_delete(relative_path, name_path, delete_even_if_used, propagate).represent()
 
 
-class JetBrainsInlineSymbol(JetBrainsTool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMarkerBeta):
+class JetBrainsInlineSymbol(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMarkerBeta, JetBrainsApiMixin):
     """
     Inlines a symbol using the JetBrains backend, replacing all call sites with the symbol's body
     """
@@ -205,7 +210,7 @@ class JetBrainsInlineSymbol(JetBrainsTool, ToolMarkerSymbolicEdit, ToolMarkerOpt
         return self._api().inline_symbol(name_path, relative_path, keep_definition).represent()
 
 
-class JetBrainsFindReferencingSymbolsTool(JetBrainsTool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Finds symbols that reference the given symbol using the JetBrains backend
     """
@@ -231,7 +236,7 @@ class JetBrainsFindReferencingSymbolsTool(JetBrainsTool, ToolMarkerSymbolicRead,
         return self._api().find_referencing_symbols(name_path, relative_path, max_answer_chars).represent()
 
 
-class JetBrainsGetSymbolsOverviewTool(JetBrainsTool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Retrieves an overview of the top-level symbols within a specified file using the JetBrains backend
     """
@@ -258,7 +263,7 @@ class JetBrainsGetSymbolsOverviewTool(JetBrainsTool, ToolMarkerSymbolicRead, Too
         return self._api().get_symbols_overview(relative_path, depth, max_answer_chars, include_file_documentation).represent()
 
 
-class JetBrainsTypeHierarchyTool(JetBrainsTool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Retrieves the type hierarchy (supertypes and/or subtypes) of a symbol using the JetBrains backend
     """
@@ -287,7 +292,7 @@ class JetBrainsTypeHierarchyTool(JetBrainsTool, ToolMarkerSymbolicRead, ToolMark
         return self._api().get_type_hierarchy(name_path, relative_path, hierarchy_type, depth, max_answer_chars).represent()
 
 
-class JetBrainsFindDeclarationTool(JetBrainsTool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class JetBrainsFindDeclarationTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Finds the declaration of a symbol using the JetBrains backend
     """
@@ -309,7 +314,7 @@ class JetBrainsFindDeclarationTool(JetBrainsTool, ToolMarkerSymbolicRead, ToolMa
         return self._api().find_declaration(relative_path, regex, include_body).represent()
 
 
-class JetBrainsFindImplementationsTool(JetBrainsTool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class JetBrainsFindImplementationsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Finds the implementations of a symbol using the JetBrains backend
     """
@@ -324,7 +329,7 @@ class JetBrainsFindImplementationsTool(JetBrainsTool, ToolMarkerSymbolicRead, To
         return self._api().find_implementations(relative_path, name_path).represent()
 
 
-class JetBrainsRenameTool(JetBrainsTool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
+class JetBrainsRenameTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Renames a symbol, file or directory throughout the codebase using the JetBrains backend.
     """
@@ -353,7 +358,7 @@ class JetBrainsRenameTool(JetBrainsTool, ToolMarkerSymbolicEdit, ToolMarkerOptio
         return self._api().rename(relative_path, new_name, name_path, rename_in_comments, rename_in_text_occurrences).represent()
 
 
-class JetBrainsDebugTool(JetBrainsTool, ToolMarkerOptional, ToolMarkerBeta):
+class JetBrainsDebugTool(Tool, ToolMarkerOptional, ToolMarkerBeta, JetBrainsApiMixin):
     """
     Provides debugging functionality (run configs, breakpoints, stepping, inspection, and evaluation)
     via a persistent debug REPL connected to the JetBrains IDE.
@@ -378,7 +383,7 @@ class JetBrainsDebugTool(JetBrainsTool, ToolMarkerOptional, ToolMarkerBeta):
         return self._api().debug_eval(expression, repl_key)
 
 
-class JetBrainsRunInspectionsTool(JetBrainsTool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class JetBrainsRunInspectionsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Runs JetBrains IDE inspections on a file and returns the results.
     """
@@ -413,7 +418,7 @@ class JetBrainsRunInspectionsTool(JetBrainsTool, ToolMarkerSymbolicRead, ToolMar
         )
 
 
-class JetBrainsListInspectionsTool(JetBrainsTool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class JetBrainsListInspectionsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Lists available JetBrains IDE inspections, optionally filtered by language or group.
     """

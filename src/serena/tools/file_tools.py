@@ -69,7 +69,7 @@ class CreateTextFileTool(EditingToolWithDiagnostics):
         :param content: the (appropriately encoded) content to write to the file
         :return: a message indicating success or failure
         """
-        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
+        with self.diagnostics_context(relative_path) as diagnostics_context:
             # validating the destination path
             project_root = self.get_project_root()
             abs_path = (Path(project_root) / relative_path).resolve()
@@ -206,7 +206,7 @@ class ReplaceContentTool(EditingToolWithDiagnostics):
         :param allow_multiple_occurrences: whether to allow matching and replacing multiple occurrences.
             If false and multiple occurrences are found, an error will be returned
         """
-        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
+        with self.diagnostics_context(relative_path) as diagnostics_context:
             self.project.validate_relative_path(relative_path)
             with EditedFileContext(relative_path, self.create_code_editor()) as context:
                 original_content = context.get_original_content()
@@ -427,7 +427,7 @@ class ReplaceInFilesTool(EditingToolWithDiagnostics):
         occurrences_by_file: dict[str, list[ReplacementOccurrence]] = {}
         for occ in occurrences:
             occurrences_by_file.setdefault(occ.relative_path, []).append(occ)
-        with self.DiagnosticsContext(self, *occurrences_by_file.keys()) as diagnostics_context:
+        with self.diagnostics_context() as diagnostics_context:
             code_editor = self.create_code_editor()
             for path, file_occurrences in occurrences_by_file.items():
                 with EditedFileContext(path, code_editor) as context:
@@ -469,7 +469,7 @@ class DeleteLinesTool(EditingToolWithDiagnostics, ToolMarkerOptional):
         :param start_line: the 0-based index of the first line to be deleted
         :param end_line: the 0-based index of the last line to be deleted
         """
-        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
+        with self.diagnostics_context(relative_path) as diagnostics_context:
             code_editor = self.create_code_editor()
             code_editor.delete_lines(relative_path, start_line, end_line)
             return diagnostics_context.format_result(SUCCESS_RESULT)
@@ -501,7 +501,7 @@ class ReplaceLinesTool(EditingToolWithDiagnostics, ToolMarkerOptional):
         if not content.endswith("\n"):
             content += "\n"
 
-        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
+        with self.diagnostics_context(relative_path) as diagnostics_context:
             code_editor = self.create_code_editor()
             code_editor.delete_lines(relative_path, start_line, end_line)
             code_editor.insert_at_line(relative_path, start_line, content)
@@ -534,7 +534,7 @@ class InsertAtLineTool(EditingToolWithDiagnostics, ToolMarkerOptional):
         if not content.endswith("\n"):
             content += "\n"
 
-        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
+        with self.diagnostics_context(relative_path) as diagnostics_context:
             code_editor = self.create_code_editor()
             code_editor.insert_at_line(relative_path, line, content)
 

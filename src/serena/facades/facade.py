@@ -14,6 +14,9 @@ from serena.project import Project
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
 
+SUCCESS_RESULT = "OK"
+"""the result returned by operations which have no result other than their success"""
+
 
 class FacadeApi(ABC):
     """
