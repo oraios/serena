@@ -1,10 +1,15 @@
 """Tests for CLI project commands (create, index)."""
 
+import json
 import os
 import shutil
 import tempfile
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from click import Command, Option
@@ -382,3 +387,119 @@ if __name__ == "__main__":
     # For manual testing, you can run this file directly:
     # uv run pytest test/serena/test_cli_project_commands.py -v
     pytest.main([__file__, "-v"])
+
+
+class _FakeTool:
+    """A stand-in for a Serena tool: records the calls and returns a canned result."""
+
+    def __init__(self, result: str | Exception) -> None:
+        self._result = result
+
+    @contextmanager
+    def _noop_context(self) -> Iterator[None]:
+        yield
+
+    @property
+    def symbol_dict_grouper(self) -> Any:
+        return SimpleNamespace(disabled_context=self._noop_context)
+
+    def get_symbol_overview(self, *_args: Any, **_kwargs: Any) -> Any:
+        return self._call()
+
+    def apply(self, *_args: Any, **_kwargs: Any) -> Any:
+        return self._call()
+
+    def _call(self) -> Any:
+        if isinstance(self._result, Exception):
+            raise self._result
+        return self._result
+
+
+def _run_health_check(
+    monkeypatch: pytest.MonkeyPatch,
+    cli_runner: CliRunner,
+    project_dir: str,
+    *,
+    refs_result: str | Exception,
+) -> Any:
+    """Run `project health-check` with every language-server dependency replaced by a double."""
+    import serena.agent
+    import serena.project
+    from serena.config.serena_config import SerenaConfig
+    from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, GetSymbolsOverviewTool
+
+    overview = [{"name": "hello", "kind": "Function"}]
+    tools = {
+        GetSymbolsOverviewTool: _FakeTool(overview),
+        FindSymbolTool: _FakeTool(json.dumps([{"name": "hello"}])),
+        FindReferencingSymbolsTool: _FakeTool(refs_result),
+    }
+
+    fake_agent = SimpleNamespace(
+        get_tool=lambda tool_class: tools[tool_class],
+        execute_task=lambda task: task(),
+    )
+    fake_config = SimpleNamespace(
+        with_headless_mode_overrides=lambda: SimpleNamespace(language_backend=None),
+    )
+
+    monkeypatch.setattr(SerenaConfig, "from_config_file", classmethod(lambda cls, *a, **kw: fake_config))
+    monkeypatch.setattr(serena.agent, "SerenaAgent", lambda **_kwargs: fake_agent)
+    monkeypatch.setattr(
+        serena.project.Project,
+        "load",
+        classmethod(lambda cls, *a, **kw: SimpleNamespace(gather_source_files=lambda: ["big.py"])),
+    )
+
+    return cli_runner.invoke(ProjectCommands.health_check, [project_dir])
+
+
+@pytest.fixture
+def temp_project_dir_with_large_python_file() -> Iterator[str]:
+    """The health check skips files of 1000 bytes or less, so the fixture file must exceed that."""
+    tmpdir = tempfile.mkdtemp()
+    try:
+        Path(tmpdir, "big.py").write_text("def hello():\n    pass\n" + "# padding\n" * 200)
+        yield tmpdir
+    finally:
+        if os.name == "nt":
+            time.sleep(0.2)
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def test_health_check_passes_when_all_tools_answer(
+    monkeypatch: pytest.MonkeyPatch, cli_runner: CliRunner, temp_project_dir_with_large_python_file: str
+) -> None:
+    result = _run_health_check(
+        monkeypatch, cli_runner, temp_project_dir_with_large_python_file, refs_result=json.dumps([{"name": "caller"}])
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Health check passed" in result.output
+
+
+def test_health_check_passes_when_symbol_has_no_references(
+    monkeypatch: pytest.MonkeyPatch, cli_runner: CliRunner, temp_project_dir_with_large_python_file: str
+) -> None:
+    """A symbol nobody calls is a legitimate result and must not be reported as a broken language server."""
+    result = _run_health_check(monkeypatch, cli_runner, temp_project_dir_with_large_python_file, refs_result=json.dumps([]))
+
+    assert result.exit_code == 0, result.output
+    assert "Health check passed" in result.output
+
+
+def test_health_check_fails_when_reference_search_raises(
+    monkeypatch: pytest.MonkeyPatch, cli_runner: CliRunner, temp_project_dir_with_large_python_file: str
+) -> None:
+    """The regression: the failure was logged as a warning, so the command reported success and exited 0."""
+    result = _run_health_check(
+        monkeypatch,
+        cli_runner,
+        temp_project_dir_with_large_python_file,
+        refs_result=RuntimeError("language server went away"),
+    )
+
+    assert result.exit_code == 1, result.output
+    assert "Health check failed" in result.output
+    assert "FindReferencingSymbolsTool" in result.output
+    assert "All tools working correctly" not in result.output
