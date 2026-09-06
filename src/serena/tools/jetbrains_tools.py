@@ -28,6 +28,8 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, 
     Performs a global (or local) search for symbols using the JetBrains backend
     """
 
+    symbol_dict_grouper = JetBrainsApi.find_symbol_grouper_
+
     def apply(
         self,
         name_path_pattern: str,
@@ -215,6 +217,8 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
     Finds symbols that reference the given symbol using the JetBrains backend
     """
 
+    symbol_dict_grouper = JetBrainsApi.references_grouper_
+
     def apply(
         self,
         name_path: str,
@@ -240,6 +244,8 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
     """
     Retrieves an overview of the top-level symbols within a specified file using the JetBrains backend
     """
+
+    symbol_dict_grouper = JetBrainsApi.overview_grouper_
 
     def apply(
         self,

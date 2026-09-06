@@ -43,6 +43,8 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, LspApiMixin):
     Gets an overview of the top-level symbols defined in a given file.
     """
 
+    symbol_dict_grouper = LspApi.overview_grouper_
+
     def apply(self, relative_path: str, depth: int = -1, max_answer_chars: int = -1) -> str:
         """
         Use this tool to get a high-level understanding of the code symbols in a file.
@@ -64,6 +66,8 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead, LspApiMixin):
     """
     Performs a global (or local) search using the language server backend.
     """
+
+    symbol_dict_grouper = LspApi.find_symbol_dict_grouper_
 
     def apply(
         self,
@@ -143,6 +147,8 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, LspApiMixin):
     """
     Finds symbols that reference the given symbol
     """
+
+    symbol_dict_grouper = LspApi.references_grouper_
 
     def apply(
         self,
