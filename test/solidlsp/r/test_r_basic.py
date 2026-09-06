@@ -92,11 +92,6 @@ class TestRLanguageServer:
         assert not matcher.is_relevant_filename("script.py")
         assert not matcher.is_relevant_filename("README.md")
 
-    def test_r_language_enum(self):
-        """Test R language enum value."""
-        assert LanguageServerId.R == "r"
-        assert str(LanguageServerId.R) == "r"
-
     @pytest.mark.parametrize("language_server", [LanguageServerId.R], indirect=True)
     def test_bare_symbol_names(self, language_server) -> None:
         all_symbols = request_all_symbols(language_server)

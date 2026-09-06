@@ -40,7 +40,7 @@ from serena.prompt_factory import SerenaPromptFactory
 from serena.tools import ActivateProjectTool
 from serena.util.cli_util import AutoRegisteringGroup
 from serena.util.logging import MemoryLogHandler
-from solidlsp.ls_config import LanguageServerId
+from solidlsp.ls_config import LanguageServerId, LanguageServerIdLike
 from solidlsp.ls_types import SymbolKind
 from solidlsp.util.subprocess_util import subprocess_kwargs
 
@@ -722,7 +722,9 @@ class ProjectCommands(AutoRegisteringGroup):
             languages=languages if languages else None,
             interactive=True,
         )
-        languages_str = ", ".join([lang.value for lang in generated_conf.language_servers]) if generated_conf.language_servers else "N/A"
+        languages_str = (
+            ", ".join([lang.get_key() for lang in generated_conf.language_servers]) if generated_conf.language_servers else "N/A"
+        )
         click.echo(f"Generated project with language servers {{{languages_str}}} at {yml_path}.")
         registered_project = serena_config.get_registered_project(str(project_root))
         if registered_project is None:
@@ -813,7 +815,7 @@ class ProjectCommands(AutoRegisteringGroup):
 
             collected_exceptions: list[Exception] = []
             files_failed = []
-            language_file_counts: dict[LanguageServerId, int] = collections.defaultdict(lambda: 0)
+            language_file_counts: dict[LanguageServerIdLike, int] = collections.defaultdict(lambda: 0)
             last_save_time = time.monotonic()
             for i, f in enumerate(tqdm(files, desc="Indexing")):
                 try:
@@ -828,7 +830,7 @@ class ProjectCommands(AutoRegisteringGroup):
                 if now - last_save_time >= 30:
                     ls_mgr.save_all_caches()
                     last_save_time = now
-            reported_language_file_counts = {k.value: v for k, v in language_file_counts.items()}
+            reported_language_file_counts = {k.get_key(): v for k, v in language_file_counts.items()}
             click.echo(f"Indexed files per language: {dict_string(reported_language_file_counts, brackets=None)}")
             ls_mgr.save_all_caches()
 
@@ -894,7 +896,7 @@ class ProjectCommands(AutoRegisteringGroup):
         ls_mgr = proj.create_language_server_manager()
         try:
             ls = ls_mgr.get_language_server(file)
-            click.echo(f"Indexing for language {ls.ls_id.value} …")
+            click.echo(f"Indexing for language {ls.ls_id.get_key()} …")
             document_symbols = ls.request_document_symbols(file)
             symbols, _ = document_symbols.get_all_symbols_and_roots()
             if verbose:

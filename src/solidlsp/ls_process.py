@@ -12,7 +12,7 @@ from typing import IO, Any, AnyStr
 
 from sensai.util.string import ToStringMixin
 
-from solidlsp.ls_config import LanguageServerId
+from solidlsp.ls_config import LanguageServerIdLike
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_request import LanguageServerRequest
 from solidlsp.lsp_protocol_handler.lsp_requests import LspNotification
@@ -58,7 +58,7 @@ class LanguageServerTerminatedException(Exception):
     Exception raised when the language server process has terminated unexpectedly.
     """
 
-    def __init__(self, message: str, ls_id: LanguageServerId, cause: Exception | None = None) -> None:
+    def __init__(self, message: str, ls_id: LanguageServerIdLike, cause: Exception | None = None) -> None:
         super().__init__(message)
         self.message = message
         self.ls_id = ls_id
@@ -121,7 +121,7 @@ class LanguageServerInterface(ABC):
 
     def __init__(
         self,
-        ls_id: LanguageServerId,
+        ls_id: LanguageServerIdLike,
         determine_log_level: Callable[[str], int],
         logger: Callable[[str, str, StringDict | str], None] | None = None,
         request_timeout: float | None = None,
@@ -491,7 +491,7 @@ class StdioLanguageServer(LanguageServerInterface):
     def __init__(
         self,
         process_launch_info: ProcessLaunchInfo,
-        ls_id: LanguageServerId,
+        ls_id: LanguageServerIdLike,
         determine_log_level: Callable[[str], int],
         logger: Callable[[str, str, StringDict | str], None] | None = None,
         start_independent_lsp_process: bool = True,
@@ -519,7 +519,7 @@ class StdioLanguageServer(LanguageServerInterface):
         log.info("Starting language server process via command: %s", self._process_launch_info.cmd)
 
         process = subprocess_util.ManagedSubprocessLauncher.get_instance().launch(
-            self._process_launch_info, name=f"LS[{self.ls_id.value}]", start_new_session=self._start_independent_lsp_process
+            self._process_launch_info, name=f"LS[{self.ls_id.get_key()}]", start_new_session=self._start_independent_lsp_process
         )
         self._process = process
 
@@ -534,12 +534,12 @@ class StdioLanguageServer(LanguageServerInterface):
         # start threads to read stdout and stderr of the process
         threading.Thread(
             target=self._read_ls_process_stdout,
-            name=f"LSP-stdout-reader:{self.ls_id.value}",
+            name=f"LSP-stdout-reader:{self.ls_id.get_key()}",
             daemon=True,
         ).start()
         threading.Thread(
             target=self._read_ls_process_stderr,
-            name=f"LSP-stderr-reader:{self.ls_id.value}",
+            name=f"LSP-stderr-reader:{self.ls_id.get_key()}",
             daemon=True,
         ).start()
 
@@ -689,7 +689,7 @@ class TCPLanguageServer(LanguageServerInterface):
     def __init__(
         self,
         connection_info: TCPConnectionInfo,
-        ls_id: LanguageServerId,
+        ls_id: LanguageServerIdLike,
         determine_log_level: Callable[[str], int],
         logger: Callable[[str, str, StringDict | str], None] | None = None,
         request_timeout: float | None = None,
@@ -732,7 +732,7 @@ class TCPLanguageServer(LanguageServerInterface):
 
         threading.Thread(
             target=self._read_loop,
-            name=f"LSP-tcp-reader:{self.ls_id.value}",
+            name=f"LSP-tcp-reader:{self.ls_id.get_key()}",
             daemon=True,
         ).start()
 

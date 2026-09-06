@@ -98,12 +98,6 @@ class SvelteTypeScriptServer(TypeScriptLanguageServer):
         self._explicit_ts_ls_executable = ts_ls_executable_path
         super().__init__(config, repository_root_path, solidlsp_settings)
 
-    @classmethod
-    @override
-    def get_language_server_id(cls) -> LanguageServerId:
-        """Return TYPESCRIPT; companion uses the TypeScript LS infrastructure."""
-        return LanguageServerId.TYPESCRIPT
-
     @override
     def get_source_fn_matcher(self) -> FilenameMatcher:
         # include .svelte so references returned by the plugin are not filtered out

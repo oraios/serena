@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 from sensai.util.string import ToStringMixin
 
 if TYPE_CHECKING:
-    from solidlsp.ls_config import LanguageServerId
+    from solidlsp.ls_config import LanguageServerIdLike
 
 log = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ class SolidLSPSettings:
     For instance, if this is "/home/user/myproject/.solidlsp",
     then Solid-LSP will store project-specific data (e.g. caches) in that directory.
     """
-    ls_specific_settings: dict["LanguageServerId", dict[str, Any]] = field(default_factory=dict)
+    ls_specific_settings: dict["LanguageServerIdLike", dict[str, Any]] = field(default_factory=dict)
     """
     Advanced configuration option allowing to configure language server implementation specific options.
     Have a look at the docstring of the constructors of the corresponding LS implementations within solidlsp to see which options are available.
@@ -76,7 +76,7 @@ class SolidLSPSettings:
                 value = default_value
             return value
 
-    def get_ls_specific_settings(self, ls_id: "LanguageServerId") -> CustomLSSettings:
+    def get_ls_specific_settings(self, ls_id: "LanguageServerIdLike") -> CustomLSSettings:
         """
         Gets the custom settings for the given language server
 

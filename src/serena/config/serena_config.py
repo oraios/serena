@@ -35,7 +35,7 @@ from serena.constants import (
 from serena.util.inspection import compute_language_server_support_composition
 from serena.util.text_utils import GlobMatcher
 from serena.util.yaml import YamlCommentNormalisation, load_yaml, normalise_yaml_comments, save_yaml, transfer_yaml_comments
-from solidlsp.ls_config import LanguageServerId
+from solidlsp.ls_config import LanguageServerId, LanguageServerIdLike, LanguageServerRegistry
 
 from ..analytics import RegisteredTokenCountEstimator
 from ..util.class_decorators import singleton
@@ -321,7 +321,7 @@ class ProjectConfigAutoGenerationMode(Enum):
 @dataclass(kw_only=True)
 class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
     project_name: str
-    language_servers: list[LanguageServerId]
+    language_servers: list[LanguageServerIdLike]
     ignored_paths: list[str] = field(default_factory=list)
     ls_workspace_folders: list[str] = field(default_factory=lambda: ["."])
     ls_additional_workspace_folders: list[str] = field(default_factory=list)
@@ -358,7 +358,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
     @classmethod
     def _determine_project_language_servers(
         cls, project_root: str, interactive: bool, serena_config: "SerenaConfig"
-    ) -> list[LanguageServerId]:
+    ) -> list[LanguageServerIdLike]:
         log.info("Determining suitable language servers for the project")
 
         # determine language servers to be considered and their priorities
@@ -452,7 +452,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
                     determined_languages = cls._determine_project_language_servers(
                         str(project_root), interactive=interactive, serena_config=serena_config
                     )
-                    languages_to_use = [l.value for l in determined_languages]
+                    languages_to_use = [l.get_key() for l in determined_languages]
             else:
                 languages_to_use = [lang.value for lang in languages]
             config_with_comments, _ = cls._load_yaml_dict(PROJECT_TEMPLATE_FILE)
@@ -580,19 +580,14 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         """
         # map languages to list of enum items, checking for errors
         lang_name_mapping = {"javascript": "typescript"}
-        ls_ids: list[LanguageServerId] = []
+        ls_ids: list[LanguageServerIdLike] = []
+        ls_registry = LanguageServerRegistry.get_instance()
         for ls_str in data["language_servers"]:
-            orig_language_str = ls_str
-            try:
-                ls_str = ls_str.lower()
-                if ls_str in lang_name_mapping:
-                    ls_str = lang_name_mapping[ls_str]
-                ls_id = LanguageServerId(ls_str)
-                ls_ids.append(ls_id)
-            except ValueError as e:
-                raise ValueError(
-                    f"Invalid language server: '{orig_language_str}'.\nValid values are: {[l.value for l in LanguageServerId]}"
-                ) from e
+            ls_str = ls_str.lower()
+            if ls_str in lang_name_mapping:
+                ls_str = lang_name_mapping[ls_str]
+            ls_id = ls_registry.resolve(ls_str)
+            ls_ids.append(ls_id)
 
         # Validate activation_command_timeout
         activation_command_timeout_raw = data.get("activation_command_timeout", 180.0)
@@ -669,7 +664,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
                 del d[k]
 
         # map fields using non-primitive types to a YAML-compatible representation
-        d["language_servers"] = [lang.value for lang in self.language_servers]
+        d["language_servers"] = [lang.get_key() for lang in self.language_servers]
         d["language_backend"] = self.language_backend.value if self.language_backend is not None else None
         d["line_ending"] = self.line_ending.value if self.line_ending is not None else None
 

@@ -45,6 +45,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     rest of the session (#1871)
   - Fix: Exceptions raised during `LanguageServerManager.start` did not stop the language server subprocess if it was
     already started (#1949)
+  - Add: Installed Python packages can provide generic external language-server adapters through the
+    `serena.language_servers` entry-point group for explicit use in `project.yml`
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: `DartLanguageServer._start_server` discarded both `$/analyzerStatus` and
     `experimental/serverStatus`, the two notifications the Dart analysis server sends to report
