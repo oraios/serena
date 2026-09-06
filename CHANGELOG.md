@@ -33,6 +33,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     Serena's own tools to close the gap (#1852)
 
 * Language Servers:
+  - Fix: Nixd could return a transient empty hover response while initial analysis was completing;
+    retry the request within a bounded interval and exercise Nix hover coverage against a supported
+    nixpkgs-backed selector (#1040)
   - Add FreeBSD mapping to platform detection
   - Remove unnecessary platform checks from the following language servers, expanding the set of
     supported platforms accordingly: Elixir Tools, Intelephense, Perl, TypeScript, VTS
