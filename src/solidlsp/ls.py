@@ -8,7 +8,7 @@ import shutil
 import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Callable, Hashable, Iterator
+from collections.abc import Callable, Hashable, Iterator, Sequence
 from contextlib import contextmanager
 from copy import copy
 from dataclasses import dataclass
@@ -1046,6 +1046,16 @@ class SolidLanguageServer(ABC):
         if the LS is not fully initialized yet.
         """
         return 2
+
+    def notify_files_created(self, relative_file_paths: Sequence[str]) -> None:
+        """
+        Called when one or more files were newly created on disk (detected outside of Serena's own file
+        tools, e.g. by :class:`serena.ls_manager.LanguageServerFileChangeNotifier`), before those files are
+        opened via :meth:`open_file`. The default implementation does nothing: a `didChangeWatchedFiles`
+        notification followed by an open/close cycle is enough for most backends to fold a new file into
+        their index. Override this for a language server whose project system needs an explicit reload to
+        become aware of a file that did not exist when the project was first loaded.
+        """
 
     # --- Cross-workspace / additional workspace folder support ---
 

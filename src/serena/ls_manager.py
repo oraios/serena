@@ -362,9 +362,15 @@ class LanguageServerFileChangeNotifier:
             # (observed with pyright) to fold a brand-new file into its cross-file reference graph;
             # an open/close cycle forces the parse+bind that Serena's own file tools trigger via
             # SolidLanguageServer.open_file().
-            for rel_path in created_paths:
-                if ls.is_ignored_path(rel_path, ignore_unsupported_files=True):
-                    continue
+            relevant_created_paths = [
+                rel_path for rel_path in created_paths if not ls.is_ignored_path(rel_path, ignore_unsupported_files=True)
+            ]
+            if relevant_created_paths:
+                try:
+                    ls.notify_files_created(relevant_created_paths)
+                except Exception as e:
+                    log.error("Failed to notify language server of newly created files", exc_info=e)
+            for rel_path in relevant_created_paths:
                 try:
                     with ls.open_file(rel_path):
                         pass

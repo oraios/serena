@@ -33,6 +33,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     Serena's own tools to close the gap (#1852)
 
 * Language Servers:
+  - Fix: a C# file created after the project was already indexed was analyzed by Roslyn as a
+    standalone Miscellaneous Files document instead of being folded into the loaded project,
+    causing phantom diagnostics on the new file and on files referencing its symbols (#1961)
   - Add FreeBSD mapping to platform detection
   - Remove unnecessary platform checks from the following language servers, expanding the set of
     supported platforms accordingly: Elixir Tools, Intelephense, Perl, TypeScript, VTS
