@@ -576,18 +576,29 @@ class TypeScriptLanguageServer(SolidLanguageServer):
 
     @override
     def _wait_for_cross_file_references_if_needed(self) -> None:
-        if self._has_waited_for_cross_file_references:
+        timeout = self._get_indexing_timeout()
+        if not self._has_waited_for_cross_file_references:
+            start_grace = self._get_indexing_start_grace()
+            self._log_cross_file_indexing_wait_outcome(
+                self._wait_for_indexing_start_or_completion(timeout=timeout, start_grace=start_grace), timeout
+            )
+            self._has_waited_for_cross_file_references = True
             return
 
-        timeout = self._get_indexing_timeout()
-        start_grace = self._get_indexing_start_grace()
-        if self._wait_for_indexing_start_or_completion(timeout=timeout, start_grace=start_grace):
+        # The latch above only covers the first query; a later one can still open a file from a
+        # project tsserver has not loaded before, starting a fresh $/progress cycle to drain.
+        with self._progress_lock:
+            indexing_in_progress = bool(self._active_progress_tokens)
+        if indexing_in_progress:
+            self._log_cross_file_indexing_wait_outcome(self.wait_for_indexing(timeout=timeout), timeout)
+
+    def _log_cross_file_indexing_wait_outcome(self, completed: bool, timeout: float) -> None:
+        if completed:
             log.info("TypeScript cross-file indexing complete")
         else:
             log.warning(
                 "TypeScript cross-file indexing did not complete within %.0fs; proceeding (%s)", timeout, self.describe_indexing_state()
             )
-        self._has_waited_for_cross_file_references = True
 
     @override
     def _get_preferred_definition(self, definitions: list[ls_types.Location]) -> ls_types.Location:

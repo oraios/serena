@@ -284,6 +284,42 @@ class TestWaitForCrossFileReferencesUsesConfiguredGrace:
         server._wait_for_cross_file_references_if_needed()
         assert time.monotonic() - start < 0.1
 
+    def test_second_call_drains_a_progress_token_already_in_flight(self) -> None:
+        """oraios/serena#1937: a later cross-file query can open a file from a project tsserver
+        has not loaded yet (e.g. a monorepo package), starting a fresh $/progress cycle. The
+        once-only latch must not let that query return while the fresh token is still active.
+        """
+        server = _bare_ts_server(TypeScriptLanguageServer, {"indexing_start_grace": 0.05})
+        server._has_waited_for_cross_file_references = True
+        server._active_progress_tokens.add("tsserver/project-b-load")
+        server._indexing_complete.clear()
+
+        def _drain_shortly() -> None:
+            time.sleep(0.2)
+            with server._progress_lock:
+                server._active_progress_tokens.discard("tsserver/project-b-load")
+                server._indexing_complete.set()
+
+        threading.Thread(target=_drain_shortly, daemon=True).start()
+
+        start = time.monotonic()
+        server._wait_for_cross_file_references_if_needed()
+        elapsed = time.monotonic() - start
+
+        # proves the wait actually blocked for the still-active token, not a fast no-op return
+        assert elapsed >= 0.15
+        assert server._active_progress_tokens == set()
+
+    def test_second_call_proceeds_on_timeout_while_a_token_never_drains(self) -> None:
+        server = _bare_ts_server(TypeScriptLanguageServer, {"indexing_timeout": 0.05})
+        server._has_waited_for_cross_file_references = True
+        server._active_progress_tokens.add("tsserver/project-b-load")
+        server._indexing_complete.clear()
+
+        server._wait_for_cross_file_references_if_needed()  # must log and return, not raise or hang
+
+        assert server._active_progress_tokens == {"tsserver/project-b-load"}
+
 
 class _FakeSolidLSPSettings:
     """Minimal settings stand-in: returns a fixed TypeScript indexing_timeout so the guard tests can
