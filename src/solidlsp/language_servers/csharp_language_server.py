@@ -256,7 +256,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         return hover
 
     def _document_symbols_cache_fingerprint(self) -> Hashable | None:
-        normalize_symbol_name_version = 1
+        normalize_symbol_name_version = 2
         return normalize_symbol_name_version
 
     def _normalize_symbol_name(self, symbol: RawDocumentSymbol, relative_file_path: str) -> str:
@@ -300,15 +300,19 @@ class CSharpLanguageServer(SolidLanguageServer):
             "Add(int, int) : int" -> ("Add", "(int, int) : int")
             "ToString()" -> ("ToString", "()")
             "SimpleMethod" -> ("SimpleMethod", "")
+            "Position : (int X, string Y)" -> ("Position", ": (int X, string Y)")
 
         Returns:
             Tuple of (base_name, type_info)
 
         """
-        # Check for property pattern: "Name : Type"
-        if " : " in roslyn_name and "(" not in roslyn_name:
+        # Check for property pattern: "Name : Type". The '(' guard must look only at the
+        # name segment before the first " : ", not the whole string, since a tuple type
+        # ("(int X, string Y)") legitimately contains parentheses.
+        if " : " in roslyn_name:
             base_name, type_part = roslyn_name.split(" : ", 1)
-            return base_name.strip(), f": {type_part.strip()}"
+            if "(" not in base_name:
+                return base_name.strip(), f": {type_part.strip()}"
 
         # Check for method pattern: "MethodName(params) : ReturnType"
         if "(" in roslyn_name:

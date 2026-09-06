@@ -40,6 +40,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     its global state under ``~/Library``; Serena now gives the child process an isolated home-directory view
     via ``solidity_state_dir`` without changing the parent process's ``HOME`` (#1817)
   - Add Fatou support as an alternative Julia language server (`julia_fatou`)
+  - Fix: C# properties/fields whose type contains a literal `(`, e.g. a tuple type like
+    `(int X, string Y)`, had their name corrupted to include a trailing `:` because the
+    parenthesis in the type was mistaken for a method's parameter list; `find_symbol` on
+    the real name then returned nothing
   - Fix: Nextflow's `_flush_deferred_workspace_scan` marked the workspace scan flushed even when both
     of its `completion` probes failed, permanently skipping the flush (and silencing retries) for the
     rest of the session (#1871)

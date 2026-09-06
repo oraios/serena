@@ -7,6 +7,7 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.language_servers.csharp_language_server import (
+    CSharpLanguageServer,
     breadth_first_file_scan,
     find_solution_or_project_file,
 )
@@ -198,6 +199,28 @@ class TestCSharpLanguageServer:
                 symbol.get("name") == "FormatGreeting" and "ConsoleGreeter.cs" in symbol["location"].get("relativePath", "")
                 for symbol in implementing_symbols
             ), f"Expected ConsoleGreeter.FormatGreeting symbol, got: {implementing_symbols}"
+
+
+class TestCSharpExtractBaseNameAndType:
+    """Regression tests for _extract_base_name_and_type, no running language server needed."""
+
+    @pytest.mark.parametrize(
+        ("roslyn_name", "expected"),
+        [
+            # Property whose type is a tuple: the literal '(' in the type must not be
+            # mistaken for a method's parameter list.
+            ("Position : (int X, string Y)", ("Position", ": (int X, string Y)")),
+            ("Name : string", ("Name", ": string")),
+            ("Add(int, int) : int", ("Add", "(int, int) : int")),
+            ("ToString()", ("ToString", "()")),
+            ("SimpleMethod", ("SimpleMethod", "")),
+            # Both still have a '(' before the first " : ", so they keep the method branch.
+            ("GetPair() : (int, int)", ("GetPair", "() : (int, int)")),
+            ("Merge((int, int) a, (int, int) b) : void", ("Merge", "((int, int) a, (int, int) b) : void")),
+        ],
+    )
+    def test_extract_base_name_and_type(self, roslyn_name: str, expected: tuple[str, str]) -> None:
+        assert CSharpLanguageServer._extract_base_name_and_type(roslyn_name) == expected
 
 
 @pytest.mark.csharp
