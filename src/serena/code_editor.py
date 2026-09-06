@@ -6,7 +6,8 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Reversible
 from contextlib import contextmanager
-from typing import Generic, TypeVar, cast
+from types import TracebackType
+from typing import Any, Generic, Self, TypeVar, cast
 
 from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
 from serena.symbol import JetBrainsSymbol, LanguageServerSymbol, LanguageServerSymbolRetriever, PositionInFile, Symbol
@@ -493,3 +494,45 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
                 rename_in_text_occurrences=rename_in_text_occurrences,
             )
             return "Success"
+
+
+class EditedFileContext:
+    """
+    Context manager for file editing.
+
+    Create the context, then use `set_updated_content` to set the new content, the original content
+    being provided in `original_content`.
+    When exiting the context without an exception, the updated content will be written back to the file.
+    """
+
+    def __init__(self, relative_path: str, code_editor: CodeEditor):
+        self._relative_path = relative_path
+        self._code_editor = code_editor
+        self._edited_file: CodeEditor.EditedFile | None = None
+        self._edited_file_context: Any = None
+
+    def __enter__(self) -> Self:
+        self._edited_file_context = self._code_editor.edited_file_context(self._relative_path)
+        self._edited_file = self._edited_file_context.__enter__()
+        return self
+
+    def get_original_content(self) -> str:
+        """
+        :return: the original content of the file before any modifications.
+        """
+        assert self._edited_file is not None
+        return self._edited_file.get_contents()
+
+    def set_updated_content(self, content: str) -> None:
+        """
+        Sets the updated content of the file, which will be written back to the file
+        when the context is exited without an exception.
+
+        :param content: the updated content of the file
+        """
+        assert self._edited_file is not None
+        self._edited_file.set_contents(content)
+
+    def __exit__(self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: TracebackType | None) -> None:
+        assert self._edited_file_context is not None
+        self._edited_file_context.__exit__(exc_type, exc_value, traceback)

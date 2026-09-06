@@ -6,8 +6,7 @@ from abc import ABC
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from functools import cached_property
-from types import TracebackType
-from typing import TYPE_CHECKING, Any, Protocol, Self, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
 from mcp import Implementation
 from mcp.server.fastmcp import Context
@@ -15,6 +14,7 @@ from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metada
 from sensai.util import logging
 from sensai.util.string import dict_string
 
+from serena.code_editor import EditedFileContext  # noqa: F401  (re-exported for tools)
 from serena.config.serena_config import LanguageBackend
 from serena.facades.facade import SUCCESS_RESULT  # noqa: F401  (re-exported for tools)
 from serena.lsp.lsp_diagnostics import DiagnosticsContext
@@ -281,6 +281,13 @@ class Tool(Component):
                 params[param] = value
         log.info(f"{self.get_name_from_cls()}: {dict_string(params)}; session_id: {session_id}")
 
+    def _resolve_max_answer_chars(self, max_answer_chars: int) -> int:
+        """
+        :param max_answer_chars: the maximum number of answer characters as passed to the tool; -1 for the configured default
+        :return: the effective maximum
+        """
+        return self.agent.serena_config.default_max_tool_answer_chars if max_answer_chars == -1 else max_answer_chars
+
     def _limit_length(
         self,
         result: str,
@@ -295,8 +302,7 @@ class Tool(Component):
             version of the result. They are tried in order until one fits within ``max_answer_chars``.
         :return: the result string, potentially replaced by a shortened version
         """
-        if max_answer_chars == -1:
-            max_answer_chars = self.agent.serena_config.default_max_tool_answer_chars
+        max_answer_chars = self._resolve_max_answer_chars(max_answer_chars)
         return TextOutputUtils.limit_length(
             result=result, max_answer_chars=max_answer_chars, shortened_result_factories=shortened_result_factories
         )
@@ -477,48 +483,6 @@ class EditingToolWithDiagnostics(Tool, ToolMarkerCanEdit):
             via `format_result`
         """
         return DiagnosticsContext(self.agent, *edited_relative_paths, enable=self.ENABLE_DIAGNOSTICS)
-
-
-class EditedFileContext:
-    """
-    Context manager for file editing.
-
-    Create the context, then use `set_updated_content` to set the new content, the original content
-    being provided in `original_content`.
-    When exiting the context without an exception, the updated content will be written back to the file.
-    """
-
-    def __init__(self, relative_path: str, code_editor: "CodeEditor"):
-        self._relative_path = relative_path
-        self._code_editor = code_editor
-        self._edited_file: CodeEditor.EditedFile | None = None
-        self._edited_file_context: Any = None
-
-    def __enter__(self) -> Self:
-        self._edited_file_context = self._code_editor.edited_file_context(self._relative_path)
-        self._edited_file = self._edited_file_context.__enter__()
-        return self
-
-    def get_original_content(self) -> str:
-        """
-        :return: the original content of the file before any modifications.
-        """
-        assert self._edited_file is not None
-        return self._edited_file.get_contents()
-
-    def set_updated_content(self, content: str) -> None:
-        """
-        Sets the updated content of the file, which will be written back to the file
-        when the context is exited without an exception.
-
-        :param content: the updated content of the file
-        """
-        assert self._edited_file is not None
-        self._edited_file.set_contents(content)
-
-    def __exit__(self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: TracebackType | None) -> None:
-        assert self._edited_file_context is not None
-        self._edited_file_context.__exit__(exc_type, exc_value, traceback)
 
 
 @dataclass(kw_only=True)
