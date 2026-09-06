@@ -8,11 +8,14 @@ import logging
 import os
 import shutil
 import threading
+from copy import deepcopy
+from typing import cast
 
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -34,8 +37,8 @@ class VtsLanguageServer(SolidLanguageServer):
     Supported entries in ``ls_specific_settings["typescript_vts"]``:
         - ``vtsls_version``: version of ``@vtsls/language-server`` to install (default: ``"0.2.9"``).
         - ``npm_registry``: custom npm registry for the managed install.
-        - ``initialization_options``: optional dict forwarded verbatim as LSP
-          ``initializationOptions``. Useful for Yarn PnP projects, e.g.::
+        - ``initialization_options``: optional LSP configuration. Automatic type acquisition
+          is disabled by default; explicit settings take precedence. Useful for Yarn PnP projects, e.g.::
 
               initialization_options:
                 typescript:
@@ -128,16 +131,11 @@ class VtsLanguageServer(SolidLanguageServer):
         """
         Returns the initialize params for the VTS Language Server.
 
-        If ``initialization_options`` is set in ``ls_specific_settings["typescript_vts"]``,
-        it is forwarded verbatim as LSP ``initializationOptions``.
+        User-provided options are copied so initialization overrides do not mutate the caller's settings.
         """
         initialize_params: dict = {
             "locale": "en",
-            "initializationOptions": {
-                "preferences": {
-                    "disableAutomaticTypingAcquisition": True,
-                },
-            },
+            "initializationOptions": deepcopy(self._initialization_options),
             "capabilities": {
                 "textDocument": {
                     "synchronization": {"didSave": True, "dynamicRegistration": True},
@@ -161,11 +159,18 @@ class VtsLanguageServer(SolidLanguageServer):
             },
         }
 
-        if self._initialization_options:
-            log.info("Forwarding user-provided initializationOptions to vtsls: %s", self._initialization_options)
-            initialize_params["initializationOptions"] = self._initialization_options
-
         return initialize_params
+
+    @override
+    def _create_initialize_params(self) -> InitializeParams:
+        """Apply the ATA default after both adapter-specific and generic initialization overrides."""
+        params = super()._create_initialize_params()
+        options = cast(dict, deepcopy(params["initializationOptions"]))
+        typescript_options = options.setdefault("typescript", {})
+        if isinstance(typescript_options, dict):
+            typescript_options.setdefault("disableAutomaticTypeAcquisition", True)
+        params["initializationOptions"] = options
+        return params
 
     def _start_server(self) -> None:
         """
@@ -192,12 +197,13 @@ class VtsLanguageServer(SolidLanguageServer):
         def execute_client_command_handler(params: dict) -> list:
             return []
 
-        init_options = self._initialization_options
+        # share the final configuration across initialization, requests and notifications
+        initialize_params = self._create_initialize_params()
+        init_options = cast(dict, initialize_params["initializationOptions"])
 
         def workspace_configuration_handler(params: dict) -> list[object]:
-            # vtsls pulls settings for sections like "typescript", "vtsls", "javascript".
-            # Return the matching sub-dicts from the user-provided initialization_options.
-            return [init_options.get(item.get("section", ""), {}) for item in params["items"]]
+            # vtsls requests the whole configuration (empty section) during startup
+            return [init_options.get(item["section"], {}) if item.get("section") else init_options for item in params["items"]]
 
         def do_nothing(params: dict) -> None:
             return
@@ -222,7 +228,6 @@ class VtsLanguageServer(SolidLanguageServer):
 
         log.info("Starting VTS server process")
         self.server.start()
-        initialize_params = self._create_initialize_params()
 
         log.info("Sending initialize request from LSP client to LSP server and awaiting response")
         init_response = self.server.send.initialize(initialize_params)
@@ -243,7 +248,7 @@ class VtsLanguageServer(SolidLanguageServer):
 
         # vtsls also reads settings via workspace/didChangeConfiguration (in addition
         # to initializationOptions and workspace/configuration pulls). Push the same
-        # user-provided settings on all three channels for maximum compatibility,
+        # effective settings on all three channels for maximum compatibility,
         # e.g. so that `typescript.tsdk` is honoured for Yarn PnP projects.
         if init_options:
             self.server.notify.workspace_did_change_configuration({"settings": init_options})

@@ -339,9 +339,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             # slow, network-dependent, and nondeterministic (and can hang on offline/locked-down
             # machines). Serena relies on the types already installed in the project instead.
             "initializationOptions": {
-                "preferences": {
-                    "disableAutomaticTypingAcquisition": True,
-                },
+                "disableAutomaticTypingAcquisition": True,
             },
             "capabilities": {
                 "textDocument": {
