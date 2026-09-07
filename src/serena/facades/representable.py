@@ -35,12 +35,15 @@ class Renderer(Generic[T], ABC):
             version of the result. They are tried in order until one fits within ``max_answer_chars``.
         :return: the result string, potentially replaced by a shortened version
         """
-        max_answer_chars = self._max_answer_chars
-        if max_answer_chars == -1:
-            max_answer_chars = self._agent.serena_config.default_max_tool_answer_chars
         return TextOutputUtils.limit_length(
-            result=result, max_answer_chars=max_answer_chars, shortened_result_factories=shortened_result_factories
+            result=result, max_answer_chars=self._get_max_answer_chars(), shortened_result_factories=shortened_result_factories
         )
+
+    def _get_max_answer_chars(self) -> int:
+        """
+        :return: the effective maximum number of characters, resolving the default from the configuration
+        """
+        return self._agent.serena_config.default_max_tool_answer_chars if self._max_answer_chars == -1 else self._max_answer_chars
 
     def _to_json(self, x: Any) -> str:
         return TextOutputUtils.to_json(x)

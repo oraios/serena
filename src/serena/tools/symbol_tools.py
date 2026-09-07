@@ -3,7 +3,7 @@ Language server-related tools
 """
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 from serena.facades.api.lsp import LspApi
 from serena.tools import (
@@ -12,10 +12,8 @@ from serena.tools import (
     ToolMarkerSymbolicEdit,
     ToolMarkerSymbolicRead,
 )
+from serena.tools.file_tools import EditApiMixin
 from serena.tools.tools_base import ToolMarkerOptional
-
-if TYPE_CHECKING:
-    pass
 
 
 class LspApiMixin:
@@ -333,7 +331,7 @@ class GetDiagnosticsForSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOption
         )
 
 
-class ReplaceSymbolBodyTool(EditingToolWithDiagnostics, LspApiMixin):
+class ReplaceSymbolBodyTool(EditingToolWithDiagnostics, EditApiMixin):
     """
     Replaces the full definition of a symbol using the language server backend.
     """
@@ -361,7 +359,7 @@ class ReplaceSymbolBodyTool(EditingToolWithDiagnostics, LspApiMixin):
             return diagnostics_context.format_result(result)
 
 
-class InsertAfterSymbolTool(EditingToolWithDiagnostics, LspApiMixin):
+class InsertAfterSymbolTool(EditingToolWithDiagnostics, EditApiMixin):
     """
     Inserts content after the end of the definition of a given symbol.
     """
@@ -386,7 +384,7 @@ class InsertAfterSymbolTool(EditingToolWithDiagnostics, LspApiMixin):
             return diagnostics_context.format_result(result)
 
 
-class InsertBeforeSymbolTool(EditingToolWithDiagnostics, LspApiMixin):
+class InsertBeforeSymbolTool(EditingToolWithDiagnostics, EditApiMixin):
     """
     Inserts content before the beginning of the definition of a given symbol.
     """

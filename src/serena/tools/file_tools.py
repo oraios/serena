@@ -10,13 +10,22 @@ File and file system-related tools, specifically for
 import os
 from collections import defaultdict
 from fnmatch import fnmatch
-from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
-from serena.tools import SUCCESS_RESULT, EditedFileContext, EditingToolWithDiagnostics, Tool, ToolMarkerOptional
+from serena.facades.api.edit import EditApi
+from serena.tools import EditingToolWithDiagnostics, Tool, ToolMarkerOptional
 from serena.util.file_system import scan_directory
-from serena.util.text_utils import ContentReplacer, MultiFileReplacement, ReplacementRejectedError
 from solidlsp.ls_utils import TextUtils
+
+
+class EditApiMixin:
+    """
+    Mixin for tools which delegate to the editing API
+    """
+
+    def _api(self) -> EditApi:
+        tool = cast(Tool, cast(object, self))
+        return EditApi(tool.agent)
 
 
 class ReadFileTool(Tool):
@@ -51,7 +60,7 @@ class ReadFileTool(Tool):
         return self._limit_length(result, max_answer_chars)
 
 
-class CreateTextFileTool(EditingToolWithDiagnostics):
+class CreateTextFileTool(EditingToolWithDiagnostics, EditApiMixin):
     """
     Creates/overwrites a file in the project directory.
     """
@@ -65,26 +74,7 @@ class CreateTextFileTool(EditingToolWithDiagnostics):
         :return: a message indicating success or failure
         """
         with self.diagnostics_context(relative_path) as diagnostics_context:
-            # validating the destination path
-            project_root = self.get_project_root()
-            abs_path = (Path(project_root) / relative_path).resolve()
-            will_overwrite_existing = abs_path.exists()
-
-            if will_overwrite_existing:
-                self.project.validate_relative_path(relative_path)
-            else:
-                assert abs_path.is_relative_to(self.get_project_root()), (
-                    f"Cannot create file outside of the project directory, got {relative_path=}"
-                )
-
-            # writing the file
-            abs_path.parent.mkdir(parents=True, exist_ok=True)
-            abs_path.write_text(content, encoding=self.project.project_config.encoding, newline=self.project.line_ending.newline_str)
-            answer = f"File created: {relative_path}."
-            if will_overwrite_existing:
-                answer += " Overwrote existing file."
-
-            return diagnostics_context.format_result(answer)
+            return diagnostics_context.format_result(self._api().create_text_file(relative_path, content))
 
 
 class ListDirTool(Tool):
@@ -166,7 +156,7 @@ class FindFileTool(Tool):
         return result
 
 
-class ReplaceContentTool(EditingToolWithDiagnostics):
+class ReplaceContentTool(EditingToolWithDiagnostics, EditApiMixin):
     """
     Replaces content in a file (optionally using regular expressions).
     """
@@ -202,16 +192,12 @@ class ReplaceContentTool(EditingToolWithDiagnostics):
             If false and multiple occurrences are found, an error will be returned
         """
         with self.diagnostics_context(relative_path) as diagnostics_context:
-            self.project.validate_relative_path(relative_path)
-            with EditedFileContext(relative_path, self.create_code_editor()) as context:
-                original_content = context.get_original_content()
-                replacer = ContentReplacer(mode=mode, allow_multiple_occurrences=allow_multiple_occurrences)
-                updated_content = replacer.replace(original_content, needle, repl)
-                context.set_updated_content(updated_content)
-            return diagnostics_context.format_result(SUCCESS_RESULT)
+            return diagnostics_context.format_result(
+                self._api().replace_content(relative_path, needle, repl, mode, allow_multiple_occurrences=allow_multiple_occurrences)
+            )
 
 
-class ReplaceInFilesTool(EditingToolWithDiagnostics):
+class ReplaceInFilesTool(EditingToolWithDiagnostics, EditApiMixin):
     """
     Replaces occurrences of a pattern across multiple files, with dry-run preview and per-occurrence selection.
     """
@@ -267,38 +253,28 @@ class ReplaceInFilesTool(EditingToolWithDiagnostics):
             returned. -1 uses the configured default.
         :return: in a dry run, the prospective changes; otherwise a summary of the applied replacements
         """
-        max_answer_chars = self._resolve_max_answer_chars(max_answer_chars)
-        replacement = MultiFileReplacement(
-            self.project,
-            needle,
-            repl,
-            mode,
-            relative_path=relative_path,
-            paths_include_glob=paths_include_glob,
-            paths_exclude_glob=paths_exclude_glob,
-        )
+        api = self._api()
         if dry_run:
-            return replacement.render_listing(max_answer_chars, dry_run=True)
+            return api.replace_in_files(
+                needle, repl, mode, relative_path, paths_include_glob, paths_exclude_glob, dry_run=True, max_answer_chars=max_answer_chars
+            ).represent()
+        with self.diagnostics_context() as diagnostics_context:
+            result = api.replace_in_files(
+                needle,
+                repl,
+                mode,
+                relative_path,
+                paths_include_glob,
+                paths_exclude_glob,
+                occurrence_ids=occurrence_ids,
+                expected_count=expected_count,
+                max_answer_chars=max_answer_chars,
+            )
+            assert isinstance(result, str)
+            return diagnostics_context.format_result(result)
 
-        # select the occurrences to replace
-        try:
-            if occurrence_ids is not None:
-                occurrences = replacement.select(occurrence_ids)
-            else:
-                occurrences = replacement.select_all_guarded(expected_count)
-        except ReplacementRejectedError as e:
-            message = str(e)
-            if e.show_prospective_changes:
-                message += "\n" + replacement.render_listing(max_answer_chars, dry_run=False)
-            raise ValueError(message) from e
 
-        # apply the replacement
-        with self.diagnostics_context(*replacement.affected_files) as diagnostics_context:
-            result = replacement.apply(self.create_code_editor(), occurrences)
-            return diagnostics_context.format_result(result.to_display_string())
-
-
-class DeleteLinesTool(EditingToolWithDiagnostics, ToolMarkerOptional):
+class DeleteLinesTool(EditingToolWithDiagnostics, ToolMarkerOptional, EditApiMixin):
     """
     Deletes a range of lines within a file.
     """
@@ -319,12 +295,10 @@ class DeleteLinesTool(EditingToolWithDiagnostics, ToolMarkerOptional):
         :param end_line: the 0-based index of the last line to be deleted
         """
         with self.diagnostics_context(relative_path) as diagnostics_context:
-            code_editor = self.create_code_editor()
-            code_editor.delete_lines(relative_path, start_line, end_line)
-            return diagnostics_context.format_result(SUCCESS_RESULT)
+            return diagnostics_context.format_result(self._api().delete_lines(relative_path, start_line, end_line))
 
 
-class ReplaceLinesTool(EditingToolWithDiagnostics, ToolMarkerOptional):
+class ReplaceLinesTool(EditingToolWithDiagnostics, ToolMarkerOptional, EditApiMixin):
     """
     Replaces a range of lines within a file with new content.
     """
@@ -346,19 +320,11 @@ class ReplaceLinesTool(EditingToolWithDiagnostics, ToolMarkerOptional):
         :param end_line: the 0-based index of the last line to be deleted
         :param content: the content to insert
         """
-        # normalizing the replacement content
-        if not content.endswith("\n"):
-            content += "\n"
-
         with self.diagnostics_context(relative_path) as diagnostics_context:
-            code_editor = self.create_code_editor()
-            code_editor.delete_lines(relative_path, start_line, end_line)
-            code_editor.insert_at_line(relative_path, start_line, content)
-
-            return diagnostics_context.format_result(SUCCESS_RESULT)
+            return diagnostics_context.format_result(self._api().replace_lines(relative_path, start_line, end_line, content))
 
 
-class InsertAtLineTool(EditingToolWithDiagnostics, ToolMarkerOptional):
+class InsertAtLineTool(EditingToolWithDiagnostics, ToolMarkerOptional, EditApiMixin):
     """
     Inserts content at a given line in a file.
     """
@@ -379,15 +345,8 @@ class InsertAtLineTool(EditingToolWithDiagnostics, ToolMarkerOptional):
         :param line: the 0-based index of the line to insert content at
         :param content: the content to be inserted
         """
-        # normalizing the inserted content
-        if not content.endswith("\n"):
-            content += "\n"
-
         with self.diagnostics_context(relative_path) as diagnostics_context:
-            code_editor = self.create_code_editor()
-            code_editor.insert_at_line(relative_path, line, content)
-
-            return diagnostics_context.format_result(SUCCESS_RESULT)
+            return diagnostics_context.format_result(self._api().insert_at_line(relative_path, line, content))
 
 
 class SearchForPatternTool(Tool):

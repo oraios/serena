@@ -16,6 +16,7 @@ from serena.project import Project
 
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
+    from serena.code_editor import CodeEditor
 
 log = logging.getLogger(__name__)
 TCallable = TypeVar("TCallable", bound=Callable[..., Any])
@@ -103,6 +104,22 @@ class FacadeApi(ABC):
 
     def _get_project(self) -> Project:
         return self._agent.get_active_project_or_raise()
+
+    def _create_code_editor(self) -> "CodeEditor":
+        """
+        :return: a code editor for the active project, using the active language backend
+        """
+        from serena.code_editor import JetBrainsCodeEditor, LanguageServerCodeEditor
+        from serena.symbol import LanguageServerSymbolRetriever
+
+        project = self._get_project()
+        backend = self._agent.get_language_backend()
+        if backend.is_lsp():
+            return LanguageServerCodeEditor(LanguageServerSymbolRetriever(project))
+        elif backend.is_jetbrains():
+            return JetBrainsCodeEditor(project)
+        else:
+            raise ValueError(f"Unsupported language backend: {backend}")
 
 
 class FacadeMethod:

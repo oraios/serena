@@ -299,7 +299,7 @@ class LspApi(FacadeApi):
         assert self._agent.get_language_backend().is_lsp(), "Language server operations require the language server backend"
         return LanguageServerSymbolRetriever(self._get_project())
 
-    def _create_code_editor(self, symbol_retriever: LanguageServerSymbolRetriever | None = None) -> LanguageServerCodeEditor:
+    def _create_ls_code_editor(self, symbol_retriever: LanguageServerSymbolRetriever | None = None) -> LanguageServerCodeEditor:
         return LanguageServerCodeEditor(symbol_retriever or self._create_symbol_retriever())
 
     @staticmethod
@@ -560,7 +560,7 @@ class LspApi(FacadeApi):
         symbol_retriever = self._create_symbol_retriever()
 
         # find relevant location for lookup
-        editor = self._create_code_editor(symbol_retriever)
+        editor = self._create_ls_code_editor(symbol_retriever)
         if not containing_symbol_name_path:
             content = editor.read_file(relative_path)
             coords = find_text_coordinates(content, regex, require_unique=True)
@@ -667,54 +667,6 @@ class LspApi(FacadeApi):
     # edit operations
 
     @facade_method(can_edit=True)
-    def replace_symbol_body(self, name_path: str, relative_path: str, body: str) -> str:
-        """
-        Replaces the body of the given symbol.
-
-        IMPORTANT: Only replace symbol bodies if you have previously made a retrieval with include_body=True and thus know what
-        constitutes the body!
-
-        :param name_path: name path of the symbol whose body to replace
-        :param relative_path: the relative path to the file containing the symbol
-        :param body: the new symbol body. The symbol body is the definition of a symbol
-            in the programming language, including e.g. the signature line for functions.
-            Depending on the language, it may or may not include a preceding docstring or other preceding annotations.
-        :return: a success message
-        """
-        self._create_code_editor().replace_body(name_path, relative_file_path=relative_path, body=body)
-        return SUCCESS_RESULT
-
-    @facade_method(can_edit=True)
-    def insert_after_symbol(self, name_path: str, relative_path: str, body: str) -> str:
-        """
-        Inserts code after a class/method/function definition.
-        Don't use this to insert after assignments (constants, fields).
-
-        :param name_path: name path of the symbol after which to insert content
-        :param relative_path: the relative path to the file containing the symbol
-        :param body: the body/content to be inserted. The inserted code shall begin with the next line after
-            the symbol.
-        :return: a success message
-        """
-        self._create_code_editor().insert_after_symbol(name_path, relative_file_path=relative_path, body=body)
-        return SUCCESS_RESULT
-
-    @facade_method(can_edit=True)
-    def insert_before_symbol(self, name_path: str, relative_path: str, body: str) -> str:
-        """
-        Inserts the given content before the beginning of the definition of the given symbol (via the symbol's location).
-        A typical use case is to insert a new class, function, method, field or variable assignment; or
-        a new import statement before the first symbol in the file.
-
-        :param name_path: name path of the symbol before which to insert content
-        :param relative_path: the relative path to the file containing the symbol
-        :param body: the body/content to be inserted before the line in which the referenced symbol is defined
-        :return: a success message
-        """
-        self._create_code_editor().insert_before_symbol(name_path, relative_file_path=relative_path, body=body)
-        return SUCCESS_RESULT
-
-    @facade_method(can_edit=True)
     def rename_symbol(self, name_path: str, relative_path: str, new_name: str) -> str:
         """
         Renames the symbol with the given `name_path` to `new_name` throughout the entire codebase.
@@ -727,7 +679,7 @@ class LspApi(FacadeApi):
         :return: a result summary indicating success or failure
         """
         self._get_project().ls_sync_file_system_changes()
-        return self._create_code_editor().rename_symbol(name_path, relative_path=relative_path, new_name=new_name)
+        return self._create_ls_code_editor().rename_symbol(name_path, relative_path=relative_path, new_name=new_name)
 
     @facade_method(can_edit=True)
     def safe_delete_symbol(self, name_path_pattern: str, relative_path: str) -> str:
@@ -765,5 +717,5 @@ class LspApi(FacadeApi):
         if file_to_lines:
             return f"Cannot delete, the symbol {symbol_name_path} is referenced in: {TextOutputUtils.to_json(file_to_lines)}"
 
-        self._create_code_editor(symbol_retriever).delete_symbol(symbol_name_path, relative_file_path=symbol_rel_path)
+        self._create_ls_code_editor(symbol_retriever).delete_symbol(symbol_name_path, relative_file_path=symbol_rel_path)
         return SUCCESS_RESULT

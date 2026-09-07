@@ -42,6 +42,7 @@ from serena.config.serena_config import (
     ToolInclusionDefinition,
 )
 from serena.dashboard import SerenaDashboardAPI, SerenaDashboardTrayManager, SerenaDashboardViewer, open_url_in_browser
+from serena.facades.api.edit import EditApi
 from serena.facades.api.jb import JetBrainsApi
 from serena.facades.api.lsp import LspApi
 from serena.facades.facade import ApiScope, Facade
@@ -1183,7 +1184,7 @@ class SerenaAgent:
                     api_scope.exclude_editing()
 
             # gather facades
-            facades = []
+            facades = [Facade.from_api(EditApi(self), api_scope)]
             if self._language_backend.is_lsp():
                 facades.append(Facade.from_api(LspApi(self), api_scope))
             elif self._language_backend.is_jetbrains():
