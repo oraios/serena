@@ -50,7 +50,7 @@ class MemoryApi(FacadeApi):
         super().__init__(
             agent,
             name="mem",
-            description="project memories (persistent notes for future tasks): listing, reading, writing, editing; onboarding",
+            description="project memories, i.e. persistent notes for future tasks",
         )
 
     def _get_memory_manager(self) -> MemoryManager:

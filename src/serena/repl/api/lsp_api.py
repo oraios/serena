@@ -291,8 +291,7 @@ class LspApi(FacadeApi):
         super().__init__(
             agent,
             name="lsp",
-            description="language server-backed operations on the codebase (finding symbols, references, implementations, "
-            "declarations and diagnostics; editing and renaming symbols)",
+            description="symbol-level operations on the codebase backed by language servers",
         )
 
     def _create_symbol_retriever(self) -> LanguageServerSymbolRetriever:

@@ -64,8 +64,7 @@ class EditApi(FacadeApi):
         super().__init__(
             agent,
             name="edit",
-            description="editing operations independent of the language backend (creating files, replacing content in one or "
-            "many files, editing at the symbol or line level)",
+            description="modifying content within existing files (independent of the language backend)",
         )
 
     # file-level operations

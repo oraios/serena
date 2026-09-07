@@ -164,8 +164,7 @@ class JetBrainsApi(FacadeApi):
         super().__init__(
             agent,
             name="jb",
-            description="JetBrains IDE-backed operations (symbol search, references, type hierarchies, refactorings, "
-            "inspections, debugging)",
+            description="operations on the codebase backed by the JetBrains IDE's code intelligence",
         )
 
     @contextmanager
