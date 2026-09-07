@@ -68,6 +68,11 @@ line_ending:
 # is activated post-init, an error will be returned.
 language_backend:
 
+# The interface through which the agent (LLM) accesses Serena's functionality (overrides the global setting).
+# Valid values: tools, REPL (see the global configuration for details); leave empty to use the global setting.
+# Note: the interface is fixed at startup. If a project is activated post-init, its setting is not applied.
+agent_interface:
+
 # whether to use project's .gitignore files to ignore files
 ignore_all_files_in_gitignore: true
 

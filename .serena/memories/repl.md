@@ -34,6 +34,13 @@ Code runs as a function body (`return` defines the result); a single expression 
 
 ## Configuration
 
+- `agent_interface: tools | REPL` (`AgentInterface`; global config, overridable per project; CLI `--agent-interface`).
+  `None` = Serena's default (`tools`). Fixed for the session. In REPL mode the toolset is *fixed*
+  (`serena_repl`, `initial_instructions`, `activate_project` unless single-project); tool inclusion/exclusion
+  definitions do not apply — each interface has its own configuration vocabulary (tool definitions ↔ tools,
+  API definitions ↔ REPL). Contexts do not influence the interface.
+  Idea (not implemented, considered over-engineered for now): contexts could declare *supported* interfaces
+  (a capability constraint, e.g. clients that handle the REPL badly), with the user's preference choosing among them.
 - `included_apis`/`excluded_apis` (references `facade` or `facade.method`) in global config, context, modes,
   project config; applied in that order via `ApiScope` (exclusions first, then inclusions; later definitions win).
   Optional methods and all methods of an excluded facade must be included explicitly.

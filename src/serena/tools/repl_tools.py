@@ -4,10 +4,10 @@ Tools which provide access to Serena's functionality through Python code executi
 
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from serena.tools.tools_base import Tool, ToolMarkerBeta
+from serena.tools.tools_base import Tool, ToolMarkerBeta, ToolMarkerOptional
 
 
-class SerenaReplTool(Tool, ToolMarkerBeta):
+class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
     """
     Executes Python code which accesses Serena's functionality programmatically.
     """

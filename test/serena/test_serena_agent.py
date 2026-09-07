@@ -14,7 +14,7 @@ from _pytest.mark import Mark, MarkDecorator, ParameterSet
 
 from serena.agent import SerenaAgent
 from serena.config.context_mode import SerenaAgentContext
-from serena.config.serena_config import ProjectConfig, RegisteredProject, SerenaConfig
+from serena.config.serena_config import AgentInterface, ProjectConfig, RegisteredProject, SerenaConfig
 from serena.lsp.lsp_diagnostics import DiagnosticsContext
 from serena.project import Project
 from serena.tools import (
@@ -30,6 +30,7 @@ from serena.tools import (
     ReplaceInFilesTool,
     ReplaceSymbolBodyTool,
     SafeDeleteSymbol,
+    SerenaReplTool,
     Tool,
 )
 from solidlsp.ls_config import LanguageServerId
@@ -898,6 +899,25 @@ class TestSerenaAgent:
             assert "activate_project" not in exposed
             assert {"find_symbol", "get_symbols_overview", "replace_symbol_body"} <= exposed
             assert "Serena's code intelligence tools" in agent.create_system_prompt()
+        finally:
+            agent.on_shutdown(timeout=5)
+
+    @pytest.mark.python
+    @pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.PYTHON), reason="python tests are disabled in this environment")
+    @pytest.mark.parametrize("context_name", ["desktop-app", "grok"], ids=["multi_project", "single_project"])
+    def test_repl_interface_exposes_fixed_toolset(self, serena_config, context_name: str):
+        # the toolset is fixed regardless of tool inclusions/exclusions (e.g. the context's or the configuration's);
+        # only the single-project property of the context matters (no project activation in that case)
+        serena_config.agent_interface = AgentInterface.REPL
+        serena_config.included_optional_tools = ["get_diagnostics_for_symbol"]
+        context = SerenaAgentContext.from_name(context_name)
+        agent = SerenaAgent(project="test_repo_python", serena_config=serena_config, context=context)
+        agent.execute_task(lambda: None)
+        try:
+            exposed = {tool.get_name() for tool in agent.get_exposed_tool_instances()}
+            expected = {"serena_repl", "initial_instructions"} | (set() if context.single_project else {"activate_project"})
+            assert exposed == expected
+            assert "s.lsp" in agent.get_tool(SerenaReplTool).apply("s.info()")
         finally:
             agent.on_shutdown(timeout=5)
 

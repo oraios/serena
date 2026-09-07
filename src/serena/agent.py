@@ -31,6 +31,7 @@ from serena import serena_version
 from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import (
+    AgentInterface,
     LanguageBackend,
     ModeSelectionDefinition,
     ModeSelectionDefinitionWithAddedModes,
@@ -59,10 +60,12 @@ from serena.task_executor import TaskExecutor
 from serena.tools import (
     ActivateProjectTool,
     GetCurrentConfigTool,
+    InitialInstructionsTool,
     OnboardingTool,
     OpenDashboardTool,
     ReadMemoryTool,
     ReplaceContentTool,
+    SerenaReplTool,
     Tool,
     ToolMarker,
     ToolRegistry,
@@ -660,6 +663,13 @@ class SerenaAgent:
             log_choice=True,
         )
 
+        # determine the effective agent interface for this session (project configuration > global configuration).
+        # Like the language backend, it is fixed for the session, since the set of exposed tools cannot change after startup.
+        self._agent_interface = self.serena_config.determine_agent_interface(
+            project_config=registered_project_to_activate.project_config if registered_project_to_activate is not None else None,
+            log_choice=True,
+        )
+
         # create the tool names mapping for prompts
         self._prompt_tool_names_mapping = self._create_prompt_tool_names_mapping(self._language_backend)
 
@@ -685,8 +695,14 @@ class SerenaAgent:
                 self._project_activation_error = str(e)
         self._update_active_modes()
 
+        # determine whether we are operating in a single-project session, i.e. the project that was activated at startup
+        # (if any) is the only project that will be worked with throughout the session (no project switching)
+        self._is_single_project = self._context.single_project and self._active_project is not None
+
         # determine the base toolset defining the set of exposed tools (which e.g. the MCP shall see),
-        self._base_toolset = self._create_base_toolset(self.serena_config, self._context, self._active_modes, self._active_project)
+        self._base_toolset = self._create_base_toolset(
+            self.serena_config, self._context, self._active_modes, self._active_project, self._agent_interface, self._is_single_project
+        )
         self._exposed_tools = self._base_toolset.to_available_tools(self._all_tools)
         log.info(f"Number of exposed tools: {len(self._exposed_tools)}. Exposed tools: {self._exposed_tools.tool_names}")
 
@@ -753,10 +769,12 @@ class SerenaAgent:
         context: SerenaAgentContext,
         modes: ActiveModes,
         project: Project | None,
+        agent_interface: AgentInterface,
+        is_single_project: bool,
     ) -> ToolSet:
         """
         Determines the base toolset defining the set of exposed tools (which e.g. the MCP shall see).
-        It depends on ...
+        In REPL mode, the toolset is fixed. Otherwise, it depends on ...
            * dashboard availability/opening on launch
            * Serena config
            * the context (which is fixed for the session)
@@ -764,6 +782,13 @@ class SerenaAgent:
            * the optional tools enabled by initial dynamic modes
            * single-project mode reductions (if applicable)
         """
+        # when in REPL mode, the toolset is fixed and does not depend on the configuration, context, modes or project
+        if agent_interface.is_repl():
+            tool_classes: list[type[Tool]] = [SerenaReplTool, InitialInstructionsTool]
+            if not is_single_project:
+                tool_classes.append(ActivateProjectTool)
+            return ToolSet({tool_class.get_name_from_cls() for tool_class in tool_classes})
+
         # determine whether to include the OpenDashboardTool based on the Serena configuration
         tool_inclusion_definitions: list[ToolInclusionDefinition] = []
         if serena_config.web_dashboard and not serena_config.web_dashboard_open_on_launch and not serena_config.gui_log_window:
@@ -774,10 +799,6 @@ class SerenaAgent:
         # consider Serena configuration and the active context
         tool_inclusion_definitions.append(serena_config)
         tool_inclusion_definitions.append(context)
-
-        # determine whether we are operating in a single-project context
-        # (i.e. the project that is activated at startup is the only project that will be worked with throughout the session)
-        is_single_project = context.single_project and project is not None
 
         # consider modes
         # * base modes: These cannot be changed, so they are fully applied
@@ -829,6 +850,17 @@ class SerenaAgent:
 
     def get_language_backend(self) -> LanguageBackend:
         return self._language_backend
+
+    def is_single_project(self) -> bool:
+        """
+        :return: whether this is a single-project session, i.e. the project activated at startup is the only project
+            that will be worked with throughout the session (no project switching); requires a single-project context
+            and a project at startup
+        """
+        return self._is_single_project
+
+    def get_agent_interface(self) -> AgentInterface:
+        return self._agent_interface
 
     def get_current_tasks(self) -> list[TaskExecutor.TaskInfo]:
         """
@@ -1142,23 +1174,29 @@ class SerenaAgent:
 
     def _update_active_tools(self) -> None:
         """
-        Updates the active tools based on the active modes and the active project.
+        Updates the active tools (and the REPL, which depends on the same configuration) based on the active modes
+        and the active project. Must be called whenever the active modes or the active project change.
         The base tool set already takes the Serena configuration and the context into account
         (as well as many other aspects, such as JetBrains mode).
         """
-        # apply modes
-        tool_set = self._base_toolset.apply(*self._active_modes.get_modes())
+        if self._agent_interface.is_repl():
+            # the REPL toolset is fixed; tool inclusion/exclusion definitions do not apply
+            tool_set = self._base_toolset
+        else:
+            # apply modes
+            tool_set = self._base_toolset.apply(*self._active_modes.get_modes())
 
-        # apply active project configuration (if any)
-        if self._active_project is not None:
-            tool_set = tool_set.apply(self._active_project.project_config)
-            if self._active_project.project_config.read_only:
-                tool_set = tool_set.without_editing_tools()
+            # apply active project configuration (if any)
+            if self._active_project is not None:
+                tool_set = tool_set.apply(self._active_project.project_config)
+                if self._active_project.project_config.read_only:
+                    tool_set = tool_set.without_editing_tools()
 
         self._active_tools = tool_set.to_available_tools(self._all_tools)
         log.info(f"Active tools ({len(self._active_tools)}): {', '.join(self._active_tools.tool_names)}")
 
-        # reset the REPL, which depends on the same configuration (it is re-created on demand)
+        # reset the REPL, whose facades/API scope depend on the active modes and project (it is re-created on demand).
+        # NOTE: This must happen irrespective of the agent interface, since the REPL tool may be active in tool mode as well.
         self._repl = None
 
         # check if a tool was activated that is not in the exposed tool set and issue a warning if so
@@ -1435,6 +1473,7 @@ class SerenaAgent:
             result_str += f"Active project: {self._active_project.project_name}\n"
         else:
             result_str += "No active project\n"
+        result_str += f"Agent interface: {self._agent_interface.value}\n"
         result_str += f"Language backend: {self._language_backend.value}"
         if self._active_project and self._active_project.project_config.language_backend is not None:
             result_str += " (project override)"

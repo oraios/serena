@@ -7,6 +7,18 @@
 #      in your IDE).
 language_backend: LSP
 
+# The interface through which the agent (LLM) accesses Serena's functionality:
+#  * tools: the classic tool interface, in which each operation is a separate tool.
+#      The set of tools is configurable via the tool inclusion/exclusion settings (excluded_tools etc.)
+#      of the configuration, the context, modes and the project.
+#  * REPL: operations are accessed programmatically via the serena_repl tool, which executes Python code.
+#      The set of tools is fixed (the REPL tool and the tools required for session management), and the tool
+#      inclusion/exclusion settings do not apply; instead, the operations available in the REPL are configured
+#      via the API inclusion/exclusion settings (excluded_apis etc.).
+# Leave empty to use Serena's default (currently "tools").
+# The interface is fixed at startup and can be overridden per project.
+agent_interface:
+
 # line ending convention to use when writing source files.
 # Possible values: "lf" (Unix), "crlf" (Windows), "native" (platform default).
 # Note that Serena's own files (e.g. memories and configuration files) always use native line endings.

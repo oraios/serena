@@ -23,6 +23,7 @@ from serena import serena_version
 from serena.config.client_setup import client_setup_handlers
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import (
+    AgentInterface,
     LanguageBackend,
     ModeSelectionDefinition,
     ModeSelectionDefinitionWithAddedModes,
@@ -264,6 +265,13 @@ class TopLevelCommands(AutoRegisteringGroup):
         help="Override the configured language backend.",
     )
     @click.option(
+        "--agent-interface",
+        type=click.Choice([i.value for i in AgentInterface], case_sensitive=False),
+        default=None,
+        help="Override the configured agent interface: 'tools' (one tool per operation) or "
+        "'REPL' (Python code execution via the serena_repl tool, with a fixed set of tools).",
+    )
+    @click.option(
         "--transport",
         type=click.Choice(["stdio", "sse", "streamable-http"]),
         default="stdio",
@@ -325,6 +333,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         default_modes: Sequence[str],
         added_modes: Sequence[str],
         language_backend: str | None,
+        agent_interface: str | None,
         transport: Literal["stdio", "sse", "streamable-http"],
         host: str,
         port: int,
@@ -385,6 +394,7 @@ class TopLevelCommands(AutoRegisteringGroup):
             port=port,
             mode_selection_def=mode_selection_def,
             language_backend=LanguageBackend.from_str(language_backend) if language_backend else None,
+            agent_interface=AgentInterface.from_str(agent_interface) if agent_interface else None,
             enable_web_dashboard=enable_web_dashboard,
             open_web_dashboard=open_web_dashboard,
             enable_gui_log_window=enable_gui_log_window,
