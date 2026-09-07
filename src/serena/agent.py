@@ -52,6 +52,7 @@ from serena.repl.api.fs_api import FsApi
 from serena.repl.api.jb_api import JetBrainsApi
 from serena.repl.api.lsp_api import LspApi
 from serena.repl.api.mem_api import MemoryApi
+from serena.repl.api.shell_api import ShellApi
 from serena.repl.facade import ApiScope, Facade
 from serena.repl.repl import SerenaRepl
 from serena.task_executor import TaskExecutor
@@ -1190,6 +1191,7 @@ class SerenaAgent:
                 Facade.from_api(FsApi(self), api_scope),
                 Facade.from_api(EditApi(self), api_scope),
                 Facade.from_api(MemoryApi(self), api_scope),
+                Facade.from_api(ShellApi(self), api_scope),
             ]
             if self._language_backend.is_lsp():
                 facades.append(Facade.from_api(LspApi(self), api_scope))
