@@ -50,6 +50,7 @@ from serena.prompt_factory import SerenaPromptFactory
 from serena.repl.api.edit_api import EditApi
 from serena.repl.api.jb_api import JetBrainsApi
 from serena.repl.api.lsp_api import LspApi
+from serena.repl.api.mem_api import MemoryApi
 from serena.repl.facade import ApiScope, Facade
 from serena.repl.repl import SerenaRepl
 from serena.task_executor import TaskExecutor
@@ -1184,7 +1185,7 @@ class SerenaAgent:
                     api_scope.exclude_editing()
 
             # gather facades
-            facades = [Facade.from_api(EditApi(self), api_scope)]
+            facades = [Facade.from_api(EditApi(self), api_scope), Facade.from_api(MemoryApi(self), api_scope)]
             if self._language_backend.is_lsp():
                 facades.append(Facade.from_api(LspApi(self), api_scope))
             elif self._language_backend.is_jetbrains():

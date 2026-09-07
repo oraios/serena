@@ -1,14 +1,22 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import logging
-from typing import Literal
+from typing import Literal, cast
 
+from serena.repl.api.mem_api import MemoryApi
 from serena.tools import Tool, ToolMarkerCanEdit
 
-log = logging.getLogger(__name__)
+
+class MemoryApiMixin:
+    """
+    Mixin for tools which delegate to the memory API
+    """
+
+    def _api(self) -> MemoryApi:
+        tool = cast(Tool, cast(object, self))
+        return MemoryApi(tool.agent)
 
 
-class WriteMemoryTool(Tool, ToolMarkerCanEdit):
+class WriteMemoryTool(Tool, ToolMarkerCanEdit, MemoryApiMixin):
     """
     Write some information (utf-8-encoded) about this project that can be useful for future tasks to a memory in md format.
     The memory name should be meaningful.
@@ -26,18 +34,10 @@ class WriteMemoryTool(Tool, ToolMarkerCanEdit):
         :param content: memory content, utf8-encoded
         :param max_chars: see other tools
         """
-        # NOTE: utf-8 encoding is configured in the MemoriesManager
-        if max_chars == -1:
-            max_chars = self.agent.serena_config.default_max_tool_answer_chars
-        if len(content) > max_chars:
-            raise ValueError(
-                f"Content for {memory_name} is too long. Max length is {max_chars} characters. " + "Please make the content shorter."
-            )
-
-        return self.memory_manager.save_memory(memory_name, content, is_tool_context=True)
+        return self._api().write_memory(memory_name, content, max_chars)
 
 
-class ReadMemoryTool(Tool):
+class ReadMemoryTool(Tool, MemoryApiMixin):
     """
     Reads the content of a memory file.
     """
@@ -46,10 +46,10 @@ class ReadMemoryTool(Tool):
         """
         Use to read a memory that is likely to be relevant to the current task, inferring relevance e.g. from the name.
         """
-        return self.memory_manager.load_memory(memory_name)
+        return self._api().read_memory(memory_name)
 
 
-class ListMemoriesTool(Tool):
+class ListMemoriesTool(Tool, MemoryApiMixin):
     """
     Lists available memories.
     """
@@ -58,10 +58,10 @@ class ListMemoriesTool(Tool):
         """
         Lists available memories, optionally filtered by topic.
         """
-        return self._to_json(self.memory_manager.list_memories(topic).to_dict())
+        return self._api().list_memories(topic).represent()
 
 
-class DeleteMemoryTool(Tool, ToolMarkerCanEdit):
+class DeleteMemoryTool(Tool, ToolMarkerCanEdit, MemoryApiMixin):
     """
     Delete a memory file.
     """
@@ -70,10 +70,10 @@ class DeleteMemoryTool(Tool, ToolMarkerCanEdit):
         """
         Delete a memory, only call if instructed explicitly or permission was granted by the user.
         """
-        return self.memory_manager.delete_memory(memory_name, is_tool_context=True)
+        return self._api().delete_memory(memory_name)
 
 
-class RenameMemoryTool(Tool, ToolMarkerCanEdit):
+class RenameMemoryTool(Tool, ToolMarkerCanEdit, MemoryApiMixin):
     """
     Renames or moves a memory, updating references that are marked with the `mem:` prefix.
     """
@@ -85,15 +85,10 @@ class RenameMemoryTool(Tool, ToolMarkerCanEdit):
         References to other memories that are marked with the `mem:` prefix will be updated accordingly.
         References in read-only memories are not affected.
         """
-        renaming_message, n_references_updated = self.memory_manager.rename_memory_and_propagate_references(
-            old_name, new_name, is_tool_context=True
-        )
-        if n_references_updated > 0:
-            log.info(f"Updated {n_references_updated} references to memory {old_name} to {new_name}")
-        return renaming_message
+        return self._api().rename_memory(old_name, new_name)
 
 
-class EditMemoryTool(Tool, ToolMarkerCanEdit):
+class EditMemoryTool(Tool, ToolMarkerCanEdit, MemoryApiMixin):
     """
     Replaces content matching a regular expression in a memory.
     """
@@ -119,6 +114,4 @@ class EditMemoryTool(Tool, ToolMarkerCanEdit):
         :param allow_multiple_occurrences: whether to allow matching and replacing multiple occurrences.
             If false and multiple occurrences are found, an error will be returned.
         """
-        return self.memory_manager.edit_memory(
-            memory_name, needle, repl, mode, allow_multiple_occurrences, is_tool_context=True, regex_multiline=True
-        )
+        return self._api().edit_memory(memory_name, needle, repl, mode, allow_multiple_occurrences)
