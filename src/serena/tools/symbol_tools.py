@@ -5,7 +5,7 @@ Language server-related tools
 
 from typing import cast
 
-from serena.facades.api.lsp import LspApi
+from serena.repl.api.lsp_api import LspApi
 from serena.tools import (
     EditingToolWithDiagnostics,
     Tool,

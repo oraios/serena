@@ -12,7 +12,7 @@ from collections import defaultdict
 from fnmatch import fnmatch
 from typing import Literal, cast
 
-from serena.facades.api.edit import EditApi
+from serena.repl.api.edit_api import EditApi
 from serena.tools import EditingToolWithDiagnostics, Tool, ToolMarkerOptional
 from serena.util.file_system import scan_directory
 from solidlsp.ls_utils import TextUtils

@@ -931,8 +931,8 @@ class ProjectCommands(AutoRegisteringGroup):
         """
         # NOTE: completely written by Claude Code, only functionality was reviewed, not implementation
         from serena.agent import SerenaAgent
-        from serena.facades.api.lsp import LspApi
         from serena.project import Project
+        from serena.repl.api.lsp_api import LspApi
 
         logging.configure(level=logging.INFO)
         project_path = os.path.abspath(project)

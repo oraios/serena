@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from serena.facades.api.jb import JetBrainsApi
-from serena.facades.facade import ApiScope, Facade
+from serena.repl.api.jb_api import JetBrainsApi
+from serena.repl.facade import ApiScope, Facade
 
 
 @pytest.fixture
@@ -20,7 +20,7 @@ def agent() -> MagicMock:
 @pytest.fixture
 def client() -> MagicMock:
     client = MagicMock()
-    with patch("serena.facades.api.jb.JetBrainsPluginClient.from_project") as from_project:
+    with patch("serena.repl.api.jb_api.JetBrainsPluginClient.from_project") as from_project:
         from_project.return_value.__enter__.return_value = client
         yield client
 

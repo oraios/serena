@@ -8,9 +8,9 @@ from unittest.mock import MagicMock
 import pytest
 
 from serena.config.serena_config import ApiInclusionDefinition
-from serena.facades.api.lsp import LspApi
-from serena.facades.facade import ApiScope, Facade, FacadeApi, FacadeMethodInfo, facade_method
-from serena.facades.repl import SerenaRepl
+from serena.repl.api.lsp_api import LspApi
+from serena.repl.facade import ApiScope, Facade, FacadeApi, FacadeMethodInfo, facade_method
+from serena.repl.repl import SerenaRepl
 from serena.tools import SerenaReplTool
 from solidlsp.ls_config import LanguageServerId
 from test.conftest import agent_for_project_context

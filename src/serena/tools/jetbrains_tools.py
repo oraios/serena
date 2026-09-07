@@ -3,7 +3,7 @@
 import logging
 from typing import TYPE_CHECKING, Literal
 
-from serena.facades.api.jb import JetBrainsApi
+from serena.repl.api.jb_api import JetBrainsApi
 from serena.tools import Tool, ToolMarkerBeta, ToolMarkerOptional, ToolMarkerSymbolicEdit, ToolMarkerSymbolicRead
 
 if TYPE_CHECKING:

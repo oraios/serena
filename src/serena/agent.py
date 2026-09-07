@@ -42,16 +42,16 @@ from serena.config.serena_config import (
     ToolInclusionDefinition,
 )
 from serena.dashboard import SerenaDashboardAPI, SerenaDashboardTrayManager, SerenaDashboardViewer, open_url_in_browser
-from serena.facades.api.edit import EditApi
-from serena.facades.api.jb import JetBrainsApi
-from serena.facades.api.lsp import LspApi
-from serena.facades.facade import ApiScope, Facade
-from serena.facades.repl import SerenaRepl
 from serena.jetbrains import launch_coordinator as jetbrains_launch_coordinator
 from serena.ls_manager import LanguageServerManager
 from serena.memories.memory_manager import MemoryManager
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
+from serena.repl.api.edit_api import EditApi
+from serena.repl.api.jb_api import JetBrainsApi
+from serena.repl.api.lsp_api import LspApi
+from serena.repl.facade import ApiScope, Facade
+from serena.repl.repl import SerenaRepl
 from serena.task_executor import TaskExecutor
 from serena.tools import (
     ActivateProjectTool,

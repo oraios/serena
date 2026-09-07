@@ -8,9 +8,9 @@ from serena import __version__
 from serena.agent import Tool, ToolRegistry
 from serena.config.context_mode import SerenaAgentContext
 from serena.config.serena_config import SerenaConfig
-from serena.facades.facade import ApiScope
-from serena.facades.repl import SerenaRepl
 from serena.mcp import SerenaMCPFactory
+from serena.repl.facade import ApiScope
+from serena.repl.repl import SerenaRepl
 
 make_tool = SerenaMCPFactory.make_mcp_tool
 

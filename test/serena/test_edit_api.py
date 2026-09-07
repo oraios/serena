@@ -8,9 +8,9 @@ from unittest.mock import MagicMock
 import pytest
 
 from serena.config.serena_config import SerenaConfig
-from serena.facades.api.edit import EditApi, ReplacementPreview
-from serena.facades.facade import ApiScope, Facade
 from serena.project import Project
+from serena.repl.api.edit_api import EditApi, ReplacementPreview
+from serena.repl.facade import ApiScope, Facade
 
 
 @pytest.fixture
