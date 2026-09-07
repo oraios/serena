@@ -30,7 +30,6 @@ def api(project: Project) -> EditApi:
 
 def test_facade_exposes_editing_operations(api: EditApi) -> None:
     default_methods = {
-        "create_text_file",
         "replace_content",
         "replace_in_files",
         "replace_symbol_body",
@@ -45,18 +44,6 @@ def test_facade_exposes_editing_operations(api: EditApi) -> None:
     for name in optional_methods:
         assert facade.get_method(name).info.optional
     assert all(facade.get_method(name).info.can_edit for name in default_methods | optional_methods)
-
-
-def test_create_text_file(api: EditApi, project: Project) -> None:
-    result = api.create_text_file("sub/new.txt", "hello\n")
-    assert "new.txt" in result
-    assert (Path(project.project_root) / "sub" / "new.txt").read_text(encoding="utf-8") == "hello\n"
-
-    result = api.create_text_file("sub/new.txt", "changed\n")
-    assert "Overwrote" in result
-
-    with pytest.raises(AssertionError):
-        api.create_text_file("../outside.txt", "nope")
 
 
 def test_replace_in_files_dry_run_returns_inspectable_preview(api: EditApi, project: Project) -> None:

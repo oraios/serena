@@ -7,15 +7,11 @@ File and file system-related tools, specifically for
 """
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import os
-from collections import defaultdict
-from fnmatch import fnmatch
 from typing import Literal, cast
 
 from serena.repl.api.edit_api import EditApi
+from serena.repl.api.fs_api import FsApi
 from serena.tools import EditingToolWithDiagnostics, Tool, ToolMarkerOptional
-from serena.util.file_system import scan_directory
-from solidlsp.ls_utils import TextUtils
 
 
 class EditApiMixin:
@@ -28,7 +24,17 @@ class EditApiMixin:
         return EditApi(tool.agent)
 
 
-class ReadFileTool(Tool):
+class FsApiMixin:
+    """
+    Mixin for tools which delegate to the file system API
+    """
+
+    def _api(self) -> FsApi:
+        tool = cast(Tool, cast(object, self))
+        return FsApi(tool.agent)
+
+
+class ReadFileTool(Tool, FsApiMixin):
     """
     Reads a file within the project directory.
     """
@@ -45,22 +51,10 @@ class ReadFileTool(Tool):
             required for the task.
         :return: the full text of the file at the given relative path
         """
-        self.project.validate_relative_path(relative_path)
-
-        # read lines, using the same (LSP-compliant) notion of line breaks as the line-based editing tools
-        result = self.project.read_file(relative_path)
-        result_lines = TextUtils.split_lines(result)
-
-        if end_line is None:
-            result_lines = result_lines[start_line:]
-        else:
-            result_lines = result_lines[start_line : end_line + 1]
-        result = "\n".join(result_lines)
-
-        return self._limit_length(result, max_answer_chars)
+        return self._api().read_file(relative_path, start_line, end_line, max_answer_chars).represent()
 
 
-class CreateTextFileTool(EditingToolWithDiagnostics, EditApiMixin):
+class CreateTextFileTool(EditingToolWithDiagnostics, FsApiMixin):
     """
     Creates/overwrites a file in the project directory.
     """
@@ -77,7 +71,7 @@ class CreateTextFileTool(EditingToolWithDiagnostics, EditApiMixin):
             return diagnostics_context.format_result(self._api().create_text_file(relative_path, content))
 
 
-class ListDirTool(Tool):
+class ListDirTool(Tool, FsApiMixin):
     """
     Lists files and directories in the given directory (optionally with recursion).
     """
@@ -94,31 +88,13 @@ class ListDirTool(Tool):
             Don't adjust unless there is really no other way to get the content required for the task.
         :return: a JSON object with the names of directories and files within the given directory
         """
-        # Check if the directory exists before validation
-        if not self.project.relative_path_exists(relative_path):
-            error_info = {
-                "error": f"Directory not found: {relative_path}",
-                "project_root": self.get_project_root(),
-                "hint": "Check if the path is correct relative to the project root",
-            }
-            return self._to_json(error_info)
-
-        self.project.validate_relative_path(relative_path)
-
-        is_ignored_path_fn = self.project.get_is_ignored_path_fn(relative_path, skip_ignored_files)
-        dirs, files = scan_directory(
-            os.path.join(self.get_project_root(), relative_path),
-            relative_to=self.get_project_root(),
-            recursive=recursive,
-            is_ignored_dir=is_ignored_path_fn,
-            is_ignored_file=is_ignored_path_fn,
-        )
-
-        result = self._to_json({"dirs": dirs, "files": files})
-        return self._limit_length(result, max_answer_chars)
+        try:
+            return self._api().list_dir(relative_path, recursive, skip_ignored_files, max_answer_chars).represent()
+        except FileNotFoundError as e:
+            return self._to_json({"error": str(e), "project_root": self.get_project_root()})
 
 
-class FindFileTool(Tool):
+class FindFileTool(Tool, FsApiMixin):
     """
     Finds files in the given relative paths
     """
@@ -132,28 +108,7 @@ class FindFileTool(Tool):
         :param skip_ignored_files: whether to skip ignored files/directories
         :return: a JSON object with the list of matching files
         """
-        self.project.validate_relative_path(relative_path)
-
-        is_ignored_path_fn = self.project.get_is_ignored_path_fn(relative_path, skip_ignored_paths=False)
-        dir_to_scan = os.path.join(self.get_project_root(), relative_path)
-
-        # find the files by ignoring everything that doesn't match
-        def is_ignored_file(abs_path: str) -> bool:
-            if is_ignored_path_fn(abs_path):
-                return True
-            filename = os.path.basename(abs_path)
-            return not fnmatch(filename, file_mask)
-
-        _dirs, files = scan_directory(
-            path=dir_to_scan,
-            recursive=True,
-            is_ignored_dir=is_ignored_path_fn,
-            is_ignored_file=is_ignored_file,
-            relative_to=self.get_project_root(),
-        )
-
-        result = self._to_json({"files": files})
-        return result
+        return self._to_json({"files": self._api().find_file(file_mask, relative_path)})
 
 
 class ReplaceContentTool(EditingToolWithDiagnostics, EditApiMixin):
@@ -349,7 +304,7 @@ class InsertAtLineTool(EditingToolWithDiagnostics, ToolMarkerOptional, EditApiMi
             return diagnostics_context.format_result(self._api().insert_at_line(relative_path, line, content))
 
 
-class SearchForPatternTool(Tool):
+class SearchForPatternTool(Tool, FsApiMixin):
     def apply(
         self,
         substring_pattern: str,
@@ -381,92 +336,19 @@ class SearchForPatternTool(Tool):
             ``-1`` uses the configured default.
         :return: A mapping from file paths to matched consecutive lines (0-based line numbers).
         """
-        relative_path = relative_path.strip()
-        if relative_path:
-            self.project.validate_relative_path(relative_path)
-
-        matches = self.project.search_project_files_for_pattern(
-            pattern=substring_pattern,
-            relative_path=relative_path,
-            context_lines_before=context_lines_before,
-            context_lines_after=context_lines_after,
-            paths_include_glob=paths_include_glob.strip(),
-            paths_exclude_glob=paths_exclude_glob.strip(),
-            multiline=multiline,
-            code_files_only=restrict_search_to_code_files,
-            skip_ignored_files=skip_ignored_files,
+        return (
+            self._api()
+            .search_for_pattern(
+                substring_pattern,
+                context_lines_before=context_lines_before,
+                context_lines_after=context_lines_after,
+                paths_include_glob=paths_include_glob,
+                paths_exclude_glob=paths_exclude_glob,
+                relative_path=relative_path,
+                restrict_search_to_code_files=restrict_search_to_code_files,
+                skip_ignored_files=skip_ignored_files,
+                multiline=multiline,
+                max_answer_chars=max_answer_chars,
+            )
+            .represent()
         )
-
-        # group matches by file
-        file_to_matches: dict[str, list[str]] = defaultdict(list)
-        for match in matches:
-            assert match.source_file_path is not None
-            file_to_matches[match.source_file_path].append(match.to_display_string())
-
-        # capture lightweight match data for shortening before serialization
-        match_lines_by_file: dict[str, list[dict[str, int | str]]] = defaultdict(list)
-        for match in matches:
-            assert match.source_file_path is not None
-            first = match.matched_lines[0]
-            match_lines_by_file[match.source_file_path].append({"line": first.line_number, "text": first.line_content.strip()})
-
-        # shortened result closures, from least to most aggressive shortening
-        _TEXT_TRUNCATE = 60
-
-        def render_first_lines(truncate: bool) -> str:
-            """Render each match's first line, either in full or truncated to a fixed length."""
-
-            def entry_text(text: str) -> str:
-                if truncate and len(text) > _TEXT_TRUNCATE:
-                    return text[:_TEXT_TRUNCATE] + "..."
-                return text
-
-            compact = {
-                path: [{"line": m["line"], "text": entry_text(str(m["text"]))} for m in lines]
-                for path, lines in match_lines_by_file.items()
-            }
-            if truncate:
-                header = (
-                    f"Matched lines (text over {_TEXT_TRUNCATE} chars is truncated, marked with a trailing '...'); "
-                    "use read_file with the line numbers for full content:"
-                )
-            else:
-                header = "Matched lines per file; use read_file with the line numbers for surrounding context:"
-            return f"{header}\n{self._to_json(compact)}"
-
-        def make_first_lines_full() -> str:
-            """Match locations with each match's full first line."""
-            return render_first_lines(truncate=False)
-
-        def make_first_lines_truncated() -> str:
-            """Match locations with each match's first line truncated to a fixed length."""
-            return render_first_lines(truncate=True)
-
-        def make_line_numbers_only() -> str:
-            """Match locations as bare line numbers (no text)."""
-            numbers = {path: [m["line"] for m in lines] for path, lines in match_lines_by_file.items()}
-            return f"Match lines per file:\n{self._to_json(numbers)}"
-
-        def make_per_file_counts() -> str:
-            counts = {path: len(lines) for path, lines in match_lines_by_file.items()}
-            return f"Match counts per file:\n{self._to_json(counts)}"
-
-        def make_summary() -> str:
-            return f"Found {len(matches)} matches in {len(match_lines_by_file)} files."
-
-        result = self._to_json(file_to_matches)
-        return self._limit_length(
-            result,
-            max_answer_chars,
-            shortened_result_factories=[
-                make_first_lines_full,
-                make_first_lines_truncated,
-                make_line_numbers_only,
-                make_per_file_counts,
-                make_summary,
-            ],
-        )
-
-    """
-    Performs a search for a pattern in the project.
-    """

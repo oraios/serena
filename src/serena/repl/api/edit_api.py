@@ -3,7 +3,6 @@
 The implementation of editing operations, which are independent of the language backend.
 """
 
-from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from serena.code_editor import EditedFileContext
@@ -68,34 +67,6 @@ class EditApi(FacadeApi):
         )
 
     # file-level operations
-
-    @facade_method(can_edit=True)
-    def create_text_file(self, relative_path: str, content: str) -> str:
-        """
-        Writes a new file or overwrites an existing file with the given content.
-
-        :param relative_path: the relative path to the file to create
-        :param content: the (appropriately encoded) content to write to the file
-        :return: a message indicating success
-        """
-        project = self._get_project()
-        project_root = Path(project.project_root)
-        abs_path = (project_root / relative_path).resolve()
-        will_overwrite_existing = abs_path.exists()
-
-        # validate the destination path
-        if will_overwrite_existing:
-            project.validate_relative_path(relative_path)
-        else:
-            assert abs_path.is_relative_to(project_root), f"Cannot create file outside of the project directory, got {relative_path=}"
-
-        # write the file
-        abs_path.parent.mkdir(parents=True, exist_ok=True)
-        abs_path.write_text(content, encoding=project.project_config.encoding, newline=project.line_ending.newline_str)
-        answer = f"File created: {relative_path}."
-        if will_overwrite_existing:
-            answer += " Overwrote existing file."
-        return answer
 
     @facade_method(can_edit=True)
     def replace_content(

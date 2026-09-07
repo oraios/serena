@@ -48,6 +48,7 @@ from serena.memories.memory_manager import MemoryManager
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.repl.api.edit_api import EditApi
+from serena.repl.api.fs_api import FsApi
 from serena.repl.api.jb_api import JetBrainsApi
 from serena.repl.api.lsp_api import LspApi
 from serena.repl.api.mem_api import MemoryApi
@@ -1185,7 +1186,11 @@ class SerenaAgent:
                     api_scope.exclude_editing()
 
             # gather facades
-            facades = [Facade.from_api(EditApi(self), api_scope), Facade.from_api(MemoryApi(self), api_scope)]
+            facades = [
+                Facade.from_api(FsApi(self), api_scope),
+                Facade.from_api(EditApi(self), api_scope),
+                Facade.from_api(MemoryApi(self), api_scope),
+            ]
             if self._language_backend.is_lsp():
                 facades.append(Facade.from_api(LspApi(self), api_scope))
             elif self._language_backend.is_jetbrains():
