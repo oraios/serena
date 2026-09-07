@@ -1,26 +1,28 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import logging
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
-from serena.repl.api.jb_api import JetBrainsApi
+from serena.symbol import SymbolDictGrouper
 from serena.tools import Tool, ToolMarkerBeta, ToolMarkerOptional, ToolMarkerSymbolicEdit, ToolMarkerSymbolicRead
 
 if TYPE_CHECKING:
-    from serena.agent import SerenaAgent
+    from serena.repl.api.jb_api import JetBrainsApi
 
 log = logging.getLogger(__name__)
 
 
 class JetBrainsApiMixin:
     """
-    Mixin for tools which delegate to the JetBrains API
+    Mixin for tools which delegate to the JetBrains API.
+    The API is imported locally, since the API module refers to the tools (as corresponding tools).
     """
 
-    agent: "SerenaAgent"
+    def _api(self) -> "JetBrainsApi":
+        from serena.repl.api.jb_api import JetBrainsApi
 
-    def _api(self) -> JetBrainsApi:
-        return JetBrainsApi(self.agent)
+        tool = cast(Tool, cast(object, self))
+        return JetBrainsApi(tool.agent)
 
 
 class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, JetBrainsApiMixin):
@@ -28,7 +30,11 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, 
     Performs a global (or local) search for symbols using the JetBrains backend
     """
 
-    symbol_dict_grouper = JetBrainsApi.find_symbol_grouper_
+    @property
+    def symbol_dict_grouper(self) -> SymbolDictGrouper:
+        from serena.repl.api.jb_api import JetBrainsApi
+
+        return JetBrainsApi.find_symbol_grouper_
 
     def apply(
         self,
@@ -217,7 +223,11 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
     Finds symbols that reference the given symbol using the JetBrains backend
     """
 
-    symbol_dict_grouper = JetBrainsApi.references_grouper_
+    @property
+    def symbol_dict_grouper(self) -> SymbolDictGrouper:
+        from serena.repl.api.jb_api import JetBrainsApi
+
+        return JetBrainsApi.references_grouper_
 
     def apply(
         self,
@@ -245,7 +255,11 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
     Retrieves an overview of the top-level symbols within a specified file using the JetBrains backend
     """
 
-    symbol_dict_grouper = JetBrainsApi.overview_grouper_
+    @property
+    def symbol_dict_grouper(self) -> SymbolDictGrouper:
+        from serena.repl.api.jb_api import JetBrainsApi
+
+        return JetBrainsApi.overview_grouper_
 
     def apply(
         self,

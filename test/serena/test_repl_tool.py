@@ -11,7 +11,7 @@ from serena.config.serena_config import ApiInclusionDefinition
 from serena.repl.api.lsp_api import LspApi
 from serena.repl.facade import ApiScope, Facade, FacadeApi, FacadeMethodInfo, facade_method
 from serena.repl.repl import SerenaRepl
-from serena.tools import SerenaReplTool
+from serena.tools import FindSymbolTool, SerenaReplTool
 from solidlsp.ls_config import LanguageServerId
 from test.conftest import agent_for_project_context
 
@@ -164,6 +164,15 @@ class TestFacade:
         # an explicit inclusion enables it
         facade = Facade.from_api(self.DummyApi(MagicMock()), self._scope(included_apis=["dummy.extra"]))
         assert "extra" in facade.enabled_method_names
+
+    def test_corresponding_tool(self) -> None:
+        facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope())
+        assert facade.get_method("add").info.get_corresponding_tool_name() is None
+
+        lsp_facade = Facade.from_api(LspApi(MagicMock()), ApiScope())
+        info = lsp_facade.get_method("find_symbol").info
+        assert info.corresponding_tool is FindSymbolTool
+        assert info.get_corresponding_tool_name() == "find_symbol"
 
     def test_method_info_mirrors_decorator(self) -> None:
         facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope())

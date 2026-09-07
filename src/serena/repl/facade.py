@@ -17,6 +17,7 @@ from serena.project import Project
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
     from serena.code_editor import CodeEditor
+    from serena.tools import Tool
 
 log = logging.getLogger(__name__)
 TCallable = TypeVar("TCallable", bound=Callable[..., Any])
@@ -39,12 +40,22 @@ class FacadeMethodInfo:
     """whether the method is in beta (not yet fully stable)"""
     can_edit: bool = False
     """whether the method can modify the codebase (relevant for read-only contexts)"""
+    corresponding_tool: "type[Tool] | None" = None
+    """the classic tool offering the same functionality, if any"""
+
+    def get_corresponding_tool_name(self) -> str | None:
+        """
+        :return: the name of the corresponding tool, or None if there is none
+        """
+        return self.corresponding_tool.get_name_from_cls() if self.corresponding_tool is not None else None
 
 
 _FACADE_METHOD_INFO_ATTR = "__facade_method_info__"
 
 
-def facade_method(*, optional: bool = False, beta: bool = False, can_edit: bool = False) -> Callable[[TCallable], TCallable]:
+def facade_method(
+    *, optional: bool = False, beta: bool = False, can_edit: bool = False, corresponding_tool: "type[Tool] | None" = None
+) -> Callable[[TCallable], TCallable]:
     """
     Marks a method of a `FacadeApi` as exposed through the facade, attaching the given metadata.
     The decorator only annotates the method (it does not wrap it), such that signature and docstring remain intact.
@@ -52,11 +63,15 @@ def facade_method(*, optional: bool = False, beta: bool = False, can_edit: bool 
     :param optional: whether the method is disabled by default and must be enabled explicitly
     :param beta: whether the method is in beta
     :param can_edit: whether the method can modify the codebase
+    :param corresponding_tool: the classic tool offering the same functionality, if any
     :return: the decorator
     """
 
     def decorator(method: TCallable) -> TCallable:
-        setattr(method, _FACADE_METHOD_INFO_ATTR, FacadeMethodInfo(name=method.__name__, optional=optional, beta=beta, can_edit=can_edit))
+        info = FacadeMethodInfo(
+            name=method.__name__, optional=optional, beta=beta, can_edit=can_edit, corresponding_tool=corresponding_tool
+        )
+        setattr(method, _FACADE_METHOD_INFO_ATTR, info)
         return method
 
     return decorator

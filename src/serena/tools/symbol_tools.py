@@ -3,9 +3,9 @@ Language server-related tools
 """
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
-from serena.repl.api.lsp_api import LspApi
+from serena.symbol import SymbolDictGrouper
 from serena.tools import (
     EditingToolWithDiagnostics,
     Tool,
@@ -15,13 +15,19 @@ from serena.tools import (
 from serena.tools.file_tools import EditApiMixin
 from serena.tools.tools_base import ToolMarkerOptional
 
+if TYPE_CHECKING:
+    from serena.repl.api.lsp_api import LspApi
+
 
 class LspApiMixin:
     """
-    Mixin for tools which delegate to the language server API
+    Mixin for tools which delegate to the language server API.
+    The API is imported locally, since the API module refers to the tools (as corresponding tools).
     """
 
-    def _api(self) -> LspApi:
+    def _api(self) -> "LspApi":
+        from serena.repl.api.lsp_api import LspApi
+
         tool = cast(Tool, cast(object, self))
         return LspApi(tool.agent)
 
@@ -41,7 +47,11 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, LspApiMixin):
     Gets an overview of the top-level symbols defined in a given file.
     """
 
-    symbol_dict_grouper = LspApi.overview_grouper_
+    @property
+    def symbol_dict_grouper(self) -> SymbolDictGrouper:
+        from serena.repl.api.lsp_api import LspApi
+
+        return LspApi.overview_grouper_
 
     def apply(self, relative_path: str, depth: int = -1, max_answer_chars: int = -1) -> str:
         """
@@ -65,7 +75,11 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead, LspApiMixin):
     Performs a global (or local) search using the language server backend.
     """
 
-    symbol_dict_grouper = LspApi.find_symbol_dict_grouper_
+    @property
+    def symbol_dict_grouper(self) -> SymbolDictGrouper:
+        from serena.repl.api.lsp_api import LspApi
+
+        return LspApi.find_symbol_dict_grouper_
 
     def apply(
         self,
@@ -146,7 +160,11 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, LspApiMixin):
     Finds symbols that reference the given symbol
     """
 
-    symbol_dict_grouper = LspApi.references_grouper_
+    @property
+    def symbol_dict_grouper(self) -> SymbolDictGrouper:
+        from serena.repl.api.lsp_api import LspApi
+
+        return LspApi.references_grouper_
 
     def apply(
         self,

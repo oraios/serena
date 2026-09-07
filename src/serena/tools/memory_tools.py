@@ -1,17 +1,22 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
-from serena.repl.api.mem_api import MemoryApi
 from serena.tools import Tool, ToolMarkerCanEdit
+
+if TYPE_CHECKING:
+    from serena.repl.api.mem_api import MemoryApi
 
 
 class MemoryApiMixin:
     """
-    Mixin for tools which delegate to the memory API
+    Mixin for tools which delegate to the memory API.
+    The API is imported locally, since the API module refers to the tools (as corresponding tools).
     """
 
-    def _api(self) -> MemoryApi:
+    def _api(self) -> "MemoryApi":
+        from serena.repl.api.mem_api import MemoryApi
+
         tool = cast(Tool, cast(object, self))
         return MemoryApi(tool.agent)
 

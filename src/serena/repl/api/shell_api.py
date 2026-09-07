@@ -6,6 +6,7 @@ The implementation of shell command execution.
 import os.path
 from typing import TYPE_CHECKING
 
+from serena.tools import ExecuteShellCommandTool
 from serena.util.shell import ShellCommandResult, execute_shell_command
 
 from ..facade import FacadeApi, facade_method
@@ -54,7 +55,7 @@ class ShellApi(FacadeApi):
     def __init__(self, agent: "SerenaAgent") -> None:
         super().__init__(agent, name="shell", description="execution of shell commands")
 
-    @facade_method(can_edit=True)
+    @facade_method(can_edit=True, corresponding_tool=ExecuteShellCommandTool)
     def execute_shell_command(
         self, command: str, cwd: str | None = None, capture_stderr: bool = True, max_answer_chars: int = -1
     ) -> ShellCommandOutput:

@@ -9,6 +9,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from serena.tools import CreateTextFileTool, FindFileTool, ListDirTool, ReadFileTool, SearchForPatternTool
 from serena.util.file_system import scan_directory
 from serena.util.text_utils import MatchedConsecutiveLines
 from solidlsp.ls_utils import TextUtils
@@ -163,7 +164,7 @@ class FsApi(FacadeApi):
     def __init__(self, agent: "SerenaAgent") -> None:
         super().__init__(agent, name="fs", description="the project's files as units (as opposed to their content, see `edit`)")
 
-    @facade_method()
+    @facade_method(corresponding_tool=ReadFileTool)
     def read_file(self, relative_path: str, start_line: int = 0, end_line: int | None = None, max_answer_chars: int = -1) -> FileContent:
         """
         Reads the given file or a range of its lines.
@@ -183,7 +184,7 @@ class FsApi(FacadeApi):
         lines = lines[start_line:] if end_line is None else lines[start_line : end_line + 1]
         return FileContent(lines, FileContentRenderer(self._agent, max_answer_chars))
 
-    @facade_method(can_edit=True)
+    @facade_method(can_edit=True, corresponding_tool=CreateTextFileTool)
     def create_text_file(self, relative_path: str, content: str) -> str:
         """
         Writes a new file or overwrites an existing file with the given content.
@@ -211,7 +212,7 @@ class FsApi(FacadeApi):
             answer += " Overwrote existing file."
         return answer
 
-    @facade_method()
+    @facade_method(corresponding_tool=ListDirTool)
     def list_dir(
         self, relative_path: str, recursive: bool, skip_ignored_files: bool = False, max_answer_chars: int = -1
     ) -> DirectoryListing:
@@ -240,7 +241,7 @@ class FsApi(FacadeApi):
         )
         return DirectoryListing(dirs, files, DirectoryListingRenderer(self._agent, max_answer_chars))
 
-    @facade_method()
+    @facade_method(corresponding_tool=FindFileTool)
     def find_file(self, file_mask: str, relative_path: str) -> list[str]:
         """
         Finds files matching the given file mask within the given relative path.
@@ -269,7 +270,7 @@ class FsApi(FacadeApi):
         )
         return files
 
-    @facade_method()
+    @facade_method(corresponding_tool=SearchForPatternTool)
     def search_for_pattern(
         self,
         substring_pattern: str,

@@ -3,18 +3,23 @@ Tools supporting the execution of (external) commands
 """
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
-from serena.repl.api.shell_api import ShellApi
 from serena.tools import Tool, ToolMarkerCanEdit
+
+if TYPE_CHECKING:
+    from serena.repl.api.shell_api import ShellApi
 
 
 class ShellApiMixin:
     """
-    Mixin for tools which delegate to the shell API
+    Mixin for tools which delegate to the shell API.
+    The API is imported locally, since the API module refers to the tools (as corresponding tools).
     """
 
-    def _api(self) -> ShellApi:
+    def _api(self) -> "ShellApi":
+        from serena.repl.api.shell_api import ShellApi
+
         tool = cast(Tool, cast(object, self))
         return ShellApi(tool.agent)
 

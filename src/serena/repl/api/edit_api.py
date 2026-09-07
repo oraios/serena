@@ -6,6 +6,16 @@ The implementation of editing operations, which are independent of the language 
 from typing import TYPE_CHECKING, Literal
 
 from serena.code_editor import EditedFileContext
+from serena.tools import (
+    DeleteLinesTool,
+    InsertAfterSymbolTool,
+    InsertAtLineTool,
+    InsertBeforeSymbolTool,
+    ReplaceContentTool,
+    ReplaceInFilesTool,
+    ReplaceLinesTool,
+    ReplaceSymbolBodyTool,
+)
 from serena.util.text_utils import ContentReplacer, MultiFileReplacement, ReplacementOccurrence, ReplacementRejectedError
 
 from ..facade import SUCCESS_RESULT, FacadeApi, facade_method
@@ -68,7 +78,7 @@ class EditApi(FacadeApi):
 
     # file-level operations
 
-    @facade_method(can_edit=True)
+    @facade_method(can_edit=True, corresponding_tool=ReplaceContentTool)
     def replace_content(
         self,
         relative_path: str,
@@ -106,7 +116,7 @@ class EditApi(FacadeApi):
             context.set_updated_content(replacer.replace(context.get_original_content(), needle, repl))
         return SUCCESS_RESULT
 
-    @facade_method(can_edit=True)
+    @facade_method(can_edit=True, corresponding_tool=ReplaceInFilesTool)
     def replace_in_files(
         self,
         needle: str,
@@ -186,7 +196,7 @@ class EditApi(FacadeApi):
 
     # line-level operations
 
-    @facade_method(optional=True, can_edit=True)
+    @facade_method(optional=True, can_edit=True, corresponding_tool=DeleteLinesTool)
     def delete_lines(self, relative_path: str, start_line: int, end_line: int) -> str:
         """
         Deletes the given lines in the file.
@@ -200,7 +210,7 @@ class EditApi(FacadeApi):
         self._create_code_editor().delete_lines(relative_path, start_line, end_line)
         return SUCCESS_RESULT
 
-    @facade_method(optional=True, can_edit=True)
+    @facade_method(optional=True, can_edit=True, corresponding_tool=ReplaceLinesTool)
     def replace_lines(self, relative_path: str, start_line: int, end_line: int, content: str) -> str:
         """
         Replaces the given range of lines in the given file.
@@ -217,7 +227,7 @@ class EditApi(FacadeApi):
         code_editor.insert_at_line(relative_path, start_line, self._normalize_inserted_content(content))
         return SUCCESS_RESULT
 
-    @facade_method(optional=True, can_edit=True)
+    @facade_method(optional=True, can_edit=True, corresponding_tool=InsertAtLineTool)
     def insert_at_line(self, relative_path: str, line: int, content: str) -> str:
         """
         Inserts the given content at the given line in the file, pushing existing content of the line down.
@@ -239,7 +249,7 @@ class EditApi(FacadeApi):
 
     # symbol-level operations
 
-    @facade_method(can_edit=True)
+    @facade_method(can_edit=True, corresponding_tool=ReplaceSymbolBodyTool)
     def replace_symbol_body(self, name_path: str, relative_path: str, body: str) -> str:
         """
         Replaces the body of the given symbol.
@@ -257,7 +267,7 @@ class EditApi(FacadeApi):
         self._create_code_editor().replace_body(name_path, relative_file_path=relative_path, body=body)
         return SUCCESS_RESULT
 
-    @facade_method(can_edit=True)
+    @facade_method(can_edit=True, corresponding_tool=InsertAfterSymbolTool)
     def insert_after_symbol(self, name_path: str, relative_path: str, body: str) -> str:
         """
         Inserts code after a class/method/function definition.
@@ -272,7 +282,7 @@ class EditApi(FacadeApi):
         self._create_code_editor().insert_after_symbol(name_path, relative_file_path=relative_path, body=body)
         return SUCCESS_RESULT
 
-    @facade_method(can_edit=True)
+    @facade_method(can_edit=True, corresponding_tool=InsertBeforeSymbolTool)
     def insert_before_symbol(self, name_path: str, relative_path: str, body: str) -> str:
         """
         Inserts the given content before the beginning of the definition of the given symbol (via the symbol's location).

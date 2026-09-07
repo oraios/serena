@@ -7,29 +7,37 @@ File and file system-related tools, specifically for
 """
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
-from serena.repl.api.edit_api import EditApi
-from serena.repl.api.fs_api import FsApi
 from serena.tools import EditingToolWithDiagnostics, Tool, ToolMarkerOptional
+
+if TYPE_CHECKING:
+    from serena.repl.api.edit_api import EditApi
+    from serena.repl.api.fs_api import FsApi
 
 
 class EditApiMixin:
     """
-    Mixin for tools which delegate to the editing API
+    Mixin for tools which delegate to the editing API.
+    The API is imported locally, since the API module refers to the tools (as corresponding tools).
     """
 
-    def _api(self) -> EditApi:
+    def _api(self) -> "EditApi":
+        from serena.repl.api.edit_api import EditApi
+
         tool = cast(Tool, cast(object, self))
         return EditApi(tool.agent)
 
 
 class FsApiMixin:
     """
-    Mixin for tools which delegate to the file system API
+    Mixin for tools which delegate to the file system API.
+    The API is imported locally, since the API module refers to the tools (as corresponding tools).
     """
 
-    def _api(self) -> FsApi:
+    def _api(self) -> "FsApi":
+        from serena.repl.api.fs_api import FsApi
+
         tool = cast(Tool, cast(object, self))
         return FsApi(tool.agent)
 

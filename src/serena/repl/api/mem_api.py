@@ -8,6 +8,15 @@ import platform
 from typing import TYPE_CHECKING, Literal
 
 from serena.memories.memory_manager import MemoryManager
+from serena.tools import (
+    DeleteMemoryTool,
+    EditMemoryTool,
+    ListMemoriesTool,
+    OnboardingTool,
+    ReadMemoryTool,
+    RenameMemoryTool,
+    WriteMemoryTool,
+)
 
 from ..facade import FacadeApi, facade_method
 from ..representable import Renderer, RepresentableViaRenderer
@@ -56,7 +65,7 @@ class MemoryApi(FacadeApi):
     def _get_memory_manager(self) -> MemoryManager:
         return self._get_project().memory_manager
 
-    @facade_method()
+    @facade_method(corresponding_tool=ListMemoriesTool)
     def list_memories(self, topic: str = "") -> MemoryList:
         """
         Lists the available memories, optionally filtered by topic.
@@ -66,7 +75,7 @@ class MemoryApi(FacadeApi):
         """
         return MemoryList(self._get_memory_manager().list_memories(topic), MemoryListRenderer(self._agent, -1))
 
-    @facade_method()
+    @facade_method(corresponding_tool=ReadMemoryTool)
     def read_memory(self, memory_name: str) -> str:
         """
         Reads a memory that is likely to be relevant to the current task, inferring relevance e.g. from the name.
@@ -76,7 +85,7 @@ class MemoryApi(FacadeApi):
         """
         return self._get_memory_manager().load_memory(memory_name)
 
-    @facade_method(can_edit=True)
+    @facade_method(can_edit=True, corresponding_tool=WriteMemoryTool)
     def write_memory(self, memory_name: str, content: str, max_chars: int = -1) -> str:
         """
         Writes information about this project that can be useful for future tasks in md format.
@@ -98,7 +107,7 @@ class MemoryApi(FacadeApi):
             )
         return self._get_memory_manager().save_memory(memory_name, content, is_tool_context=True)
 
-    @facade_method(can_edit=True)
+    @facade_method(can_edit=True, corresponding_tool=EditMemoryTool)
     def edit_memory(
         self,
         memory_name: str,
@@ -125,7 +134,7 @@ class MemoryApi(FacadeApi):
             memory_name, needle, repl, mode, allow_multiple_occurrences, is_tool_context=True, regex_multiline=True
         )
 
-    @facade_method(can_edit=True)
+    @facade_method(can_edit=True, corresponding_tool=RenameMemoryTool)
     def rename_memory(self, old_name: str, new_name: str) -> str:
         """
         Renames or moves a memory; use "/" in the name to organize into topics.
@@ -144,7 +153,7 @@ class MemoryApi(FacadeApi):
             log.info(f"Updated {n_references_updated} references to memory {old_name} to {new_name}")
         return renaming_message
 
-    @facade_method(can_edit=True)
+    @facade_method(can_edit=True, corresponding_tool=DeleteMemoryTool)
     def delete_memory(self, memory_name: str) -> str:
         """
         Deletes a memory; only call this if instructed explicitly or permission was granted by the user.
@@ -154,7 +163,7 @@ class MemoryApi(FacadeApi):
         """
         return self._get_memory_manager().delete_memory(memory_name, is_tool_context=True)
 
-    @facade_method()
+    @facade_method(corresponding_tool=OnboardingTool)
     def onboarding(self) -> str:
         """
         Provides the instructions for performing onboarding (identifying the project structure and essential tasks,
