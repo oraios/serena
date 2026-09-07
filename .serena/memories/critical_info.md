@@ -34,9 +34,11 @@ Snapshot tests use syrupy.
 * Each piece of information appears exactly once, at the element that owns it: callers do not
   explain callees' internals, and callees do not describe their callers.
 
-# Pull requests
+# Commits & pull requests
 
-Read `mem:creating_pull_requests` when asked to participate in the creation of a pull request.
+* Commit messages: wrap all lines (subject and body) at ~100 characters; write the message to a file and commit with `-F`
+  rather than passing long paragraphs via `-m`.
+* Read `mem:creating_pull_requests` when asked to participate in the creation of a pull request.
 
 # Memories
 
