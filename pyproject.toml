@@ -114,10 +114,8 @@ python-version = "3.11"
 python-platform = "all"
 
 [tool.ty.rules]
-# Mirror mypy's ignore_missing_imports=true: optional extras (e.g. agno, google-genai) and
-# platform-specific modules (e.g. AppKit on macOS) are not installed in the default dev environment,
-# so we do not want unresolvable imports to fail the type check.
-unresolved-import = "ignore"
+# Unresolvable imports do fail the type check (catching broken first-party imports); the exceptions for
+# optional extras and platform-specific modules are handled per file/line below.
 possibly-missing-submodule = "ignore"
 
 [tool.ty.src]
@@ -126,6 +124,15 @@ possibly-missing-submodule = "ignore"
 # repos under test/resources; excluding them here would suppress the diagnostics those tests rely on.
 # test/resources is instead excluded from the `ty check test` CLI task via its --exclude flag.
 exclude = ["build/", "docs/"]
+
+[[tool.ty.overrides]]
+# Modules whose imports cannot be resolved in the default dev environment: the agno integration depends
+# on the optional extra `agno`, and the pywebview integration imports macOS-only modules (AppKit, PyObjCTools)
+# in several places. Elsewhere, individual platform-specific imports are suppressed inline.
+include = ["src/serena/agno.py", "src/serena/util/pywebview.py"]
+
+[tool.ty.overrides.rules]
+unresolved-import = "ignore"
 
 [[tool.ty.overrides]]
 # Test code is heavily dynamic (pytest fixtures, MagicMock, intentionally loose Optionals). ty models

@@ -1190,7 +1190,7 @@ class SerenaDashboardTrayManager:
         # set up tray icon with a dynamic menu (callable returns items on each open)
         kwargs: dict[str, Any] = {}
         if sys.platform == "darwin":
-            from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+            from AppKit import NSApplication, NSApplicationActivationPolicyAccessory  # ty: ignore[unresolved-import]  (macOS only)
 
             nsapp = NSApplication.sharedApplication()
             # run as an accessory app so that only the menu bar icon is shown (no Dock icon)
