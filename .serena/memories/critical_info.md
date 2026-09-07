@@ -34,6 +34,11 @@ Snapshot tests use syrupy.
 * Each piece of information appears exactly once, at the element that owns it: callers do not
   explain callees' internals, and callees do not describe their callers.
 
+# REPL & facades
+
+Read `mem:repl` before working on `serena.repl` (the code-execution paradigm and its facade APIs) or on tools
+delegating to it: structure, exposure/naming principles, configuration of the API scope and the availability policy.
+
 # Commits & pull requests
 
 * Commit messages: wrap all lines (subject and body) at ~100 characters; write the message to a file and commit with `-F`
