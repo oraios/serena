@@ -11,14 +11,20 @@ GraphQL documents live.
 Caveats:
     * ``graphql-language-service-cli`` declares ``graphql`` as a *peer* dependency, so we
       install both packages into the managed directory.
-    * A graphql-config file at the workspace root is *required*, not merely helpful for
-      cross-file navigation: ``graphql-language-service-server`` never sets its internal
+    * A usable graphql-config file at the workspace root is *required*, not merely helpful
+      for cross-file navigation: ``graphql-language-service-server`` never sets its internal
       "initialized" flag without one, and every request handler (documentSymbol, hover,
       definition, completion, workspaceSymbol) short-circuits to an empty result while that
       flag is unset -- including document symbols for a single, self-contained file. Only
       syntax highlighting (which Serena does not use) keeps working in that case. The
       server logs "graphql-config error, only highlighting is enabled" when this happens;
       we detect that message to fail fast instead of waiting out the full startup timeout.
+    * That same "graphql-config error" line is also logged in a much milder situation: the
+      config loaded and the caches came up, but the schema it points at does not fully
+      resolve (e.g. it uses a directive that the server declares programmatically and that
+      is never declared in SDL). Requests are served normally then -- document symbols come
+      back -- while the schema-backed features are degraded. The server does not distinguish
+      the two cases in its message, so we branch on whether the caches ever initialized.
     * Language is registered as experimental.
 """
 # SPDX-License-Identifier: MIT
@@ -87,7 +93,7 @@ class GraphQLLanguageServer(SolidLanguageServer):
         self.server_ready = threading.Event()
         # Set from the window/logMessage handler when the server reports it found no
         # graphql-config; guards the final startup log message (see _start_server).
-        self._graphql_config_missing = False
+        self._graphql_config_unusable = False
 
     @override
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
@@ -219,23 +225,44 @@ class GraphQLLanguageServer(SolidLanguageServer):
             # so we use it as the readiness signal.
             if "caches initialized" in lower:
                 self.server_ready.set()
-            # Without a graphql-config file at the workspace root, the server logs this exact
-            # warning and *never* sets `_isInitialized` -- "caches initialized" above will
-            # therefore never arrive, and (contrary to what one might expect) every request
-            # handler, including documentSymbol for a single self-contained file, short-circuits
-            # to an empty result until that flag is set. Treat this as an immediate negative
-            # readiness signal instead of waiting out the full startup timeout for a signal that
-            # will provably never come.
+            # The server logs this for two quite different situations, and does not say which:
+            # there is no graphql-config at the workspace root at all, or there is one but it
+            # cannot be loaded (e.g. the schema it points at uses a directive that is only
+            # declared programmatically on the server side and never in SDL). What separates
+            # them observably is whether the caches ever came up, so branch on that rather than
+            # asserting a cause we cannot know.
             elif "graphql-config error" in lower:
-                self._graphql_config_missing = True
-                log.warning(
-                    "GraphQL language server found no graphql-config (.graphqlrc.yml / "
-                    "graphql.config.{yml,yaml,json,js,ts}) at the workspace root; document "
-                    "symbols, hover, go-to-definition, completion and workspace symbols will all "
-                    "return empty results until one is added. Server message: %s",
-                    text,
-                )
-                self.server_ready.set()
+                if self.server_ready.is_set():
+                    # The caches were built, so requests are being served: document symbols for a
+                    # single file still come back. This message arrives later, from the server's
+                    # background workspace scan, and means the schema could not be fully resolved,
+                    # so the features that need it (hover, go-to-definition, completion, workspace
+                    # symbols) are degraded.
+                    log.warning(
+                        "GraphQL language server could not load the graphql-config schema. Document "
+                        "symbols still work, but hover, go-to-definition, completion and workspace "
+                        "symbols need the resolved schema and will be degraded. Fix what the server "
+                        "reports below (a directive used in the SDL but never declared in it is a "
+                        "common cause). Server message: %s",
+                        text,
+                    )
+                else:
+                    # The caches never came up. In this state the server *never* sets its internal
+                    # `_isInitialized` flag, so "caches initialized" will not arrive and (contrary
+                    # to what one might expect) every request handler, including documentSymbol for
+                    # a single self-contained file, short-circuits to an empty result. Treat this as
+                    # an immediate negative readiness signal instead of waiting out the full startup
+                    # timeout for a signal that will provably never come.
+                    self._graphql_config_unusable = True
+                    log.warning(
+                        "GraphQL language server could not use a graphql-config (.graphqlrc.yml / "
+                        "graphql.config.{yml,yaml,json,js,ts}) at the workspace root -- either there "
+                        "is none, or it failed to load -- and its caches never initialized. In this "
+                        "state document symbols, hover, go-to-definition, completion and workspace "
+                        "symbols all return empty results. Server message: %s",
+                        text,
+                    )
+                    self.server_ready.set()
 
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
@@ -259,5 +286,5 @@ class GraphQLLanguageServer(SolidLanguageServer):
         if not self.server_ready.wait(timeout=30.0):
             log.warning("Timed out waiting for GraphQL language server caches to initialize; proceeding anyway")
             self.server_ready.set()
-        elif not self._graphql_config_missing:
+        elif not self._graphql_config_unusable:
             log.info("GraphQL language server caches initialized")

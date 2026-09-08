@@ -352,9 +352,11 @@ class LanguageServerId(Enum):
     (https://github.com/graphql/graphql-language-service). Supports *.graphql and *.gql files.
     Must be explicitly specified in project.yml. Requires Node.js and npm.
     Requires a graphql-config file (.graphqlrc.yml / graphql.config.{yml,yaml,json}) at the
-    repository root that points at the schema: without one, the server never leaves its
-    "config missing" state and *all* features -- including document symbols for a single,
-    self-contained file, not just cross-file navigation -- return empty results.
+    repository root that points at the schema. If the server cannot use one -- there is none, or
+    it fails to load -- its caches never initialize and *all* features return empty results,
+    including document symbols for a single self-contained file, not just cross-file navigation.
+    A config that loads but whose schema does not fully resolve is a milder, separate case: the
+    caches do come up and document symbols work, while the schema-backed features are degraded.
     """
 
     @classmethod
