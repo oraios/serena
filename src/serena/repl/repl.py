@@ -135,7 +135,7 @@ class SerenaReplEntrypoint:
                 session.described_type_names.add(referenced_type.name)
 
         # append the referenced types (breadth-first), unless already described in this call or earlier in the session
-        pending = list(referenced_type.get_referenced_type_names())
+        pending = [cls.__name__ for cls in referenced_type.get_referenced_classes()]
         while pending:
             type_name = pending.pop(0)
             if type_name in described_in_call:
@@ -150,7 +150,7 @@ class SerenaReplEntrypoint:
                 parts.append(contained_type.describe())
                 if session is not None:
                     session.described_type_names.add(type_name)
-                pending.extend(contained_type.get_referenced_type_names())
+                pending.extend(cls.__name__ for cls in contained_type.get_referenced_classes())
         return "\n".join(parts)
 
 

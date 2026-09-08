@@ -35,11 +35,13 @@ Code runs as a function body (`return` defines the result); a single expression 
   `niche` methods (`@facade_method(niche=True)`, rarely needed + long docs) only as summary + pointer, result
   types by name only; tier 2 = types on request. Types are never pushed (`provide_info_with_facade` exists but
   is set nowhere); the tool description tells the model to request type docs only when processing results in code.
-- Result types: a type returned by a single method is documented under `:return:`. Types that are shared,
-  contained (`LanguageServerSymbol`) or navigated are declared per facade as `ReferencedType`s (constructor
-  arg `types=`), with an optional `members` whitelist (curation for foreign/large classes; listed methods are
-  shown even if undocumented, convention-derived ones only if documented). Types are documented via
-  `s.info("<facade>.<Type>")` or bare `s.info("<Type>")`; method docs point to their referenced return type.
+- Result types: every user-defined class reachable through annotations (method parameters/returns, and the members
+  of reachable types, transitively) is automatically documentable (`Facade._discover_referenced_types`); builtins,
+  typing constructs and stdlib classes are excluded. Explicit `ReferencedType` declarations (constructor arg
+  `types=`) exist for curation only: an optional `members` whitelist (foreign/large classes such as
+  `LanguageServerSymbol`; listed methods are shown even if undocumented, convention-derived ones only if
+  documented) and flags. Enums render with members/values, TypedDicts with their keys. Types are documented via
+  `s.info("<facade>.<Type>")` or bare `s.info("<Type>")`; method docs point to their referenced types.
   Result classes declare attribute annotations at class level (attributes set only in `__init__` are not
   discoverable). Annotations are rendered without module paths, so signature names equal lookup names.
   A type's documentation transitively includes the declared types its members reference; within a session

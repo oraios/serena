@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Any, TypeVar
 
+import typing_extensions
+
 from serena.config.serena_config import ApiInclusionDefinition
 from serena.project import Project
 
@@ -49,6 +51,41 @@ def format_signature(callable_: Callable[..., Any]) -> str:
     return format_annotation(str(inspect.signature(callable_)))
 
 
+def extract_referenced_classes(annotation: Any) -> list[type]:
+    """
+    :param annotation: a (resolved) type annotation
+    :return: the user-defined classes appearing in the annotation (recursively, e.g. in `list[X] | None`), in order of
+        appearance; builtins, typing constructs and classes from the standard library are excluded
+    """
+    classes: list[type] = []
+
+    def visit(a: Any) -> None:
+        if isinstance(a, type):
+            module = getattr(a, "__module__", "")
+            if module not in ("builtins", "typing", "collections.abc", "abc") and not module.startswith("_") and a not in classes:
+                classes.append(a)
+        for arg in typing.get_args(a):
+            visit(arg)
+
+    visit(annotation)
+    return classes
+
+
+def get_annotated_classes(callable_: Callable[..., Any]) -> list[type]:
+    """
+    :param callable_: a function or method
+    :return: the user-defined classes appearing in the annotations of its parameters and return type
+    """
+    try:
+        hints = typing.get_type_hints(callable_)
+    except Exception:  # unresolvable forward references
+        return []
+    classes: list[type] = []
+    for hint in hints.values():
+        classes.extend(c for c in extract_referenced_classes(hint) if c not in classes)
+    return classes
+
+
 @dataclass
 class ReferencedType:
     """
@@ -82,32 +119,49 @@ class ReferencedType:
         names.difference_update(dir(RepresentableViaRenderer))
         return sorted(n for n in names if not n.startswith("_") and not n.endswith("_"))
 
-    def get_referenced_type_names(self) -> list[str]:
+    def get_referenced_classes(self) -> list[type]:
         """
-        :return: the names of the types appearing in the annotations of the described members (attributes, properties,
-            method parameters and return types), in order of appearance (each name at most once, excluding the type itself)
+        :return: the user-defined classes appearing in the annotations of the described members (attributes, properties,
+            method parameters and return types), in order of appearance (each class at most once, excluding the type itself)
         """
         if self.is_enum():
             return []
-        annotations: list[str] = []
+        classes: list[type] = []
         type_hints = typing.get_type_hints(self.cls)
+        if self.is_typed_dict():
+            for hint in type_hints.values():
+                classes.extend(c for c in extract_referenced_classes(hint) if c is not self.cls and c not in classes)
+            return classes
         for member_name in self._get_member_names():
             member = inspect.getattr_static(self.cls, member_name, None)
             if isinstance(member, property) and member.fget is not None:
-                annotations.append(format_annotation(inspect.signature(member.fget).return_annotation))
+                found = get_annotated_classes(member.fget)
             elif inspect.isfunction(member):
-                annotations.append(format_signature(member))
+                found = get_annotated_classes(member)
             elif member_name in type_hints:
-                annotations.append(format_annotation(type_hints[member_name]))
-        names: list[str] = []
-        for annotation in annotations:
-            for name in re.findall(r"\b[A-Z]\w*", annotation):
-                if name != self.name and name not in names:
-                    names.append(name)
-        return names
+                found = extract_referenced_classes(type_hints[member_name])
+            else:
+                found = []
+            classes.extend(c for c in found if c is not self.cls and c not in classes)
+        return classes
 
     def is_enum(self) -> bool:
         return isinstance(self.cls, type) and issubclass(self.cls, Enum)
+
+    def is_typed_dict(self) -> bool:
+        # NOTE: TypedDicts defined via typing_extensions are not recognised by typing.is_typeddict
+        return typing.is_typeddict(self.cls) or typing_extensions.is_typeddict(self.cls)
+
+    def _describe_typed_dict(self) -> str:
+        parts = [f"type {self.name} (a dict with the following keys)"]
+        if self.cls.__doc__ and not self.cls.__doc__.startswith(self.name + "("):  # NOTE: the default docstring is uninformative
+            parts.append(f"  {inspect.cleandoc(self.cls.__doc__).replace(chr(10), chr(10) + '  ')}")
+        type_hints = typing.get_type_hints(self.cls)
+        member_names = self.members if self.members is not None else list(type_hints)
+        parts.append(
+            "keys:\n" + "\n".join(f"  {name}: {format_annotation(type_hints[name])}" for name in member_names if name in type_hints)
+        )
+        return "\n".join(parts) + "\n"
 
     def _describe_enum(self) -> str:
         parts = [f"enum {self.name}"]
@@ -129,6 +183,8 @@ class ReferencedType:
         """
         if self.is_enum():
             return self._describe_enum()
+        if self.is_typed_dict():
+            return self._describe_typed_dict()
         attributes: list[str] = []
         methods: list[str] = []
         type_hints = typing.get_type_hints(self.cls)
@@ -335,6 +391,9 @@ class FacadeMethod:
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self._implementation(*args, **kwargs)
 
+    def get_implementation_(self) -> Callable[..., Any]:
+        return self._implementation
+
     def get_referenced_return_types(self) -> list[ReferencedType]:
         """
         :return: the types referenced by the facade which appear in the method's return type annotation
@@ -508,7 +567,30 @@ class Facade:
                 continue
             is_enabled = api_scope.is_method_enabled(facade.name, method_info)
             facade._add_method(FacadeMethod(facade, member, method_info, enabled=is_enabled))
+        facade._discover_referenced_types()
         return facade
+
+    def _discover_referenced_types(self) -> None:
+        """
+        Adds referenced types for all classes reachable (transitively) through the annotations of the facade's methods
+        and of the referenced types' members, such that every type an LLM may encounter can be documented.
+        Explicitly declared types take precedence (they may curate members and carry flags).
+        """
+        # seed the worklist with the classes referenced by the declared types and by the methods
+        pending: list[type] = []
+        for referenced_type in self._types.values():
+            pending.extend(referenced_type.get_referenced_classes())
+        for method in self._methods.values():
+            pending.extend(get_annotated_classes(method.get_implementation_()))
+
+        # add undeclared classes, following their references in turn
+        while pending:
+            cls = pending.pop(0)
+            if cls.__name__ in self._types:
+                continue
+            referenced_type = ReferencedType(cls)
+            self._types[cls.__name__] = referenced_type
+            pending.extend(referenced_type.get_referenced_classes())
 
     @property
     def name(self) -> str:

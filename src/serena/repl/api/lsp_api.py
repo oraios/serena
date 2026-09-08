@@ -331,7 +331,6 @@ class LspApi(FacadeApi):
                 ReferencedType(LspReferenceCollection),
                 ReferencedType(ReferenceInLanguageServerSymbol),
                 ReferencedType(LspDiagnostics),
-                ReferencedType(SymbolKind),
             ],
         )
 

@@ -73,9 +73,13 @@ class TestReplExecution:
         assert "get_name_path() -> str" in type_info and "iter_children()" in type_info
         assert "to_dict" not in type_info  # not among the curated members
 
-        # types referenced by parameters are documented as well; enums are documented with their members
-        assert "enum SymbolKind" in type_info and "SymbolKind.Class = 5" in type_info  # via iter_ancestors(up_to_symbol_kind)
+        # types reachable through annotations are documented without being declared: SymbolKind (a parameter type of
+        # iter_ancestors) is documented as an enum with its members, both transitively and on request
+        assert "enum SymbolKind" in type_info and "SymbolKind.Class = 5" in type_info
         assert "enum SymbolKind" in repl.execute('s.info("SymbolKind")')
+
+        # TypedDicts reachable through annotations are documented with their keys
+        assert "keys:" in repl.execute('s.info("Diagnostic")') and "severity" in repl.execute('s.info("Diagnostic")')
         assert "represent()" not in repl.execute('s.info("LspSymbolCollection")')  # the representation mechanism is not exposed
 
     def test_contained_types_are_documented_once_per_session(self, repl: SerenaRepl) -> None:
