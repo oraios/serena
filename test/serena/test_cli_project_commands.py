@@ -420,7 +420,8 @@ def _run_health_check(
     cli_runner: CliRunner,
     project_dir: str,
     *,
-    refs_result: str | Exception,
+    find_symbol_result: str | Exception = json.dumps([{"name": "hello"}]),
+    refs_result: str | Exception = json.dumps([{"name": "caller"}]),
 ) -> Any:
     """Run `project health-check` with every language-server dependency replaced by a double."""
     import serena.agent
@@ -431,7 +432,7 @@ def _run_health_check(
     overview = [{"name": "hello", "kind": "Function"}]
     tools = {
         GetSymbolsOverviewTool: _FakeTool(overview),
-        FindSymbolTool: _FakeTool(json.dumps([{"name": "hello"}])),
+        FindSymbolTool: _FakeTool(find_symbol_result),
         FindReferencingSymbolsTool: _FakeTool(refs_result),
     }
 
@@ -503,3 +504,24 @@ def test_health_check_fails_when_reference_search_raises(
     assert "Health check failed" in result.output
     assert "FindReferencingSymbolsTool" in result.output
     assert "All tools working correctly" not in result.output
+
+
+def test_health_check_fails_with_find_symbol_error_when_symbol_search_empty(
+    monkeypatch: pytest.MonkeyPatch, cli_runner: CliRunner, temp_project_dir_with_large_python_file: str
+) -> None:
+    """When FindSymbolTool returns no results, the check must fail identifying FindSymbolTool,
+
+    even if reference search would also raise (e.g. ValueError from find_unique).
+    """
+    result = _run_health_check(
+        monkeypatch,
+        cli_runner,
+        temp_project_dir_with_large_python_file,
+        find_symbol_result=json.dumps([]),
+        refs_result=ValueError("No symbol matching 'hello' found"),
+    )
+
+    assert result.exit_code == 1, result.output
+    assert "Health check failed" in result.output
+    assert "FindSymbolTool returned no results" in result.output
+    assert "FindReferencingSymbolsTool" not in result.output

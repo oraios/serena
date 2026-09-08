@@ -1011,6 +1011,8 @@ class ProjectCommands(AutoRegisteringGroup):
                     )
                 find_symbol_data = json.loads(find_symbol_result)
                 log.info("FindSymbolTool found %d matches for symbol %s", len(find_symbol_data), symbol_name)
+                if not find_symbol_data:
+                    raise ProjectCommands._HealthCheckFailure("FindSymbolTool returned no results")
 
                 # Test 3: FindReferencingSymbolsTool
                 log.info("Testing FindReferencingSymbolsTool for symbol: %s", symbol_name)
@@ -1026,10 +1028,6 @@ class ProjectCommands(AutoRegisteringGroup):
                     # asked to determine. Logging it as a warning let the command print
                     # "All tools working correctly" and exit 0 after the search had already failed.
                     raise ProjectCommands._HealthCheckFailure(f"FindReferencingSymbolsTool failed for symbol {symbol_name}: {e}") from e
-
-                # Verify tools worked as expected
-                if not find_symbol_data:
-                    raise ProjectCommands._HealthCheckFailure("FindSymbolTool returned no results")
 
                 log.info("Health check completed successfully")
 
