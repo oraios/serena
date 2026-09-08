@@ -9,7 +9,7 @@ import textwrap
 import traceback
 from typing import Any
 
-from .facade import ApiScope, Facade
+from .facade import ApiScope, Facade, FacadeMethod
 from .representable import Representable
 
 log = logging.getLogger(__name__)
@@ -33,6 +33,12 @@ class SerenaReplEntrypoint:
                 self._register(facade)
                 registered_facade_names.append(facade.name)
         log.info("Registered %d/%d facades: %s", len(registered_facade_names), len(facades), registered_facade_names)
+
+    def get_enabled_methods(self) -> list[FacadeMethod]:
+        """
+        :return: the list of all enabled methods across all facades
+        """
+        return [method for facade in self._facades.values() for method in facade.get_enabled_methods()]
 
     def _register(self, facade: Facade) -> None:
         if facade.name in self._facades:

@@ -582,6 +582,7 @@ class SerenaAgent:
         self.version = serena_version()
         self._config_changed_callbacks: list[Callable[[], None]] = []
         self._repl: SerenaRepl | None = None
+        self._prompt_params: SerenaAgent.PromptParams | None = None
 
         # obtain serena configuration using the decoupled factory function
         self.serena_config = serena_config or SerenaConfig.from_config_file()
@@ -669,9 +670,6 @@ class SerenaAgent:
             project_config=registered_project_to_activate.project_config if registered_project_to_activate is not None else None,
             log_choice=True,
         )
-
-        # create the tool names mapping for prompts
-        self._prompt_tool_names_mapping = self._create_prompt_tool_names_mapping(self._language_backend)
 
         # create executor for starting the language server and running tools in another thread
         # This executor is used to achieve linear task execution
@@ -980,27 +978,88 @@ class SerenaAgent:
         """
         return self._active_modes
 
-    @staticmethod
-    def _create_prompt_tool_names_mapping(language_backend: LanguageBackend) -> dict[str, str]:
+    @dataclass
+    class PromptParams:
         """
-        Creates a mapping from tool names to new tool names, which take into consideration
-
-           * legacy tool names, where the name was changed and
-           * LSP tools which are functionally replaced by other tools due to the active language backend
-             (e.g. "find_symbol" being replaced by "jet_brains_find_symbol" in JetBrains mode).
-
-        The mapping is intended to be used for the generation of prompts, such that prompts can
-        refer to tool names as `{{ tool_names["find_symbol"] }}`, and the mapping will ensure that
-        the correct tool name is used in the prompt based on the active language backend.
-
-        :return: the mapping from tool names to new tool names
+        Holds parameters for prompt rendering
         """
-        result = dict(ToolSet.LEGACY_TOOL_NAME_MAPPING)
-        class_replacements = language_backend.get_lsp_tool_class_replacements()
-        for tool_class in ToolRegistry().get_all_tool_classes():
-            new_tool_class: type[Tool] = class_replacements.get(tool_class, tool_class)
-            result[tool_class.get_name_from_cls()] = new_tool_class.get_name_from_cls()
-        return result
+
+        available_tools: set[str]
+        """
+        available tool names or, in REPL mode, the names of the raw facade methods (without facade name prefix) and 
+        the names of the corresponding tools
+        """
+        available_markers: set[str]
+        """
+        names of the ToolMarkers (class names) that the available tools inherit from
+        """
+        tool_names_mapping: dict[str, str]
+        """
+        mapping from standard tool names to currently used and replacement tool/API method names.
+        In particular, this maps 
+          * legacy tool names to current tool names
+          * LSP tool names to their backend- and interface-specific counterparts 
+            (e.g. "find_symbol" to "jet_brains_find_symbol" in JetBrains mode, "find_symbol" to the corresponding API method name
+            when using the REPL interface). 
+        """
+
+    def _get_prompt_params(self) -> PromptParams:
+        """
+        :return: parameters for prompt rendering depending on the current agent interface, language backend and active tools/methods
+        """
+        if self._prompt_params is not None:
+            return self._prompt_params
+
+        if self._agent_interface == AgentInterface.TOOLS:
+            # available tool names are simply the exposed tools
+            available_tool_names = set(self._exposed_tools.tool_names)
+            available_tool_marker_names = set(self._exposed_tools.tool_marker_names)
+
+            tool_name_mapping = dict(ToolSet.LEGACY_TOOL_NAME_MAPPING)
+            class_replacements = self._language_backend.get_lsp_tool_class_replacements()
+            for tool_class in ToolRegistry().get_all_tool_classes():
+                new_tool_class: type[Tool] = class_replacements.get(tool_class, tool_class)
+                tool_name_mapping[tool_class.get_name_from_cls()] = new_tool_class.get_name_from_cls()
+
+        elif self._agent_interface == AgentInterface.REPL:
+            # available tool names include both the names of the facade methods and the names of the corresponding tools
+            repl = self.get_repl()
+            enabled_methods = repl.entrypoint.get_enabled_methods()
+            corresponding_tool_classes = [m.info.corresponding_tool for m in enabled_methods if m.info.corresponding_tool is not None]
+            available_tools = AvailableTools(
+                self._exposed_tools.tools + [self._all_tools[tool_class] for tool_class in corresponding_tool_classes]
+            )
+            available_tool_names = set(available_tools.tool_names).union({m.info.name for m in enabled_methods})
+            available_tool_marker_names = set(available_tools.tool_marker_names)
+
+            tool_class_replacements = self._language_backend.get_lsp_tool_class_replacements()
+            methods_by_tool_class = {m.info.corresponding_tool: m for m in enabled_methods if m.info.corresponding_tool is not None}
+
+            def get_name(tool_class: type[Tool]) -> str:
+                # if there is a corresponding method in the API, return its qualified name (as used in REPL code)
+                method = methods_by_tool_class.get(tool_class)
+                if method is not None:
+                    return method.qualified_name
+                # if there is a corresponding method for the replacement class, return its qualified name
+                replacement_class = tool_class_replacements.get(tool_class)
+                if replacement_class is not None:
+                    replacement_method = methods_by_tool_class.get(replacement_class)
+                    if replacement_method is not None:
+                        return replacement_method.qualified_name
+                # otherwise, keep the tool's name
+                return tool_class.get_name_from_cls()
+
+            tool_name_mapping = {}
+            for legacy_name, new_name in ToolSet.LEGACY_TOOL_NAME_MAPPING.items():
+                tool_name_mapping[legacy_name] = get_name(ToolRegistry().get_tool_class_by_name(new_name))
+            for tool_class in ToolRegistry().get_all_tool_classes():
+                tool_name_mapping[tool_class.get_name_from_cls()] = get_name(tool_class)
+        else:
+            raise ValueError()
+
+        return self.PromptParams(
+            available_tools=available_tool_names, available_markers=available_tool_marker_names, tool_names_mapping=tool_name_mapping
+        )
 
     @staticmethod
     def _format_prompt_tag(text: str, tag: str, tag_name_attr: str | None = None) -> str:
@@ -1027,10 +1086,11 @@ class SerenaAgent:
                 return ""
 
         template = JinjaTemplate(prompt_template)
+        prompt_params = self._get_prompt_params()
         text = template.render(
-            available_tools=self._exposed_tools.tool_names,
-            available_markers=self._exposed_tools.tool_marker_names,
-            tool_names=self._prompt_tool_names_mapping,
+            available_tools=prompt_params.available_tools,
+            available_markers=prompt_params.available_markers,
+            tool_names=prompt_params.tool_names_mapping,
             embed_memory=embed_memory,
         )
 
@@ -1069,11 +1129,8 @@ class SerenaAgent:
         :param session_id: the client session ID for the case where this is run from a tool; "global" for the connection time case
         :return: the prompt
         """
-        available_tools = self._active_tools
-        available_markers = available_tools.tool_marker_names
         global_memories = self._create_global_memory_manager().list_global_memories()
         global_memories_str = dict_string(global_memories.to_dict()) if len(global_memories) > 0 else ""
-        log.info("Generating system prompt with available_tools=(see active tools), available_markers=%s", available_markers)
 
         # determine modes for which prompts must (still) be provided, excluding modes that were already provided in a
         # previously provided project activation message (if any)
@@ -1084,13 +1141,14 @@ class SerenaAgent:
                     relevant_modes.append(mode)
         self._project_prompt_status.mark_mode_prompts_as_provided(session_id)
 
+        prompt_params = self._get_prompt_params()
         system_prompt = self.prompt_factory.create_system_prompt(
             context_system_prompt=self._render_prompt(self._context.prompt, tag="context"),
             mode_system_prompts=[self._render_prompt(mode.prompt, tag="mode", tag_name_attr=mode.name) for mode in relevant_modes],
-            available_tools=available_tools.tool_names,
-            available_markers=available_markers,
+            available_tools=prompt_params.available_tools,
+            available_markers=prompt_params.available_markers,
             global_memories_list=global_memories_str,
-            tool_names=self._prompt_tool_names_mapping,
+            tool_names=prompt_params.tool_names_mapping,
         )
 
         # provide the project activation message if it hasn't yet been provided
@@ -1195,9 +1253,9 @@ class SerenaAgent:
         self._active_tools = tool_set.to_available_tools(self._all_tools)
         log.info(f"Active tools ({len(self._active_tools)}): {', '.join(self._active_tools.tool_names)}")
 
-        # reset the REPL, whose facades/API scope depend on the active modes and project (it is re-created on demand).
-        # NOTE: This must happen irrespective of the agent interface, since the REPL tool may be active in tool mode as well.
+        # reset members that depend on the active tools, so that they are re-created on demand with the new active tools
         self._repl = None
+        self._prompt_params = None
 
         # check if a tool was activated that is not in the exposed tool set and issue a warning if so
         active_tools_not_exposed = set(self._active_tools.tool_names) - set(self._exposed_tools.tool_names)

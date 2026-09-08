@@ -918,6 +918,11 @@ class TestSerenaAgent:
             expected = {"serena_repl", "initial_instructions"} | (set() if context.single_project else {"activate_project"})
             assert exposed == expected
             assert "s.lsp" in agent.get_tool(SerenaReplTool).apply("s.info()")
+
+            # prompts refer to operations by their qualified REPL names, e.g. `lsp.find_symbol` instead of the tool name
+            system_prompt = agent.create_system_prompt()
+            assert "`lsp.find_symbol`" in system_prompt
+            assert "`find_symbol`" not in system_prompt
         finally:
             agent.on_shutdown(timeout=5)
 

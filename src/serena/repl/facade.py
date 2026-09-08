@@ -7,7 +7,7 @@ The facade, i.e. the object through which REPL code accesses a group of related 
 import inspect
 import logging
 from abc import ABC
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -143,29 +143,43 @@ class FacadeMethod:
     enabled or disabled; only enabled methods are accessible from REPL code.
     """
 
-    def __init__(self, name: str, implementation: Callable[..., Any], info: FacadeMethodInfo, enabled: bool) -> None:
+    def __init__(self, parent: "Facade", implementation: Callable[..., Any], info: FacadeMethodInfo, enabled: bool) -> None:
         """
-        :param name: the method's name
+        :param parent: the facade the method belongs to
         :param implementation: the implementation to delegate to
-        :param info: the method's metadata
+        :param info: the method's metadata (including the method's name)
         :param enabled: whether the method is initially enabled
         """
-        self.name = name
+        self.parent = parent
         self._implementation = implementation
         self.info = info
         self.enabled = enabled
 
+    @property
+    def name(self) -> str:
+        return self.info.name
+
+    @property
+    def facade_name(self) -> str:
+        return self.parent.name
+
+    @property
+    def qualified_name(self) -> str:
+        """
+        :return: the name under which the method is accessible from REPL code (facade name and method name)
+        """
+        return f"{self.facade_name}.{self.name}"
+
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self._implementation(*args, **kwargs)
 
-    def describe(self, facade_name: str) -> str:
+    def describe(self) -> str:
         """
-        :param facade_name: the name of the facade the method belongs to
         :return: the method's signature and documentation
         """
         signature = inspect.signature(self._implementation)
         doc = inspect.getdoc(self._implementation) or "(no documentation)"
-        return f"{facade_name}.{self.name}{signature}\n{doc}\n"
+        return f"{self.qualified_name}{signature}\n{doc}\n"
 
 
 class ApiScope:
@@ -268,11 +282,15 @@ class Facade:
     A named group of related operations which an LLM can invoke from REPL code.
     """
 
-    def __init__(self, name: str, description: str, methods: Iterable[FacadeMethod]) -> None:
+    def __init__(self, name: str, description: str) -> None:
         # NOTE: attributes are set via object.__setattr__ because __getattr__ is overridden
         object.__setattr__(self, "_name", name)
         object.__setattr__(self, "_description", description)
-        object.__setattr__(self, "_methods", {m.name: m for m in methods})
+        object.__setattr__(self, "_methods", {})
+
+    def _add_method(self, method: FacadeMethod) -> None:
+        assert method.parent is self
+        self._methods[method.name] = method
 
     @staticmethod
     def from_api(api: FacadeApi, api_scope: ApiScope) -> "Facade":
@@ -283,15 +301,14 @@ class Facade:
         :param api_scope: API scope definition determining which methods are enabled
         :return: the facade
         """
-        facade_name = api.get_name_()
-        methods = []
+        facade = Facade(api.get_name_(), api.get_description_())
         for name, member in inspect.getmembers(api, predicate=inspect.ismethod):
             method_info = get_facade_method_info(member)
             if method_info is None:
                 continue
-            is_enabled = api_scope.is_method_enabled(facade_name, method_info)
-            methods.append(FacadeMethod(name, member, method_info, enabled=is_enabled))
-        return Facade(api.get_name_(), api.get_description_(), methods)
+            is_enabled = api_scope.is_method_enabled(facade.name, method_info)
+            facade._add_method(FacadeMethod(facade, member, method_info, enabled=is_enabled))
+        return facade
 
     @property
     def name(self) -> str:
@@ -304,6 +321,12 @@ class Facade:
     @property
     def enabled_method_names(self) -> list[str]:
         return [m.name for m in self._methods.values() if m.enabled]
+
+    def get_enabled_methods(self) -> list[FacadeMethod]:
+        """
+        :return: the list of enabled methods
+        """
+        return [m for m in self._methods.values() if m.enabled]
 
     def get_method(self, method_name: str) -> FacadeMethod:
         """
@@ -338,7 +361,7 @@ class Facade:
         parts = [f"Facade '{self._name}': {self._description}", ""]
         for method in self._methods.values():
             if method.enabled:
-                parts.append(method.describe(self._name))
+                parts.append(method.describe())
         return "\n".join(parts)
 
     def describe_method(self, method_name: str) -> str:
@@ -349,4 +372,4 @@ class Facade:
         method = self._get_enabled_method(method_name)
         if method is None:
             raise ValueError(self._no_such_method_message(method_name))
-        return method.describe(self._name)
+        return method.describe()
