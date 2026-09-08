@@ -577,6 +577,15 @@ class PreToolUseEnforceSymbolicToolsHook(PreToolUseRemindAboutSymbolicToolsHook)
                 if value is not None:
                     relative_path = str(value)
                     break
+        # Shell-command clients (Codex/Grok) carry the needle and the target file in the
+        # command line instead of ``tool_input``; fall back to the same shell-argument
+        # parsing the read branch uses, so the retry suggestion keeps the actual values.
+        if pattern == "<pattern>" or relative_path is None:
+            shell_arguments = self._iter_shell_path_arguments()
+            if pattern == "<pattern>":
+                pattern = next((a for a in shell_arguments if not self._is_code_file_path(a)), "<pattern>")
+            if relative_path is None:
+                relative_path = next((a for a in shell_arguments if self._is_code_file_path(a)), None)
         arguments = [f"substring_pattern={json.dumps(pattern)}"]
         if relative_path:
             arguments.append(f"relative_path={json.dumps(relative_path)}")
