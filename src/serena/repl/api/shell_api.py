@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from serena.tools import ExecuteShellCommandTool
 from serena.util.shell import ShellCommandResult, execute_shell_command
 
-from ..facade import FacadeApi, ReferencedType, facade_method
+from ..facade import FacadeApi, facade_method
 from ..representable import Renderer, RepresentableViaRenderer
 
 if TYPE_CHECKING:
@@ -53,7 +53,7 @@ class ShellCommandOutputRenderer(Renderer[ShellCommandOutput]):
 
 class ShellApi(FacadeApi):
     def __init__(self, agent: "SerenaAgent") -> None:
-        super().__init__(agent, name="shell", description="execution of shell commands", types=[ReferencedType(ShellCommandOutput)])
+        super().__init__(agent, name="shell", description="execution of shell commands")
 
     @facade_method(can_edit=True, corresponding_tool=ExecuteShellCommandTool)
     def execute_shell_command(

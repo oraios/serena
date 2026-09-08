@@ -18,7 +18,7 @@ from serena.tools import (
     WriteMemoryTool,
 )
 
-from ..facade import FacadeApi, ReferencedType, facade_method
+from ..facade import FacadeApi, facade_method
 from ..representable import Renderer, RepresentableViaRenderer
 
 if TYPE_CHECKING:
@@ -60,7 +60,6 @@ class MemoryApi(FacadeApi):
             agent,
             name="mem",
             description="project memories, i.e. persistent notes for future tasks",
-            types=[ReferencedType(MemoryList)],
         )
 
     def _get_memory_manager(self) -> MemoryManager:

@@ -310,7 +310,6 @@ class LspApi(FacadeApi):
             name="lsp",
             description="symbol-level operations on the codebase backed by language servers",
             types=[
-                ReferencedType(LspSymbolCollection),
                 ReferencedType(
                     LanguageServerSymbol,
                     members=[
@@ -327,10 +326,6 @@ class LspApi(FacadeApi):
                         "get_parent",
                     ],
                 ),
-                ReferencedType(LspSymbol),
-                ReferencedType(LspReferenceCollection),
-                ReferencedType(ReferenceInLanguageServerSymbol),
-                ReferencedType(LspDiagnostics),
             ],
         )
 

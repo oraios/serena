@@ -30,7 +30,7 @@ from serena.tools import (
 )
 from serena.util.text_utils import find_text_coordinates
 
-from ..facade import FacadeApi, ReferencedType, facade_method
+from ..facade import FacadeApi, facade_method
 from ..representable import JsonObject, JsonObjectRenderer, Renderer, RepresentableViaRenderer
 
 if TYPE_CHECKING:
@@ -185,11 +185,6 @@ class JetBrainsApi(FacadeApi):
             agent,
             name="jb",
             description="operations on the codebase backed by the JetBrains IDE's code intelligence",
-            types=[
-                ReferencedType(JetBrainsSymbolCollection),
-                ReferencedType(JetBrainsSymbolsOverview),
-                ReferencedType(JsonObject),
-            ],
         )
 
     @contextmanager

@@ -89,8 +89,10 @@ def get_annotated_classes(callable_: Callable[..., Any]) -> list[type]:
 @dataclass
 class ReferencedType:
     """
-    A type that is referenced by a facade's methods (returned by them or contained in their results), whose interface
-    the LLM can inspect via `info`.
+    A type that is referenced by a facade's methods (returned by them, contained in their results or used as a parameter
+    type), whose interface the LLM can inspect via `info`.
+    All types reachable through annotations are discovered automatically; an explicit declaration is needed only in order
+    to curate the type's presentation (the members to describe, inclusion in the facade's description).
     """
 
     cls: type
@@ -318,8 +320,8 @@ class FacadeApi(ABC):
         :param agent: the agent providing access to the project and its resources
         :param name: the attribute name under which the facade is accessible from the REPL entrypoint
         :param description: a one-line description of the functionality offered by the facade
-        :param types: the types referenced by the facade's methods (returned or contained in results) whose interface
-            the LLM shall be able to inspect
+        :param types: declarations for referenced types whose presentation is to be curated (see `ReferencedType`);
+            types reachable through annotations need not be declared in order to be documentable
         """
         self._agent = agent
         self._name = name

@@ -75,7 +75,6 @@ class EditApi(FacadeApi):
             name="edit",
             description="modifying content within existing files (independent of the language backend)",
             types=[
-                ReferencedType(ReplacementPreview),
                 ReferencedType(
                     ReplacementOccurrence,
                     members=["occurrence_id", "relative_path", "start_line", "end_line", "matched_text", "replacement", "is_ambiguous"],
