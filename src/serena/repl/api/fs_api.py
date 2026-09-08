@@ -176,7 +176,7 @@ class FsApi(FacadeApi):
             types=[
                 ReferencedType(FileContent),
                 ReferencedType(DirectoryListing),
-                ReferencedType(PatternMatches, provide_info_with_facade=True),
+                ReferencedType(PatternMatches),
                 ReferencedType(
                     MatchedConsecutiveLines, members=["source_file_path", "matched_lines", "start_line", "end_line", "to_display_string"]
                 ),

@@ -143,6 +143,11 @@ class FacadeMethodInfo:
     """whether the method is in beta (not yet fully stable)"""
     can_edit: bool = False
     """whether the method can modify the codebase (relevant for read-only contexts)"""
+    niche: bool = False
+    """
+    whether the method is rarely needed, such that the facade's description only summarises it (first line of its
+    documentation and a pointer to its full documentation) in order to keep the description compact
+    """
     corresponding_tool: "type[Tool] | None" = None
     """the classic tool offering the same functionality, if any"""
 
@@ -157,7 +162,12 @@ _FACADE_METHOD_INFO_ATTR = "__facade_method_info__"
 
 
 def facade_method(
-    *, optional: bool = False, beta: bool = False, can_edit: bool = False, corresponding_tool: "type[Tool] | None" = None
+    *,
+    optional: bool = False,
+    beta: bool = False,
+    can_edit: bool = False,
+    niche: bool = False,
+    corresponding_tool: "type[Tool] | None" = None,
 ) -> Callable[[TCallable], TCallable]:
     """
     Marks a method of a `FacadeApi` as exposed through the facade, attaching the given metadata.
@@ -166,13 +176,19 @@ def facade_method(
     :param optional: whether the method is disabled by default and must be enabled explicitly
     :param beta: whether the method is in beta
     :param can_edit: whether the method can modify the codebase
+    :param niche: whether the method is rarely needed (its documentation is then only summarised in the facade's description)
     :param corresponding_tool: the classic tool offering the same functionality, if any
     :return: the decorator
     """
 
     def decorator(method: TCallable) -> TCallable:
         info = FacadeMethodInfo(
-            name=method.__name__, optional=optional, beta=beta, can_edit=can_edit, corresponding_tool=corresponding_tool
+            name=method.__name__,
+            optional=optional,
+            beta=beta,
+            can_edit=can_edit,
+            niche=niche,
+            corresponding_tool=corresponding_tool,
         )
         setattr(method, _FACADE_METHOD_INFO_ATTR, info)
         return method
@@ -282,22 +298,39 @@ class FacadeMethod:
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self._implementation(*args, **kwargs)
 
-    def describe(self, include_return_type_pointer: bool = True) -> str:
+    def get_referenced_return_types(self) -> list[ReferencedType]:
         """
-        :param include_return_type_pointer: whether to append a pointer to the documentation of the return type,
+        :return: the types referenced by the facade which appear in the method's return type annotation
+        """
+        return_annotation = format_annotation(inspect.signature(self._implementation).return_annotation)
+        return [t for t in self.parent.get_types() if re.search(rf"\b{re.escape(t.name)}\b", return_annotation)]
+
+    def get_summary(self) -> str:
+        """
+        :return: the first line of the method's documentation
+        """
+        doc = inspect.getdoc(self._implementation)
+        return doc.splitlines()[0] if doc else "(no documentation)"
+
+    def describe(self) -> str:
+        """
+        :return: the method's signature and documentation, with a pointer to the documentation of its return type
             if it is a type referenced by the facade
-        :return: the method's signature and documentation
         """
         signature = format_signature(self._implementation)
         doc = inspect.getdoc(self._implementation) or "(no documentation)"
         text = f"{self.qualified_name}{signature}\n{doc}\n"
-        if include_return_type_pointer:
-            return_annotation = format_annotation(inspect.signature(self._implementation).return_annotation)
-            referenced = [t for t in self.parent.get_types() if re.search(rf"\b{re.escape(t.name)}\b", return_annotation)]
-            if referenced:
-                pointers = ", ".join(f'`s.info("{self.facade_name}.{t.name}")`' for t in referenced)
-                text += f"Return type: see {pointers}\n"
+        referenced = self.get_referenced_return_types()
+        if referenced:
+            pointers = ", ".join(f'`s.info("{t.name}")`' for t in referenced)
+            text += f"Return type documentation: {pointers}\n"
         return text
+
+    def describe_summary(self) -> str:
+        """
+        :return: the method's name and the first line of its documentation, with a pointer to its full documentation
+        """
+        return f'{self.qualified_name}: {self.get_summary()} [full documentation: `s.info("{self.qualified_name}")`]\n'
 
 
 class ApiScope:
@@ -492,18 +525,24 @@ class Facade:
             as well as its referenced types (in full if so declared, otherwise by name)
         """
         parts = [f"Facade '{self._name}': {self._description}", ""]
-        for method in self._methods.values():
-            if method.enabled:
+        enabled_methods = self.get_enabled_methods()
+        for method in enabled_methods:
+            if not method.info.niche:
                 parts.append(method.describe())
-        described_types = [t for t in self._types.values() if t.provide_info_with_facade]
-        listed_types = [t for t in self._types.values() if not t.provide_info_with_facade]
-        for referenced_type in described_types:
-            parts.append(referenced_type.describe())
-        if listed_types:
+        niche_methods = [m for m in enabled_methods if m.info.niche]
+        if niche_methods:
+            parts.append("Rarely needed methods (documented on request):\n" + "".join(m.describe_summary() for m in niche_methods))
+        for referenced_type in self._types.values():
+            if referenced_type.provide_info_with_facade:
+                parts.append(referenced_type.describe())
+        result_type_names = sorted(
+            {t.name for m in enabled_methods for t in m.get_referenced_return_types() if not t.provide_info_with_facade}
+        )
+        if result_type_names:
             parts.append(
-                "Further types: "
-                + ", ".join(t.name for t in listed_types)
-                + f' (request documentation via `s.info("{self._name}.<type name>")`)'
+                "Result types: "
+                + ", ".join(result_type_names)
+                + ' (request documentation via `s.info("<type name>")` only if you intend to process results in code)'
             )
         return "\n".join(parts)
 

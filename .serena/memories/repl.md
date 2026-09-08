@@ -30,14 +30,18 @@ Code runs as a function body (`return` defines the result); a single expression 
 - Progressive disclosure: a priori only facade names, descriptions and method names; `s.info("<facade>")` /
   `s.info("<facade>.<method>")` give signature + docstring together, never a signature alone.
   `info(*items)` documents several items at once; unknown items are reported inline.
+- Disclosure tiers: tier 0 (tool description) = facades, descriptions, method names with navigable return types
+  (`find_symbol -> LspSymbolCollection`); tier 1 (`s.info("<facade>")`) = all common methods in full,
+  `niche` methods (`@facade_method(niche=True)`, rarely needed + long docs) only as summary + pointer, result
+  types by name only; tier 2 = types on request. Types are never pushed (`provide_info_with_facade` exists but
+  is set nowhere); the tool description tells the model to request type docs only when processing results in code.
 - Result types: a type returned by a single method is documented under `:return:`. Types that are shared,
   contained (`LanguageServerSymbol`) or navigated are declared per facade as `ReferencedType`s (constructor
-  arg `types=`), with `provide_info_with_facade` (full description in `s.info("<facade>")`, else listed by name)
-  and an optional `members` whitelist (curation for foreign/large classes; listed methods are shown even if
-  undocumented, convention-derived ones only if documented). Types are documented via `s.info("<facade>.<Type>")`
-  or bare `s.info("<Type>")`; method docs point to their referenced return type. Result classes declare
-  attribute annotations at class level (attributes set only in `__init__` are not discoverable).
-  Annotations are rendered without module paths, so signature names equal lookup names.
+  arg `types=`), with an optional `members` whitelist (curation for foreign/large classes; listed methods are
+  shown even if undocumented, convention-derived ones only if documented). Types are documented via
+  `s.info("<facade>.<Type>")` or bare `s.info("<Type>")`; method docs point to their referenced return type.
+  Result classes declare attribute annotations at class level (attributes set only in `__init__` are not
+  discoverable). Annotations are rendered without module paths, so signature names equal lookup names.
 - APIs must not import `serena.tools` at module level except for tool classes in decorators; tools import
   APIs locally in `_api()` (API modules refer to tool classes).
 

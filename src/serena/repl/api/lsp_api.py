@@ -313,7 +313,7 @@ class LspApi(FacadeApi):
             name="lsp",
             description="symbol-level operations on the codebase backed by language servers",
             types=[
-                ReferencedType(LspSymbolCollection, provide_info_with_facade=True),
+                ReferencedType(LspSymbolCollection),
                 ReferencedType(
                     LanguageServerSymbol,
                     members=[

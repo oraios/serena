@@ -18,9 +18,16 @@ class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
     def apply(self, code: str) -> str:
         """
         Executes the given Python code, which has access to Serena's functionality through the object `s`.
-        The functionality is organised in facades, which are attributes of `s` (e.g. `s.myfacade`).
-        Use `s.info()` to list the facades, `s.info("<facade>")` to see a facade's methods and
-        `s.info("<facade>.<method>")` for the documentation of a single method.
+        The functionality is organised in facades, which are attributes of `s` (e.g. `s.myfacade`); the available
+        facades and their methods are listed below.
+
+        Documentation: Use `s.info("<facade>")` when you will use a facade's functionality (it documents all common
+        operations at once) and `s.info("<facade>.<method>")` for a single or a rarely needed operation. Several items
+        can be requested in one call, e.g. `s.info("lsp", "edit.replace_content")`.
+        `s.info("<facade>")` documents the facade's operations only, not their result types. Result types are given
+        in the method listing below (`method -> Type`); request their documentation via `s.info("<Type>")`, which
+        includes the types they contain, ONLY if you intend to process results in code (filter, aggregate, chain
+        calls). If you simply want the result, return it directly: returned objects are rendered for you.
 
         The code is executed as the body of a function, so use `return` to define the result;
         a single expression is evaluated and its value returned directly.

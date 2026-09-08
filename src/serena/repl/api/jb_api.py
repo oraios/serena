@@ -186,7 +186,7 @@ class JetBrainsApi(FacadeApi):
             name="jb",
             description="operations on the codebase backed by the JetBrains IDE's code intelligence",
             types=[
-                ReferencedType(JetBrainsSymbolCollection, provide_info_with_facade=True),
+                ReferencedType(JetBrainsSymbolCollection),
                 ReferencedType(JetBrainsSymbolsOverview),
                 ReferencedType(JsonObject),
             ],

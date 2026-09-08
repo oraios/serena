@@ -53,15 +53,18 @@ class TestReplExecution:
         assert "name_path_pattern" in method_info
 
     def test_type_discovery(self, repl: SerenaRepl) -> None:
+        # the overview names the result types of methods returning objects that can be processed in code
+        assert "find_symbol -> LspSymbolCollection" in repl.execute("s.info()")
+
         # signatures render type names without module paths, and point to the documentation of referenced return types
         method_info = repl.execute('s.info("lsp.find_symbol")')
         assert "-> LspSymbolCollection" in method_info and "lsp_api." not in method_info
-        assert 's.info("lsp.LspSymbolCollection")' in method_info
+        assert 's.info("LspSymbolCollection")' in method_info
 
-        # the facade description includes types declared as important in full and lists the others by name
+        # the facade description documents the operations only and lists the result types by name
         facade_info = repl.execute('s.info("lsp")')
-        assert "type LspSymbolCollection" in facade_info and "symbols: list[LanguageServerSymbol]" in facade_info
-        assert "type LanguageServerSymbol" not in facade_info and "LanguageServerSymbol" in facade_info
+        assert "type LspSymbolCollection" not in facade_info
+        assert "Result types: " in facade_info and "LspSymbolCollection" in facade_info
 
         # types can be requested via the facade or by bare name, and their curated members are documented
         type_info = repl.execute('s.info("lsp.LanguageServerSymbol")')
@@ -95,6 +98,14 @@ class TestFacade:
         @facade_method(optional=True, beta=True)
         def extra(self) -> str:
             return "extra"
+
+        @facade_method(niche=True)
+        def rarely(self, x: int) -> str:
+            """Rarely needed operation.
+
+            :param x: some parameter
+            """
+            return str(x)
 
         def undecorated(self) -> str:
             """Public within Serena, but not exposed, since it is not decorated."""
@@ -142,13 +153,13 @@ class TestFacade:
             ApiInclusionDefinition(included_apis=["dummy.add"]),
         )
         facade = Facade.from_api(self.DummyApi(MagicMock()), scope)
-        assert set(facade.enabled_method_names) == {"add", "secret"}
+        assert set(facade.enabled_method_names) == {"add", "secret", "rarely"}
 
     def test_api_scope_read_only_excludes_editing_methods(self) -> None:
         scope = self._scope(included_apis=["dummy.secret"])
         scope.exclude_editing()
         facade = Facade.from_api(self.DummyApi(MagicMock()), scope)
-        assert facade.enabled_method_names == ["add"]
+        assert set(facade.enabled_method_names) == {"add", "rarely"}
 
     def test_enabled_methods_delegate_to_implementation(self) -> None:
         facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope())
@@ -175,6 +186,13 @@ class TestFacade:
             facade.get_method("undecorated")
         assert "undecorated" not in facade.describe()
         assert "undecorated" not in facade.enabled_method_names
+
+    def test_niche_methods_are_summarised_in_facade_description(self) -> None:
+        facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope())
+        description = facade.describe()
+        assert "dummy.rarely: Rarely needed operation." in description
+        assert ":param x:" not in description  # only the summary, no signature or full documentation
+        assert ":param x:" in facade.describe_member("rarely")  # full documentation on request
 
     def test_optional_methods_are_disabled_by_default(self) -> None:
         facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope())

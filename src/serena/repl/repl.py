@@ -54,9 +54,15 @@ class SerenaReplEntrypoint:
     def overview(self) -> str:
         """
         :return: the list of available facades, each with a one-line description and the names of its methods
+            (with the result type of methods returning objects that can be processed in code)
         """
+
+        def method_entry(method: FacadeMethod) -> str:
+            return_types = method.get_referenced_return_types()
+            return method.name + (f" -> {'|'.join(t.name for t in return_types)}" if return_types else "")
+
         return "\n".join(
-            f"s.{facade.name}: {facade.description}\n  methods: {', '.join(facade.enabled_method_names)}"
+            f"s.{facade.name}: {facade.description}\n  methods: {', '.join(method_entry(m) for m in facade.get_enabled_methods())}"
             for facade in self._facades.values()
         )
 
