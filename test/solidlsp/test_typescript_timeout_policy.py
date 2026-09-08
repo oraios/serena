@@ -17,7 +17,7 @@ from solidlsp.language_servers.svelte_language_server import (
     SvelteLanguageServer,
     SvelteTypeScriptServer,
 )
-from solidlsp.language_servers.typescript_language_server import TypeScriptLanguageServer
+from solidlsp.language_servers.typescript_language_server import TypeScriptLanguageServer, TypeScriptServerCrashedError
 from solidlsp.settings import SolidLSPSettings
 
 
@@ -31,6 +31,7 @@ def _bare_ts_server(cls: type[TypeScriptLanguageServer], custom_settings: dict |
     server._active_progress_tokens = set()
     server._indexing_complete = threading.Event()
     server._indexing_complete.set()  # mirrors __init__: initially no active work
+    server._crash_message = None  # mirrors __init__: no crash observed yet
     server._custom_settings = SolidLSPSettings.CustomLSSettings(custom_settings)
     return server
 
@@ -147,6 +148,111 @@ class TestWaitForIndexingStartOrCompletion:
             assert server._wait_for_indexing_start_or_completion(timeout=30.0, start_grace=0.0) is True
         finally:
             timer.cancel()
+
+
+class TestTsserverCrashDetection:
+    """oraios/serena#1814: typescript-language-server sends a $/progress "end" for the
+    in-flight token as part of tearing its connection down after tsserver dies, which
+    _wait_for_indexing_start_or_completion previously could not distinguish from a real
+    completion: find_referencing_symbols returned {} with isError: false instead of
+    surfacing the crash. window/logMessage does carry the crash independently; these
+    tests drive the exact begin/crash-log/end sequence from the reporter's log and pin
+    that every wait path now raises instead of reporting silent success.
+    """
+
+    def test_tsserver_exit_message_matches_sigabrt_line(self) -> None:
+        msg = {"type": 1, "message": "[lspserver] [tsclient] [tsserver] Exited. Code: null. Signal: SIGABRT"}
+        assert TypeScriptLanguageServer._tsserver_exit_message(msg) == msg["message"]
+
+    def test_tsserver_exit_message_ignores_non_error_type(self) -> None:
+        # type 3 (Info) is what a clean shutdown/log line would carry, not type 1 (Error)
+        msg = {"type": 3, "message": "[lspserver] [tsclient] [tsserver] Exited. Code: null. Signal: SIGABRT"}
+        assert TypeScriptLanguageServer._tsserver_exit_message(msg) is None
+
+    def test_tsserver_exit_message_ignores_unrelated_error(self) -> None:
+        msg = {"type": 1, "message": "Some other tsserver error unrelated to process exit"}
+        assert TypeScriptLanguageServer._tsserver_exit_message(msg) is None
+
+    def test_raise_if_crashed_is_a_noop_when_no_crash_observed(self) -> None:
+        server = _bare_ts_server(TypeScriptLanguageServer)
+        server._raise_if_crashed()  # must not raise
+
+    def test_raise_if_crashed_raises_with_recorded_message(self) -> None:
+        server = _bare_ts_server(TypeScriptLanguageServer)
+        server._crash_message = "tsserver exited abnormally: [tsserver] Exited. Code: null. Signal: SIGABRT"
+
+        with pytest.raises(TypeScriptServerCrashedError, match="SIGABRT"):
+            server._raise_if_crashed()
+
+    def test_wait_for_indexing_raises_when_progress_end_follows_a_crash(self) -> None:
+        """Drives the reporter's exact sequence: $/progress begin, the SIGABRT window/logMessage,
+        then $/progress end (teardown), the same "end" that previously read as success.
+        """
+        server = _bare_ts_server(TypeScriptLanguageServer)
+        server.expect_indexing()
+        server._active_progress_tokens.add("646a4e19")
+
+        # window/logMessage handler's effect: record the crash independently of progress state
+        server._crash_message = "tsserver exited abnormally: [tsserver] Exited. Code: null. Signal: SIGABRT"
+        # $/progress end (teardown): drains the token and sets indexing_complete, exactly as a
+        # real completion would
+        server._active_progress_tokens.discard("646a4e19")
+        server._indexing_complete.set()
+
+        with pytest.raises(TypeScriptServerCrashedError, match="SIGABRT"):
+            server.wait_for_indexing(timeout=1.0)
+
+    def test_wait_for_indexing_returns_true_on_clean_completion(self) -> None:
+        """Same $/progress begin/end shape as the crash test, without a crash message: must still
+        return True, not regress the ordinary success path.
+        """
+        server = _bare_ts_server(TypeScriptLanguageServer)
+        server.expect_indexing()
+        server._active_progress_tokens.add("646a4e19")
+        server._active_progress_tokens.discard("646a4e19")
+        server._indexing_complete.set()
+
+        assert server.wait_for_indexing(timeout=1.0) is True
+
+    def test_wait_for_indexing_start_or_completion_raises_via_early_is_set_branch(self) -> None:
+        """Covers the early "if self._indexing_complete.is_set(): return True" branch, which is
+        reached (not the tail wait_for_indexing() call) when begin+crash+end all land before the
+        first poll iteration observes an active token.
+        """
+        server = _bare_ts_server(TypeScriptLanguageServer)
+        server.expect_indexing()
+        server._crash_message = "tsserver exited abnormally: [tsserver] Exited. Code: null. Signal: SIGABRT"
+        server._indexing_complete.set()  # progress already drained by the time we start waiting
+
+        with pytest.raises(TypeScriptServerCrashedError, match="SIGABRT"):
+            server._wait_for_indexing_start_or_completion(timeout=1.0, start_grace=1.0)
+
+    def test_wait_for_indexing_start_or_completion_raises_via_absent_progress_branch(self) -> None:
+        """Covers the "treat absent progress as ready" branch: no active token observed within the
+        start grace, but a crash was already recorded.
+        """
+        server = _bare_ts_server(TypeScriptLanguageServer)
+        server.expect_indexing()
+        server._crash_message = "tsserver exited abnormally: [tsserver] Exited. Code: null. Signal: SIGABRT"
+
+        with pytest.raises(TypeScriptServerCrashedError, match="SIGABRT"):
+            server._wait_for_indexing_start_or_completion(timeout=1.0, start_grace=0.05)
+
+    def test_wait_for_cross_file_references_propagates_the_crash(self) -> None:
+        """The actual call path find_referencing_symbols drives (ls.py's SymbolLocationRequest.execute
+        calls this with no surrounding try/except) must raise, not silently log "indexing complete"
+        and let the caller receive an empty result.
+        """
+        server = _bare_ts_server(TypeScriptLanguageServer)
+        server._has_waited_for_cross_file_references = False
+        server.expect_indexing()
+        server._crash_message = "tsserver exited abnormally: [tsserver] Exited. Code: null. Signal: SIGABRT"
+
+        with pytest.raises(TypeScriptServerCrashedError, match="SIGABRT"):
+            server._wait_for_cross_file_references_if_needed()
+
+        # the crash must be reported, not swallowed into a false "we've already waited" state
+        assert server._has_waited_for_cross_file_references is False
 
 
 class TestWaitForCrossFileReferencesUsesConfiguredGrace:
