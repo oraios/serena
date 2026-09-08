@@ -18,7 +18,7 @@ from serena.tools import (
 )
 from serena.util.text_utils import ContentReplacer, MultiFileReplacement, ReplacementOccurrence, ReplacementRejectedError
 
-from ..facade import SUCCESS_RESULT, FacadeApi, facade_method
+from ..facade import SUCCESS_RESULT, FacadeApi, ReferencedType, facade_method
 from ..representable import Renderer, RepresentableViaRenderer
 
 if TYPE_CHECKING:
@@ -74,6 +74,13 @@ class EditApi(FacadeApi):
             agent,
             name="edit",
             description="modifying content within existing files (independent of the language backend)",
+            types=[
+                ReferencedType(ReplacementPreview, provide_info_with_facade=True),
+                ReferencedType(
+                    ReplacementOccurrence,
+                    members=["occurrence_id", "relative_path", "start_line", "end_line", "matched_text", "replacement", "is_ambiguous"],
+                ),
+            ],
         )
 
     # file-level operations

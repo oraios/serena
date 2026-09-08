@@ -92,6 +92,9 @@ class JsonObject(RepresentableViaRenderer):
         super().__init__(renderer)
         self.data = data
 
+    data: Any
+    """the JSON-serializable data (dict, list, etc.)"""
+
 
 class JsonObjectRenderer(Renderer[JsonObject]):
     def render(self, obj: JsonObject) -> str:

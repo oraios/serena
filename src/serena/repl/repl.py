@@ -60,22 +60,35 @@ class SerenaReplEntrypoint:
             for facade in self._facades.values()
         )
 
-    def info(self, path: str = "") -> str:
+    def info(self, *items: str) -> str:
         """
         Provides documentation on the available functionality.
 
-        :param path: the empty string for an overview of all facades, a facade name (e.g. "lsp") for the
-            documentation of all of the facade's methods, or a dotted method path (e.g. "lsp.find_symbol")
-            for the documentation of a single method
+        :param items: the items to document; if none are given, an overview of all facades is provided.
+            Each item is either a facade name (e.g. "lsp") for the documentation of all of the facade's methods and types,
+            a dotted path (e.g. "lsp.find_symbol" or "lsp.LspSymbolCollection") for the documentation of a single method
+            or type, or a bare type name (e.g. "LanguageServerSymbol"), which is looked up across all facades.
+            Unknown items are reported without affecting the documentation of the other items.
         :return: the requested documentation
         """
-        if path == "":
+        if not items:
             return self.overview()
-        facade_name, _, method_name = path.partition(".")
-        facade = self._get_facade(facade_name)
-        if method_name == "":
-            return facade.describe()
-        return facade.describe_method(method_name)
+        return "\n\n".join(self._describe_item(item) for item in items)
+
+    def _describe_item(self, item: str) -> str:
+        facade_name, _, member_name = item.partition(".")
+        try:
+            if member_name:
+                return self._get_facade(facade_name).describe_member(member_name)
+            if facade_name in self._facades:
+                return self._facades[facade_name].describe()
+            # not a facade: look up the item as a type across all facades
+            matches = [facade for facade in self._facades.values() if facade.get_type(item) is not None]
+            if not matches:
+                raise ValueError(f"Unknown item '{item}': neither a facade nor a type. Available facades: {list(self._facades)}")
+            return matches[0].describe_member(item)
+        except ValueError as e:
+            return str(e)
 
 
 class SerenaRepl:

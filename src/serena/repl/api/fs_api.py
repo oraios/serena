@@ -14,7 +14,7 @@ from serena.util.file_system import scan_directory
 from serena.util.text_utils import MatchedConsecutiveLines
 from solidlsp.ls_utils import TextUtils
 
-from ..facade import FacadeApi, facade_method
+from ..facade import FacadeApi, ReferencedType, facade_method
 from ..representable import Renderer, RepresentableViaRenderer
 
 if TYPE_CHECKING:
@@ -33,6 +33,8 @@ class FileContent(RepresentableViaRenderer):
         """
         super().__init__(renderer)
         self.lines = lines
+
+    lines: list[str]
 
     @property
     def text(self) -> str:
@@ -59,6 +61,9 @@ class DirectoryListing(RepresentableViaRenderer):
         self.dirs = dirs
         self.files = files
 
+    dirs: list[str]
+    files: list[str]
+
 
 class DirectoryListingRenderer(Renderer[DirectoryListing]):
     def render(self, obj: DirectoryListing) -> str:
@@ -78,6 +83,8 @@ class PatternMatches(RepresentableViaRenderer):
         """
         super().__init__(renderer)
         self.matches = matches
+
+    matches: list[MatchedConsecutiveLines]
 
     def __len__(self) -> int:
         return len(self.matches)
@@ -162,7 +169,19 @@ class PatternMatchesRenderer(Renderer[PatternMatches]):
 
 class FsApi(FacadeApi):
     def __init__(self, agent: "SerenaAgent") -> None:
-        super().__init__(agent, name="fs", description="the project's files as units (as opposed to their content, see `edit`)")
+        super().__init__(
+            agent,
+            name="fs",
+            description="the project's files as units (as opposed to their content, see `edit`)",
+            types=[
+                ReferencedType(FileContent),
+                ReferencedType(DirectoryListing),
+                ReferencedType(PatternMatches, provide_info_with_facade=True),
+                ReferencedType(
+                    MatchedConsecutiveLines, members=["source_file_path", "matched_lines", "start_line", "end_line", "to_display_string"]
+                ),
+            ],
+        )
 
     @facade_method(corresponding_tool=ReadFileTool)
     def read_file(self, relative_path: str, start_line: int = 0, end_line: int | None = None, max_answer_chars: int = -1) -> FileContent:

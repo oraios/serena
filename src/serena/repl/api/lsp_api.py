@@ -33,7 +33,7 @@ from serena.tools import (
 from serena.util.text_utils import TextOutputUtils, find_text_coordinates
 from solidlsp.lsp_protocol_handler.lsp_types import SymbolKind
 
-from ..facade import SUCCESS_RESULT, FacadeApi, facade_method
+from ..facade import SUCCESS_RESULT, FacadeApi, ReferencedType, facade_method
 from ..representable import Renderer, RepresentableViaRenderer
 
 if TYPE_CHECKING:
@@ -46,6 +46,8 @@ class LspSymbolCollection(RepresentableViaRenderer):
     Each symbol (`LanguageServerSymbol`) offers e.g. `get_name_path()`, `relative_path`, `symbol_kind_name`,
     `body`, `get_body_line_numbers()`, `iter_children()`.
     """
+
+    symbols: list[LanguageServerSymbol]
 
     def __init__(self, symbols: list[LanguageServerSymbol], renderer: "LspSymbolCollectionRenderer"):
         """
@@ -69,6 +71,8 @@ class LspSymbol(RepresentableViaRenderer):
     """
     A single symbol retrieved via the language server (see `LspSymbolCollection` for the symbol's interface).
     """
+
+    symbol: LanguageServerSymbol
 
     def __init__(self, symbol: LanguageServerSymbol, renderer: "LspSymbolRenderer"):
         """
@@ -207,6 +211,8 @@ class LspReferenceCollection(RepresentableViaRenderer):
     (a `LanguageServerSymbol`) and the `line` of the reference.
     """
 
+    references: list[ReferenceInLanguageServerSymbol]
+
     def __init__(self, references: list[ReferenceInLanguageServerSymbol], renderer: "LspReferenceCollectionRenderer"):
         """
         :param references: the references
@@ -273,6 +279,8 @@ class LspDiagnostics(RepresentableViaRenderer):
     Diagnostics grouped as `relative_path -> severity -> name_path -> diagnostics`; see `grouped.get_dict()`.
     """
 
+    grouped: GroupedDiagnostics
+
     def __init__(self, grouped: GroupedDiagnostics, renderer: "LspDiagnosticsRenderer"):
         """
         :param grouped: the grouped diagnostics
@@ -304,6 +312,29 @@ class LspApi(FacadeApi):
             agent,
             name="lsp",
             description="symbol-level operations on the codebase backed by language servers",
+            types=[
+                ReferencedType(LspSymbolCollection, provide_info_with_facade=True),
+                ReferencedType(
+                    LanguageServerSymbol,
+                    members=[
+                        "name",
+                        "get_name_path",
+                        "relative_path",
+                        "symbol_kind_name",
+                        "line",
+                        "column",
+                        "body",
+                        "get_body_line_numbers",
+                        "iter_children",
+                        "iter_ancestors",
+                        "get_parent",
+                    ],
+                ),
+                ReferencedType(LspSymbol),
+                ReferencedType(LspReferenceCollection),
+                ReferencedType(ReferenceInLanguageServerSymbol),
+                ReferencedType(LspDiagnostics),
+            ],
         )
 
     def _create_symbol_retriever(self) -> LanguageServerSymbolRetriever:

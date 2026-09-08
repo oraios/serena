@@ -52,6 +52,29 @@ class TestReplExecution:
         method_info = repl.execute('s.info("lsp.find_symbol")')
         assert "name_path_pattern" in method_info
 
+    def test_type_discovery(self, repl: SerenaRepl) -> None:
+        # signatures render type names without module paths, and point to the documentation of referenced return types
+        method_info = repl.execute('s.info("lsp.find_symbol")')
+        assert "-> LspSymbolCollection" in method_info and "lsp_api." not in method_info
+        assert 's.info("lsp.LspSymbolCollection")' in method_info
+
+        # the facade description includes types declared as important in full and lists the others by name
+        facade_info = repl.execute('s.info("lsp")')
+        assert "type LspSymbolCollection" in facade_info and "symbols: list[LanguageServerSymbol]" in facade_info
+        assert "type LanguageServerSymbol" not in facade_info and "LanguageServerSymbol" in facade_info
+
+        # types can be requested via the facade or by bare name, and their curated members are documented
+        type_info = repl.execute('s.info("lsp.LanguageServerSymbol")')
+        assert type_info == repl.execute('s.info("LanguageServerSymbol")')
+        assert "get_name_path() -> str" in type_info and "iter_children()" in type_info
+        assert "to_dict" not in type_info  # not among the curated members
+        assert "represent" not in repl.execute('s.info("LspSymbolCollection")')  # the representation mechanism is not exposed
+
+    def test_info_documents_several_items(self, repl: SerenaRepl) -> None:
+        info = repl.execute('s.info("lsp.find_symbol", "nope", "lsp.LspSymbolCollection")')
+        assert "lsp.find_symbol(" in info and "type LspSymbolCollection" in info
+        assert "Unknown item 'nope'" in info  # an unknown item does not prevent the documentation of the others
+
 
 class TestFacade:
     """Tests the indirection between facades and their implementations."""
@@ -131,7 +154,7 @@ class TestFacade:
         facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope())
         assert facade.add(1, 2) == 3
         assert "dummy.add(a: int, b: int) -> int" in facade.describe()
-        assert "Adds two numbers." in facade.describe_method("add")
+        assert "Adds two numbers." in facade.describe_member("add")
 
     def test_disabled_methods_are_inaccessible_and_undocumented(self) -> None:
         facade = Facade.from_api(self.DummyApi(MagicMock()), self._scope(excluded_apis=["dummy.secret"]))
@@ -139,7 +162,7 @@ class TestFacade:
         with pytest.raises(AttributeError):
             facade.secret()
         with pytest.raises(ValueError):
-            facade.describe_method("secret")
+            facade.describe_member("secret")
         assert "secret" not in facade.describe()
         assert "_internal" not in facade.describe()
 

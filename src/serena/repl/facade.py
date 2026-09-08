@@ -6,13 +6,17 @@ The facade, i.e. the object through which REPL code accesses a group of related 
 
 import inspect
 import logging
+import re
+import typing
 from abc import ABC
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from serena.config.serena_config import ApiInclusionDefinition
 from serena.project import Project
+
+from .representable import RepresentableViaRenderer
 
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
@@ -24,6 +28,105 @@ TCallable = TypeVar("TCallable", bound=Callable[..., Any])
 
 SUCCESS_RESULT = "OK"
 """the result returned by operations which have no result other than their success"""
+
+
+def format_annotation(annotation: Any) -> str:
+    """
+    :param annotation: a type annotation (or a signature/annotation string)
+    :return: the annotation rendered without module paths (e.g. `list[LanguageServerSymbol]`), such that type names
+        match the names by which the types can be looked up
+    """
+    text = annotation if isinstance(annotation, str) else inspect.formatannotation(annotation)
+    return re.sub(r"\b(?:[A-Za-z_]\w*\.)+([A-Za-z_]\w*)", r"\1", text)
+
+
+def format_signature(callable_: Callable[..., Any]) -> str:
+    """
+    :param callable_: the callable
+    :return: the signature rendered without module paths in annotations
+    """
+    return format_annotation(str(inspect.signature(callable_)))
+
+
+@dataclass
+class ReferencedType:
+    """
+    A type that is referenced by a facade's methods (returned by them or contained in their results), whose interface
+    the LLM can inspect via `info`.
+    """
+
+    cls: type
+    """the type"""
+    provide_info_with_facade: bool = False
+    """whether the type's full description is included in the facade's description (rather than just its name)"""
+    members: Sequence[str] | None = None
+    """
+    the LLM-facing members (attributes, properties, methods) to describe; if None, all members admitted by the naming
+    convention (no leading or trailing underscore) which are documented are described. Explicitly listed methods are
+    described even if undocumented, as the listing is the documentation decision.
+    """
+
+    _CAPABILITIES: typing.ClassVar[dict[str, str]] = {"__len__": "len()", "__iter__": "iteration", "__getitem__": "indexing"}
+
+    @property
+    def name(self) -> str:
+        return self.cls.__name__
+
+    def _get_member_names(self) -> list[str]:
+        if self.members is not None:
+            return list(self.members)
+        names = set(typing.get_type_hints(self.cls))
+        names.update(n for n in dir(self.cls) if not n.startswith("_"))
+        # exclude the representation mechanism, which is not meant to be used from REPL code
+        names.difference_update(dir(RepresentableViaRenderer))
+        return sorted(n for n in names if not n.startswith("_") and not n.endswith("_"))
+
+    @staticmethod
+    def _first_doc_line(obj: Any) -> str:
+        doc = inspect.getdoc(obj) or ""
+        first_line = doc.splitlines()[0] if doc else ""
+        return first_line.removeprefix(":return:").strip()
+
+    def describe(self) -> str:
+        """
+        :return: the type's documentation: its docstring, attributes/properties with their types and methods with their
+            signatures and documentation
+        """
+        attributes: list[str] = []
+        methods: list[str] = []
+        type_hints = typing.get_type_hints(self.cls)
+        for member_name in self._get_member_names():
+            member = inspect.getattr_static(self.cls, member_name, None)
+            if isinstance(member, property):
+                fget = member.fget
+                annotation = inspect.signature(fget).return_annotation if fget is not None else inspect.Signature.empty
+                type_str = f": {format_annotation(annotation)}" if annotation is not inspect.Signature.empty else ""
+                doc = self._first_doc_line(member)
+                attributes.append(f"  {member_name}{type_str}" + (f"  # {doc}" if doc else ""))
+            elif inspect.isfunction(member):
+                doc = inspect.getdoc(member)
+                if doc is None and self.members is None:
+                    continue
+                signature = format_signature(member).replace("(self, ", "(", 1).replace("(self)", "()", 1)
+                methods.append(f"  {member_name}{signature}" + (f"\n    {doc.replace(chr(10), chr(10) + '    ')}" if doc else ""))
+            elif member_name in type_hints:
+                attributes.append(f"  {member_name}: {format_annotation(type_hints[member_name])}")
+            else:
+                attributes.append(f"  {member_name}")
+
+        # assemble the description
+        parts = [f"type {self.name}"]
+        if self.cls.__doc__:  # NOTE: the class' own docstring (inspect.getdoc would fall back to base class docstrings)
+            doc = inspect.cleandoc(self.cls.__doc__)
+            parts.append(f"  {doc.replace(chr(10), chr(10) + '  ')}")
+        if attributes:
+            parts.append("attributes:\n" + "\n".join(attributes))
+        if methods:
+            parts.append("methods:\n" + "\n".join(methods))
+        capabilities = [text for dunder, text in self._CAPABILITIES.items() if dunder in dir(self.cls) and dunder not in dir(object)]
+        if capabilities:
+            parts.append("supports: " + ", ".join(capabilities))
+        return "\n".join(parts) + "\n"
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -101,21 +204,27 @@ class FacadeApi(ABC):
       * Names with a leading underscore are private, as usual.
     """
 
-    def __init__(self, agent: "SerenaAgent", name: str, description: str) -> None:
+    def __init__(self, agent: "SerenaAgent", name: str, description: str, types: Sequence[ReferencedType] = ()) -> None:
         """
         :param agent: the agent providing access to the project and its resources
         :param name: the attribute name under which the facade is accessible from the REPL entrypoint
         :param description: a one-line description of the functionality offered by the facade
+        :param types: the types referenced by the facade's methods (returned or contained in results) whose interface
+            the LLM shall be able to inspect
         """
         self._agent = agent
         self._name = name
         self._description = description
+        self._types = list(types)
 
     def get_name_(self) -> str:
         return self._name
 
     def get_description_(self) -> str:
         return self._description
+
+    def get_referenced_types_(self) -> list[ReferencedType]:
+        return self._types
 
     def _get_project(self) -> Project:
         return self._agent.get_active_project_or_raise()
@@ -173,13 +282,22 @@ class FacadeMethod:
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self._implementation(*args, **kwargs)
 
-    def describe(self) -> str:
+    def describe(self, include_return_type_pointer: bool = True) -> str:
         """
+        :param include_return_type_pointer: whether to append a pointer to the documentation of the return type,
+            if it is a type referenced by the facade
         :return: the method's signature and documentation
         """
-        signature = inspect.signature(self._implementation)
+        signature = format_signature(self._implementation)
         doc = inspect.getdoc(self._implementation) or "(no documentation)"
-        return f"{self.qualified_name}{signature}\n{doc}\n"
+        text = f"{self.qualified_name}{signature}\n{doc}\n"
+        if include_return_type_pointer:
+            return_annotation = format_annotation(inspect.signature(self._implementation).return_annotation)
+            referenced = [t for t in self.parent.get_types() if re.search(rf"\b{re.escape(t.name)}\b", return_annotation)]
+            if referenced:
+                pointers = ", ".join(f'`s.info("{self.facade_name}.{t.name}")`' for t in referenced)
+                text += f"Return type: see {pointers}\n"
+        return text
 
 
 class ApiScope:
@@ -282,11 +400,12 @@ class Facade:
     A named group of related operations which an LLM can invoke from REPL code.
     """
 
-    def __init__(self, name: str, description: str) -> None:
+    def __init__(self, name: str, description: str, types: Sequence[ReferencedType] = ()) -> None:
         # NOTE: attributes are set via object.__setattr__ because __getattr__ is overridden
         object.__setattr__(self, "_name", name)
         object.__setattr__(self, "_description", description)
         object.__setattr__(self, "_methods", {})
+        object.__setattr__(self, "_types", {t.name: t for t in types})
 
     def _add_method(self, method: FacadeMethod) -> None:
         assert method.parent is self
@@ -301,7 +420,7 @@ class Facade:
         :param api_scope: API scope definition determining which methods are enabled
         :return: the facade
         """
-        facade = Facade(api.get_name_(), api.get_description_())
+        facade = Facade(api.get_name_(), api.get_description_(), api.get_referenced_types_())
         for name, member in inspect.getmembers(api, predicate=inspect.ismethod):
             method_info = get_facade_method_info(member)
             if method_info is None:
@@ -327,6 +446,19 @@ class Facade:
         :return: the list of enabled methods
         """
         return [m for m in self._methods.values() if m.enabled]
+
+    def get_types(self) -> list[ReferencedType]:
+        """
+        :return: the types referenced by the facade's methods
+        """
+        return list(self._types.values())
+
+    def get_type(self, type_name: str) -> ReferencedType | None:
+        """
+        :param type_name: the name of the type
+        :return: the referenced type, or None if the facade does not reference a type of that name
+        """
+        return self._types.get(type_name)
 
     def get_method(self, method_name: str) -> FacadeMethod:
         """
@@ -357,19 +489,36 @@ class Facade:
     def describe(self) -> str:
         """
         :return: a description of the facade listing all of its enabled methods with their signatures and documentation
+            as well as its referenced types (in full if so declared, otherwise by name)
         """
         parts = [f"Facade '{self._name}': {self._description}", ""]
         for method in self._methods.values():
             if method.enabled:
                 parts.append(method.describe())
+        described_types = [t for t in self._types.values() if t.provide_info_with_facade]
+        listed_types = [t for t in self._types.values() if not t.provide_info_with_facade]
+        for referenced_type in described_types:
+            parts.append(referenced_type.describe())
+        if listed_types:
+            parts.append(
+                "Further types: "
+                + ", ".join(t.name for t in listed_types)
+                + f' (request documentation via `s.info("{self._name}.<type name>")`)'
+            )
         return "\n".join(parts)
 
-    def describe_method(self, method_name: str) -> str:
+    def describe_member(self, member_name: str) -> str:
         """
-        :param method_name: the name of one of the facade's enabled methods
-        :return: the method's signature and documentation
+        :param member_name: the name of one of the facade's enabled methods or referenced types
+        :return: the member's documentation
         """
-        method = self._get_enabled_method(method_name)
-        if method is None:
-            raise ValueError(self._no_such_method_message(method_name))
-        return method.describe()
+        method = self._get_enabled_method(member_name)
+        if method is not None:
+            return method.describe()
+        referenced_type = self._types.get(member_name)
+        if referenced_type is not None:
+            return referenced_type.describe()
+        raise ValueError(
+            f"Facade '{self._name}' has no method or type '{member_name}'. "
+            f"Available methods: {self.enabled_method_names}; types: {list(self._types)}"
+        )

@@ -30,7 +30,7 @@ from serena.tools import (
 )
 from serena.util.text_utils import find_text_coordinates
 
-from ..facade import FacadeApi, facade_method
+from ..facade import FacadeApi, ReferencedType, facade_method
 from ..representable import JsonObject, JsonObjectRenderer, Renderer, RepresentableViaRenderer
 
 if TYPE_CHECKING:
@@ -43,6 +43,8 @@ class JetBrainsSymbolCollection(RepresentableViaRenderer):
     Each symbol is a dict with keys such as `name_path`, `relative_path` and `type`, and optionally
     `children`, `body`, `quick_info`, `documentation` and (for references) `context`.
     """
+
+    symbols: list[SymbolDTO]
 
     def __init__(self, symbols: list[SymbolDTO], renderer: "JetBrainsSymbolCollectionRenderer"):
         """
@@ -123,6 +125,9 @@ class JetBrainsSymbolsOverview(RepresentableViaRenderer):
         self.symbols = symbols
         self.documentation = documentation
 
+    symbols: list[SymbolDTO]
+    documentation: str | None
+
 
 class JetBrainsSymbolsOverviewRenderer(Renderer[JetBrainsSymbolsOverview]):
     """
@@ -180,6 +185,11 @@ class JetBrainsApi(FacadeApi):
             agent,
             name="jb",
             description="operations on the codebase backed by the JetBrains IDE's code intelligence",
+            types=[
+                ReferencedType(JetBrainsSymbolCollection, provide_info_with_facade=True),
+                ReferencedType(JetBrainsSymbolsOverview),
+                ReferencedType(JsonObject),
+            ],
         )
 
     @contextmanager
