@@ -54,7 +54,7 @@ def test_default_disables_type_acquisition_in_running_server(backend: LanguageSe
         (
             {"initialization_options": {"typescript": {"tsdk": "workspace/typescript/lib"}, "vtsls": {"autoUseWorkspaceTsdk": True}}},
             {
-                "typescript": {"tsdk": "workspace/typescript/lib", "disableAutomaticTypeAcquisition": True},
+                "typescript": {"tsdk": "workspace/typescript/lib"},
                 "vtsls": {"autoUseWorkspaceTsdk": True},
             },
         ),
@@ -64,7 +64,21 @@ def test_default_disables_type_acquisition_in_running_server(backend: LanguageSe
         ),
         (
             {"initializationOptions": {"typescript": {"tsdk": "workspace/typescript/lib"}}},
-            {"typescript": {"tsdk": "workspace/typescript/lib", "disableAutomaticTypeAcquisition": True}},
+            {"typescript": {"tsdk": "workspace/typescript/lib"}},
+        ),
+        (
+            {"initialization_options": {"vtsls": {"autoUseWorkspaceTsdk": True}}},
+            {"typescript": {"disableAutomaticTypeAcquisition": True}, "vtsls": {"autoUseWorkspaceTsdk": True}},
+        ),
+        (
+            {
+                "initialization_options": {
+                    "typescript": {"disableAutomaticTypeAcquisition": False},
+                    "vtsls": {"autoUseWorkspaceTsdk": True},
+                },
+                "initializationOptions": {"typescript": {"tsdk": "workspace/typescript/lib"}},
+            },
+            {"typescript": {"tsdk": "workspace/typescript/lib"}},
         ),
     ],
 )

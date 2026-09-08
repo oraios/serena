@@ -35,6 +35,9 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Language Servers:
   - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
     preserves explicit user settings across initialization and configuration requests (#1989)
+    VTS initialization options now override defaults per top-level key rather than replacing the
+    entire configuration; a user-provided `typescript` block replaces the ATA default too.
+    `initializationOptions` takes precedence over the legacy `initialization_options` alias.
   - Add FreeBSD mapping to platform detection
   - Remove unnecessary platform checks from the following language servers, expanding the set of
     supported platforms accordingly: Elixir Tools, Intelephense, Perl, TypeScript, VTS

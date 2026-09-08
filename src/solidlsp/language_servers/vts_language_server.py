@@ -8,14 +8,12 @@ import logging
 import os
 import shutil
 import threading
-from copy import deepcopy
 from typing import cast
 
 from overrides import override
 
 from solidlsp.ls import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
-from solidlsp.lsp_protocol_handler.lsp_types import InitializeParams
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
@@ -37,16 +35,18 @@ class VtsLanguageServer(SolidLanguageServer):
     Supported entries in ``ls_specific_settings["typescript_vts"]``:
         - ``vtsls_version``: version of ``@vtsls/language-server`` to install (default: ``"0.2.9"``).
         - ``npm_registry``: custom npm registry for the managed install.
-        - ``initialization_options``: optional LSP configuration. Automatic type acquisition
-          is disabled by default; explicit settings take precedence. Useful for Yarn PnP projects, e.g.::
+        - ``initializationOptions``: optional LSP configuration, overriding defaults per top-level key.
+          Automatic type acquisition is disabled by default, but a user-provided ``typescript`` block
+          replaces that entire default block. Useful for Yarn PnP projects, e.g.::
 
-              initialization_options:
+              initializationOptions:
                 typescript:
                   tsdk: "project/.yarn/sdks/typescript/lib"
                 vtsls:
                   autoUseWorkspaceTsdk: true
 
           See https://github.com/yioneko/vtsls/issues/169 for the PnP recipe.
+        - ``initialization_options``: legacy alias, used only when ``initializationOptions`` is absent.
     """
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
@@ -112,30 +112,18 @@ class VtsLanguageServer(SolidLanguageServer):
         assert os.path.exists(vts_executable_path), "vtsls executable not found. Please install @vtsls/language-server and try again."
         return f"{vts_executable_path} --stdio"
 
-    @property
-    def _initialization_options(self) -> dict:
-        """
-        Validated user-provided ``initializationOptions``.
-
-        :raises ValueError: if ``ls_specific_settings.typescript_vts.initialization_options``
-            is set to a value that is not a dict.
-        """
-        opts = self._custom_settings.get("initialization_options")
-        if opts is None:
-            return {}
-        if not isinstance(opts, dict):
-            raise ValueError(f"ls_specific_settings.typescript_vts.initialization_options must be a dict, got {type(opts).__name__}")
-        return opts
-
     def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the VTS Language Server.
-
-        User-provided options are copied so initialization overrides do not mutate the caller's settings.
         """
+        # normalize the legacy key for the shared builder without changing caller-owned settings
+        settings = self._custom_settings.settings
+        if "initialization_options" in settings and "initializationOptions" not in settings:
+            self._custom_settings.settings = {**settings, "initializationOptions": settings["initialization_options"]}
+
         initialize_params: dict = {
             "locale": "en",
-            "initializationOptions": deepcopy(self._initialization_options),
+            "initializationOptions": {"typescript": {"disableAutomaticTypeAcquisition": True}},
             "capabilities": {
                 "textDocument": {
                     "synchronization": {"didSave": True, "dynamicRegistration": True},
@@ -160,17 +148,6 @@ class VtsLanguageServer(SolidLanguageServer):
         }
 
         return initialize_params
-
-    @override
-    def _create_initialize_params(self) -> InitializeParams:
-        """Apply the ATA default after both adapter-specific and generic initialization overrides."""
-        params = super()._create_initialize_params()
-        options = cast(dict, deepcopy(params["initializationOptions"]))
-        typescript_options = options.setdefault("typescript", {})
-        if isinstance(typescript_options, dict):
-            typescript_options.setdefault("disableAutomaticTypeAcquisition", True)
-        params["initializationOptions"] = options
-        return params
 
     def _start_server(self) -> None:
         """
