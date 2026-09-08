@@ -10,6 +10,7 @@ import pytest
 from serena.config.serena_config import ApiInclusionDefinition
 from serena.repl.api.edit_api import EditApi
 from serena.repl.api.lsp_api import LspApi
+from serena.repl.external_project import ExternalProjectContext
 from serena.repl.facade import ApiScope, Facade, FacadeApi, FacadeMethodInfo, facade_method
 from serena.repl.repl import SerenaRepl
 from serena.session import SerenaSession
@@ -81,6 +82,30 @@ class TestReplExecution:
         rebuilt_repl = SerenaRepl([Facade.from_api(EditApi(MagicMock()), ApiScope())], ApiScope())
         overview = rebuilt_repl.execute("facades()", session)
         assert "s.edit" in overview and "s.lsp" not in overview
+
+    def test_external_project_dispatch(self) -> None:
+        class FakeExternalProject(ExternalProjectContext):
+            def __init__(self) -> None:
+                super().__init__("other", remote_execution=True)
+                self.calls: list[tuple[str, str, tuple, dict]] = []
+
+            def call(self, facade_name: str, method_name: str, args: tuple, kwargs: dict) -> str:
+                self.calls.append((facade_name, method_name, args, kwargs))
+                return "remote result"
+
+        facades = [Facade.from_api(LspApi(MagicMock()), ApiScope()), Facade.from_api(EditApi(MagicMock()), ApiScope())]
+        repl = SerenaRepl(facades, ApiScope())
+        external_project = FakeExternalProject()
+        repl.entrypoint.set_external_project_(external_project)
+
+        # methods using the project server are executed remotely, editing methods are refused
+        assert repl.execute('s.lsp.find_symbol("Foo", depth=1)') == "remote result"
+        assert external_project.calls == [("lsp", "find_symbol", ("Foo",), {"depth": 1})]
+        assert "read-only" in repl.execute('s.edit.replace_content("a.py", "x", "y", "literal")')
+
+        # without remote execution (JetBrains backend), methods run locally
+        repl.entrypoint.set_external_project_(ExternalProjectContext("other", remote_execution=False))
+        assert "remote result" not in repl.execute('s.info("lsp.find_symbol")')
 
     def test_facade_discovery(self, repl: SerenaRepl) -> None:
         overview = repl.execute("s.info()")

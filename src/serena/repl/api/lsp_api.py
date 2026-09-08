@@ -47,13 +47,20 @@ class LspSymbolCollection(RepresentableViaRenderer):
 
     symbols: list[LanguageServerSymbol]
 
-    def __init__(self, symbols: list[LanguageServerSymbol], renderer: "LspSymbolCollectionRenderer"):
+    def __init__(
+        self,
+        symbols: list[LanguageServerSymbol],
+        renderer: "LspSymbolCollectionRenderer",
+        info_by_symbol: dict[LanguageServerSymbol, str] | None = None,
+    ):
         """
         :param symbols: the list of symbols
         :param renderer: the renderer to use for representing the collection
+        :param info_by_symbol: additional (hover-like) info per symbol, if requested
         """
         super().__init__(renderer)
         self.symbols = symbols
+        self.info_by_symbol_ = info_by_symbol or {}
 
     def __len__(self) -> int:
         return len(self.symbols)
@@ -72,13 +79,15 @@ class LspSymbol(RepresentableViaRenderer):
 
     symbol: LanguageServerSymbol
 
-    def __init__(self, symbol: LanguageServerSymbol, renderer: "LspSymbolRenderer"):
+    def __init__(self, symbol: LanguageServerSymbol, renderer: "LspSymbolRenderer", info: str | None = None):
         """
         :param symbol: the symbol
         :param renderer: the renderer to use for representing the symbol
+        :param info: additional (hover-like) info on the symbol, if requested
         """
         super().__init__(renderer)
         self.symbol = symbol
+        self.info_ = info
 
 
 @dataclass(kw_only=True)
@@ -108,19 +117,20 @@ class LspSymbolCollectionRenderer(Renderer[LspSymbolCollection]):
         self,
         agent: "SerenaAgent",
         max_answer_chars: int,
-        symbol_retriever: LanguageServerSymbolRetriever,
         output_params: SymbolOutputParams,
         grouper: SymbolDictGrouper | None = None,
     ):
         super().__init__(agent, max_answer_chars)
-        self._symbol_retriever = symbol_retriever
         self._output_params = output_params
         self._grouper = grouper
 
-    def symbol_dicts_(self, symbols: list[LanguageServerSymbol]) -> list[LanguageServerSymbol.OutputDict]:
+    def symbol_dicts_(
+        self, symbols: list[LanguageServerSymbol], info_by_symbol: dict[LanguageServerSymbol, str]
+    ) -> list[LanguageServerSymbol.OutputDict]:
         """
         :param symbols: the symbols to convert
-        :return: the dict representations of the symbols according to the output parameters (including info, if requested)
+        :param info_by_symbol: additional info to include per symbol, if any
+        :return: the dict representations of the symbols according to the output parameters (including the info)
         """
         p = self._output_params
         symbol_dicts = [
@@ -140,14 +150,12 @@ class LspSymbolCollectionRenderer(Renderer[LspSymbolCollection]):
             )
             for s in symbols
         ]
-        if not p.include_body and p.include_info:
-            info_by_symbol = self._symbol_retriever.request_info_for_symbol_batch(symbols)
-            for s, s_dict in zip(symbols, symbol_dicts, strict=True):
-                if symbol_info := info_by_symbol.get(s):
-                    # In python 3.15 we could specify extra_items=True in the TypedDict definition,
-                    # https://peps.python.org/pep-0728/
-                    # If we ever upgrade to 3.15, we can remove the type: ignore[typeddict-unknown-key]
-                    s_dict["info"] = symbol_info
+        for s, s_dict in zip(symbols, symbol_dicts, strict=True):
+            if symbol_info := info_by_symbol.get(s):
+                # In python 3.15 we could specify extra_items=True in the TypedDict definition,
+                # https://peps.python.org/pep-0728/
+                # If we ever upgrade to 3.15, we can remove the type: ignore[typeddict-unknown-key]
+                s_dict["info"] = symbol_info
         return symbol_dicts
 
     def _group(self, symbol_dicts: list[LanguageServerSymbol.OutputDict]) -> Any:
@@ -157,7 +165,7 @@ class LspSymbolCollectionRenderer(Renderer[LspSymbolCollection]):
         def create_short_result_relative_path_to_name_paths() -> str:
             return f"Shortened result:\n{TextOutputUtils.to_json(obj.relative_path_to_name_paths_())}"
 
-        result = self._to_json(self._group(self.symbol_dicts_(obj.symbols)))
+        result = self._to_json(self._group(self.symbol_dicts_(obj.symbols, obj.info_by_symbol_)))
         return self._limit_length(result, shortened_result_factories=[create_short_result_relative_path_to_name_paths])
 
 
@@ -171,7 +179,8 @@ class LspSymbolRenderer(Renderer[LspSymbol]):
         self._collection_renderer = collection_renderer
 
     def render(self, obj: LspSymbol) -> str:
-        symbol_dict = self._collection_renderer.symbol_dicts_([obj.symbol])[0]
+        info_by_symbol = {obj.symbol: obj.info_} if obj.info_ else {}
+        symbol_dict = self._collection_renderer.symbol_dicts_([obj.symbol], info_by_symbol)[0]
         return self._limit_length(self._to_json(symbol_dict))
 
 
@@ -182,7 +191,7 @@ class LspSymbolsOverviewRenderer(LspSymbolCollectionRenderer):
     """
 
     def render(self, obj: LspSymbolCollection) -> str:
-        symbol_dicts = self.symbol_dicts_(obj.symbols)
+        symbol_dicts = self.symbol_dicts_(obj.symbols, obj.info_by_symbol_)
         result = self._to_json(self._group(symbol_dicts))
 
         def make_kind_counts() -> str:
@@ -210,13 +219,20 @@ class LspReferenceCollection(RepresentableViaRenderer):
 
     references: list[ReferenceInLanguageServerSymbol]
 
-    def __init__(self, references: list[ReferenceInLanguageServerSymbol], renderer: "LspReferenceCollectionRenderer"):
+    def __init__(
+        self,
+        references: list[ReferenceInLanguageServerSymbol],
+        contents_around_references: list[str],
+        renderer: "LspReferenceCollectionRenderer",
+    ):
         """
         :param references: the references
+        :param contents_around_references: for each reference, the code around it (for display)
         :param renderer: the renderer to use for representing the collection
         """
         super().__init__(renderer)
         self.references = references
+        self.contents_around_references_ = contents_around_references
 
     def __len__(self) -> int:
         return len(self.references)
@@ -233,18 +249,11 @@ class LspReferenceCollectionRenderer(Renderer[LspReferenceCollection]):
         self._grouper = grouper
 
     def render(self, obj: LspReferenceCollection) -> str:
-        project = self._agent.get_active_project_or_raise()
-
         reference_dicts = []
         ref_summaries = []
-        for ref in obj.references:
+        for ref, content_around_ref in zip(obj.references, obj.contents_around_references_, strict=True):
             ref_dict = dict(ref.symbol.to_dict(kind=True, relative_path=True, depth=0, body=False, body_location=True))
-            ref_relative_path = ref.symbol.location.relative_path
-            assert ref_relative_path is not None, f"Referencing symbol {ref.symbol.name} has no relative path, this is likely a bug."
-            content_around_ref = project.retrieve_content_around_line(
-                relative_file_path=ref_relative_path, line=ref.line, context_lines_before=1, context_lines_after=1
-            )
-            ref_dict["content_around_reference"] = content_around_ref.to_display_string()
+            ref_dict["content_around_reference"] = content_around_ref
             reference_dicts.append(ref_dict)
             ref_summaries.append(
                 {
@@ -292,6 +301,10 @@ class LspDiagnosticsRenderer(Renderer[LspDiagnostics]):
         return self._limit_length(self._to_json(obj.grouped.get_dict()))
 
 
+def _is_not_low_level(symbol: LanguageServerSymbol) -> bool:
+    return not symbol.is_low_level()
+
+
 class LspApi(FacadeApi):
     FILE_LEVEL_DIAGNOSTIC_BUCKET = "<file>"
     """the name path under which diagnostics that cannot be mapped to a symbol are grouped"""
@@ -337,6 +350,26 @@ class LspApi(FacadeApi):
         return LanguageServerCodeEditor(symbol_retriever or self._create_symbol_retriever())
 
     @staticmethod
+    def _request_info(
+        symbol_retriever: LanguageServerSymbolRetriever, symbols: list[LanguageServerSymbol], output_params: SymbolOutputParams
+    ) -> dict[LanguageServerSymbol, str]:
+        """
+        :return: additional (hover-like) info per symbol, if the output parameters request it (and not the body, which
+            supersedes it); requested eagerly, such that results are self-contained
+        """
+        if output_params.include_info and not output_params.include_body:
+            return {s: info for s, info in symbol_retriever.request_info_for_symbol_batch(symbols).items() if info}
+        return {}
+
+    def _retrieve_content_around_reference(self, reference: ReferenceInLanguageServerSymbol) -> str:
+        relative_path = reference.symbol.location.relative_path
+        assert relative_path is not None, f"Referencing symbol {reference.symbol.name} has no relative path, this is likely a bug."
+        content = self._get_project().retrieve_content_around_line(
+            relative_file_path=relative_path, line=reference.line, context_lines_before=1, context_lines_after=1
+        )
+        return content.to_display_string()
+
+    @staticmethod
     def _parse_kinds(kinds: Sequence[int]) -> Sequence[SymbolKind] | None:
         return [SymbolKind(k) for k in kinds] if kinds else None
 
@@ -345,7 +378,7 @@ class LspApi(FacadeApi):
 
     # language server management
 
-    @facade_method(optional=True, corresponding_tool=RestartLanguageServerTool)
+    @facade_method(uses_project_server=True, optional=True, corresponding_tool=RestartLanguageServerTool)
     def restart_language_server(self) -> str:
         """
         Restarts the language server(s). Use this only on explicit user request or after confirmation;
@@ -358,7 +391,7 @@ class LspApi(FacadeApi):
 
     # read operations
 
-    @facade_method(corresponding_tool=GetSymbolsOverviewTool)
+    @facade_method(uses_project_server=True, corresponding_tool=GetSymbolsOverviewTool)
     def get_symbols_overview(self, relative_path: str, depth: int = -1, max_answer_chars: int = -1) -> LspSymbolCollection:
         """
         Gets an overview of the top-level symbols defined in the given file (classes, methods, fields) — its
@@ -396,14 +429,12 @@ class LspApi(FacadeApi):
             kind=True,
             relative_path=False,
             location=False,
-            child_inclusion_predicate=lambda s: not s.is_low_level(),
+            child_inclusion_predicate=_is_not_low_level,
         )
-        renderer = LspSymbolsOverviewRenderer(
-            self._agent, max_answer_chars, symbol_retriever, output_params, grouper=self.overview_grouper_
-        )
+        renderer = LspSymbolsOverviewRenderer(self._agent, max_answer_chars, output_params, grouper=self.overview_grouper_)
         return LspSymbolCollection(symbols, renderer)
 
-    @facade_method(corresponding_tool=FindSymbolTool)
+    @facade_method(uses_project_server=True, corresponding_tool=FindSymbolTool)
     def find_symbol(
         self,
         name_path_pattern: str,
@@ -481,10 +512,8 @@ class LspApi(FacadeApi):
             children_name_path=False,
             include_info=include_info,
         )
-        renderer = LspSymbolCollectionRenderer(
-            self._agent, max_answer_chars, symbol_retriever, output_params, grouper=self.find_symbol_dict_grouper_
-        )
-        symbol_collection = LspSymbolCollection(symbols, renderer)
+        renderer = LspSymbolCollectionRenderer(self._agent, max_answer_chars, output_params, grouper=self.find_symbol_dict_grouper_)
+        symbol_collection = LspSymbolCollection(symbols, renderer, self._request_info(symbol_retriever, symbols, output_params))
 
         # check for max_matches limit exceeded
         n_matches = len(symbols)
@@ -495,7 +524,7 @@ class LspApi(FacadeApi):
 
         return symbol_collection
 
-    @facade_method(corresponding_tool=FindReferencingSymbolsTool)
+    @facade_method(uses_project_server=True, corresponding_tool=FindReferencingSymbolsTool)
     def find_referencing_symbols(
         self,
         name_path: str,
@@ -526,9 +555,11 @@ class LspApi(FacadeApi):
             include_kinds=self._parse_kinds(include_kinds),
             exclude_kinds=self._parse_kinds(exclude_kinds),
         )
-        return LspReferenceCollection(references, LspReferenceCollectionRenderer(self._agent, max_answer_chars, self.references_grouper_))
+        contents_around_references = [self._retrieve_content_around_reference(ref) for ref in references]
+        renderer = LspReferenceCollectionRenderer(self._agent, max_answer_chars, self.references_grouper_)
+        return LspReferenceCollection(references, contents_around_references, renderer)
 
-    @facade_method(corresponding_tool=FindImplementationsTool)
+    @facade_method(uses_project_server=True, corresponding_tool=FindImplementationsTool)
     def find_implementations(
         self,
         name_path: str,
@@ -561,9 +592,10 @@ class LspApi(FacadeApi):
             exclude_kinds=self._parse_kinds(exclude_kinds),
         )
         output_params = SymbolOutputParams(kind=True, relative_path=True, body_location=True, include_info=include_info)
-        return LspSymbolCollection(symbols, LspSymbolCollectionRenderer(self._agent, max_answer_chars, symbol_retriever, output_params))
+        renderer = LspSymbolCollectionRenderer(self._agent, max_answer_chars, output_params)
+        return LspSymbolCollection(symbols, renderer, self._request_info(symbol_retriever, symbols, output_params))
 
-    @facade_method(corresponding_tool=FindDeclarationTool)
+    @facade_method(uses_project_server=True, corresponding_tool=FindDeclarationTool)
     def find_declaration(
         self,
         relative_path: str,
@@ -615,10 +647,11 @@ class LspApi(FacadeApi):
         output_params = SymbolOutputParams(
             kind=True, relative_path=True, body_location=True, include_body=include_body, include_info=include_info
         )
-        collection_renderer = LspSymbolCollectionRenderer(self._agent, -1, symbol_retriever, output_params)
-        return LspSymbol(defining_symbol, LspSymbolRenderer(self._agent, -1, collection_renderer))
+        collection_renderer = LspSymbolCollectionRenderer(self._agent, -1, output_params)
+        info = self._request_info(symbol_retriever, [defining_symbol], output_params).get(defining_symbol)
+        return LspSymbol(defining_symbol, LspSymbolRenderer(self._agent, -1, collection_renderer), info)
 
-    @facade_method(corresponding_tool=GetDiagnosticsForFileTool)
+    @facade_method(uses_project_server=True, corresponding_tool=GetDiagnosticsForFileTool)
     def get_diagnostics_for_file(
         self, relative_path: str, start_line: int = 0, end_line: int = -1, min_severity: int = 4, max_answer_chars: int = -1
     ) -> LspDiagnostics:
@@ -651,7 +684,7 @@ class LspApi(FacadeApi):
 
         return self._create_diagnostics(grouped_diagnostics, max_answer_chars)
 
-    @facade_method(optional=True, corresponding_tool=GetDiagnosticsForSymbolTool)
+    @facade_method(uses_project_server=True, optional=True, corresponding_tool=GetDiagnosticsForSymbolTool)
     def get_diagnostics_for_symbol(
         self,
         name_path: str,
@@ -694,7 +727,7 @@ class LspApi(FacadeApi):
 
     # edit operations
 
-    @facade_method(can_edit=True, corresponding_tool=RenameSymbolTool)
+    @facade_method(uses_project_server=True, can_edit=True, corresponding_tool=RenameSymbolTool)
     def rename_symbol(self, name_path: str, relative_path: str, new_name: str) -> str:
         """
         Renames the symbol with the given `name_path` to `new_name` throughout the entire codebase.
@@ -709,7 +742,7 @@ class LspApi(FacadeApi):
         self._get_project().ls_sync_file_system_changes()
         return self._create_ls_code_editor().rename_symbol(name_path, relative_path=relative_path, new_name=new_name)
 
-    @facade_method(can_edit=True, corresponding_tool=SafeDeleteSymbol)
+    @facade_method(uses_project_server=True, can_edit=True, corresponding_tool=SafeDeleteSymbol)
     def safe_delete_symbol(self, name_path_pattern: str, relative_path: str) -> str:
         """
         Deletes the symbol if it is safe to do so (i.e., if there are no references to it)

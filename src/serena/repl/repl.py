@@ -11,6 +11,7 @@ import traceback
 from typing import Any
 
 from ..session import SerenaSession
+from .external_project import ExternalProjectContext
 from .facade import ApiScope, Facade, FacadeMethod, ReferencedType
 from .representable import Representable
 
@@ -43,6 +44,18 @@ class SerenaReplEntrypoint:
         :return: the list of all enabled methods across all facades
         """
         return [method for facade in self._facades.values() for method in facade.get_enabled_methods()]
+
+    def set_external_project_(self, external_project: "ExternalProjectContext | None") -> None:
+        """
+        :param external_project: the context of the external project being queried by the currently executing code
+            (None if the active project is used); propagated to all facades
+        """
+        for facade in self._facades.values():
+            facade.set_external_project_(external_project)
+
+    def get_external_project_(self) -> "ExternalProjectContext | None":
+        external_projects = {facade.get_external_project_() for facade in self._facades.values()}
+        return next(iter(external_projects)) if external_projects else None
 
     def set_current_session_(self, session: SerenaSession | None, namespace: dict[str, Any] | None) -> None:
         """
@@ -99,6 +112,13 @@ class SerenaReplEntrypoint:
         if name not in self._facades:
             raise ValueError(f"Unknown facade '{name}'. Available facades: {list(self._facades)}")
         return self._facades[name]
+
+    def get_facade_(self, name: str) -> Facade:
+        """
+        :param name: the facade's name
+        :return: the facade
+        """
+        return self._get_facade(name)
 
     def overview(self) -> str:
         """

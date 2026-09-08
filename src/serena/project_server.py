@@ -2,11 +2,12 @@
 
 import json
 import logging
+import pickle
 import threading
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import requests as requests_lib
-from flask import Flask, request
+from flask import Flask, Response, request
 from pydantic import BaseModel
 from sensai.util.logging import LogTime
 
@@ -31,6 +32,19 @@ class QueryProjectRequest(BaseModel):
     project_name: str
     tool_name: str
     tool_params_json: str
+
+
+class CallFacadeMethodRequest(BaseModel):
+    """
+    Request model for the /call_facade_method endpoint: the execution of a (read-only) REPL facade method
+    in the context of a project.
+    """
+
+    project_name: str
+    facade_name: str
+    method_name: str
+    args: list[Any]
+    kwargs: dict[str, Any]
 
 
 class ProjectServer:
@@ -86,6 +100,18 @@ class ProjectServer:
             query_request = QueryProjectRequest.model_validate(request.get_json())
             return self._query_project(query_request)
 
+        @self._app.route("/call_facade_method", methods=["POST"])
+        def call_facade_method() -> Response:
+            call_request = CallFacadeMethodRequest.model_validate(request.get_json())
+            try:
+                result = self._call_facade_method(call_request)
+            except Exception as e:
+                # report the error to the client (which raises it in the REPL) instead of a generic server error page
+                log.warning("Facade method call failed: %s", e)
+                return Response(f"{type(e).__name__}: {e}", status=400, mimetype="text/plain")
+            # NOTE: the result is pickled; the client (a Serena instance on the same machine) unpickles it
+            return Response(pickle.dumps(result), mimetype="application/octet-stream")
+
     def _get_project(self, project_root_or_name: str) -> "Project":
         """Gets the project with the given name, loading it if necessary."""
         serena_config = self._agent.serena_config
@@ -136,6 +162,20 @@ class ProjectServer:
             params = json.loads(req.tool_params_json)
             return tool.apply_ex(**params)
 
+    def _call_facade_method(self, req: CallFacadeMethodRequest) -> Any:
+        """
+        Handles a /call_facade_method request by executing the facade method on the agent's REPL facades in the
+        context of the specified project (see `_query_project` regarding the lock).
+        Only methods which use the project server and do not edit are admissible.
+        """
+        project = self._get_project(req.project_name)
+        with self._active_project_lock, self._agent.active_project_context(project):
+            facade = self._agent.get_repl().entrypoint.get_facade_(req.facade_name)
+            method = facade.get_method(req.method_name)
+            if not method.enabled or method.info.can_edit or not method.info.uses_project_server:
+                raise ValueError(f"Method '{req.facade_name}.{req.method_name}' cannot be executed via the project server")
+            return self._agent.execute_task(lambda: method(*req.args, **req.kwargs))
+
     def run(self) -> None:
         """
         Run the server on the given host and port.
@@ -158,12 +198,14 @@ class ProjectServerClient:
     :class:`ConnectionError` is raised.
     """
 
-    def __init__(self, host: str = "127.0.0.1", port: int = ProjectServer.PORT, timeout: int = 300) -> None:
+    def __init__(self, host: str = "127.0.0.1", port: int | None = None, timeout: int = 300) -> None:
         """
         :param host: the host address of the project server.
-        :param port: the port of the project server.
+        :param port: the port of the project server; None for the default port.
         :raises ConnectionError: if the project server is not reachable.
         """
+        if port is None:
+            port = ProjectServer.PORT
         self._base_url = f"http://{host}:{port}"
         self._timeout = timeout
 
@@ -197,3 +239,22 @@ class ProjectServerClient:
         response = requests_lib.post(f"{self._base_url}/query_project", json=payload, timeout=self._timeout)
         response.raise_for_status()
         return response.text
+
+    def call_facade_method(self, project_name: str, facade_name: str, method_name: str, args: list[Any], kwargs: dict[str, Any]) -> Any:
+        """
+        Executes a (read-only) REPL facade method in the context of a project.
+
+        :param project_name: the name of the project to query
+        :param facade_name: the facade's name
+        :param method_name: the method's name
+        :param args: the positional arguments (JSON-serialisable)
+        :param kwargs: the keyword arguments (JSON-serialisable)
+        :return: the method's result, as returned by the server (unpickled; the server is a trusted local process)
+        """
+        payload = CallFacadeMethodRequest(
+            project_name=project_name, facade_name=facade_name, method_name=method_name, args=args, kwargs=kwargs
+        ).model_dump()
+        response = requests_lib.post(f"{self._base_url}/call_facade_method", json=payload, timeout=self._timeout)
+        if not response.ok:
+            raise ValueError(f"Project server error ({response.status_code}): {response.text[:2000]}")
+        return pickle.loads(response.content)

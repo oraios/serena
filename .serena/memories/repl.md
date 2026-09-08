@@ -90,6 +90,14 @@ expression is the result. No `return` (a top-level `return` yields a SyntaxError
 - Python code can always modify the system; the REPL tool is inherently fully privileged, regardless of
   facade scope or the project's `read_only` setting (which only makes Serena's own API refuse edits).
   A "read-only REPL" is not feasible and must not be promised.
+- External projects (`s.ext`): `list_projects()`, `project_context(name)` (a `with`-able context; not nestable).
+  Within it, the agent's active project is temporarily switched (`active_project_context`) and the facades are
+  read-only (`can_edit` methods raise). Methods marked `@facade_method(uses_project_server=True)` (all of `lsp`)
+  are executed in the project server via `/call_facade_method` ({facade, method, args, kwargs} as JSON, result
+  pickled; the server is a trusted local process) when the LSP backend is active; with JetBrains they run locally
+  (the IDE serves all projects). Result objects must be self-contained/picklable: renderers hold no agent (only the
+  default length limit), LSP results carry eagerly retrieved info and reference contexts, no lambdas in output
+  params. Replaces the query_project/list_queryable_projects tools in the REPL.
 - Project activation (activate_project) and initial_instructions stay tool-only (activation rebuilds the REPL);
   Serena's configuration/session state (config overview, dashboard; later e.g. modes) lives in the `cfg` facade.
   Computed conditions (read-only project, dashboard not openable) are applied to the API scope in

@@ -19,7 +19,12 @@ T = TypeVar("T")
 
 class Renderer(Generic[T], ABC):
     def __init__(self, agent: "SerenaAgent", max_answer_chars: int = -1):
-        self._agent = agent
+        """
+        :param agent: the agent, from which the configured default length limit is taken (the agent itself is not
+            retained, such that results remain picklable)
+        :param max_answer_chars: the maximum number of characters; -1 for the configured default
+        """
+        self._default_max_answer_chars = agent.serena_config.default_max_tool_answer_chars
         self._max_answer_chars = max_answer_chars
 
     def _limit_length(
@@ -43,7 +48,7 @@ class Renderer(Generic[T], ABC):
         """
         :return: the effective maximum number of characters, resolving the default from the configuration
         """
-        return self._agent.serena_config.default_max_tool_answer_chars if self._max_answer_chars == -1 else self._max_answer_chars
+        return self._default_max_answer_chars if self._max_answer_chars == -1 else self._max_answer_chars
 
     def _to_json(self, x: Any) -> str:
         return TextOutputUtils.to_json(x)

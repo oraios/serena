@@ -26,6 +26,8 @@ if TYPE_CHECKING:
     from serena.code_editor import CodeEditor
     from serena.tools import Tool
 
+    from .external_project import ExternalProjectContext
+
 log = logging.getLogger(__name__)
 TCallable = TypeVar("TCallable", bound=Callable[..., Any])
 
@@ -106,7 +108,12 @@ class ReferencedType:
     described even if undocumented, as the listing is the documentation decision.
     """
 
-    _CAPABILITIES: typing.ClassVar[dict[str, str]] = {"__len__": "len()", "__iter__": "iteration", "__getitem__": "indexing"}
+    _CAPABILITIES: typing.ClassVar[dict[str, str]] = {
+        "__len__": "len()",
+        "__iter__": "iteration",
+        "__getitem__": "indexing",
+        "__enter__": "use in a `with` statement",
+    }
 
     @property
     def name(self) -> str:
@@ -243,6 +250,11 @@ class FacadeMethodInfo:
     whether the method is rarely needed, such that the facade's description only summarises it (first line of its
     documentation and a pointer to its full documentation) in order to keep the description compact
     """
+    uses_project_server: bool = False
+    """
+    whether the method requires the project's language servers and must therefore be executed in the project server
+    when an external project is queried (see `ExternalProjectContext`)
+    """
     corresponding_tool: "type[Tool] | None" = None
     """the classic tool offering the same functionality, if any"""
 
@@ -262,6 +274,7 @@ def facade_method(
     beta: bool = False,
     can_edit: bool = False,
     niche: bool = False,
+    uses_project_server: bool = False,
     corresponding_tool: "type[Tool] | None" = None,
 ) -> Callable[[TCallable], TCallable]:
     """
@@ -272,6 +285,7 @@ def facade_method(
     :param beta: whether the method is in beta
     :param can_edit: whether the method can modify the codebase
     :param niche: whether the method is rarely needed (its documentation is then only summarised in the facade's description)
+    :param uses_project_server: whether the method must be executed in the project server when an external project is queried
     :param corresponding_tool: the classic tool offering the same functionality, if any
     :return: the decorator
     """
@@ -283,6 +297,7 @@ def facade_method(
             beta=beta,
             can_edit=can_edit,
             niche=niche,
+            uses_project_server=uses_project_server,
             corresponding_tool=corresponding_tool,
         )
         setattr(method, _FACADE_METHOD_INFO_ATTR, info)
@@ -391,6 +406,12 @@ class FacadeMethod:
         return f"{self.facade_name}.{self.name}"
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        external_project = self.parent.get_external_project_()
+        if external_project is not None:
+            if self.info.can_edit:
+                raise ValueError(f"{self.qualified_name} cannot be called while an external project is being queried (read-only access)")
+            if external_project.executes_remotely(self.info.uses_project_server):
+                return external_project.call(self.facade_name, self.name, args, kwargs)
         return self._implementation(*args, **kwargs)
 
     def get_implementation_(self) -> Callable[..., Any]:
@@ -548,6 +569,16 @@ class Facade:
         object.__setattr__(self, "_description", description)
         object.__setattr__(self, "_methods", {})
         object.__setattr__(self, "_types", {t.name: t for t in types})
+        object.__setattr__(self, "_external_project", None)
+
+    def set_external_project_(self, external_project: "ExternalProjectContext | None") -> None:
+        """
+        :param external_project: the context of the external project being queried (None if the active project is used)
+        """
+        object.__setattr__(self, "_external_project", external_project)
+
+    def get_external_project_(self) -> "ExternalProjectContext | None":
+        return self._external_project
 
     def _add_method(self, method: FacadeMethod) -> None:
         assert method.parent is self

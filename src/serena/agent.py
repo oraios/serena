@@ -51,6 +51,7 @@ from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.repl.api.cfg_api import ConfigApi
 from serena.repl.api.edit_api import EditApi
+from serena.repl.api.ext_api import ExternalProjectsApi
 from serena.repl.api.fs_api import FsApi
 from serena.repl.api.jb_api import JetBrainsApi
 from serena.repl.api.lsp_api import LspApi
@@ -1326,6 +1327,7 @@ class SerenaAgent:
                 Facade.from_api(EditApi(self), api_scope),
                 Facade.from_api(MemoryApi(self), api_scope),
                 Facade.from_api(ShellApi(self), api_scope),
+                Facade.from_api(ExternalProjectsApi(self), api_scope),
             ]
             if self._language_backend.is_lsp():
                 facades.append(Facade.from_api(LspApi(self), api_scope))
