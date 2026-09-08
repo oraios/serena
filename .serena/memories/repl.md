@@ -1,8 +1,9 @@
 # REPL (`serena.repl`)
 
 Alternative interaction paradigm: one tool (`serena_repl`) executes Python code against entrypoint `s`,
-whose attributes are facades (`s.lsp`, `s.edit`, `s.fs`, `s.mem`, `s.shell`, `s.jb`).
-Code runs as a function body (`return` defines the result); a single expression is evaluated directly.
+whose attributes are facades (`s.lsp`, `s.edit`, `s.fs`, `s.mem`, `s.shell`, `s.jb`, `s.cfg`).
+Code runs like a notebook cell (module-level exec in the session namespace); the value of a trailing
+expression is the result. No `return` (a top-level `return` yields a SyntaxError with a hint).
 
 ## Structure
 
@@ -55,11 +56,10 @@ Code runs as a function body (`return` defines the result); a single expression 
   a `SerenaSession` and states its id; `serena_repl` takes a required `session_id`. `SessionRegistry` creates
   unknown ids on demand (benign: at worst docs are repeated) and evicts LRU and idle (TTL) sessions.
   Sessions survive REPL rebuilds.
-- Persistence (notebook semantics): `SerenaSession.repl_namespace` is the globals of the session's executions;
-  names bound at the top level of submitted code (assignments, def/class, imports, loop/with targets, walrus)
-  persist across calls (an AST pass wraps the code in a function and declares those names `global`, preserving
-  line numbers). `s` is re-bound in the namespace before every execution, so persisted functions always use the
-  current entrypoint (no closure over `s`). `s.vars()`/`s.clear()` list/remove persisted items. Data is tied to
+- Persistence (notebook semantics): `SerenaSession.repl_namespace` is the globals of the session's executions,
+  which run at module level (statements exec'd, a trailing expression eval'd; line numbers preserved), so all
+  top-level bindings persist across calls. `s` is re-bound in the namespace before every execution, so persisted
+  functions always use the current entrypoint. `s.vars()`/`s.clear()` list/remove persisted items. Data is tied to
   the session's lifetime (not cleared on REPL rebuild); stored facades/project objects may go stale.
   Deferred idea if memory becomes an issue: hybrid — implicit items expire after N turns, explicit store
   (e.g. `s.d`) for indefinite retention.

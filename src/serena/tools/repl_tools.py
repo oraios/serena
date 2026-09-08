@@ -27,12 +27,11 @@ class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
         `s.info("<facade>")` documents the facade's operations only, not their result types. Result types are given
         in the method listing below (`method -> Type`); request their documentation via `s.info("<Type>")`, which
         includes the types they contain, ONLY if you intend to process results in code (filter, aggregate, chain
-        calls). If you simply want the result, return it directly: returned objects are rendered for you.
+        calls). If you simply want the result, make it the last expression: results are rendered for you.
 
-        The code is executed as the body of a function, so use `return` to define the result;
-        a single expression is evaluated and its value returned directly.
-        Returned objects are rendered in a form suitable for you; lists are rendered element-wise.
-        Returned strings are passed through unchanged.
+        The code is executed like a notebook cell: if its last statement is an expression, the expression's value is
+        the result (do not use `return`). Results are rendered in a form suitable for you; lists are rendered
+        element-wise, strings are passed through unchanged.
 
         Output size: methods with a `max_answer_chars` parameter limit the size of the rendered result (-1 uses the
         configured default). If the limit is exceeded, a shortened result (or no content) is rendered instead;

@@ -200,17 +200,15 @@ class SerenaRepl:
     Executes Python code submitted by an LLM, binding the configured facades to the entrypoint object `s`
     and rendering the result of the execution as a string for the LLM.
 
-    The code is executed as the body of a function, such that the `return` statement defines the result;
-    code consisting of a single expression is evaluated and its value is the result.
-    Names assigned at the top level of the code (variables, functions, classes, imports) persist in the session's
-    namespace across executions (like the cells of a notebook), which serves as the globals of the executions.
+    The code is executed like the cell of a notebook: it is executed at module level in the session's namespace,
+    such that the names it binds (variables, functions, classes, imports) persist across executions, and if its last
+    statement is an expression, the expression's value is the result of the execution.
     The entrypoint `s` is (re)bound in the namespace before every execution, such that persisted functions always
     access the current entrypoint.
     """
 
     SOURCE_NAME = "<serena_repl>"
     ENTRYPOINT_NAME = "s"
-    _FUNCTION_NAME = "__serena_repl_fn__"
     _PERSISTED_NAME_PATTERN = re.compile(r"^(?!__)[A-Za-z_]\w*$")
 
     @classmethod
@@ -272,92 +270,26 @@ class SerenaRepl:
 
     def _run(self, code: str, namespace: dict[str, Any]) -> Any:
         """
-        Runs the given code in the given namespace (as globals) with the entrypoint bound, either as a single expression
-        or as the body of a function whose return value is the result and whose top-level assignments are made global
-        (such that they persist in the namespace).
+        Runs the given code at module level in the given namespace (as globals) with the entrypoint bound.
+
+        :return: the value of the code's last statement if it is an expression, None otherwise
         """
         namespace[self.ENTRYPOINT_NAME] = self._entrypoint
-
-        # try to evaluate the code as a single expression
-        try:
-            compiled = compile(code, self.SOURCE_NAME, "eval")
-        except SyntaxError:
-            compiled = None
-        if compiled is not None:
-            return eval(compiled, namespace)
-
-        # otherwise execute the code as the body of a function, declaring the names assigned at the top level as global.
-        # The function is constructed at the AST level, such that the line numbers of the code are preserved.
         module = ast.parse(code, self.SOURCE_NAME)
-        body: list[ast.stmt] = list(module.body)
-        assigned_names = self._collect_top_level_assigned_names(body)
-        if assigned_names:
-            body.insert(0, ast.Global(names=sorted(assigned_names)))
-        function = ast.FunctionDef(
-            name=self._FUNCTION_NAME,
-            args=ast.arguments(posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[]),
-            body=body,
-            decorator_list=[],
-            returns=None,
-        )
-        wrapper = ast.fix_missing_locations(ast.Module(body=[function], type_ignores=[]))
-        exec(compile(wrapper, self.SOURCE_NAME, "exec"), namespace)
-        try:
-            return namespace[self._FUNCTION_NAME]()
-        finally:
-            del namespace[self._FUNCTION_NAME]
 
-    @classmethod
-    def _collect_top_level_assigned_names(cls, statements: list[ast.stmt]) -> set[str]:
-        """
-        :param statements: the top-level statements of the code
-        :return: the names bound by the statements (assignment targets, function/class definitions, imports,
-            loop/with targets, deletions and walrus assignments outside of nested scopes)
-        """
-        names: set[str] = set()
+        # separate a trailing expression, whose value is the result
+        statements = module.body
+        trailing_expression: ast.expr | None = None
+        if statements and isinstance(statements[-1], ast.Expr):
+            trailing_expression = statements[-1].value
+            statements = statements[:-1]
 
-        def add_target(target: ast.expr) -> None:
-            if isinstance(target, ast.Name):
-                names.add(target.id)
-            elif isinstance(target, ast.Tuple | ast.List):
-                for element in target.elts:
-                    add_target(element)
-            elif isinstance(target, ast.Starred):
-                add_target(target.value)
-
-        def add_walrus_targets(node: ast.AST) -> None:
-            # walrus assignments bind in the enclosing scope, unless within a nested scope
-            for child in ast.iter_child_nodes(node):
-                if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda):
-                    continue
-                if isinstance(child, ast.NamedExpr):
-                    add_target(child.target)
-                add_walrus_targets(child)
-
-        for statement in statements:
-            match statement:
-                case ast.Assign(targets=targets):
-                    for target in targets:
-                        add_target(target)
-                case ast.AnnAssign(target=target) | ast.AugAssign(target=target):
-                    add_target(target)
-                case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name) | ast.ClassDef(name=name):
-                    names.add(name)
-                case ast.Import(names=aliases) | ast.ImportFrom(names=aliases):
-                    for alias in aliases:
-                        if alias.name != "*":
-                            names.add(alias.asname or alias.name.split(".")[0])
-                case ast.For(target=target) | ast.AsyncFor(target=target):
-                    add_target(target)
-                case ast.With(items=items) | ast.AsyncWith(items=items):
-                    for item in items:
-                        if item.optional_vars is not None:
-                            add_target(item.optional_vars)
-                case ast.Delete(targets=targets):
-                    for target in targets:
-                        add_target(target)
-            add_walrus_targets(statement)
-        return names
+        # execute the statements, then evaluate the trailing expression (both retain the original line numbers)
+        if statements:
+            exec(compile(ast.Module(body=statements, type_ignores=[]), self.SOURCE_NAME, "exec"), namespace)
+        if trailing_expression is not None:
+            return eval(compile(ast.Expression(body=trailing_expression), self.SOURCE_NAME, "eval"), namespace)
+        return None
 
     def _format_error(self, e: Exception, code: str) -> str:
         """
@@ -373,7 +305,10 @@ class SerenaRepl:
 
         # report syntax errors in the executed code (which carry no traceback frames of their own)
         if isinstance(e, SyntaxError) and e.filename == self.SOURCE_NAME and e.lineno is not None:
-            return f"SyntaxError: {e.msg}\n" + location_line(e.lineno)
+            message = f"SyntaxError: {e.msg}\n" + location_line(e.lineno)
+            if "return" in (e.msg or "") and "outside function" in e.msg:
+                message += "\nNote: the code is executed like a notebook cell; the value of the last expression is the result (do not use `return`)."
+            return message
 
         # report runtime errors, locating them within the executed code
         location_lines = []

@@ -25,14 +25,21 @@ class TestReplExecution:
     def repl(self) -> SerenaRepl:
         return SerenaRepl([Facade.from_api(LspApi(MagicMock()), ApiScope())], ApiScope())
 
-    def test_return_statement_defines_result(self, repl: SerenaRepl) -> None:
-        assert repl.execute("x = 20\ny = 22\nreturn x + y") == "42"
+    def test_last_expression_defines_result(self, repl: SerenaRepl) -> None:
+        assert repl.execute("x = 20\ny = 22\nx + y") == "42"
+        assert repl.execute("x = 20\ny = 22") == "None"  # no trailing expression
+        assert repl.execute("") == "None"
+
+    def test_return_yields_a_hint(self, repl: SerenaRepl) -> None:
+        result = repl.execute("x = 1\nreturn x")
+        assert result.startswith("SyntaxError") and "line 2" in result
+        assert "last expression is the result" in result
 
     def test_single_expression_is_evaluated(self, repl: SerenaRepl) -> None:
         assert repl.execute("1 + 2") == "3"
 
     def test_list_is_rendered_element_wise(self, repl: SerenaRepl) -> None:
-        assert repl.execute('return ["a", "b"]') == "a\nb"
+        assert repl.execute('["a", "b"]') == "a\nb"
 
     def test_error_reports_type_message_and_line(self, repl: SerenaRepl) -> None:
         result = repl.execute("x = 1\nraise ValueError('boom')")
@@ -47,7 +54,7 @@ class TestReplExecution:
     def test_top_level_names_persist_within_session(self, repl: SerenaRepl) -> None:
         session = SerenaSession("a")
         repl.execute("x = 20\ndef double(v):\n    return 2 * v\nfor i in range(3):\n    pass\nimport os as os_module", session)
-        assert repl.execute("return double(x) + i", session) == "42"
+        assert repl.execute("double(x) + i", session) == "42"
         assert repl.execute("os_module.sep is not None", session) == "True"
 
         # local variables of nested scopes do not persist; persisted items can be listed and cleared
@@ -56,23 +63,23 @@ class TestReplExecution:
         assert "x: int = 20" in listing and "double: function" in listing
         assert repl.execute("s.clear()", session) == "Removed 4 persisted item(s)."
         assert repl.execute("s.vars()", session) == "No persisted variables."
-        assert "NameError" in repl.execute("return x", session)
+        assert "NameError" in repl.execute("x", session)
 
     def test_sessions_have_separate_namespaces(self, repl: SerenaRepl) -> None:
         session_a = SerenaSession("a")
         repl.execute("x = 1", session_a)
-        assert "NameError" in repl.execute("return x", SerenaSession("b"))
-        assert repl.execute("return x", session_a) == "1"
+        assert "NameError" in repl.execute("x", SerenaSession("b"))
+        assert repl.execute("x", session_a) == "1"
         # ... and execution without a session persists nothing
         repl.execute("y = 1")
-        assert "NameError" in repl.execute("return y")
+        assert "NameError" in repl.execute("y")
 
     def test_persisted_functions_use_the_current_entrypoint(self) -> None:
         # a function defined against one REPL instance uses the entrypoint of the REPL that later calls it
         session = SerenaSession("a")
         SerenaRepl([Facade.from_api(LspApi(MagicMock()), ApiScope())], ApiScope()).execute("def facades():\n    return s.info()", session)
         rebuilt_repl = SerenaRepl([Facade.from_api(EditApi(MagicMock()), ApiScope())], ApiScope())
-        overview = rebuilt_repl.execute("return facades()", session)
+        overview = rebuilt_repl.execute("facades()", session)
         assert "s.edit" in overview and "s.lsp" not in overview
 
     def test_facade_discovery(self, repl: SerenaRepl) -> None:
@@ -298,13 +305,13 @@ class TestLspFacade:
             session_id = agent.create_session().session_id
 
             # a returned collection is rendered, identifying the symbol and its file
-            rendered = tool.apply(session_id, 'return s.lsp.find_symbol("create_user")')
+            rendered = tool.apply(session_id, 's.lsp.find_symbol("create_user")')
             assert "create_user" in rendered
             assert "services.py" in rendered
 
             # the underlying symbols are accessible from code, e.g. to retrieve a body without rendering the collection
             body = tool.apply(
                 session_id,
-                f'result = s.lsp.find_symbol("create_user", relative_path={self._SERVICES_FILE!r})\nreturn result.symbols[0].body',
+                f'result = s.lsp.find_symbol("create_user", relative_path={self._SERVICES_FILE!r})\nresult.symbols[0].body',
             )
             assert body.startswith("def create_user")
