@@ -34,6 +34,11 @@ class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
         Returned objects are rendered in a form suitable for you; lists are rendered element-wise.
         Returned strings are passed through unchanged.
 
+        Output size: methods with a `max_answer_chars` parameter limit the size of the rendered result (-1 uses the
+        configured default). If the limit is exceeded, a shortened result (or no content) is rendered instead;
+        adjust the limit only if there is no other way to obtain the content required for the task (e.g. by
+        narrowing the query or processing the result in code and returning only what is needed).
+
         Persistence: variables, functions and classes defined at the top level of your code persist across calls
         within your session (like the cells of a notebook), so you can reuse results and define helper functions once.
         `s.vars()` lists the persisted items, `s.clear()` removes them. Do not store facades (`s.<facade>`) in

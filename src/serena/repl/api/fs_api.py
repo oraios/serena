@@ -187,8 +187,6 @@ class FsApi(FacadeApi):
         :param relative_path: the relative path to the file to read
         :param start_line: the 0-based index of the first line to be retrieved, negative values count from the end of the file.
         :param end_line: the 0-based index of the last line to be retrieved (inclusive). If None, read until the end of the file.
-        :param max_answer_chars: if the rendered content is longer than this number of characters, no content is rendered;
-            -1 for the configured default. Don't adjust unless there is really no other way to get the content required for the task.
         :return: the content
         """
         project = self._get_project()
@@ -237,8 +235,6 @@ class FsApi(FacadeApi):
         :param relative_path: the relative path to the directory to list; pass "." to scan the project root
         :param recursive: whether to scan subdirectories recursively
         :param skip_ignored_files: whether to skip files and directories that are ignored
-        :param max_answer_chars: if the rendered listing is longer than this number of characters, no content is rendered;
-            -1 for the configured default. Don't adjust unless there is really no other way to get the content required for the task.
         :return: the listing
         """
         project = self._get_project()
@@ -313,8 +309,6 @@ class FsApi(FacadeApi):
             (useful when looking for class/method definitions); otherwise also search non-code files.
         :param skip_ignored_files: whether to skip ignored sub-paths (default: True)
         :param multiline: whether to apply multi-line matching (default: True), enabling the flags re.DOTALL and re.MULTILINE
-        :param max_answer_chars: if the rendered output exceeds this many characters, a progressively shortened summary is
-            rendered instead. -1 for the configured default.
         :return: the matches, rendered as a mapping from file paths to matched consecutive lines (0-based line numbers)
         """
         project = self._get_project()

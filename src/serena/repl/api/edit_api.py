@@ -169,8 +169,6 @@ class EditApi(FacadeApi):
         :param expected_count: optional guard for calls without occurrence_ids: the number of
             occurrences you expect to be replaced. If the actual count differs, nothing is changed and
             an error containing the prospective changes is raised. -1 disables the guard.
-        :param max_answer_chars: if the rendered output exceeds this many characters, a shortened version is
-            used. -1 uses the configured default.
         :return: in a dry run, the prospective changes (`ReplacementPreview`); otherwise a summary of the applied replacements
         """
         replacement = MultiFileReplacement(

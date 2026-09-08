@@ -70,8 +70,6 @@ class ShellApi(FacadeApi):
         :param cwd: the working directory to execute the command in (absolute, or relative to the project root).
             If None, the project root will be used.
         :param capture_stderr: whether to capture and return stderr output
-        :param max_answer_chars: if the rendered output is longer than this number of characters, no content is rendered;
-            -1 for the configured default. Don't adjust unless there is no other way to get the content required for the task.
         :return: the output (object with properties stdout, stderr, return_code and cwd)
         """
         project_root = self._get_project().project_root

@@ -368,7 +368,6 @@ class LspApi(FacadeApi):
         :param relative_path: the relative path to the file to get the overview of
         :param depth: depth up to which descendants shall be retrieved.
             Default (-1) results in a language specific choice: 1 for java and kotlin and 0 for other languages
-        :param max_answer_chars: max result length; -1 for default. If exceeded, a shortened result is returned.
         :return: the top-level symbols of the file
         """
         # Note: file system sync not required (relevant file is opened in the language server explicitly)
@@ -454,7 +453,6 @@ class LspApi(FacadeApi):
             (i.e. the name of the symbol, e.g. "foo" in "Class/foo" or "my_method" in "my_method").
         :param max_matches: Maximum number of permitted matches. If exceeded, an error containing a shortened result is raised,
              which allows refining the search. -1 (default) means no limit. Set to 1 to search for a unique symbol.
-        :param max_answer_chars: max result length; -1 for default
         :return: the symbols (with locations) matching the name path pattern
         """
         # Note: file system sync not required; the symbol finder opens all relevant source files explicitly in the case of changes
@@ -514,7 +512,6 @@ class LspApi(FacadeApi):
         :param relative_path: the relative path to the file containing the symbol for which to find references.
         :param include_kinds: (optional) limits results to the given LSP symbol kinds (integers, i.e. values of `SymbolKind`)
         :param exclude_kinds: optional list of LSP symbol kinds (integers, i.e. values of `SymbolKind`) to exclude.
-        :param max_answer_chars: max result length; -1 for default
         :return: the references to the symbol
         """
         # file system sync needed for case where symbol finder does not perform a global search, updating everything
@@ -551,7 +548,6 @@ class LspApi(FacadeApi):
             about the implementing symbols.
         :param include_kinds: (optional) limits results to the given LSP symbol kinds (integers, i.e. values of `SymbolKind`)
         :param exclude_kinds: (optional) list of LSP symbol kinds (integers, i.e. values of `SymbolKind`) to exclude.
-        :param max_answer_chars: max result length; -1 for default
         :return: the symbols implementing the given symbol
         """
         self._get_project().ls_sync_file_system_changes()
@@ -635,7 +631,6 @@ class LspApi(FacadeApi):
         :param end_line: the last 0-based line to include. Defaults to -1, which means until the end of the file.
         :param min_severity: minimum LSP severity to include, where 1=Error, 2=Warning, 3=Information, 4=Hint.
             Diagnostics with lower-or-equal numeric severity are returned.
-        :param max_answer_chars: max result length; -1 for default
         :return: the grouped diagnostics for the requested file.
         """
         self._get_project().ls_sync_file_system_changes()
@@ -675,7 +670,6 @@ class LspApi(FacadeApi):
         :param check_symbol_references: whether to additionally collect diagnostics for symbols that reference the symbol.
         :param min_severity: minimum LSP severity to include, where 1=Error, 2=Warning, 3=Information, 4=Hint.
             Diagnostics with lower-or-equal numeric severity are returned.
-        :param max_answer_chars: max result length; -1 for default
         :return: the grouped diagnostics for the requested symbol and, optionally, its referencing symbols.
         """
         self._get_project().ls_sync_file_system_changes()

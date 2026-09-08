@@ -245,7 +245,6 @@ class JetBrainsApi(FacadeApi):
         :param search_deps: If True, also search in project dependencies (e.g., libraries).
         :param max_matches: Maximum number of permitted matches. If exceeded, an error containing a shortened result is raised,
              which allows refining the search. -1 (default) means no limit. Set to 1 if you search for a single symbol.
-        :param max_answer_chars: max characters for the result (-1 for default). If exceeded, no content/a shortened result is returned.
         :return: the symbols matching the pattern
         """
         if name_path_pattern.replace("*", "").replace("/", "") == "":
@@ -292,7 +291,6 @@ class JetBrainsApi(FacadeApi):
         :param relative_path: the relative path to the file containing the symbol (must be a file, not a directory)
             Note: for external dependencies, this must be an identifier starting with `<ext` that you have received
             earlier (don't try to guess!).
-        :param max_answer_chars: max characters for the result (-1 for default). If exceeded, no content/a shortened result is returned.
         :return: the referencing symbols
         """
         with self._client() as client:
@@ -326,7 +324,6 @@ class JetBrainsApi(FacadeApi):
         :param relative_path: the relative path to the file to get the overview of
         :param depth: depth up to which descendants shall be retrieved.
             Default (-1) results in a language specific choice: 1 for java and kotlin and 0 for other languages
-        :param max_answer_chars: max characters for the result (-1 for default). If exceeded, no content/a shortened result is returned.
         :param include_file_documentation: whether to include the file's docstring. Default False.
         :return: the overview
         """
@@ -377,8 +374,6 @@ class JetBrainsApi(FacadeApi):
         :param hierarchy_type: which hierarchy to retrieve: "super" for parent classes/interfaces,
             "sub" for subclasses/implementations, or "both" for both directions. Default is "both".
         :param depth: depth limit for hierarchy traversal (None or 0 for unlimited). Default is 1.
-        :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
-            -1 means the default value from the config will be used.
         :return: the file-grouped hierarchy, with keys "supertypes" and/or "subtypes" (and "levels_not_included"
             if the depth limit truncated the hierarchy)
         """
@@ -579,8 +574,6 @@ class JetBrainsApi(FacadeApi):
             If not specified, all applicable inspections are run.
         :param start_line: optional 1-based start line to restrict the inspection range.
         :param end_line: optional 1-based end line to restrict the inspection range.
-        :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
-            -1 means the default value from the config will be used.
         :return: the inspection results including severity, message, and location.
         """
         with self._client() as client:
@@ -604,8 +597,6 @@ class JetBrainsApi(FacadeApi):
         :param language: optional language to filter by (e.g. "Java", "Python", "Kotlin").
         :param group_path_contains: optional substring to match against the inspection group path
             (e.g. "probable bugs", "code style").
-        :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
-            -1 means the default value from the config will be used.
         :return: the list of available inspections including name, group path, and language.
         """
         with self._client() as client:
