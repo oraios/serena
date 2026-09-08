@@ -331,6 +331,7 @@ class LspApi(FacadeApi):
                 ReferencedType(LspReferenceCollection),
                 ReferencedType(ReferenceInLanguageServerSymbol),
                 ReferencedType(LspDiagnostics),
+                ReferencedType(SymbolKind),
             ],
         )
 
@@ -453,8 +454,8 @@ class LspApi(FacadeApi):
         :param include_info: whether to include additional info (hover-like, typically including docstring and signature),
             about the symbol (ignored if include_body is True). Info is never included for child symbols.
             Note: Depending on the language, this can be slow (e.g., C/C++).
-        :param include_kinds: (optional) limits results to the given LSP symbol kinds (integers)
-        :param exclude_kinds: (optional) list of LSP symbol kinds (integers) to exclude.
+        :param include_kinds: (optional) limits results to the given LSP symbol kinds (integers, i.e. values of `SymbolKind`)
+        :param exclude_kinds: (optional) list of LSP symbol kinds (integers, i.e. values of `SymbolKind`) to exclude.
         :param substring_matching: If True, use substring matching for the last segment of `name_path_pattern`
             (i.e. the name of the symbol, e.g. "foo" in "Class/foo" or "my_method" in "my_method").
         :param max_matches: Maximum number of permitted matches. If exceeded, an error containing a shortened result is raised,
@@ -517,8 +518,8 @@ class LspApi(FacadeApi):
 
         :param name_path: name path of the symbol
         :param relative_path: the relative path to the file containing the symbol for which to find references.
-        :param include_kinds: (optional) limits results to the given LSP symbol kinds (integers)
-        :param exclude_kinds: optional list of LSP symbol kinds (integers) to exclude.
+        :param include_kinds: (optional) limits results to the given LSP symbol kinds (integers, i.e. values of `SymbolKind`)
+        :param exclude_kinds: optional list of LSP symbol kinds (integers, i.e. values of `SymbolKind`) to exclude.
         :param max_answer_chars: max result length; -1 for default
         :return: the references to the symbol
         """
@@ -554,8 +555,8 @@ class LspApi(FacadeApi):
             Note that here you can't pass a directory but must pass a file.
         :param include_info: whether to include additional info (hover-like, typically including docstring and signature),
             about the implementing symbols.
-        :param include_kinds: (optional) limits results to the given LSP symbol kinds (integers)
-        :param exclude_kinds: (optional) list of LSP symbol kinds (integers) to exclude.
+        :param include_kinds: (optional) limits results to the given LSP symbol kinds (integers, i.e. values of `SymbolKind`)
+        :param exclude_kinds: (optional) list of LSP symbol kinds (integers, i.e. values of `SymbolKind`) to exclude.
         :param max_answer_chars: max result length; -1 for default
         :return: the symbols implementing the given symbol
         """

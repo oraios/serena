@@ -11,6 +11,7 @@ import typing
 from abc import ABC
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from enum import Enum
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from serena.config.serena_config import ApiInclusionDefinition
@@ -84,8 +85,10 @@ class ReferencedType:
     def get_referenced_type_names(self) -> list[str]:
         """
         :return: the names of the types appearing in the annotations of the described members (attributes, properties,
-            method return types), in order of appearance (each name at most once, excluding the type itself)
+            method parameters and return types), in order of appearance (each name at most once, excluding the type itself)
         """
+        if self.is_enum():
+            return []
         annotations: list[str] = []
         type_hints = typing.get_type_hints(self.cls)
         for member_name in self._get_member_names():
@@ -93,7 +96,7 @@ class ReferencedType:
             if isinstance(member, property) and member.fget is not None:
                 annotations.append(format_annotation(inspect.signature(member.fget).return_annotation))
             elif inspect.isfunction(member):
-                annotations.append(format_annotation(inspect.signature(member).return_annotation))
+                annotations.append(format_signature(member))
             elif member_name in type_hints:
                 annotations.append(format_annotation(type_hints[member_name]))
         names: list[str] = []
@@ -102,6 +105,16 @@ class ReferencedType:
                 if name != self.name and name not in names:
                     names.append(name)
         return names
+
+    def is_enum(self) -> bool:
+        return isinstance(self.cls, type) and issubclass(self.cls, Enum)
+
+    def _describe_enum(self) -> str:
+        parts = [f"enum {self.name}"]
+        if self.cls.__doc__:
+            parts.append(f"  {inspect.cleandoc(self.cls.__doc__).replace(chr(10), chr(10) + '  ')}")
+        parts.append("members:\n" + "\n".join(f"  {self.name}.{member.name} = {member.value!r}" for member in self.cls))  # type: ignore[attr-defined]
+        return "\n".join(parts) + "\n"
 
     @staticmethod
     def _first_doc_line(obj: Any) -> str:
@@ -112,8 +125,10 @@ class ReferencedType:
     def describe(self) -> str:
         """
         :return: the type's documentation: its docstring, attributes/properties with their types and methods with their
-            signatures and documentation
+            signatures and documentation; for enums, the members with their values
         """
+        if self.is_enum():
+            return self._describe_enum()
         attributes: list[str] = []
         methods: list[str] = []
         type_hints = typing.get_type_hints(self.cls)
@@ -325,7 +340,17 @@ class FacadeMethod:
         :return: the types referenced by the facade which appear in the method's return type annotation
         """
         return_annotation = format_annotation(inspect.signature(self._implementation).return_annotation)
-        return [t for t in self.parent.get_types() if re.search(rf"\b{re.escape(t.name)}\b", return_annotation)]
+        return self._find_referenced_types(return_annotation)
+
+    def get_referenced_parameter_types(self) -> list[ReferencedType]:
+        """
+        :return: the types referenced by the facade which appear in the annotations of the method's parameters
+        """
+        parameters = inspect.signature(self._implementation).parameters.values()
+        return self._find_referenced_types(" ".join(format_annotation(p.annotation) for p in parameters))
+
+    def _find_referenced_types(self, annotation_text: str) -> list[ReferencedType]:
+        return [t for t in self.parent.get_types() if re.search(rf"\b{re.escape(t.name)}\b", annotation_text)]
 
     def get_summary(self) -> str:
         """
@@ -336,16 +361,17 @@ class FacadeMethod:
 
     def describe(self) -> str:
         """
-        :return: the method's signature and documentation, with a pointer to the documentation of its return type
-            if it is a type referenced by the facade
+        :return: the method's signature and documentation, with pointers to the documentation of the referenced types
+            appearing in its return type and parameter annotations
         """
         signature = format_signature(self._implementation)
         doc = inspect.getdoc(self._implementation) or "(no documentation)"
         text = f"{self.qualified_name}{signature}\n{doc}\n"
         referenced = self.get_referenced_return_types()
+        referenced += [t for t in self.get_referenced_parameter_types() if t not in referenced]
         if referenced:
             pointers = ", ".join(f'`s.info("{t.name}")`' for t in referenced)
-            text += f"Return type documentation: {pointers}\n"
+            text += f"Type documentation: {pointers}\n"
         return text
 
     def describe_summary(self) -> str:
