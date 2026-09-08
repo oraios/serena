@@ -53,5 +53,7 @@ Code runs as a function body (`return` defines the result); a single expression 
 - Python code can always modify the system; the REPL tool is inherently fully privileged, regardless of
   facade scope or the project's `read_only` setting (which only makes Serena's own API refuse edits).
   A "read-only REPL" is not feasible and must not be promised.
-- Session/project management (activate_project, initial_instructions, dashboard, ...) stays tool-only;
-  facades expose operations on the active project.
+- Project activation (activate_project) and initial_instructions stay tool-only (activation rebuilds the REPL);
+  Serena's configuration/session state (config overview, dashboard; later e.g. modes) lives in the `cfg` facade.
+  Computed conditions (read-only project, dashboard not openable) are applied to the API scope in
+  `SerenaAgent.get_repl` via `exclude_editing()`/`NamedApiInclusionDefinition`, mirroring the tool side.

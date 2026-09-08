@@ -191,6 +191,14 @@ class ApiInclusionDefinition:
 
 
 @dataclass
+class NamedApiInclusionDefinition(ApiInclusionDefinition):
+    name: str | None = None
+
+    def __str__(self) -> str:
+        return f"ApiInclusionDefinition[{self.name}]"
+
+
+@dataclass
 class ModeSelectionDefinition:
     default_modes: Sequence[str] | None = None
 

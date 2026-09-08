@@ -36,6 +36,7 @@ from serena.config.serena_config import (
     ModeSelectionDefinition,
     ModeSelectionDefinitionWithAddedModes,
     ModeSelectionDefinitionWithBaseModes,
+    NamedApiInclusionDefinition,
     NamedToolInclusionDefinition,
     RegisteredProject,
     SerenaConfig,
@@ -48,6 +49,7 @@ from serena.ls_manager import LanguageServerManager
 from serena.memories.memory_manager import MemoryManager
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
+from serena.repl.api.cfg_api import ConfigApi
 from serena.repl.api.edit_api import EditApi
 from serena.repl.api.fs_api import FsApi
 from serena.repl.api.jb_api import JetBrainsApi
@@ -760,6 +762,15 @@ class SerenaAgent:
         except Exception as e:
             log.debug(f"Failed to send usage info: {e}")
 
+    @staticmethod
+    def _is_dashboard_openable(serena_config: SerenaConfig) -> bool:
+        """
+        :param serena_config: the configuration
+        :return: whether the web dashboard is available and opening it is a meaningful operation
+            (i.e. it is enabled and not opened automatically)
+        """
+        return serena_config.web_dashboard and not serena_config.web_dashboard_open_on_launch and not serena_config.gui_log_window
+
     @classmethod
     def _create_base_toolset(
         cls,
@@ -789,7 +800,7 @@ class SerenaAgent:
 
         # determine whether to include the OpenDashboardTool based on the Serena configuration
         tool_inclusion_definitions: list[ToolInclusionDefinition] = []
-        if serena_config.web_dashboard and not serena_config.web_dashboard_open_on_launch and not serena_config.gui_log_window:
+        if cls._is_dashboard_openable(serena_config):
             tool_inclusion_definitions.append(
                 NamedToolInclusionDefinition(name="OpenDashboard", included_optional_tools=[OpenDashboardTool.get_name_from_cls()])
             )
@@ -1281,9 +1292,12 @@ class SerenaAgent:
                 api_scope.process(self._active_project.project_config)
                 if self._active_project.project_config.read_only:
                     api_scope.exclude_editing()
+            if not self._is_dashboard_openable(self.serena_config):
+                api_scope.process(NamedApiInclusionDefinition(name="Dashboard", excluded_apis=["cfg.open_dashboard"]))
 
             # gather facades
             facades = [
+                Facade.from_api(ConfigApi(self), api_scope),
                 Facade.from_api(FsApi(self), api_scope),
                 Facade.from_api(EditApi(self), api_scope),
                 Facade.from_api(MemoryApi(self), api_scope),

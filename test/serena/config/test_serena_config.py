@@ -268,7 +268,10 @@ class TestAgentInterface:
             fixed_toolset = {"serena_repl", "initial_instructions", "activate_project"}
             assert {t.get_name() for t in agent.get_exposed_tool_instances()} == fixed_toolset
             assert set(agent.get_active_tool_names()) == fixed_toolset
-            assert "s.mem" in agent.get_repl().entrypoint.overview()
+            overview = agent.get_repl().entrypoint.overview()
+            assert "s.mem" in overview
+            # the dashboard is disabled in the test configuration, so opening it is not offered
+            assert "s.cfg" in overview and "open_dashboard" not in overview
 
             # after activation: the toolset is unchanged, the REPL reflects the project's API exclusions
             agent.activate_project_from_path_or_name(name)
