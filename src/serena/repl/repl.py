@@ -4,8 +4,9 @@ The REPL through which an LLM executes Python code against Serena's facades.
 
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+import ast
 import logging
-import textwrap
+import re
 import traceback
 from typing import Any
 
@@ -29,6 +30,7 @@ class SerenaReplEntrypoint:
         """
         self._facades: dict[str, Facade] = {}
         self._current_session: SerenaSession | None = None
+        self._current_namespace: dict[str, Any] | None = None
         registered_facade_names = []
         for facade in facades:
             if api_scope.is_facade_enabled(facade.name):
@@ -42,11 +44,50 @@ class SerenaReplEntrypoint:
         """
         return [method for facade in self._facades.values() for method in facade.get_enabled_methods()]
 
-    def set_current_session_(self, session: SerenaSession | None) -> None:
+    def set_current_session_(self, session: SerenaSession | None, namespace: dict[str, Any] | None) -> None:
         """
         :param session: the session on whose behalf code is being executed (None if no code is being executed)
+        :param namespace: the namespace of the execution (None if no code is being executed)
         """
         self._current_session = session
+        self._current_namespace = namespace
+
+    def _get_persisted_items(self) -> dict[str, Any]:
+        assert self._current_namespace is not None, "No code execution in progress"
+        return {
+            name: value
+            for name, value in self._current_namespace.items()
+            if name != SerenaRepl.ENTRYPOINT_NAME and SerenaRepl.is_persisted_name(name)
+        }
+
+    def vars(self) -> str:
+        """
+        Lists the variables and functions which persist in the session's namespace across executions.
+
+        :return: the listing (name, type and a short representation per item)
+        """
+        items = self._get_persisted_items()
+        if not items:
+            return "No persisted variables."
+        lines = []
+        for name, value in items.items():
+            summary = value.__name__ if callable(value) and hasattr(value, "__name__") else repr(value)
+            if len(summary) > 80:
+                summary = summary[:77] + "..."
+            lines.append(f"{name}: {type(value).__name__} = {summary}")
+        return "\n".join(lines)
+
+    def clear(self) -> str:
+        """
+        Removes all persisted variables and functions from the session's namespace.
+
+        :return: a message indicating the number of removed items
+        """
+        items = self._get_persisted_items()
+        assert self._current_namespace is not None
+        for name in items:
+            del self._current_namespace[name]
+        return f"Removed {len(items)} persisted item(s)."
 
     def _register(self, facade: Facade) -> None:
         if facade.name in self._facades:
@@ -161,11 +202,25 @@ class SerenaRepl:
 
     The code is executed as the body of a function, such that the `return` statement defines the result;
     code consisting of a single expression is evaluated and its value is the result.
+    Names assigned at the top level of the code (variables, functions, classes, imports) persist in the session's
+    namespace across executions (like the cells of a notebook), which serves as the globals of the executions.
+    The entrypoint `s` is (re)bound in the namespace before every execution, such that persisted functions always
+    access the current entrypoint.
     """
 
     SOURCE_NAME = "<serena_repl>"
     ENTRYPOINT_NAME = "s"
     _FUNCTION_NAME = "__serena_repl_fn__"
+    _PERSISTED_NAME_PATTERN = re.compile(r"^(?!__)[A-Za-z_]\w*$")
+
+    @classmethod
+    def is_persisted_name(cls, name: str) -> bool:
+        """
+        :param name: a name in a session namespace
+        :return: whether the name denotes a persisted item of the LLM's (as opposed to an implementation detail
+            such as `__builtins__`)
+        """
+        return cls._PERSISTED_NAME_PATTERN.match(name) is not None
 
     def __init__(self, facades: list[Facade], api_scope: ApiScope) -> None:
         """
@@ -205,21 +260,23 @@ class SerenaRepl:
             e.g. in tests), which determines e.g. which type documentation has already been provided
         :return: the representation of the code's result, or a description of the error if execution failed
         """
-        self._entrypoint.set_current_session_(session)
+        namespace = session.repl_namespace if session is not None else {}
+        self._entrypoint.set_current_session_(session, namespace)
         try:
-            result = self._run(code)
+            result = self._run(code, namespace)
         except Exception as e:
             return self._format_error(e, code)
         finally:
-            self._entrypoint.set_current_session_(None)
+            self._entrypoint.set_current_session_(None, None)
         return self._represent(result)
 
-    def _run(self, code: str) -> Any:
+    def _run(self, code: str, namespace: dict[str, Any]) -> Any:
         """
-        Runs the given code with the entrypoint bound, either as a single expression
-        or as the body of a function whose return value is the result.
+        Runs the given code in the given namespace (as globals) with the entrypoint bound, either as a single expression
+        or as the body of a function whose return value is the result and whose top-level assignments are made global
+        (such that they persist in the namespace).
         """
-        namespace: dict[str, Any] = {self.ENTRYPOINT_NAME: self._entrypoint}
+        namespace[self.ENTRYPOINT_NAME] = self._entrypoint
 
         # try to evaluate the code as a single expression
         try:
@@ -229,10 +286,78 @@ class SerenaRepl:
         if compiled is not None:
             return eval(compiled, namespace)
 
-        # otherwise execute the code as the body of a function
-        source = f"def {self._FUNCTION_NAME}({self.ENTRYPOINT_NAME}):\n" + textwrap.indent(code, "    ")
-        exec(compile(source, self.SOURCE_NAME, "exec"), namespace)
-        return namespace[self._FUNCTION_NAME](self._entrypoint)
+        # otherwise execute the code as the body of a function, declaring the names assigned at the top level as global.
+        # The function is constructed at the AST level, such that the line numbers of the code are preserved.
+        module = ast.parse(code, self.SOURCE_NAME)
+        body: list[ast.stmt] = list(module.body)
+        assigned_names = self._collect_top_level_assigned_names(body)
+        if assigned_names:
+            body.insert(0, ast.Global(names=sorted(assigned_names)))
+        function = ast.FunctionDef(
+            name=self._FUNCTION_NAME,
+            args=ast.arguments(posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[]),
+            body=body,
+            decorator_list=[],
+            returns=None,
+        )
+        wrapper = ast.fix_missing_locations(ast.Module(body=[function], type_ignores=[]))
+        exec(compile(wrapper, self.SOURCE_NAME, "exec"), namespace)
+        try:
+            return namespace[self._FUNCTION_NAME]()
+        finally:
+            del namespace[self._FUNCTION_NAME]
+
+    @classmethod
+    def _collect_top_level_assigned_names(cls, statements: list[ast.stmt]) -> set[str]:
+        """
+        :param statements: the top-level statements of the code
+        :return: the names bound by the statements (assignment targets, function/class definitions, imports,
+            loop/with targets, deletions and walrus assignments outside of nested scopes)
+        """
+        names: set[str] = set()
+
+        def add_target(target: ast.expr) -> None:
+            if isinstance(target, ast.Name):
+                names.add(target.id)
+            elif isinstance(target, ast.Tuple | ast.List):
+                for element in target.elts:
+                    add_target(element)
+            elif isinstance(target, ast.Starred):
+                add_target(target.value)
+
+        def add_walrus_targets(node: ast.AST) -> None:
+            # walrus assignments bind in the enclosing scope, unless within a nested scope
+            for child in ast.iter_child_nodes(node):
+                if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.Lambda):
+                    continue
+                if isinstance(child, ast.NamedExpr):
+                    add_target(child.target)
+                add_walrus_targets(child)
+
+        for statement in statements:
+            match statement:
+                case ast.Assign(targets=targets):
+                    for target in targets:
+                        add_target(target)
+                case ast.AnnAssign(target=target) | ast.AugAssign(target=target):
+                    add_target(target)
+                case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name) | ast.ClassDef(name=name):
+                    names.add(name)
+                case ast.Import(names=aliases) | ast.ImportFrom(names=aliases):
+                    for alias in aliases:
+                        if alias.name != "*":
+                            names.add(alias.asname or alias.name.split(".")[0])
+                case ast.For(target=target) | ast.AsyncFor(target=target):
+                    add_target(target)
+                case ast.With(items=items) | ast.AsyncWith(items=items):
+                    for item in items:
+                        if item.optional_vars is not None:
+                            add_target(item.optional_vars)
+                case ast.Delete(targets=targets):
+                    for target in targets:
+                        add_target(target)
+            add_walrus_targets(statement)
+        return names
 
     def _format_error(self, e: Exception, code: str) -> str:
         """
@@ -248,13 +373,12 @@ class SerenaRepl:
 
         # report syntax errors in the executed code (which carry no traceback frames of their own)
         if isinstance(e, SyntaxError) and e.filename == self.SOURCE_NAME and e.lineno is not None:
-            return f"SyntaxError: {e.msg}\n" + location_line(e.lineno - 1)  # undo the function header offset
+            return f"SyntaxError: {e.msg}\n" + location_line(e.lineno)
 
         # report runtime errors, locating them within the executed code
         location_lines = []
         for frame in traceback.extract_tb(e.__traceback__):
             if frame.filename != self.SOURCE_NAME or frame.lineno is None:
                 continue
-            line_number = frame.lineno - 1 if frame.name == self._FUNCTION_NAME else frame.lineno  # undo the function header offset
-            location_lines.append(location_line(line_number))
+            location_lines.append(location_line(frame.lineno))
         return "\n".join([f"{type(e).__name__}: {e}", *location_lines])

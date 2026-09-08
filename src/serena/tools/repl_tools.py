@@ -34,6 +34,11 @@ class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
         Returned objects are rendered in a form suitable for you; lists are rendered element-wise.
         Returned strings are passed through unchanged.
 
+        Persistence: variables, functions and classes defined at the top level of your code persist across calls
+        within your session (like the cells of a notebook), so you can reuse results and define helper functions once.
+        `s.vars()` lists the persisted items, `s.clear()` removes them. Do not store facades (`s.<facade>`) in
+        variables; access them via `s` at call time. Do not keep large results longer than needed.
+
         :param session: your Serena session id, as provided in Serena's instructions (call `initial_instructions` if you do not have one)
         :param code: the Python code to execute
         :return: the representation of the returned value, or the error if execution failed

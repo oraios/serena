@@ -53,8 +53,16 @@ Code runs as a function body (`return` defines the result); a single expression 
 - MCP provides no reliable session identification (newer protocol versions drop it), and clients keep a stdio
   server across conversations. Hence the REPL's session identity is LLM-supplied: `create_system_prompt` creates
   a `SerenaSession` and states its id; `serena_repl` takes a required `session_id`. `SessionRegistry` creates
-  unknown ids on demand (benign: at worst docs are repeated) and evicts LRU. Sessions survive REPL rebuilds.
-  Later: the persistent REPL namespace lives on the session.
+  unknown ids on demand (benign: at worst docs are repeated) and evicts LRU and idle (TTL) sessions.
+  Sessions survive REPL rebuilds.
+- Persistence (notebook semantics): `SerenaSession.repl_namespace` is the globals of the session's executions;
+  names bound at the top level of submitted code (assignments, def/class, imports, loop/with targets, walrus)
+  persist across calls (an AST pass wraps the code in a function and declares those names `global`, preserving
+  line numbers). `s` is re-bound in the namespace before every execution, so persisted functions always use the
+  current entrypoint (no closure over `s`). `s.vars()`/`s.clear()` list/remove persisted items. Data is tied to
+  the session's lifetime (not cleared on REPL rebuild); stored facades/project objects may go stale.
+  Deferred idea if memory becomes an issue: hybrid — implicit items expire after N turns, explicit store
+  (e.g. `s.d`) for indefinite retention.
 - Only tools whose use presupposes having read the instructions may require the id. `activate_project` and
   `initial_instructions` may be called first and keep the existing MCP-context-derived session handling (prompt
   provision status); migrating that to LLM-supplied ids is a separate, future change.

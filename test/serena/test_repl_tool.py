@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from serena.config.serena_config import ApiInclusionDefinition
+from serena.repl.api.edit_api import EditApi
 from serena.repl.api.lsp_api import LspApi
 from serena.repl.facade import ApiScope, Facade, FacadeApi, FacadeMethodInfo, facade_method
 from serena.repl.repl import SerenaRepl
@@ -42,6 +43,37 @@ class TestReplExecution:
         result = repl.execute("x = 1\ny = (2")
         assert result.startswith("SyntaxError")
         assert "line 2" in result
+
+    def test_top_level_names_persist_within_session(self, repl: SerenaRepl) -> None:
+        session = SerenaSession("a")
+        repl.execute("x = 20\ndef double(v):\n    return 2 * v\nfor i in range(3):\n    pass\nimport os as os_module", session)
+        assert repl.execute("return double(x) + i", session) == "42"
+        assert repl.execute("os_module.sep is not None", session) == "True"
+
+        # local variables of nested scopes do not persist; persisted items can be listed and cleared
+        assert "v" not in repl.execute("s.vars()", session)
+        listing = repl.execute("s.vars()", session)
+        assert "x: int = 20" in listing and "double: function" in listing
+        assert repl.execute("s.clear()", session) == "Removed 4 persisted item(s)."
+        assert repl.execute("s.vars()", session) == "No persisted variables."
+        assert "NameError" in repl.execute("return x", session)
+
+    def test_sessions_have_separate_namespaces(self, repl: SerenaRepl) -> None:
+        session_a = SerenaSession("a")
+        repl.execute("x = 1", session_a)
+        assert "NameError" in repl.execute("return x", SerenaSession("b"))
+        assert repl.execute("return x", session_a) == "1"
+        # ... and execution without a session persists nothing
+        repl.execute("y = 1")
+        assert "NameError" in repl.execute("return y")
+
+    def test_persisted_functions_use_the_current_entrypoint(self) -> None:
+        # a function defined against one REPL instance uses the entrypoint of the REPL that later calls it
+        session = SerenaSession("a")
+        SerenaRepl([Facade.from_api(LspApi(MagicMock()), ApiScope())], ApiScope()).execute("def facades():\n    return s.info()", session)
+        rebuilt_repl = SerenaRepl([Facade.from_api(EditApi(MagicMock()), ApiScope())], ApiScope())
+        overview = rebuilt_repl.execute("return facades()", session)
+        assert "s.edit" in overview and "s.lsp" not in overview
 
     def test_facade_discovery(self, repl: SerenaRepl) -> None:
         overview = repl.execute("s.info()")
