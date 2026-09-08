@@ -72,8 +72,7 @@ class DirectoryListingRenderer(Renderer[DirectoryListing]):
 
 class PatternMatches(RepresentableViaRenderer):
     """
-    The matches of a pattern search: `matches`, each a `MatchedConsecutiveLines` with `source_file_path`,
-    `matched_lines` (each with `line_number` and `line_content`) and `to_display_string()`.
+    The matches of a pattern search (`MatchedConsecutiveLines`).
     """
 
     def __init__(self, matches: list[MatchedConsecutiveLines], renderer: "PatternMatchesRenderer"):

@@ -15,7 +15,7 @@ class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
     def get_apply_docstring(self) -> str:
         return self.get_apply_docstring_from_cls() + "\n\nAvailable facades:\n" + self.agent.get_repl().entrypoint.overview()
 
-    def apply(self, code: str) -> str:
+    def apply(self, session: str, code: str) -> str:
         """
         Executes the given Python code, which has access to Serena's functionality through the object `s`.
         The functionality is organised in facades, which are attributes of `s` (e.g. `s.myfacade`); the available
@@ -34,7 +34,8 @@ class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
         Returned objects are rendered in a form suitable for you; lists are rendered element-wise.
         Returned strings are passed through unchanged.
 
+        :param session: your Serena session id, as provided in Serena's instructions (call `initial_instructions` if you do not have one)
         :param code: the Python code to execute
         :return: the representation of the returned value, or the error if execution failed
         """
-        return self.agent.get_repl().execute(code)
+        return self.agent.get_repl().execute(code, self.agent.get_session(session))

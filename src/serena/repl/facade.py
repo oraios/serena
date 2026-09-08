@@ -81,6 +81,28 @@ class ReferencedType:
         names.difference_update(dir(RepresentableViaRenderer))
         return sorted(n for n in names if not n.startswith("_") and not n.endswith("_"))
 
+    def get_referenced_type_names(self) -> list[str]:
+        """
+        :return: the names of the types appearing in the annotations of the described members (attributes, properties,
+            method return types), in order of appearance (each name at most once, excluding the type itself)
+        """
+        annotations: list[str] = []
+        type_hints = typing.get_type_hints(self.cls)
+        for member_name in self._get_member_names():
+            member = inspect.getattr_static(self.cls, member_name, None)
+            if isinstance(member, property) and member.fget is not None:
+                annotations.append(format_annotation(inspect.signature(member.fget).return_annotation))
+            elif inspect.isfunction(member):
+                annotations.append(format_annotation(inspect.signature(member).return_annotation))
+            elif member_name in type_hints:
+                annotations.append(format_annotation(type_hints[member_name]))
+        names: list[str] = []
+        for annotation in annotations:
+            for name in re.findall(r"\b[A-Z]\w*", annotation):
+                if name != self.name and name not in names:
+                    names.append(name)
+        return names
+
     @staticmethod
     def _first_doc_line(obj: Any) -> str:
         doc = inspect.getdoc(obj) or ""

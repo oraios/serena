@@ -42,9 +42,7 @@ if TYPE_CHECKING:
 
 class LspSymbolCollection(RepresentableViaRenderer):
     """
-    A collection of symbols retrieved via the language server.
-    Each symbol (`LanguageServerSymbol`) offers e.g. `get_name_path()`, `relative_path`, `symbol_kind_name`,
-    `body`, `get_body_line_numbers()`, `iter_children()`.
+    A collection of symbols (`LanguageServerSymbol`) retrieved via the language server.
     """
 
     symbols: list[LanguageServerSymbol]
@@ -207,8 +205,7 @@ class LspSymbolsOverviewRenderer(LspSymbolCollectionRenderer):
 
 class LspReferenceCollection(RepresentableViaRenderer):
     """
-    The references to a symbol, each a `ReferenceInLanguageServerSymbol` with the referencing `symbol`
-    (a `LanguageServerSymbol`) and the `line` of the reference.
+    The references to a symbol (`ReferenceInLanguageServerSymbol`).
     """
 
     references: list[ReferenceInLanguageServerSymbol]

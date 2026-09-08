@@ -11,6 +11,7 @@ from serena.config.serena_config import ApiInclusionDefinition
 from serena.repl.api.lsp_api import LspApi
 from serena.repl.facade import ApiScope, Facade, FacadeApi, FacadeMethodInfo, facade_method
 from serena.repl.repl import SerenaRepl
+from serena.session import SerenaSession
 from serena.tools import FindSymbolTool, SerenaReplTool
 from solidlsp.ls_config import LanguageServerId
 from test.conftest import agent_for_project_context
@@ -71,7 +72,24 @@ class TestReplExecution:
         assert type_info == repl.execute('s.info("LanguageServerSymbol")')
         assert "get_name_path() -> str" in type_info and "iter_children()" in type_info
         assert "to_dict" not in type_info  # not among the curated members
-        assert "represent" not in repl.execute('s.info("LspSymbolCollection")')  # the representation mechanism is not exposed
+        assert "represent()" not in repl.execute('s.info("LspSymbolCollection")')  # the representation mechanism is not exposed
+
+    def test_contained_types_are_documented_once_per_session(self, repl: SerenaRepl) -> None:
+        session = SerenaSession("test")
+
+        # a type's documentation includes the types it contains (transitively)
+        first = repl.execute('s.info("LspReferenceCollection")', session)
+        assert "type LspReferenceCollection" in first
+        assert "type ReferenceInLanguageServerSymbol" in first and "type LanguageServerSymbol" in first
+
+        # a contained type documented earlier in the session is only pointed to; an explicit request yields it again
+        second = repl.execute('s.info("LspSymbolCollection")', session)
+        assert "type LspSymbolCollection" in second
+        assert "type LanguageServerSymbol: documented earlier" in second and "get_name_path()" not in second
+        assert "get_name_path()" in repl.execute('s.info("LanguageServerSymbol")', session)
+
+        # another session is unaffected
+        assert "get_name_path()" in repl.execute('s.info("LspSymbolCollection")', SerenaSession("other"))
 
     def test_info_documents_several_items(self, repl: SerenaRepl) -> None:
         info = repl.execute('s.info("lsp.find_symbol", "nope", "lsp.LspSymbolCollection")')
@@ -237,14 +255,16 @@ class TestLspFacade:
     def test_find_symbol_via_repl(self) -> None:
         with agent_for_project_context(LanguageServerId.PYTHON) as agent:
             tool = agent.get_tool(SerenaReplTool)
+            session_id = agent.create_session().session_id
 
             # a returned collection is rendered, identifying the symbol and its file
-            rendered = tool.apply('return s.lsp.find_symbol("create_user")')
+            rendered = tool.apply(session_id, 'return s.lsp.find_symbol("create_user")')
             assert "create_user" in rendered
             assert "services.py" in rendered
 
             # the underlying symbols are accessible from code, e.g. to retrieve a body without rendering the collection
             body = tool.apply(
-                f'result = s.lsp.find_symbol("create_user", relative_path={self._SERVICES_FILE!r})\nreturn result.symbols[0].body'
+                session_id,
+                f'result = s.lsp.find_symbol("create_user", relative_path={self._SERVICES_FILE!r})\nreturn result.symbols[0].body',
             )
             assert body.startswith("def create_user")

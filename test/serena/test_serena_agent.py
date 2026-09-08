@@ -917,12 +917,18 @@ class TestSerenaAgent:
             exposed = {tool.get_name() for tool in agent.get_exposed_tool_instances()}
             expected = {"serena_repl", "initial_instructions"} | (set() if context.single_project else {"activate_project"})
             assert exposed == expected
-            assert "s.lsp" in agent.get_tool(SerenaReplTool).apply("s.info()")
+            assert "s.lsp" in agent.get_tool(SerenaReplTool).apply(agent.create_session().session_id, "s.info()")
 
             # prompts refer to operations by their qualified REPL names, e.g. `lsp.find_symbol` instead of the tool name
             system_prompt = agent.create_system_prompt()
             assert "`lsp.find_symbol`" in system_prompt
             assert "`find_symbol`" not in system_prompt
+
+            # the instructions establish a session, whose id can be used with session-aware tools
+            session_id_match = re.search(r"session id is `(\w+)`", system_prompt)
+            assert session_id_match is not None
+            session_id = session_id_match.group(1)
+            assert "s.lsp" in agent.get_tool(SerenaReplTool).apply(session_id, "s.info()")
         finally:
             agent.on_shutdown(timeout=5)
 

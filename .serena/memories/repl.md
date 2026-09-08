@@ -42,6 +42,20 @@ Code runs as a function body (`return` defines the result); a single expression 
   `s.info("<facade>.<Type>")` or bare `s.info("<Type>")`; method docs point to their referenced return type.
   Result classes declare attribute annotations at class level (attributes set only in `__init__` are not
   discoverable). Annotations are rendered without module paths, so signature names equal lookup names.
+  A type's documentation transitively includes the declared types its members reference; within a session
+  (`SerenaSession.described_type_names`), a contained type is documented once and afterwards only pointed to
+  (explicit requests always yield full documentation).
+
+## Sessions (`serena.session`)
+
+- MCP provides no reliable session identification (newer protocol versions drop it), and clients keep a stdio
+  server across conversations. Hence the REPL's session identity is LLM-supplied: `create_system_prompt` creates
+  a `SerenaSession` and states its id; `serena_repl` takes a required `session_id`. `SessionRegistry` creates
+  unknown ids on demand (benign: at worst docs are repeated) and evicts LRU. Sessions survive REPL rebuilds.
+  Later: the persistent REPL namespace lives on the session.
+- Only tools whose use presupposes having read the instructions may require the id. `activate_project` and
+  `initial_instructions` may be called first and keep the existing MCP-context-derived session handling (prompt
+  provision status); migrating that to LLM-supplied ids is a separate, future change.
 - APIs must not import `serena.tools` at module level except for tool classes in decorators; tools import
   APIs locally in `_api()` (API modules refer to tool classes).
 

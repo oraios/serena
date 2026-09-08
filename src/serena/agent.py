@@ -58,6 +58,7 @@ from serena.repl.api.mem_api import MemoryApi
 from serena.repl.api.shell_api import ShellApi
 from serena.repl.facade import ApiScope, Facade
 from serena.repl.repl import SerenaRepl
+from serena.session import SerenaSession, SessionRegistry
 from serena.task_executor import TaskExecutor
 from serena.tools import (
     ActivateProjectTool,
@@ -580,6 +581,7 @@ class SerenaAgent:
         self._gui_log_viewer: Optional["GuiLogViewer"] = None
         self._dashboard_manager: DashboardManager | None = None
         self._project_prompt_status = ProjectPromptProvisionStatus()
+        self._session_registry = SessionRegistry()
         self._session_mode_selection_definition = modes
         self.version = serena_version()
         self._config_changed_callbacks: list[Callable[[], None]] = []
@@ -1133,9 +1135,24 @@ class SerenaAgent:
         else:
             return self._create_global_memory_manager()
 
+    def create_session(self) -> SerenaSession:
+        """
+        :return: a new client session (with a random id)
+        """
+        return self._session_registry.create_session()
+
+    def get_session(self, session_id: str) -> SerenaSession:
+        """
+        :param session_id: the session id (as supplied by the LLM)
+        :return: the session, which is created if it is unknown
+        """
+        return self._session_registry.get_session(session_id)
+
     def create_system_prompt(self, session_id: str = "global") -> str:
         """
         Returns the 'Serena Instructions Manual', i.e. Serena's system prompt.
+        The prompt also establishes a new Serena session (see `SerenaSession`), stating its id for use with tools
+        which require it (e.g. the REPL tool).
 
         :param session_id: the client session ID for the case where this is run from a tool; "global" for the connection time case
         :return: the prompt
@@ -1167,6 +1184,13 @@ class SerenaAgent:
             system_prompt += "\n\n" + self._format_prompt_tag(self.get_project_activation_message(session_id), tag="active-project")
         elif self._project_activation_error:
             system_prompt += f"\n\nNo project is active ({self._project_activation_error})."
+
+        # establish a Serena session and state its id, which the LLM must pass to tools which require it
+        serena_session = self.create_session()
+        system_prompt += "\n\n" + self._format_prompt_tag(
+            f"Your Serena session id is `{serena_session.session_id}`. Pass it as the `session` parameter to tools which require it.",
+            tag="session",
+        )
 
         return self._format_prompt_tag(system_prompt, tag="serena")
 

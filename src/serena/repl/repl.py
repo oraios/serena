@@ -9,7 +9,8 @@ import textwrap
 import traceback
 from typing import Any
 
-from .facade import ApiScope, Facade, FacadeMethod
+from ..session import SerenaSession
+from .facade import ApiScope, Facade, FacadeMethod, ReferencedType
 from .representable import Representable
 
 log = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ class SerenaReplEntrypoint:
         :param api_scope: the API scope, which determines which of the facades are made available
         """
         self._facades: dict[str, Facade] = {}
+        self._current_session: SerenaSession | None = None
         registered_facade_names = []
         for facade in facades:
             if api_scope.is_facade_enabled(facade.name):
@@ -39,6 +41,12 @@ class SerenaReplEntrypoint:
         :return: the list of all enabled methods across all facades
         """
         return [method for facade in self._facades.values() for method in facade.get_enabled_methods()]
+
+    def set_current_session_(self, session: SerenaSession | None) -> None:
+        """
+        :param session: the session on whose behalf code is being executed (None if no code is being executed)
+        """
+        self._current_session = session
 
     def _register(self, facade: Facade) -> None:
         if facade.name in self._facades:
@@ -79,22 +87,71 @@ class SerenaReplEntrypoint:
         """
         if not items:
             return self.overview()
-        return "\n\n".join(self._describe_item(item) for item in items)
+        described_in_call: set[str] = set()
+        return "\n\n".join(self._describe_item(item, described_in_call) for item in items)
 
-    def _describe_item(self, item: str) -> str:
+    def _describe_item(self, item: str, described_in_call: set[str]) -> str:
         facade_name, _, member_name = item.partition(".")
         try:
             if member_name:
-                return self._get_facade(facade_name).describe_member(member_name)
+                facade = self._get_facade(facade_name)
+                referenced_type = facade.get_type(member_name)
+                if referenced_type is not None:
+                    return self._describe_type(referenced_type, described_in_call)
+                return facade.describe_member(member_name)
             if facade_name in self._facades:
                 return self._facades[facade_name].describe()
             # not a facade: look up the item as a type across all facades
-            matches = [facade for facade in self._facades.values() if facade.get_type(item) is not None]
-            if not matches:
+            referenced_type = self._find_type(item)
+            if referenced_type is None:
                 raise ValueError(f"Unknown item '{item}': neither a facade nor a type. Available facades: {list(self._facades)}")
-            return matches[0].describe_member(item)
+            return self._describe_type(referenced_type, described_in_call)
         except ValueError as e:
             return str(e)
+
+    def _find_type(self, type_name: str) -> ReferencedType | None:
+        for facade in self._facades.values():
+            referenced_type = facade.get_type(type_name)
+            if referenced_type is not None:
+                return referenced_type
+        return None
+
+    def _describe_type(self, referenced_type: ReferencedType, described_in_call: set[str]) -> str:
+        """
+        Describes the given (explicitly requested) type along with the types it references (transitively), each at most
+        once per call. Referenced types whose documentation was already provided earlier in the session are not repeated
+        but pointed to (an explicit request always yields the full documentation).
+
+        :param referenced_type: the requested type
+        :param described_in_call: the names of the types already described in the current `info` call (updated)
+        :return: the documentation
+        """
+        session = self._current_session
+        parts = []
+        if referenced_type.name not in described_in_call:
+            parts.append(referenced_type.describe())
+            described_in_call.add(referenced_type.name)
+            if session is not None:
+                session.described_type_names.add(referenced_type.name)
+
+        # append the referenced types (breadth-first), unless already described in this call or earlier in the session
+        pending = list(referenced_type.get_referenced_type_names())
+        while pending:
+            type_name = pending.pop(0)
+            if type_name in described_in_call:
+                continue
+            contained_type = self._find_type(type_name)
+            if contained_type is None:
+                continue
+            described_in_call.add(type_name)
+            if session is not None and type_name in session.described_type_names:
+                parts.append(f'type {type_name}: documented earlier in this session (request `s.info("{type_name}")` to see it again)\n')
+            else:
+                parts.append(contained_type.describe())
+                if session is not None:
+                    session.described_type_names.add(type_name)
+                pending.extend(contained_type.get_referenced_type_names())
+        return "\n".join(parts)
 
 
 class SerenaRepl:
@@ -138,17 +195,23 @@ class SerenaRepl:
             return "\n".join(cls._represent(item) for item in obj)
         return str(obj)
 
-    def execute(self, code: str) -> str:
+    def execute(self, code: str, session: SerenaSession | None = None) -> str:
         """
         Executes the given code and renders its result.
+        Executions are expected to be serialised (the entrypoint holds the current session during execution).
 
         :param code: the Python code to execute
+        :param session: the client session on whose behalf the code is executed (None for session-less execution,
+            e.g. in tests), which determines e.g. which type documentation has already been provided
         :return: the representation of the code's result, or a description of the error if execution failed
         """
+        self._entrypoint.set_current_session_(session)
         try:
             result = self._run(code)
         except Exception as e:
             return self._format_error(e, code)
+        finally:
+            self._entrypoint.set_current_session_(None)
         return self._represent(result)
 
     def _run(self, code: str) -> Any:
