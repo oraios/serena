@@ -19,7 +19,7 @@ class OnboardingTool(Tool, MemoryApiMixin):
 
         :return: instructions on how to create the onboarding information
         """
-        write_memory_tool_available = self.agent.tool_is_exposed(WriteMemoryTool.get_name_from_cls())
+        write_memory_tool_available = self.agent.is_tool_function_available(WriteMemoryTool)
         if not write_memory_tool_available:
             return "Memory writing tool not activated, skipping onboarding."
         return self._api().onboarding()

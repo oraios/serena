@@ -27,6 +27,7 @@ from serena.analytics import ToolUsageStats
 from serena.config.serena_config import SerenaConfig, SerenaPaths
 from serena.constants import SERENA_DASHBOARD_DIR, SerenaPorts
 from serena.task_executor import TaskExecutor
+from serena.tools import ReadMemoryTool
 from serena.util.logging import MemoryLogHandler
 from serena.util.pypi import PyPIPackageInfo
 from serena.util.pywebview import WebViewWithTray
@@ -604,7 +605,7 @@ class SerenaDashboardAPI:
 
         # Get available memories if ReadMemoryTool is active
         available_memories = None
-        if self._agent.tool_is_active("read_memory") and project is not None:
+        if self._agent.is_tool_function_available(ReadMemoryTool) and project is not None:
             available_memories = project.memory_manager.list_memories().get_full_list()
 
         # Get list of languages for the active project

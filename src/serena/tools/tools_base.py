@@ -308,7 +308,7 @@ class Tool(Component):
         )
 
     def is_active(self) -> bool:
-        return self.agent.tool_is_active(self.get_name())
+        return self.agent.get_active_tools().contains_tool_name(self.get_name())
 
     def is_readonly(self) -> bool:
         return not self.can_edit()

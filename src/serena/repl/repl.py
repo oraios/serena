@@ -8,12 +8,15 @@ import ast
 import logging
 import re
 import traceback
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..session import SerenaSession
 from .external_project import ExternalProjectContext
 from .facade import ApiScope, Facade, FacadeMethod, ReferencedType
 from .representable import Representable
+
+if TYPE_CHECKING:
+    from ..tools.tools_base import Tool
 
 log = logging.getLogger(__name__)
 
@@ -44,6 +47,18 @@ class SerenaReplEntrypoint:
         :return: the list of all enabled methods across all facades
         """
         return [method for facade in self._facades.values() for method in facade.get_enabled_methods()]
+
+    def is_tool_function_available(self, tool_class: "type[Tool]") -> bool:
+        """
+        Checks whether any of the enabled methods corresponds to the given tool class.
+
+        :param tool_class: the tool class to check for
+        :return: whether any enabled method corresponds to the given tool class
+        """
+        for method in self.get_enabled_methods():
+            if method.info.corresponding_tool == tool_class:
+                return True
+        return False
 
     def set_external_project_(self, external_project: "ExternalProjectContext | None") -> None:
         """

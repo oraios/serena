@@ -1017,6 +1017,15 @@ class SerenaAgent:
             when using the REPL interface). 
         """
 
+        def get_function_name(self, tool_class: type[Tool]) -> str:
+            """
+            :param tool_class: the tool for which to get the function name
+            :return: the function name to use for this tool in prompts, which may be different from the tool's standard name
+                (e.g. when using a different language backend or when using the REPL interface)
+            """
+            tool_name = tool_class.get_name_from_cls()
+            return self.tool_names_mapping.get(tool_name, tool_name)
+
     def _get_prompt_params(self) -> PromptParams:
         """
         :return: parameters for prompt rendering depending on the current agent interface, language backend and active tools/methods
@@ -1203,6 +1212,8 @@ class SerenaAgent:
         proj = self._active_project
         assert proj is not None, "A project must be active before calling this."
 
+        prompt_params = self._get_prompt_params()
+
         # Note: The activation message is always returned in full, even if it was already provided in the current session,
         #   because some clients (e.g. Claude Desktop) will use the same session across multiple chats.
         #   So while we don't want the activation message to be additionally included in the system prompt
@@ -1222,16 +1233,16 @@ class SerenaAgent:
         msg += f"File encoding: {proj.project_config.encoding}.\n"
 
         # add list of memories (if memories are enabled)
-        include_memories = self._active_tools.contains_tool_class(ReadMemoryTool)
+        include_memories = self.is_tool_function_available(ReadMemoryTool)
         if include_memories:
             project_memories = proj.memory_manager.list_project_memories()
             if project_memories:
                 msg += (
                     f"{json.dumps(project_memories.to_dict())}\n"
-                    + f"Use the `{ReadMemoryTool.get_name_from_cls()}` tool to read these memories later if they are relevant to the task.\n"
+                    + f"Use `{prompt_params.get_function_name(ReadMemoryTool)}` to read these memories later if they are relevant to the task.\n"
                 )
-            elif self._active_tools.contains_tool_class(OnboardingTool):
-                msg += f"Onboarding has not been performed yet. Ask the user whether to perform onboarding via the `{OnboardingTool.get_name_from_cls()}` tool.\n"
+            elif self.is_tool_function_available(OnboardingTool):
+                msg += f"Onboarding has not been performed yet. Ask the user whether to perform onboarding and if so, call `{prompt_params.get_function_name(OnboardingTool)}`.\n"
 
         # add prompts for modes that were dynamically activated by the project
         modes_with_prompts = self._project_prompt_status.get_modes_with_prompts_to_be_provided_for_project_activation(session_id)
@@ -1546,19 +1557,26 @@ class SerenaAgent:
         """
         return self._active_tools.tool_names
 
-    def tool_is_active(self, tool_name: str) -> bool:
+    def get_active_tools(self) -> AvailableTools:
         """
-        :param tool_class: the name of the tool to check
-        :return: True if the tool is active, False otherwise
+        :return: the set of active tools
         """
-        return self._active_tools.contains_tool_name(tool_name)
+        return self._active_tools
 
-    def tool_is_exposed(self, tool_name: str) -> bool:
+    def is_tool_function_available(self, tool_class: type[Tool]) -> bool:
         """
-        :param tool_name: the name of the tool to check
-        :return: True if the tool is in the exposed tool set, False otherwise
+        Checks whether the functionality offered by a tool is available - either through the tool
+        itself being enabled or through the corresponding function being exposed in the REPL.
+
+        :param tool_class: the tool class
+        :return: whether the function is available
         """
-        return self._exposed_tools.contains_tool_name(tool_name)
+        if self._agent_interface == AgentInterface.TOOLS:
+            return self._active_tools.contains_tool_class(tool_class)
+        elif self._agent_interface == AgentInterface.REPL:
+            return self.get_repl().entrypoint.is_tool_function_available(tool_class)
+        else:
+            raise NotImplementedError
 
     def get_current_config_overview(self) -> str:
         """
