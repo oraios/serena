@@ -41,8 +41,12 @@ delegating to it: structure, exposure/naming principles, configuration of the AP
 
 # Commits & pull requests
 
-* Commit messages: wrap all lines (subject and body) at ~100 characters; write the message to a file and commit with `-F`
-  rather than passing long paragraphs via `-m`.
+* Commit messages:
+  * The subject line must cover the *entire* change; make it suitably abstract if necessary
+  * Details are presented in concise bullet items, one point per item; no prose paragraphs.
+    Where the change spans several topics, group the items by topic, each group with a short heading.
+  * Wrap all lines at ~100 characters.
+  * Write the message to a file and commit with `-F`; do not pass long text via `-m`.
 * Read `mem:creating_pull_requests` when asked to participate in the creation of a pull request.
 
 # Memories
