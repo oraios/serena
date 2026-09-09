@@ -29,6 +29,10 @@ class MockAgent:
     def get_repl() -> SerenaRepl:
         return SerenaRepl([], ApiScope())
 
+    @staticmethod
+    def is_single_project() -> bool:
+        return False
+
 
 class BaseMockTool(Tool):
     """A mock Tool class for testing."""

@@ -1251,9 +1251,14 @@ class SerenaAgent:
                 msg += self._render_prompt(mode.prompt, tag="mode", tag_name_attr=mode.name) + "\n"
         self._project_prompt_status.mark_mode_prompts_as_provided(session_id)
 
-        # add project-specific prompt
+        # add the project's prompt (if any)
         if proj.project_config.initial_prompt:
             msg += "\n" + self._render_prompt(proj.project_config.initial_prompt, tag="project-instructions")
+
+        # when the REPL is active, add information on available facades if the agent is not in single-project mode
+        # (for single-project mode where the facades can't change, they are provided in the tool's description)
+        if self._active_tools.contains_tool_class(SerenaReplTool) and not self.is_single_project():
+            msg += f"\n\nAvailable facades for the `{SerenaReplTool.get_name_from_cls()}` tool:\n" + self.get_repl().entrypoint.overview()
 
         self._project_prompt_status.mark_project_activation_message_as_provided(session_id)
 
@@ -1571,10 +1576,11 @@ class SerenaAgent:
         :param tool_class: the tool class
         :return: whether the function is available
         """
+        is_active_tool = self._active_tools.contains_tool_class(tool_class)
         if self._agent_interface == AgentInterface.TOOLS:
-            return self._active_tools.contains_tool_class(tool_class)
+            return is_active_tool
         elif self._agent_interface == AgentInterface.REPL:
-            return self.get_repl().entrypoint.is_tool_function_available(tool_class)
+            return is_active_tool or self.get_repl().entrypoint.is_tool_function_available(tool_class)
         else:
             raise NotImplementedError
 

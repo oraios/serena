@@ -919,6 +919,13 @@ class TestSerenaAgent:
             assert exposed == expected
             assert "s.lsp" in agent.get_tool(SerenaReplTool).apply(agent.create_session().session_id, "s.info()")
 
+            # the facade listing is part of the (fixed) tool description in single-project sessions,
+            # and of the activation message otherwise (where the facades depend on the activated project)
+            tool_description = agent.get_tool(SerenaReplTool).get_apply_docstring()
+            activation_message = agent.get_project_activation_message("test_session")
+            assert ("s.lsp:" in tool_description) == context.single_project
+            assert ("s.lsp:" in activation_message) == (not context.single_project)
+
             # prompts refer to operations by their qualified REPL names, e.g. `lsp.find_symbol` instead of the tool name
             system_prompt = agent.create_system_prompt()
             assert "`lsp.find_symbol`" in system_prompt
