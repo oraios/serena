@@ -254,6 +254,19 @@ class TestTsserverCrashDetection:
         # the crash must be reported, not swallowed into a false "we've already waited" state
         assert server._has_waited_for_cross_file_references is False
 
+    def test_wait_for_cross_file_references_raises_after_the_latch_when_a_crash_was_observed(self) -> None:
+        """A crash observed after the first query has latched _has_waited_for_cross_file_references
+        must still surface on the next query. The latch skips the wait, and the wait is the only
+        place that checks _crash_message, so without a check here tsserver's teardown $/progress
+        "end" leaves nothing to raise and find_referencing_symbols returns {} with isError false.
+        """
+        server = _bare_ts_server(TypeScriptLanguageServer)
+        server._has_waited_for_cross_file_references = True
+        server._crash_message = "tsserver exited abnormally: [tsserver] Exited. Code: null. Signal: SIGKILL"
+
+        with pytest.raises(TypeScriptServerCrashedError, match="SIGKILL"):
+            server._wait_for_cross_file_references_if_needed()
+
 
 class TestWaitForCrossFileReferencesUsesConfiguredGrace:
     """The actual find-references call path (not just the helper in isolation) must honor
