@@ -663,7 +663,8 @@ class SerenaAgent:
 
         # determine the effective language backend for this session.
         # If a startup project is provided and has a per-project override, use it; otherwise use the global config.
-        # Since we don't want to change the toolset after startup, the language backend cannot be changed within a running Serena session
+        # With the tool interface, the backend cannot change within a session (the toolset depends on it and is fixed);
+        # with the REPL interface, it may change upon project activation (see _activate_project).
         self._language_backend = self.serena_config.determine_language_backend(
             project_config=registered_project_to_activate.project_config if registered_project_to_activate is not None else None,
             log_choice=True,
@@ -1420,15 +1421,24 @@ class SerenaAgent:
 
         self._project_activation_error = None
 
-        # check if the project requires a different language backend than the one initialized at startup
+        # handle the case where the project requires a different language backend than the current one.
+        # With the tool interface, the backend cannot change, since the set of exposed tools depends on it and is fixed
+        # for the session. With the REPL interface, the backend can be switched, as all backend-dependent state
+        # (background modes, REPL facades, prompt parameters, the project's language backend initialisation) is
+        # recomputed upon activation.
         project_backend = project.project_config.language_backend
         if project_backend is not None and project_backend != self._language_backend:
-            raise ValueError(
-                f"Cannot activate project '{project.project_name}': it requires the {project_backend.value} backend, "
-                f"but this session was initialized with {self._language_backend.value}. "
-                f"Workarounds: (1) Use project activation at startup via the --project flag, "
-                f"(2) Configure one MCP server per backend in your client."
+            if self._agent_interface.is_tools():
+                raise ValueError(
+                    f"Cannot activate project '{project.project_name}': it requires the {project_backend.value} backend, "
+                    f"but this session was initialized with {self._language_backend.value}. "
+                    f"Workarounds: (1) Use project activation at startup via the --project flag, "
+                    f"(2) Configure one MCP server per backend in your client, (3) use the REPL interface."
+                )
+            log.info(
+                f"Switching language backend from {self._language_backend.value} to {project_backend.value} for project '{project.project_name}'"
             )
+            self._language_backend = project_backend
 
         # shut down the previously active project to release its language server processes
         if self._active_project is not None:

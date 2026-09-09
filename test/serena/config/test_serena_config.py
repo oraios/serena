@@ -363,6 +363,35 @@ class TestEffectiveLanguageBackend:
         finally:
             agent.on_shutdown(timeout=5)
 
+    def test_activate_project_switches_backend_with_repl_interface(self):
+        """With the REPL interface, post-init activation of a project with a different backend switches the backend."""
+        config, name = _make_config_with_project("lsp_proj", language_backend=None, global_backend=LanguageBackend.LSP)
+        config.agent_interface = AgentInterface.REPL
+        jb_project = Project(
+            project_root=str(Path(__file__).parent.parent / "resources" / "repos" / "java" / "test_repo"),
+            project_config=ProjectConfig(
+                project_name="jb_proj",
+                language_servers=[LanguageServerId.JAVA],
+                language_backend=LanguageBackend.JETBRAINS,
+            ),
+            serena_config=config,
+        )
+        config.projects.append(RegisteredProject.from_project_instance(jb_project))
+
+        agent = SerenaAgent(project=name, serena_config=config)
+        try:
+            assert agent.get_language_backend() == LanguageBackend.LSP
+            assert "s.lsp" in agent.get_repl().entrypoint.overview()
+
+            # the backend and everything depending on it follow the activated project
+            agent.activate_project_from_path_or_name("jb_proj")
+            assert agent.get_language_backend() == LanguageBackend.JETBRAINS
+            overview = agent.get_repl().entrypoint.overview()
+            assert "s.jb" in overview and "s.lsp" not in overview
+            assert "jetbrains" in [m.name for m in agent.get_active_modes().get_modes(include_background_base_modes=True)]
+        finally:
+            agent.on_shutdown(timeout=5)
+
     def test_activate_project_allows_matching_backend(self):
         """Post-init activation of a project with matching backend succeeds."""
         config, name = _make_config_with_project("lsp_proj", language_backend=None, global_backend=LanguageBackend.LSP)

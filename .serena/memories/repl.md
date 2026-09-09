@@ -76,6 +76,9 @@ expression is the result. No `return` (a top-level `return` yields a SyntaxError
   (`serena_repl`, `initial_instructions`, `activate_project` unless single-project); tool inclusion/exclusion
   definitions do not apply — each interface has its own configuration vocabulary (tool definitions ↔ tools,
   API definitions ↔ REPL). Contexts do not influence the interface.
+  In REPL mode, the language backend may change upon project activation (a project's backend override is
+  applied; background modes, facades, prompt params and backend initialisation are recomputed), whereas the
+  tool interface forbids this (the toolset depends on the backend and is fixed).
   Idea (not implemented, considered over-engineered for now): contexts could declare *supported* interfaces
   (a capability constraint, e.g. clients that handle the REPL badly), with the user's preference choosing among them.
 - `included_apis`/`excluded_apis` (references `facade` or `facade.method`) in global config, context, modes,
