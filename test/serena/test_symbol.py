@@ -311,7 +311,7 @@ class TestHoverBudget:
 
     @pytest.mark.parametrize("project_with_ls", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_budget_exceeded_partial_info(self, project_with_ls: Project, monkeypatch: pytest.MonkeyPatch):
-        """With a small budget, hover lookups stop and remaining symbols get None info."""
+        """With a small budget, hover lookups stop and remaining symbols get an explanatory note."""
         project_with_ls.serena_config.symbol_info_budget = 0.1
         project_with_ls.project_config.symbol_info_budget = 0.1
 
@@ -345,13 +345,11 @@ class TestHoverBudget:
         assert call_count == 2
         assert len(result) == 5
 
-        # First 2 symbols should have info, last 3 should be None
+        # First 2 symbols should have info, last 3 should explain the budget cut
         result_list = list(result.values())
         assert result_list[0] is not None
         assert result_list[1] is not None
-        assert result_list[2] is None
-        assert result_list[3] is None
-        assert result_list[4] is None
+        assert all(info is not None and "symbol_info_budget" in info for info in result_list[2:])
 
     @pytest.mark.parametrize("project_with_ls", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_budget_zero_means_unlimited(self, project_with_ls: Project, monkeypatch: pytest.MonkeyPatch):
