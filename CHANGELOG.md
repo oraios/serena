@@ -13,6 +13,8 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * General:
   - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
+  - Fix: importing Serena no longer loads the `anthropic` package unless the Anthropic token counter is
+    actually used; the unconditional import added seconds to CLI/MCP startup on some machines (#2012)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
   - Fix: `TextUtils.insert_text_at_position` returned a wrong position when the inserted text merged
