@@ -1011,6 +1011,8 @@ class ProjectCommands(AutoRegisteringGroup):
                     )
                 find_symbol_data = json.loads(find_symbol_result)
                 log.info("FindSymbolTool found %d matches for symbol %s", len(find_symbol_data), symbol_name)
+                if not find_symbol_data:
+                    raise ProjectCommands._HealthCheckFailure("FindSymbolTool returned no results")
 
                 # Test 3: FindReferencingSymbolsTool
                 log.info("Testing FindReferencingSymbolsTool for symbol: %s", symbol_name)
@@ -1020,11 +1022,12 @@ class ProjectCommands(AutoRegisteringGroup):
                         find_refs_data = json.loads(find_refs_result)
                         log.info("FindReferencingSymbolsTool found %d references for symbol %s", len(find_refs_data), symbol_name)
                 except Exception as e:
-                    log.warning("FindReferencingSymbolsTool failed for symbol %s: %s", symbol_name, str(e))
-
-                # Verify tools worked as expected
-                if not find_symbol_data:
-                    raise ProjectCommands._HealthCheckFailure("FindSymbolTool returned no results")
+                    # A symbol with no references at all is a legitimate result, so the number of
+                    # references is not asserted - but a *failure* of the reference search means the
+                    # language server is not functional, which is the single thing this command is
+                    # asked to determine. Logging it as a warning let the command print
+                    # "All tools working correctly" and exit 0 after the search had already failed.
+                    raise ProjectCommands._HealthCheckFailure(f"FindReferencingSymbolsTool failed for symbol {symbol_name}: {e}") from e
 
                 log.info("Health check completed successfully")
 
