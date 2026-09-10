@@ -37,10 +37,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     reset-on-Serena-tool-use branch was unreachable there and reminder counters never cleared after a
     successful Serena call. Add a `serena-hooks reset` command and a `PostToolUse` example matched to
     Serena's own tools to close the gap (#1852)
-
-* Language Servers:
   - Add DSH (DeepSeek Harness) as a Claude-compatible `serena-hooks` client, including activate, remind,
     cleanup and auto-approve commands (#1869)
+
+* Language Servers:
   - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
     preserves explicit user settings across initialization and configuration requests (#1989)
     VTS initialization options now override defaults per top-level key rather than replacing the
