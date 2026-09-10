@@ -13,6 +13,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     which could leave grandchildren as zombies; cleanup now waits for the discovered descendants (#1464)
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
 
+* CLI:
+  - Fix: `project health-check` reported `Health check passed - All tools working correctly` and
+    exited 0 even when `FindReferencingSymbolsTool` had raised, because that failure was logged as
+    a warning while the verdict checked `FindSymbolTool` only. A reference-search failure now fails
+    the check; a symbol with no references is still a pass
+
 * Memories:
   - Fix: `save_memory`/`edit_memory` wrote directly to the memory file with `open(path, "w")`, which
     truncates it before the new content is written; a crash, OOM kill, or full disk partway through
@@ -37,6 +43,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     code searches and reads, plus configurable code-file extensions (#1470)
 
 * Language Servers:
+  - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
+    preserves explicit user settings across initialization and configuration requests (#1989)
+    VTS initialization options now override defaults per top-level key rather than replacing the
+    entire configuration; a user-provided `typescript` block replaces the ATA default too.
+    `initializationOptions` takes precedence over the legacy `initialization_options` alias.
   - Add FreeBSD mapping to platform detection
   - Remove unnecessary platform checks from the following language servers, expanding the set of
     supported platforms accordingly: Elixir Tools, Intelephense, Perl, TypeScript, VTS
@@ -71,6 +82,16 @@ Status of the `main` branch. Changes prior to the next official version change w
     silently returned an empty result instead of surfacing the crash. The crash is now detected
     independently via the `window/logMessage` notification tsserver already sends, and the
     affected wait now raises instead of reporting success (#1814)
+  - Fix: two Serena instances activating the same project concurrently launched their Kotlin LSP
+    processes against the same on-disk index storage location, so the second instance's requests
+    were repeatedly cancelled by the first instance's server. A Kotlin LSP process now claims that
+    storage directory via a lock; a single instance (including across restarts) still gets the
+    same directory, and a second concurrent instance gets a directory of its own instead of
+    contending for the first one's (#1966)
+  - Fix: document symbol caching did not account for language-server-specific post-processing of
+    symbols, which was applied outside the caches; the processing of language servers that post-process
+    symbols (e.g. Go, Nix, Fortran, F#, Vue) was therefore repeated on every request or, if it mutated
+    symbols in place, re-applied to already processed cached results
 
 CLI:
   - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)

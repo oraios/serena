@@ -127,7 +127,7 @@ class AnsibleLanguageServer(SolidLanguageServer):
         return False
 
     @override
-    def _request_document_symbols(
+    def _request_raw_document_symbols(
         self, relative_file_path: str, file_data: LSPFileBuffer | None
     ) -> list[SymbolInformation] | list[DocumentSymbol] | None:
         # ansible-language-server does not implement textDocument/documentSymbol and the
