@@ -14,6 +14,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
 
 * CLI:
+  - Add `download-ls-dependencies` to prefetch runtime dependencies for selected language servers, or all
+    non-experimental servers with `--all`, for environments with restricted network access (#664)
   - Fix: `project health-check` reported `Health check passed - All tools working correctly` and
     exited 0 even when `FindReferencingSymbolsTool` had raised, because that failure was logged as
     a warning while the verdict checked `FindSymbolTool` only. A reference-search failure now fails
@@ -37,10 +39,6 @@ Status of the `main` branch. Changes prior to the next official version change w
     reset-on-Serena-tool-use branch was unreachable there and reminder counters never cleared after a
     successful Serena call. Add a `serena-hooks reset` command and a `PostToolUse` example matched to
     Serena's own tools to close the gap (#1852)
-
-* CLI:
-  - Add `download-ls-dependencies` to prefetch runtime dependencies for selected language servers, or all
-    non-experimental servers with `--all`, for environments with restricted network access (#664)
 
 * Language Servers:
   - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
