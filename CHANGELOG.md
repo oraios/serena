@@ -92,7 +92,8 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Hooks:
   - Fix: Claude Code and CodeBuddy Bash payloads now classify common shell searches and source-file
     reads, including compound commands, so native shell traffic reaches the symbolic-tool reminder (#1845)
-CLI:
+
+* CLI:
   - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)
 
 * Dependencies:
