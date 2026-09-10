@@ -977,16 +977,16 @@ class ProjectCommands(AutoRegisteringGroup):
             exit(1)
         ls_mgr = proj.create_language_server_manager()
         try:
-            for ls in ls_mgr.iter_language_servers():
-                click.echo(f"Indexing for language {ls.ls_id.value} …")
-                document_symbols = ls.request_document_symbols(file)
-                symbols, _ = document_symbols.get_all_symbols_and_roots()
-                if verbose:
-                    click.echo(f"Symbols in file '{file}':")
-                    for symbol in symbols:
-                        click.echo(f"  - {symbol['name']} at line {symbol['selectionRange']['start']['line']} of kind {symbol['kind']}")
-                ls.save_cache()
-                click.echo(f"Successfully indexed file '{file}', {len(symbols)} symbols saved to cache in {ls.cache_dir}.")
+            ls = ls_mgr.get_language_server(file)
+            click.echo(f"Indexing for language {ls.ls_id.value} …")
+            document_symbols = ls.request_document_symbols(file)
+            symbols, _ = document_symbols.get_all_symbols_and_roots()
+            if verbose:
+                click.echo(f"Symbols in file '{file}':")
+                for symbol in symbols:
+                    click.echo(f"  - {symbol['name']} at line {symbol['selectionRange']['start']['line']} of kind {symbol['kind']}")
+            ls.save_cache()
+            click.echo(f"Successfully indexed file '{file}', {len(symbols)} symbols saved to cache in {ls.cache_dir}.")
         finally:
             ls_mgr.stop_all()
 
@@ -1095,6 +1095,8 @@ class ProjectCommands(AutoRegisteringGroup):
                     )
                 find_symbol_data = json.loads(find_symbol_result)
                 log.info("FindSymbolTool found %d matches for symbol %s", len(find_symbol_data), symbol_name)
+                if not find_symbol_data:
+                    raise ProjectCommands._HealthCheckFailure("FindSymbolTool returned no results")
 
                 # Test 3: FindReferencingSymbolsTool
                 log.info("Testing FindReferencingSymbolsTool for symbol: %s", symbol_name)
@@ -1104,11 +1106,12 @@ class ProjectCommands(AutoRegisteringGroup):
                         find_refs_data = json.loads(find_refs_result)
                         log.info("FindReferencingSymbolsTool found %d references for symbol %s", len(find_refs_data), symbol_name)
                 except Exception as e:
-                    log.warning("FindReferencingSymbolsTool failed for symbol %s: %s", symbol_name, str(e))
-
-                # Verify tools worked as expected
-                if not find_symbol_data:
-                    raise ProjectCommands._HealthCheckFailure("FindSymbolTool returned no results")
+                    # A symbol with no references at all is a legitimate result, so the number of
+                    # references is not asserted - but a *failure* of the reference search means the
+                    # language server is not functional, which is the single thing this command is
+                    # asked to determine. Logging it as a warning let the command print
+                    # "All tools working correctly" and exit 0 after the search had already failed.
+                    raise ProjectCommands._HealthCheckFailure(f"FindReferencingSymbolsTool failed for symbol {symbol_name}: {e}") from e
 
                 log.info("Health check completed successfully")
 

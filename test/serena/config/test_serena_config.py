@@ -604,6 +604,48 @@ class TestSerenaConfigLoadSave:
 
         assert len(resulting_config.projects) == 4
 
+    def test_remove_project_persists_across_reload(self):
+        """Removing a project must update the on-disk project registry."""
+        p1 = self._make_project_dir("project1", 'project_name: "project1"\nlanguages: ["python"]\n')
+        p2 = self._make_project_dir("project2", 'project_name: "project2"\nlanguages: ["python"]\n')
+        self._write_master_config([p1, p2])
+
+        config = SerenaConfig.from_config_file(generate_if_missing=False)
+        config.remove_project("project2")
+
+        reloaded = SerenaConfig.from_config_file(generate_if_missing=False)
+        assert [project.project_config.project_name for project in reloaded.projects] == ["project1"]
+
+    def test_remove_project_preserves_concurrent_addition(self):
+        """A removal must not discard a project added by another config instance."""
+        p1 = self._make_project_dir("project1", 'project_name: "project1"\nlanguages: ["python"]\n')
+        p2 = self._make_project_dir("project2", 'project_name: "project2"\nlanguages: ["python"]\n')
+        p3 = self._make_project_dir("project3", 'project_name: "project3"\nlanguages: ["python"]\n')
+        self._write_master_config([p1, p2])
+
+        removing_config = SerenaConfig.from_config_file(generate_if_missing=False)
+        adding_config = SerenaConfig.from_config_file(generate_if_missing=False)
+        adding_config.add_project_from_path(p3)
+        removing_config.remove_project("project2")
+
+        reloaded = SerenaConfig.from_config_file(generate_if_missing=False)
+        assert {project.project_config.project_name for project in reloaded.projects} == {"project1", "project3"}
+
+    def test_add_project_preserves_concurrent_removal(self):
+        """An addition must not resurrect a project removed by another config instance."""
+        p1 = self._make_project_dir("project1", 'project_name: "project1"\nlanguages: ["python"]\n')
+        p2 = self._make_project_dir("project2", 'project_name: "project2"\nlanguages: ["python"]\n')
+        p3 = self._make_project_dir("project3", 'project_name: "project3"\nlanguages: ["python"]\n')
+        self._write_master_config([p1, p2])
+
+        removing_config = SerenaConfig.from_config_file(generate_if_missing=False)
+        adding_config = SerenaConfig.from_config_file(generate_if_missing=False)
+        removing_config.remove_project("project2")
+        adding_config.add_project_from_path(p3)
+
+        reloaded = SerenaConfig.from_config_file(generate_if_missing=False)
+        assert {project.project_config.project_name for project in reloaded.projects} == {"project1", "project3"}
+
 
 class TestGetRegisteredProjectWithDanglingProject:
     """A registered project whose root directory was deleted (e.g. a removed git

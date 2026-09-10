@@ -266,6 +266,59 @@ class TestKotlinDependencyProvider:
             ]
             assert other_os_provider.create_launch_command() == [other_os_launcher, "--stdio"]
 
+    def test_single_instance_keeps_the_deterministic_cache_dir(self, tmp_path: Path) -> None:
+        """The common case (one Serena instance, possibly restarted) must keep reusing the
+        same on-disk directory, or the Kotlin LSP loses its index cache on every restart.
+        """
+        provider = _make_provider(tmp_path)
+
+        assert provider.storage_dir == str(tmp_path / "project-cache")
+
+    def test_second_concurrent_instance_gets_its_own_storage_dir(self, tmp_path: Path) -> None:
+        """Two Serena instances activating the same project concurrently (oraios/serena#1966)
+        must not be handed the same Kotlin LSP storage directory: the second one falls back to
+        a directory of its own instead of contending with the first for the same index.
+        """
+        first = _make_provider(tmp_path)
+        second = _make_provider(tmp_path)
+        try:
+            assert first.storage_dir == str(tmp_path / "project-cache")
+            assert second.storage_dir != first.storage_dir
+            assert second.storage_dir.startswith(str(tmp_path / "project-cache") + "-instance-")
+        finally:
+            first.release_storage_lock()
+            second.release_storage_lock()
+
+    def test_storage_dir_is_reclaimed_once_the_first_instance_releases_it(self, tmp_path: Path) -> None:
+        first = _make_provider(tmp_path)
+        first.release_storage_lock()
+
+        second = _make_provider(tmp_path)
+        try:
+            assert second.storage_dir == str(tmp_path / "project-cache")
+        finally:
+            second.release_storage_lock()
+
+    def test_concurrent_instances_get_different_system_path_arguments(self, tmp_path: Path) -> None:
+        launcher = "/path/to/intellij-server"
+        first = _make_provider(tmp_path, {"ls_path": launcher})
+        second = _make_provider(tmp_path, {"ls_path": launcher})
+        try:
+            with patch(
+                "solidlsp.language_servers.kotlin_language_server.PlatformUtils.get_platform_id",
+                return_value=PlatformId.LINUX_x64,
+            ):
+                first_cmd = first.create_launch_command()
+                second_cmd = second.create_launch_command()
+
+            assert first_cmd == [launcher, "--stdio", "--system-path", str(tmp_path / "project-cache" / "kotlin-lsp-system")]
+            assert second_cmd[:2] == [launcher, "--stdio"]
+            assert second_cmd[2] == "--system-path"
+            assert second_cmd[3] != first_cmd[3]
+        finally:
+            first.release_storage_lock()
+            second.release_storage_lock()
+
     def test_invalid_version_is_rejected_before_download(self) -> None:
         with pytest.raises(ValueError, match="dot-separated integers"):
             KotlinLanguageServer.DependencyProvider._create_artifact("latest", PlatformId.OSX_arm64)

@@ -41,7 +41,7 @@ from serena.config.serena_config import (
     ToolInclusionDefinition,
 )
 from serena.dashboard import SerenaDashboardAPI, SerenaDashboardTrayManager, SerenaDashboardViewer, open_url_in_browser
-from serena.jetbrains import jetbrains_plugin_client
+from serena.jetbrains import launch_coordinator as jetbrains_launch_coordinator
 from serena.ls_manager import LanguageServerManager
 from serena.memories.memory_manager import MemoryManager
 from serena.project import Project
@@ -794,6 +794,7 @@ class SerenaAgent:
         # of tools that will be exposed to the client.
         # Furthermore, we disable tools that are only relevant for project activation.
         # So if the project exists, we apply all the aforementioned exclusions.
+        apply_read_only = False
         if is_single_project:
             assert project is not None
             log.info(
@@ -807,9 +808,12 @@ class SerenaAgent:
                 )
             )
             tool_inclusion_definitions.append(project.project_config)
+            apply_read_only = project.project_config.read_only
 
         # compute the resulting tool set
         base_toolset = ToolSet.default().apply(*tool_inclusion_definitions)
+        if apply_read_only:
+            base_toolset = base_toolset.without_editing_tools()
         log.info(f"Number of exposed tools: {len(base_toolset)}")
         return base_toolset
 
@@ -1322,18 +1326,13 @@ class SerenaAgent:
 
         # for JetBrains mode, search for plugin server and spawn IDE (if not found and launch command provided)
         elif self.get_language_backend().is_jetbrains():
-            try:
-                client = jetbrains_plugin_client.JetBrainsPluginClient.from_project(project, log_warning=False)
+            client = jetbrains_launch_coordinator.find_plugin_server(project)
+            if client is not None:
                 log.info("Found Serena JetBrains Plugin server: %s", client)
-            except jetbrains_plugin_client.ServerNotFoundError:
+            else:
                 log.info("Serena JetBrains Plugin server not found for project %s", project.project_name)
                 if self.serena_config.jetbrains_launch_command:
-                    cmd = subprocess_util.convert_shell_cmd([self.serena_config.jetbrains_launch_command, project.project_root])
-                    log.info("Launching IDE with command: %s", cmd)
-                    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-                    stdout, stderr = p.communicate()
-                    if p.returncode != 0:
-                        log.error(f"Failed to launch JetBrains IDE: {stderr.decode('utf-8')}")
+                    jetbrains_launch_coordinator.launch_and_wait_for_plugin_server(project, self.serena_config.jetbrains_launch_command)
 
     def activate_project_from_path_or_name(
         self, project_root_or_name: str, update_active_modes: bool = True, update_active_tools: bool = True
