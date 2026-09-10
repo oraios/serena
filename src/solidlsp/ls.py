@@ -143,6 +143,11 @@ class LSPFileBuffer:
             current_contents = self.contents
             if self._read_file_modified_date != self._read_file_modified_date_passed_to_ls:
                 self._read_file_modified_date_passed_to_ls = self._read_file_modified_date
+                # A VersionedTextDocumentIdentifier's version must increase after each change,
+                # like the range-based didChange notifications sent for edits do. Reusing the
+                # previous number makes diagnostics/resolve data for the old and the new text
+                # indistinguishable to servers that key on it (rust-analyzer, pyright).
+                self.version += 1
                 self.language_server.server.notify.did_change_text_document(
                     {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
                         LSPConstants.TEXT_DOCUMENT: {
