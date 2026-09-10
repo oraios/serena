@@ -23,6 +23,7 @@ import stat
 import threading
 from dataclasses import dataclass
 
+from filelock import FileLock, Timeout
 from overrides import override
 
 from solidlsp.dependency_provider import DownloadedDependency, DownloadedDependencyHashDatabase
@@ -117,7 +118,37 @@ class KotlinLanguageServer(SolidLanguageServer):
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
         def __init__(self, custom_settings: SolidLSPSettings.CustomLSSettings, ls_resources_dir: str, project_cache_dir: str):
             super().__init__(custom_settings, ls_resources_dir)
-            self._project_cache_dir = project_cache_dir
+            self._storage_lock: FileLock | None = None
+            self.storage_dir = self._claim_storage_dir(project_cache_dir)
+
+        def _claim_storage_dir(self, project_cache_dir: str) -> str:
+            """Claims the on-disk directory this instance's Kotlin LSP process will use for its index storage.
+
+            Tries the shared, deterministic per-project directory first via a non-blocking file lock, so a
+            single Serena instance keeps reusing its index across restarts (the primary use case, which must
+            not regress). If another live Serena instance already holds that directory (concurrent sessions
+            on the same project, see oraios/serena#1966), falls back to a directory unique to this process
+            instead of two Kotlin LSP processes contending for the same index.
+            """
+            lock = FileLock(f"{project_cache_dir}.lock")
+            try:
+                lock.acquire(timeout=0)
+            except Timeout:
+                instance_dir = f"{project_cache_dir}-instance-{os.getpid()}"
+                os.makedirs(instance_dir, exist_ok=True)
+                log.info(
+                    "Kotlin LSP storage directory %s is in use by another Serena instance; using %s for this instance",
+                    project_cache_dir,
+                    instance_dir,
+                )
+                return instance_dir
+            self._storage_lock = lock
+            return project_cache_dir
+
+        def release_storage_lock(self) -> None:
+            if self._storage_lock is not None:
+                self._storage_lock.release()
+                self._storage_lock = None
 
         @classmethod
         def _create_artifact(cls, version: str, platform_id: PlatformId) -> KotlinLSPArtifact:
@@ -224,7 +255,7 @@ class KotlinLanguageServer(SolidLanguageServer):
             platform_id = PlatformUtils.get_platform_id()
             intellij_launcher_name = "intellij-server.exe" if platform_id.is_windows() else "intellij-server"
             if os.path.basename(core_path).lower() == intellij_launcher_name:
-                command.extend(["--system-path", os.path.join(self._project_cache_dir, "kotlin-lsp-system")])
+                command.extend(["--system-path", os.path.join(self.storage_dir, "kotlin-lsp-system")])
             return command
 
         def create_launch_command_env(self) -> dict[str, str]:
@@ -243,10 +274,19 @@ class KotlinLanguageServer(SolidLanguageServer):
             env["JAVA_TOOL_OPTIONS"] = jvm_options
             return env
 
+    @override
+    def stop(self, shutdown_timeout: float = 2.0) -> None:
+        super().stop(shutdown_timeout=shutdown_timeout)
+        if isinstance(self._dependency_provider, self.DependencyProvider):
+            self._dependency_provider.release_storage_lock()
+
     def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Kotlin Language Server.
         """
+        dependency_provider = self._get_dependency_provider()
+        assert isinstance(dependency_provider, self.DependencyProvider)
+        storage_dir = dependency_provider.storage_dir
         root_uri = pathlib.Path(self.repository_root_path).as_uri()
         initialize_params = {
             "locale": "en",
@@ -459,7 +499,7 @@ class KotlinLanguageServer(SolidLanguageServer):
             },
             "initializationOptions": {
                 "workspaceFolders": [root_uri],
-                "storagePath": None,
+                "storagePath": storage_dir,
                 "codegen": {"enabled": False},
                 "compiler": {"jvm": {"target": "default"}},
                 "completion": {"snippets": {"enabled": True}},
