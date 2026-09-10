@@ -10,9 +10,11 @@ from dataclasses import dataclass
 from typing import Literal, cast
 
 import pytest
+import tiktoken
 from _pytest.mark import Mark, MarkDecorator, ParameterSet
 
 from serena.agent import SerenaAgent
+from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
 from serena.config.context_mode import SerenaAgentContext
 from serena.config.serena_config import AgentInterface, ProjectConfig, RegisteredProject, SerenaConfig
 from serena.lsp.lsp_diagnostics import DiagnosticsContext
@@ -33,6 +35,7 @@ from serena.tools import (
     SafeDeleteSymbol,
     SerenaReplTool,
     Tool,
+    ToolMarkerDoesNotRequireActiveProject,
 )
 from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_types import SymbolKind
@@ -868,6 +871,30 @@ def serena_agent(request: pytest.FixtureRequest, serena_config) -> Iterator[Sere
 
 
 class TestSerenaAgent:
+    def test_tool_result_survives_tokenizer_literals(self, serena_config, monkeypatch: pytest.MonkeyPatch) -> None:
+        encoding = tiktoken.Encoding(
+            name="test_special_tokens",
+            pat_str=r"(?s:.)",
+            mergeable_ranks={bytes([value]): value for value in range(256)},
+            special_tokens={"<|endoftext|>": 256, "<|endofprompt|>": 257},
+        )
+        monkeypatch.setattr(tiktoken, "encoding_for_model", lambda _: encoding)
+        agent = SerenaAgent(serena_config=serena_config)
+        agent._tool_usage_stats = ToolUsageStats(RegisteredTokenCountEstimator.TIKTOKEN_GPT4O)
+
+        class LiteralTokenTool(Tool, ToolMarkerDoesNotRequireActiveProject):
+            def apply(self, text: str) -> str:
+                return f"{text} <|endofprompt|>"
+
+        tool = LiteralTokenTool(agent)
+        monkeypatch.setattr(tool, "is_active", lambda: True)
+
+        try:
+            result = tool.apply_ex(catch_exceptions=False, text="<|endoftext|>")
+            assert result == "<|endoftext|> <|endofprompt|>"
+        finally:
+            agent.on_shutdown(timeout=5)
+
     @pytest.mark.parametrize(
         "project",
         [None, str(get_repo_path(LanguageServerId.PYTHON)), "non_existent_path"],
