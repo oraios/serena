@@ -113,7 +113,7 @@ Some languages require additional installations or setup steps, as noted.
   the project must be a Lake project with `lake build` run before use)
 * **Lua**
   (by default, uses `lua-language-server`; the experimental Rust-based [EmmyLua Analyzer](https://github.com/EmmyLuaLs/emmylua-analyzer-rust)
-  can be selected with language `lua_emmylua` and is automatically downloaded when `emmylua_ls` is not on PATH)
+  can be selected with language `lua_emmylua`; Serena manages a verified download unless `ls_path` is set)
 * **Luau**
 * **Markdown**  
   (must explicitly enable language `markdown`, primarily useful for documentation-heavy projects)
