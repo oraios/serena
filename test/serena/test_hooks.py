@@ -1409,9 +1409,10 @@ class TestPreToolUseEnforceSymbolicToolsHook:
         hook_output = output["hookSpecificOutput"]
         assert hook_output["permissionDecision"] == "deny"
         assert "additionalContext" not in hook_output
-        assert 'mcp__serena__search_for_pattern(substring_pattern="needle", relative_path="src/foo.py")' in hook_output[
-            "permissionDecisionReason"
-        ]
+        assert (
+            'mcp__serena__search_for_pattern(substring_pattern="needle", relative_path="src/foo.py")'
+            in hook_output["permissionDecisionReason"]
+        )
 
     def test_codex_grep_without_code_file_target_keeps_pattern_only(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         payload = _base_input(tool_name="exec_command", tool_input={"cmd": "rg -n needle"})
