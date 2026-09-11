@@ -155,9 +155,7 @@ class TestMqlLanguageServer:
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.MQL], indirect=True)
     @pytest.mark.parametrize("repo_path", [LanguageServerId.MQL], indirect=True)
-    def test_definition_at_include_line_documents_server_limitation(
-        self, language_server: SolidLanguageServer, repo_path: Path
-    ) -> None:
+    def test_definition_at_include_line_documents_server_limitation(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         """D7-1 probe: definition at the .mq5 include line is NOT resolved by
         mql-lsp-server v2.0.0 (cross-file definition unsupported); the include
         relationship is instead verified via workspace-wide references
@@ -186,7 +184,7 @@ class TestMqlLanguageServer:
         # _get_language_id_for_file); didSave must reach the server while it is open
         with language_server.open_file(relative_path) as file_buffer:
             language_server.server.notify.did_save_text_document(
-                {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                {  # dict built from LSPConstants keys; shape matches the TypedDict
                     "textDocument": {"uri": file_buffer.uri},
                 }
             )
