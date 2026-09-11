@@ -29,7 +29,7 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
-PYREFLY_VERSION = "1.1.1"
+PYREFLY_VERSION = "1.2.0"
 PYREFLY_CONFIG_DOC_URL = "https://pyrefly.org/en/docs/configuration/"
 
 # Pyrefly cancels in-flight requests with these error codes whenever its workspace state mutates
