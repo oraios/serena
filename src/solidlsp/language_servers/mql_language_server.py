@@ -107,6 +107,8 @@ class MqlLanguageServer(SolidLanguageServer):
 
             # legacy unversioned dir reserved for INITIAL; every other version gets a versioned subdir
             # so that a DEFAULT bump never silently reuses stale binaries
+            # (at introduction INITIAL == DEFAULT, so the default install targets the
+            # legacy dir — matching upstream marksman behavior at its own introduction)
             install_dir = (
                 os.path.join(self._ls_resources_dir, "mql-lsp")
                 if version == INITIAL_MQL_VERSION
@@ -190,23 +192,8 @@ class MqlLanguageServer(SolidLanguageServer):
 
     def _start_server(self) -> None:
         """Start the mql-lsp-server process and complete the LSP handshake."""
-        # the server sends no experimental/serverStatus notifications, so we
-        # consider it ready immediately after the initialize response
-
-        def register_capability_handler(params: dict) -> None:
-            return
-
-        def window_log_message(msg: dict) -> None:
-            log.info("LSP: window/logMessage: %s", msg)
-
-        def do_nothing(params: dict) -> None:
-            return
-
-        self.server.on_request("client/registerCapability", register_capability_handler)
-        self.server.on_notification("window/logMessage", window_log_message)
-        self.server.on_notification("$/progress", do_nothing)
-        self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
-        self.server.on_notification("window/showMessage", do_nothing)
+        # the server sends no experimental/serverStatus notifications; readiness
+        # is gated on the dynamically registered feature capabilities instead
 
         # dynamic registration server: the documentSymbol/definition/references/etc.
         # providers are advertised via client/registerCapability after `initialized`
