@@ -39,6 +39,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     Serena's own tools to close the gap (#1852)
 
 * Language Servers:
+  - Extensionless scripts are routed to their language by the shebang line (`#!/usr/bin/env python3`,
+    `#!/bin/bash`, ...): `FilenameMatcher` sniffs existing files without an extension for the interpreters a
+    language declares (Python, Bash, Ruby, Perl), so `dev`- and `bin/`-style scripts are seen by the symbol
+    index, the ignore checks and the tools instead of being invisible.
   - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
     preserves explicit user settings across initialization and configuration requests (#1989)
     VTS initialization options now override defaults per top-level key rather than replacing the
