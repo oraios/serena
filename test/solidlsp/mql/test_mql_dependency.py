@@ -6,9 +6,9 @@ versions), allowed-hosts configuration, and the no-re-download cache hit.
 """
 
 import os
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
-from dataclasses import replace
 
 import pytest
 
