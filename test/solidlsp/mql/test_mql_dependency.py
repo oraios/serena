@@ -8,9 +8,11 @@ versions), allowed-hosts configuration, and the no-re-download cache hit.
 import os
 from pathlib import Path
 from unittest.mock import patch
+from dataclasses import replace
 
 import pytest
 
+from solidlsp.language_servers.common import RuntimeDependencyCollection
 from solidlsp.language_servers.mql_language_server import (
     _ASSET_BASENAME_BY_PLATFORM,
     DEFAULT_MQL_SHA256_BY_PLATFORM,
@@ -21,7 +23,8 @@ from solidlsp.language_servers.mql_language_server import (
     MqlLanguageServer,
     _mql_sha,
 )
-from solidlsp.ls_utils import PlatformId, PlatformUtils
+from solidlsp.ls_exceptions import SolidLSPException
+from solidlsp.ls_utils import FileUtils, PlatformId, PlatformUtils
 from solidlsp.settings import SolidLSPSettings
 
 
@@ -306,6 +309,128 @@ class TestMqlVersionResolution:
             provider._get_or_install_core_dependency()
 
         assert provider._create_launch_command(core) == [core]
+
+
+@pytest.mark.mql
+class TestMqlSecurityRefusals:
+    """Verifies the threat-matrix boundary: the install path must refuse
+    tampered targets instead of silently producing a usable binary (design D7
+    threat matrix, "Executable download+classification" row).
+    """
+
+    def test_url_outside_allowed_hosts_is_refused(self, tmp_path: Path) -> None:
+        """Spec R3 host-validation: a dependency URL resolving outside
+        MQL_ALLOWED_HOSTS must be refused with an explicit error naming the
+        offending host — before any bytes hit the filesystem.
+        """
+        # build the exact runtime dependency the provider resolves, then tamper
+        # its URL host to simulate a hijacked release channel
+        deps = MqlLanguageServer._runtime_dependencies(DEFAULT_MQL_VERSION)
+        dep = replace(deps.get_single_dep_for_current_platform(), url="https://evil.example.com/mql-lsp-server")
+
+        with pytest.raises(SolidLSPException, match="evil.example.com") as excinfo:
+            FileUtils.download_file_verified(
+                dep.url,
+                str(tmp_path / "mql-lsp-server"),
+                expected_sha256=dep.sha256,
+                allowed_hosts=dep.allowed_hosts,
+            )
+
+        # the refusal must come from host validation, not a network error
+        assert "allowed hosts" in str(excinfo.value), f"expected host-validation refusal, got: {excinfo.value}"
+        assert not (tmp_path / "mql-lsp-server").exists(), "refused download must leave no artifact"
+
+    def test_sha256_mismatch_refuses_install_and_leaves_no_usable_binary(self, tmp_path: Path) -> None:
+        """A downloaded asset whose digest differs from the pinned SHA must abort
+        the install: no binary may be left usable at the target path.
+        """
+        wrong_sha = "0" * 64
+        deps = MqlLanguageServer._runtime_dependencies(DEFAULT_MQL_VERSION)
+        dep = deps.get_single_dep_for_current_platform()
+        assert dep.sha256 is not None, "pinned dependency must carry a sha256"
+
+        # real download machinery with a corrupted body. Note: download_file_verified
+        # wraps the checksum failure into the generic "Error downloading file."
+        # SolidLSPException (the detailed checksum message is only logged); the
+        # security property asserted is the refusal + no artifact left behind.
+        payload = b"MQLTAMPEREDPAYLOAD"
+        with (
+            patch(
+                "solidlsp.ls_utils.requests.get",
+                return_value=_FakeResponse(payload, dep.url),
+            ),
+            pytest.raises(SolidLSPException),
+        ):
+            FileUtils.download_file_verified(
+                dep.url,
+                str(tmp_path / "mql-lsp-server"),
+                expected_sha256=wrong_sha,
+                allowed_hosts=dep.allowed_hosts,
+            )
+
+        assert not (tmp_path / "mql-lsp-server").exists(), "refused install must leave no usable binary"
+
+    def test_provider_install_failure_leaves_no_executable_to_launch(self, tmp_path: Path) -> None:
+        """End-to-end refusal path: with the real (host+sha enforcing) download
+        chain patched to fail at the checksum step, the provider must raise
+        FileNotFoundError — i.e. there is no binary to launch — and must not
+        leave an executable behind.
+        """
+        provider = _make_provider(tmp_path)
+
+        with (
+            patch(
+                "solidlsp.ls_utils.requests.get",
+                return_value=_FakeResponse(b"tampered", "https://github.com/final"),
+            ),
+            pytest.raises((SolidLSPException, FileNotFoundError)),
+        ):
+            provider._get_or_install_core_dependency()
+
+        binary_path = os.path.join(str(tmp_path), "mql-lsp", "mql-lsp-server")
+        assert not os.path.exists(binary_path), "failed install must leave no usable binary"
+
+    def test_provider_uses_real_download_chain(self) -> None:
+        """The MQL install must go through the verified download chain
+        (host validation + sha256), not a bypass: RuntimeDependencyCollection._install_from_url
+        must receive MQL's pinned sha256 and allowed_hosts.
+        """
+        with patch(
+            "solidlsp.ls_utils.FileUtils.download_and_extract_archive_verified",
+            side_effect=lambda *a, **kw: (_ for _ in ()).throw(SolidLSPException("stop")),
+        ) as chain:
+            deps = MqlLanguageServer._runtime_dependencies(DEFAULT_MQL_VERSION)
+            dep = deps.get_single_dep_for_current_platform()
+            try:
+                RuntimeDependencyCollection._install_from_url(dep, "/tmp/should-not-exist")
+            except SolidLSPException:
+                pass
+
+        chain.assert_called_once()
+        _, kwargs = chain.call_args
+        assert kwargs["expected_sha256"] == DEFAULT_MQL_SHA256_BY_PLATFORM[_get_platform_id().value]
+        assert tuple(kwargs["allowed_hosts"]) == MQL_ALLOWED_HOSTS
+
+        # and the MQL dependency object must carry the pinned digest + hosts
+        assert dep.sha256 == DEFAULT_MQL_SHA256_BY_PLATFORM[_get_platform_id().value]
+        assert tuple(dep.allowed_hosts) == MQL_ALLOWED_HOSTS
+
+
+class _FakeResponse:
+    """Minimal requests.Response stand-in for download tests (mirrors test_ls_utils)."""
+
+    def __init__(self, payload: bytes, final_url: str) -> None:
+        self.status_code = 200
+        self.headers = {}
+        self.url = final_url
+        self._payload = payload
+
+    def iter_content(self, chunk_size: int = 1):
+        for offset in range(0, len(self._payload), chunk_size):
+            yield self._payload[offset : offset + chunk_size]
+
+    def close(self) -> None:
+        return None
 
 
 @pytest.mark.mql
