@@ -414,6 +414,43 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
         msg = f"Successfully renamed '{name_path}' to '{new_name}' ({num_changes} changes applied)"
         return msg
 
+    def rename_file(self, relative_path: str, new_relative_path: str) -> str:
+        """
+        Renames or moves a file, updating the code that refers to it (the import statements in other files, typically)
+        as proposed by the language server through `workspace/willRenameFiles`.
+
+        :param relative_path: the relative path of the file to rename or move
+        :param new_relative_path: the relative path the file shall have afterwards; its directory may differ (a move),
+            and missing parent directories are created
+        :return: a status message
+        """
+        old_abs_path = os.path.join(self.project_root, relative_path)
+        new_abs_path = os.path.join(self.project_root, new_relative_path)
+        if not os.path.isfile(old_abs_path):
+            raise FileNotFoundError(f"'{relative_path}' is not a file in the project (directories cannot be renamed with this method)")
+        if os.path.exists(new_abs_path):
+            raise FileExistsError(f"'{new_relative_path}' already exists")
+
+        lang_server = self._get_language_server(relative_path)
+        workspace_edit = lang_server.request_will_rename_files(relative_path, new_relative_path)
+        # The proposed edits address the files at their CURRENT paths (the file being moved included, e.g. for its own
+        # relative imports), so they are applied before anything is moved.
+        num_edited_files = self._apply_workspace_edit(workspace_edit) if workspace_edit is not None else 0
+
+        # A server may include the rename itself among its document changes; then the move already happened.
+        if os.path.exists(old_abs_path):
+            os.makedirs(os.path.dirname(new_abs_path), exist_ok=True)
+            os.rename(old_abs_path, new_abs_path)
+        lang_server.notify_did_rename_files(relative_path, new_relative_path)
+
+        if num_edited_files == 0:
+            return (
+                f"Renamed '{relative_path}' to '{new_relative_path}'. The language server proposed no edits to other files: "
+                "either nothing refers to it, or the server does not support workspace/willRenameFiles — "
+                "search for references to the old name to make sure."
+            )
+        return f"Renamed '{relative_path}' to '{new_relative_path}' and updated the references to it in {num_edited_files} file(s)"
+
 
 class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
     def __init__(self, project: Project) -> None:

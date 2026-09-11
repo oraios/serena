@@ -65,6 +65,7 @@ class TyLanguageServer(SolidLanguageServer):
             "capabilities": {
                 "workspace": {
                     "workspaceEdit": {"documentChanges": True},
+                    "fileOperations": {"willRename": True, "didRename": True},
                     "didChangeConfiguration": {"dynamicRegistration": True},
                     "didChangeWatchedFiles": {"dynamicRegistration": True},
                     "symbol": {

@@ -13,7 +13,7 @@ from _pytest.mark import Mark, MarkDecorator
 from sensai.util import logging
 
 from serena.agent import SerenaAgent
-from serena.config.serena_config import SerenaConfig, SerenaPaths
+from serena.config.serena_config import ProjectConfig, SerenaConfig, SerenaPaths
 from serena.constants import SERENA_MANAGED_DIR_NAME
 from serena.project import Project
 from serena.util.file_system import GitignoreParser
@@ -245,6 +245,38 @@ def project_with_ls_context(ls_id: LanguageServerId, repo_root_override: str | N
     with project_context(ls_id, repo_root_override) as project:
         project.create_language_server_manager()
         yield project
+
+
+@contextmanager
+def project_with_explicit_ls_context(
+    ls_id: LanguageServerId, repo_root_override: str | None = None, ls_specific_settings: dict | None = None
+) -> Iterator[Project]:
+    """
+    Like :func:`project_with_ls_context`, but the project runs the GIVEN language server: ``project_with_ls_context``
+    loads the repo's own ``.serena/project.yml``, which for the Python test repo names ``python`` (pyright) whatever
+    backend the test asked for, so a test of a specific backend (``PYTHON_PYREFLY``, ``PYTHON_TY``) needs this one.
+    """
+    repo_path = str(get_repo_path(ls_id)) if repo_root_override is None else repo_root_override
+    project = Project(
+        project_root=repo_path,
+        project_config=ProjectConfig(
+            project_name=f"test_repo_{ls_id}",
+            language_servers=[ls_id],
+            ignored_paths=[],
+            excluded_tools=[],
+            read_only=False,
+            ignore_all_files_in_gitignore=True,
+            initial_prompt="",
+            encoding="utf-8",
+            ls_specific_settings=ls_specific_settings or {},
+        ),
+        serena_config=create_default_serena_config(),
+    )
+    try:
+        project.create_language_server_manager()
+        yield project
+    finally:
+        project.shutdown(timeout=5)
 
 
 @contextmanager

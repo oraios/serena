@@ -360,6 +360,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                 },
                 "workspace": {
                     "workspaceFolders": True,
+                    "fileOperations": {"willRename": True, "didRename": True},
                     "configuration": True,
                     "didChangeConfiguration": {"dynamicRegistration": True},
                     "symbol": {"dynamicRegistration": True},
