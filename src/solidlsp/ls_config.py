@@ -121,6 +121,10 @@ class LanguageServerId(str, Enum):
     Uses luau-lsp by JohnnyMorganz. Automatically downloads the binary if not found.
     Supports .luau files. Configure via .luaurc in the project root.
     """
+    MQL = "mql"
+    """MQL4/MQL5 (.mq4/.mq5) and .mqh includes via mql-language-server.
+    Uses davalillo/mql-language-server, which auto-downloads its binary.
+    """
     NIX = "nix"
     ERLANG = "erlang"
     OCAML = "ocaml"
@@ -505,6 +509,8 @@ class LanguageServerId(str, Enum):
                 return FilenameMatcher(".cr")
             case self.CUE:
                 return FilenameMatcher(".cue")
+            case self.MQL:
+                return FilenameMatcher(".mq4", ".mq5", ".mqh")
             case self.YAML:
                 return FilenameMatcher(".yaml", ".yml")
             case self.JSON:
@@ -919,6 +925,10 @@ class LanguageServerId(str, Enum):
                 from solidlsp.language_servers.wolfram_language_server import WolframLanguageServer
 
                 return WolframLanguageServer
+            case self.MQL:
+                from solidlsp.language_servers.mql_language_server import MqlLanguageServer
+
+                return MqlLanguageServer
             case self.HTML:
                 from solidlsp.language_servers.vscode_html_language_server import VsCodeHtmlLanguageServer
 
