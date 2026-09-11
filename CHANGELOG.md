@@ -2,6 +2,14 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Tools:
+  - `find_implementations` on a class or interface for which the server reports no implementations now returns
+    its direct subtypes from the server's type hierarchy (`textDocument/prepareTypeHierarchy` +
+    `typeHierarchy/subtypes`), instead of `[]` — pyright and pyrefly answer `textDocument/implementation` for
+    methods only.
+  - Add `find_type_hierarchy` (optional tool): the direct subtypes or supertypes of a class/interface over the
+    language server's type hierarchy, one level per call.
+
 * General:
   - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
@@ -39,6 +47,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     Serena's own tools to close the gap (#1852)
 
 * Language Servers:
+  - The Python servers (pyright, basedpyright, ty, pyrefly) and the TypeScript server advertise the
+    `textDocument.typeHierarchy` client capability.
   - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
     preserves explicit user settings across initialization and configuration requests (#1989)
     VTS initialization options now override defaults per top-level key rather than replacing the

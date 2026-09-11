@@ -43,12 +43,14 @@ from solidlsp.lsp_protocol_handler.lsp_types import (
     Definition,
     DefinitionParams,
     DocumentSymbol,
+    ErrorCodes,
     ImplementationParams,
     InitializeParams,
     LocationLink,
     RenameParams,
     SymbolInformation,
     SymbolKind,
+    TypeHierarchyItem,
 )
 from solidlsp.lsp_protocol_handler.server import (
     LSPError,
@@ -3175,6 +3177,108 @@ class SolidLanguageServer(ABC):
 
         with self.open_file(relative_file_path):
             return self.server.send.rename(params)
+
+    def request_type_hierarchy_subtypes(
+        self, relative_file_path: str, line: int, column: int, include_body: bool = False
+    ) -> list[ls_types.UnifiedSymbolInformation]:
+        """
+        Finds the direct subtypes of the type at the given location — the classes that extend it and the types that
+        implement it — via `textDocument/prepareTypeHierarchy` + `typeHierarchy/subtypes`, resolved to the symbols
+        that define them.
+
+        :param relative_file_path: The relative path to the file.
+        :param line: The 0-indexed line number.
+        :param column: The 0-indexed column number.
+        :param include_body: whether to include the body of the symbols in the result.
+        :return: The symbol information for each direct subtype; empty if the server has no type hierarchy support.
+        """
+        return self._request_type_hierarchy_symbols(relative_file_path, line, column, subtypes=True, include_body=include_body)
+
+    def request_type_hierarchy_supertypes(
+        self, relative_file_path: str, line: int, column: int, include_body: bool = False
+    ) -> list[ls_types.UnifiedSymbolInformation]:
+        """
+        Finds the direct supertypes of the type at the given location (the bases it extends, the interfaces it implements)
+        via `textDocument/prepareTypeHierarchy` + `typeHierarchy/supertypes`, resolved to the symbols that define them.
+        Supertypes defined outside the repository (the standard library, installed packages) are not included.
+
+        :param relative_file_path: The relative path to the file.
+        :param line: The 0-indexed line number.
+        :param column: The 0-indexed column number.
+        :param include_body: whether to include the body of the symbols in the result.
+        :return: The symbol information for each direct supertype; empty if the server has no type hierarchy support.
+        """
+        return self._request_type_hierarchy_symbols(relative_file_path, line, column, subtypes=False, include_body=include_body)
+
+    @staticmethod
+    def _is_method_not_found(e: SolidLSPException) -> bool:
+        """Whether the language server answered a request with MethodNotFound (-32601), i.e. it does not implement it."""
+        return isinstance(e.cause, LSPError) and e.cause.code == ErrorCodes.MethodNotFound
+
+    def _request_type_hierarchy_symbols(
+        self, relative_file_path: str, line: int, column: int, *, subtypes: bool, include_body: bool
+    ) -> list[ls_types.UnifiedSymbolInformation]:
+        if not self.server_started:
+            log.error("type hierarchy requested before language server started")
+            raise SolidLSPException("Language Server not started")
+
+        direction = "subtypes" if subtypes else "supertypes"
+        related_items: list[TypeHierarchyItem] = []
+        try:
+            with self.open_file(relative_file_path):
+                prepared = self.server.send.prepare_type_hierarchy(
+                    self._create_text_document_position_params(relative_file_path, line, column)
+                )
+                for item in prepared or []:
+                    if subtypes:
+                        found = self.server.send.type_hierarchy_subtypes({"item": item})
+                    else:
+                        found = self.server.send.type_hierarchy_supertypes({"item": item})
+                    related_items.extend(found or [])
+        except SolidLSPException as e:
+            if not self._is_method_not_found(e):
+                raise
+            # A server without a typeHierarchyProvider answers the request with MethodNotFound; that is
+            # "no hierarchy known here", not a failure of the caller's question.
+            log.info("Type hierarchy (%s) not available from %s: %s", direction, self.ls_id, e)
+            return []
+
+        result: list[ls_types.UnifiedSymbolInformation] = []
+        seen_keys: set[tuple[str, int, int, int]] = set()
+        repository_root = os.path.abspath(self.repository_root_path)
+        for item in related_items:
+            abs_path = os.path.abspath(PathUtils.uri_to_path(item["uri"]))
+            # a supertype from the standard library or an installed package (pyrefly answers `ABC` from its bundled
+            # typeshed, say) is not a symbol of this repository
+            if os.path.commonpath([abs_path, repository_root]) != repository_root or not os.path.isfile(abs_path):
+                log.info("typeHierarchy/%s found a type outside the repository, skipping: %s", direction, abs_path)
+                continue
+            rel_path = os.path.relpath(abs_path, repository_root)
+            if self.is_ignored_path(rel_path):
+                log.info("typeHierarchy/%s found a type in ignored path, skipping: %s", direction, rel_path)
+                continue
+            selection_range = item.get("selectionRange") or item["range"]
+            symbol = self._request_symbol_at_location(
+                rel_path,
+                selection_range["start"]["line"],
+                selection_range["start"]["character"],
+                include_body=include_body,
+                body_factory=None,
+            )
+            if symbol is None or "location" not in symbol:
+                continue
+            symbol_location = symbol["location"]
+            symbol_key = (
+                cast(str, symbol_location["relativePath"]),
+                symbol_location["range"]["start"]["line"],
+                symbol_location["range"]["start"]["character"],
+                symbol["kind"],
+            )
+            if symbol_key in seen_keys:
+                continue
+            seen_keys.add(symbol_key)
+            result.append(symbol)
+        return result
 
     def apply_text_edits_to_file(self, relative_path: str, edits: list[ls_types.TextEdit]) -> None:
         """

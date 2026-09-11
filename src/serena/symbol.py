@@ -896,12 +896,20 @@ class LanguageServerSymbolRetriever:
         :param exclude_kinds: which kinds of symbols to exclude from the result.
         """
         symbol = self.find_unique(name_path, substring_matching=False, within_relative_path=relative_file_path)
-        return self.find_implementing_symbols_by_location(
+        implementing_symbols = self.find_implementing_symbols_by_location(
             symbol.location,
             include_body=include_body,
             include_kinds=include_kinds,
             exclude_kinds=exclude_kinds,
         )
+        if not implementing_symbols and symbol.symbol_kind in (SymbolKind.Class, SymbolKind.Interface):
+            # `textDocument/implementation` answers for METHODS in several servers (pyrefly, pyright: the overriding
+            # methods of an abstract one) and is empty for the class itself; the direct subtypes ARE the class's
+            # implementations, so fall back to the type hierarchy when the server has one.
+            implementing_symbols = self.find_subtype_symbols_by_location(
+                symbol.location, include_body=include_body, include_kinds=include_kinds, exclude_kinds=exclude_kinds
+            )
+        return implementing_symbols
 
     def find_implementing_symbols_by_location(
         self,
@@ -942,6 +950,113 @@ class LanguageServerSymbolRetriever:
             implementing_symbols = [s for s in implementing_symbols if s["kind"] not in exclude_kinds]
 
         return [LanguageServerSymbol(s) for s in implementing_symbols]
+
+    def find_subtype_symbols(
+        self,
+        name_path: str,
+        relative_file_path: str,
+        include_body: bool = False,
+        include_kinds: Sequence[SymbolKind] | None = None,
+        exclude_kinds: Sequence[SymbolKind] | None = None,
+    ) -> list[LanguageServerSymbol]:
+        """
+        Find the subtypes of the specified type (the classes extending it, the types implementing it), which is
+        assumed to be unique — the direct ones per the LSP specification; some servers (pyrefly) include indirect
+        ones too. Empty when the server provides no type hierarchy.
+
+        :param name_path: the name path of the type. While this can be a matching pattern, it should usually be the
+            full path to ensure uniqueness.
+        :param relative_file_path: the relative path of the file in which the type is defined.
+        :param include_body: whether to include the body of the symbols in the result.
+        :param include_kinds: which kinds of symbols to include in the result.
+        :param exclude_kinds: which kinds of symbols to exclude from the result.
+        """
+        symbol = self.find_unique(name_path, substring_matching=False, within_relative_path=relative_file_path)
+        return self.find_subtype_symbols_by_location(
+            symbol.location, include_body=include_body, include_kinds=include_kinds, exclude_kinds=exclude_kinds
+        )
+
+    def find_subtype_symbols_by_location(
+        self,
+        symbol_location: LanguageServerSymbolLocation,
+        include_body: bool = False,
+        include_kinds: Sequence[SymbolKind] | None = None,
+        exclude_kinds: Sequence[SymbolKind] | None = None,
+    ) -> list[LanguageServerSymbol]:
+        """
+        Find the subtypes of the type at the given location (see :meth:`find_subtype_symbols`).
+        """
+        return self._find_type_hierarchy_symbols_by_location(
+            symbol_location, subtypes=True, include_body=include_body, include_kinds=include_kinds, exclude_kinds=exclude_kinds
+        )
+
+    def find_supertype_symbols(
+        self,
+        name_path: str,
+        relative_file_path: str,
+        include_body: bool = False,
+        include_kinds: Sequence[SymbolKind] | None = None,
+        exclude_kinds: Sequence[SymbolKind] | None = None,
+    ) -> list[LanguageServerSymbol]:
+        """
+        Find the supertypes of the specified type (the bases it extends, the interfaces it implements) that are
+        defined within the project; the type is assumed to be unique. The direct ones per the LSP specification;
+        some servers (pyrefly) include indirect ones too. Empty when the server provides no type hierarchy.
+
+        :param name_path: the name path of the type. While this can be a matching pattern, it should usually be the
+            full path to ensure uniqueness.
+        :param relative_file_path: the relative path of the file in which the type is defined.
+        :param include_body: whether to include the body of the symbols in the result.
+        :param include_kinds: which kinds of symbols to include in the result.
+        :param exclude_kinds: which kinds of symbols to exclude from the result.
+        """
+        symbol = self.find_unique(name_path, substring_matching=False, within_relative_path=relative_file_path)
+        return self.find_supertype_symbols_by_location(
+            symbol.location, include_body=include_body, include_kinds=include_kinds, exclude_kinds=exclude_kinds
+        )
+
+    def find_supertype_symbols_by_location(
+        self,
+        symbol_location: LanguageServerSymbolLocation,
+        include_body: bool = False,
+        include_kinds: Sequence[SymbolKind] | None = None,
+        exclude_kinds: Sequence[SymbolKind] | None = None,
+    ) -> list[LanguageServerSymbol]:
+        """
+        Find the supertypes of the type at the given location (see :meth:`find_supertype_symbols`).
+        """
+        return self._find_type_hierarchy_symbols_by_location(
+            symbol_location, subtypes=False, include_body=include_body, include_kinds=include_kinds, exclude_kinds=exclude_kinds
+        )
+
+    def _find_type_hierarchy_symbols_by_location(
+        self,
+        symbol_location: LanguageServerSymbolLocation,
+        *,
+        subtypes: bool,
+        include_body: bool,
+        include_kinds: Sequence[SymbolKind] | None,
+        exclude_kinds: Sequence[SymbolKind] | None,
+    ) -> list[LanguageServerSymbol]:
+        if not symbol_location.has_position_in_file():
+            raise ValueError("Symbol location does not contain a valid position in a file")
+        assert symbol_location.relative_path is not None
+        assert symbol_location.line is not None
+        assert symbol_location.column is not None
+        lang_server = self.get_language_server(symbol_location.relative_path)
+        if subtypes:
+            related = lang_server.request_type_hierarchy_subtypes(
+                symbol_location.relative_path, symbol_location.line, symbol_location.column, include_body=include_body
+            )
+        else:
+            related = lang_server.request_type_hierarchy_supertypes(
+                symbol_location.relative_path, symbol_location.line, symbol_location.column, include_body=include_body
+            )
+        if include_kinds is not None:
+            related = [s for s in related if s["kind"] in include_kinds]
+        if exclude_kinds is not None:
+            related = [s for s in related if s["kind"] not in exclude_kinds]
+        return [LanguageServerSymbol(s) for s in related]
 
     def find_declaration(
         self,
