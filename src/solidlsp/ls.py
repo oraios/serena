@@ -3249,8 +3249,9 @@ class SolidLanguageServer(ABC):
         for item in related_items:
             abs_path = os.path.abspath(PathUtils.uri_to_path(item["uri"]))
             # a supertype from the standard library or an installed package (pyrefly answers `ABC` from its bundled
-            # typeshed, say) is not a symbol of this repository
-            if os.path.commonpath([abs_path, repository_root]) != repository_root or not os.path.isfile(abs_path):
+            # typeshed, say) is not a symbol of this repository -- and on Windows it can live on another drive than
+            # the repository, where os.path.commonpath raises instead of answering
+            if not Path(abs_path).is_relative_to(repository_root) or not os.path.isfile(abs_path):
                 log.info("typeHierarchy/%s found a type outside the repository, skipping: %s", direction, abs_path)
                 continue
             rel_path = os.path.relpath(abs_path, repository_root)
