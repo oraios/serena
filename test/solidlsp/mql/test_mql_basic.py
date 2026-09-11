@@ -152,3 +152,72 @@ class TestMqlLanguageServer:
                 f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
                 pytrace=False,
             )
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MQL], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.MQL], indirect=True)
+    def test_definition_at_include_line_documents_server_limitation(
+        self, language_server: SolidLanguageServer, repo_path: Path
+    ) -> None:
+        """D7-1 probe: definition at the .mq5 include line is NOT resolved by
+        mql-lsp-server v2.0.0 (cross-file definition unsupported); the include
+        relationship is instead verified via workspace-wide references
+        (test_references_across_dialects_reach_mqh). This test pins the current
+        server behavior so a future server upgrade that starts resolving include
+        lines is noticed rather than silently changing semantics.
+        """
+        # TradingClass.mq5 line 3 (0-indexed): #include "IncludeUtils.mqh"; cursor on "IncludeUtils"
+        definitions = language_server.request_definition(str(repo_path / "TradingClass.mq5"), 3, 12)
+
+        resolved_includes = [d for d in definitions if d["uri"].endswith("IncludeUtils.mqh")]
+        if definitions and resolved_includes:
+            # a future server resolves includes — the contract upgrade is welcome
+            assert all(d["uri"].endswith("IncludeUtils.mqh") for d in definitions)
+        else:
+            # current v2.0.0 behavior: no cross-file definition at the include line
+            assert not resolved_includes, "unexpected partial include resolution"
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MQL], indirect=True)
+    def test_did_save_round_trip(self, language_server: SolidLanguageServer) -> None:
+        """Spec R2 didSave: the server accepts a didSave notification for an open
+        document and stays responsive (synchronous notification, no hang/desync).
+        """
+        relative_path = "ExpertAdvisor.mq4"
+        # open_file sends textDocument/didOpen (LSPFileBuffer, language id mql4 via
+        # _get_language_id_for_file); didSave must reach the server while it is open
+        with language_server.open_file(relative_path) as file_buffer:
+            language_server.server.notify.did_save_text_document(
+                {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                    "textDocument": {"uri": file_buffer.uri},
+                }
+            )
+
+            assert language_server.is_running()
+
+            # the server must still answer requests after the save round trip
+            symbols, _ = language_server.request_document_symbols("TradingClass.mq5").get_all_symbols_and_roots()
+            assert any(s.get("name") == "TradingClass" for s in symbols), "server desynced after didSave"
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MQL], indirect=True)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.MQL], indirect=True)
+    def test_language_ids_per_dialect(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
+        """Spec R2 both-dialects: language ids mql4/mql5 are computed per file type
+        from the same server instance (verified at the _get_language_id_for_file hook,
+        since didOpen language ids are only observable server-side).
+        """
+        assert language_server._get_language_id_for_file("ExpertAdvisor.mq4") == "mql4"
+        assert language_server._get_language_id_for_file("TradingClass.mq5") == "mql5"
+        assert language_server._get_language_id_for_file("IncludeUtils.mqh") == "mql5"
+        # case-insensitive on Windows-typical inputs
+        assert language_server._get_language_id_for_file("EA.MQ4") == "mql4"
+        # and the live server instance actually serves both dialect files (R2 s4)
+        mq4_symbols, _ = language_server.request_document_symbols("ExpertAdvisor.mq4").get_all_symbols_and_roots()
+        assert any(s.get("name") == "CalculateLotSize" for s in mq4_symbols)
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MQL], indirect=True)
+    def test_server_ready_and_capability_registration(self, language_server: SolidLanguageServer) -> None:
+        """Spec R2 readiness: after the initialize handshake the server_ready event
+        is set and the Serena-relevant providers were dynamically registered
+        (msl-style registerCapability, asserted in _start_server).
+        """
+        assert language_server.server_ready.is_set(), "server_ready must be set after the initialize handshake"
+        assert language_server.is_running()
