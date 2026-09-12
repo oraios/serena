@@ -42,12 +42,13 @@ INITIAL_MQL_SHA256_BY_PLATFORM = {
     "osx-arm64": "f7a0038aaf9d8df2bbdf1e3331bd21cb93c1e13108fe6de20ff68cc7e7ed8718",
     "win-x64": "dd11026e033fd2f703c4ca27fe6b730acc7283f1512dd165a546c59b270e730c",
 }
-DEFAULT_MQL_VERSION = "v2.0.0"
+DEFAULT_MQL_VERSION = "v2.0.1"
 DEFAULT_MQL_SHA256_BY_PLATFORM = {
-    "linux-x64": "be0c1014dec89236570a6dcbe024c9a74337276f99f7274c86128e845447560c",
-    "osx-x64": "034769254b17ed0dd837abb5507f11303656b3d6dfe1b95ef94ed15c74285810",
-    "osx-arm64": "f7a0038aaf9d8df2bbdf1e3331bd21cb93c1e13108fe6de20ff68cc7e7ed8718",
-    "win-x64": "dd11026e033fd2f703c4ca27fe6b730acc7283f1512dd165a546c59b270e730c",
+    # sha256 values from the v2.0.1 release CHECKSUMS.txt (GitHub release v2.0.1)
+    "linux-x64": "493d4f900876653afe10bbcdfd769c4ddab9761e0bc2fb5cbff91338aa88e156",
+    "osx-x64": "15f50e6305e051a9b01688c4904175503dfccd332e8166d824695af8542b6795",
+    "osx-arm64": "2d9a5dd0a1a0a72bbf49a1ea77fc2c03cebb4d4983d55859dd7cafdd9590e265",
+    "win-x64": "a3f4ef432fde7d9cd357b59fb0e60dc3c9530cb6ca31c6da4935eba8e50f0cdb",
 }
 
 
@@ -78,6 +79,15 @@ class MqlLanguageServer(SolidLanguageServer):
           downloaded by Serena (default: the bundled version). Custom-version
           SHA256 sums are unknown, so verification is skipped for them.
     """
+
+    @override
+    def _supports_pull_diagnostics(self) -> bool:
+        # The underlying mql-lsp-server binary is push-only: it never registers the
+        # `diagnosticProvider` capability and never answers ``textDocument/diagnostic``
+        # requests. Sending the pull request leaves it pending forever, which deadlocks
+        # the request pipe and wedges the whole MCP server. Force the
+        # published-diagnostics path instead.
+        return False
 
     @classmethod
     def _runtime_dependencies(cls, version: str) -> RuntimeDependencyCollection:
