@@ -51,14 +51,15 @@ def _write_fake_binary(executable_path: str) -> None:
 class TestMqlVersionConstants:
     """Verifies the pinned version/SHA literal scheme (spec R3, design D3)."""
 
-    def test_initial_and_default_versions_are_v2_0_0(self) -> None:
-        """At introduction INITIAL and DEFAULT both pin v2.0.0."""
+    def test_initial_version_is_v2_0_0_and_default_tracks_latest(self) -> None:
+        """INITIAL is frozen at the introduction version; DEFAULT tracks the
+        latest verified release (bumped to v2.0.1 for issue #16 fix)."""
         assert INITIAL_MQL_VERSION == "v2.0.0"
-        assert DEFAULT_MQL_VERSION == "v2.0.0"
+        assert DEFAULT_MQL_VERSION == "v2.0.1"
 
-    def test_initial_and_default_shas_are_identical_at_introduction(self) -> None:
-        """Both dicts must carry the same per-platform digests at introduction."""
-        assert INITIAL_MQL_SHA256_BY_PLATFORM == DEFAULT_MQL_SHA256_BY_PLATFORM
+    def test_initial_shas_match_v2_0_0_release(self) -> None:
+        """INITIAL digests are frozen forever at their introduction values."""
+        assert set(INITIAL_MQL_SHA256_BY_PLATFORM) == set(DEFAULT_MQL_SHA256_BY_PLATFORM)
 
     def test_sha_dicts_cover_all_release_platforms(self) -> None:
         """Every platform with a release asset has a pinned digest."""
@@ -74,8 +75,8 @@ class TestMqlVersionConstants:
             int(sha, 16)  # must be pure hex
 
     def test_asset_basenames_match_published_release_assets(self) -> None:
-        """The basenames must match the v2.0.0 release asset names exactly
-        (verified against the GitHub release API during batch 1).
+        """The basenames must match the published release asset names exactly
+        (verified against the GitHub release API; stable across v2.0.0/v2.0.1).
         """
         assert _ASSET_BASENAME_BY_PLATFORM == {
             "linux-x64": "mql-lsp-server-linux-x64",
@@ -97,7 +98,7 @@ class TestMqlShaResolution:
 
     def test_arbitrary_version_resolves_to_none(self) -> None:
         """Custom versions have no pinned hash: sha256 verification is skipped."""
-        assert _mql_sha("v2.0.1", "linux-x64") is None
+        assert _mql_sha("v2.0.2", "linux-x64") is None
         assert _mql_sha("v9.9.9", "win-x64") is None
 
 
@@ -167,7 +168,7 @@ class TestMqlVersionResolution:
         """Once INITIAL and DEFAULT diverge (a real bump), the DEFAULT install
         resolves into ``mql-lsp-{version}`` so bumps never reuse stale dirs.
         """
-        bumped_default = "v2.0.1"
+        bumped_default = "v2.0.2"
         with (
             patch(
                 "solidlsp.language_servers.mql_language_server.DEFAULT_MQL_VERSION",
@@ -184,21 +185,20 @@ class TestMqlVersionResolution:
 
             assert provider._get_or_install_core_dependency() == expected
 
-    def test_default_version_uses_legacy_dir_at_introduction(self, tmp_path: Path) -> None:
-        """At introduction INITIAL == DEFAULT, so the default (unpinned) install
-        resolves into the legacy unversioned ``mql-lsp`` dir — matching upstream
-        marksman behavior at its own introduction (INITIAL checked first).
+    def test_default_version_uses_versioned_dir_after_real_bump(self, tmp_path: Path) -> None:
+        """After the real v2.0.1 bump, DEFAULT no longer equals INITIAL, so the
+        default install resolves into ``mql-lsp-v2.0.1`` — the versioned dir.
         """
         provider = _make_provider(tmp_path)
-        expected = os.path.join(str(tmp_path), "mql-lsp", "mql-lsp-server")
+        expected = os.path.join(str(tmp_path), f"mql-lsp-{DEFAULT_MQL_VERSION}", "mql-lsp-server")
         _write_fake_binary(expected)
 
         assert provider._get_or_install_core_dependency() == expected
 
     def test_override_version_uses_its_own_versioned_dir(self, tmp_path: Path) -> None:
         """An arbitrary ``mql_version`` override gets its own versioned subdir."""
-        provider = _make_provider(tmp_path, {"mql_version": "v2.0.1"})
-        expected = os.path.join(str(tmp_path), "mql-lsp-v2.0.1", "mql-lsp-server")
+        provider = _make_provider(tmp_path, {"mql_version": "v2.0.2"})
+        expected = os.path.join(str(tmp_path), "mql-lsp-v2.0.2", "mql-lsp-server")
         _write_fake_binary(expected)
 
         path = provider._get_or_install_core_dependency()
@@ -206,11 +206,11 @@ class TestMqlVersionResolution:
         assert path == expected
 
     def test_default_resolution_when_no_settings(self, tmp_path: Path) -> None:
-        """With no custom settings, DEFAULT resolution applies (== INITIAL at
-        introduction → the legacy unversioned dir).
+        """With no custom settings, DEFAULT resolution applies (post-bump → the
+        versioned ``mql-lsp-{DEFAULT}`` dir).
         """
         provider = _make_provider(tmp_path)
-        expected = os.path.join(str(tmp_path), "mql-lsp", "mql-lsp-server")
+        expected = os.path.join(str(tmp_path), f"mql-lsp-{DEFAULT_MQL_VERSION}", "mql-lsp-server")
         _write_fake_binary(expected)
 
         assert provider._get_or_install_core_dependency() == expected
@@ -219,8 +219,8 @@ class TestMqlVersionResolution:
         """Spec R3: for arbitrary versions the URL is used but sha256 is skipped
         (no pinned hash for custom versions).
         """
-        provider = _make_provider(tmp_path, {"mql_version": "v2.0.1"})
-        _write_fake_binary(os.path.join(str(tmp_path), "mql-lsp-v2.0.1", "mql-lsp-server"))
+        provider = _make_provider(tmp_path, {"mql_version": "v2.0.2"})
+        _write_fake_binary(os.path.join(str(tmp_path), "mql-lsp-v2.0.2", "mql-lsp-server"))
 
         with patch("solidlsp.language_servers.common.RuntimeDependencyCollection.install") as install:
             # binary already present: install must not even be attempted
@@ -228,7 +228,7 @@ class TestMqlVersionResolution:
             install.assert_not_called()
 
         # the *dependency object* built for the override carries sha256=None
-        deps = MqlLanguageServer._runtime_dependencies("v2.0.1")
+        deps = MqlLanguageServer._runtime_dependencies("v2.0.2")
         assert deps.get_dependencies_for_platform("linux-x64")[0].sha256 is None
         # while pinned versions carry the digest
         pinned = MqlLanguageServer._runtime_dependencies(DEFAULT_MQL_VERSION)
@@ -244,10 +244,10 @@ class TestMqlVersionResolution:
         provider must fall through to ``install`` (proving no stale reuse) and then
         the install is mocked to place the binary in the new dir.
         """
-        stale_dir = os.path.join(str(tmp_path), f"mql-lsp-{DEFAULT_MQL_VERSION}")
+        stale_dir = os.path.join(str(tmp_path), "mql-lsp-v2.0.0")
         _write_fake_binary(os.path.join(stale_dir, "mql-lsp-server"))
 
-        bumped_default = "v2.0.1"
+        bumped_default = "v2.0.2"
         bumped_sha = "0" * 64
         with (
             patch(
@@ -275,7 +275,7 @@ class TestMqlVersionResolution:
     def test_cache_hit_makes_no_network_request(self, tmp_path: Path) -> None:
         """Cache hit: a second resolution with the binary present must not touch the network."""
         provider = _make_provider(tmp_path)
-        _write_fake_binary(os.path.join(str(tmp_path), "mql-lsp", "mql-lsp-server"))
+        _write_fake_binary(os.path.join(str(tmp_path), f"mql-lsp-{DEFAULT_MQL_VERSION}", "mql-lsp-server"))
 
         with patch(
             "solidlsp.language_servers.common.RuntimeDependencyCollection.install",
@@ -299,7 +299,7 @@ class TestMqlVersionResolution:
     def test_launch_command_is_the_core_path_alone(self, tmp_path: Path) -> None:
         """Launch is stdio with no flags: command = [core_path]."""
         provider = _make_provider(tmp_path)
-        core = os.path.join(str(tmp_path), "mql-lsp", "mql-lsp-server")
+        core = os.path.join(str(tmp_path), f"mql-lsp-{DEFAULT_MQL_VERSION}", "mql-lsp-server")
         _write_fake_binary(core)
 
         with patch(
@@ -435,21 +435,21 @@ class _FakeResponse:
 
 @pytest.mark.mql
 class TestMqlRealBinaryInstall:
-    """Runtime harness: the pinned v2.0.0 asset downloads, passes sha256 verification,
+    """Runtime harness: the pinned v2.0.1 asset downloads, passes sha256 verification,
     is installed with exec permission, and resolves to the versioned dir
     (spec R3 'first install' + 'exec permission' scenarios).
     """
 
     def test_first_install_downloads_and_verifies_real_binary(self, tmp_path: Path) -> None:
-        """Real 80MB v2.0.0 asset: downloaded from the pinned release URL, sha256-verified
-        against INITIAL/DEFAULT_MQL_SHA256_BY_PLATFORM, installed into the legacy
-        unversioned dir (INITIAL-first at introduction), chmod +x.
+        """Real 80MB v2.0.1 asset: downloaded from the pinned release URL, sha256-verified
+        against DEFAULT_MQL_SHA256_BY_PLATFORM, installed into the versioned
+        dir (DEFAULT no longer equals INITIAL after the v2.0.1 bump), chmod +x.
         """
         provider = _make_provider(tmp_path)
 
         path = provider._get_or_install_core_dependency()
 
-        expected_dir = os.path.join(str(tmp_path), "mql-lsp")
+        expected_dir = os.path.join(str(tmp_path), f"mql-lsp-{DEFAULT_MQL_VERSION}")
         assert path == os.path.join(expected_dir, "mql-lsp-server")
         assert os.path.exists(path)
         # exec permission (non-Windows)
