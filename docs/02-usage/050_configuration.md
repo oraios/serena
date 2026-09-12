@@ -888,7 +888,7 @@ Supported settings:
 
 | Setting | Default | Description |
 |---|---|---|
-| `mql_version` | `v2.0.0` | Override the mql-language-server version Serena downloads. Versions other than the pinned default are downloaded without SHA-256 verification. |
+| `mql_version` | `v2.0.1` | Override the mql-language-server version Serena downloads. The pinned default and all other versions are verified against the release's `CHECKSUMS.txt`; an install is refused if that file cannot be fetched. |
 
 #### Nix
 
