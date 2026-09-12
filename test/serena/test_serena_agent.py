@@ -1022,6 +1022,28 @@ class TestSerenaAgent:
                 containing_symbol_name_path=case.containing_symbol_name_path,
             )
 
+    @pytest.mark.parametrize(
+        "serena_agent",
+        [pytest.param(LanguageServerId.PYTHON, marks=get_pytest_markers(LanguageServerId.PYTHON), id="python_stdlib")],
+        indirect=["serena_agent"],
+    )
+    def test_find_declaration_outside_the_project(self, serena_agent: SerenaAgent) -> None:
+        """
+        A definition in the standard library (typeshed, outside the repository and its workspace folders) is answered
+        read-only by its absolute path and marked external, instead of failing on the workspace check.
+        """
+        tool = serena_agent.get_tool(FindDeclarationTool)
+        result = tool.apply(
+            regex=r"os\.path\.(exists)\(config_path\)",
+            relative_path=os.path.join("scripts", "run_app.py"),
+            include_body=True,
+        )
+        defining_symbol = json.loads(result)
+        assert defining_symbol["external"] is True, defining_symbol
+        assert os.path.isabs(defining_symbol["relative_path"]) and defining_symbol["relative_path"].endswith(".pyi"), defining_symbol
+        assert self._symbol_matches_expected_name(defining_symbol, "exists"), defining_symbol
+        assert "def exists(" in defining_symbol["body"], defining_symbol
+
     @pytest.mark.parametrize("serena_agent,diagnostic_case", DIAGNOSTIC_CASES, indirect=["serena_agent"])
     def test_get_diagnostics_for_file(self, serena_agent: SerenaAgent, diagnostic_case: DiagnosticCase) -> None:
         diagnostics_tool = serena_agent.get_tool(GetDiagnosticsForFileTool)
