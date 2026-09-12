@@ -219,3 +219,21 @@ class TestMqlLanguageServer:
         """
         assert language_server.server_ready.is_set(), "server_ready must be set after the initialize handshake"
         assert language_server.is_running()
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.MQL], indirect=True)
+    def test_diagnostics_request_returns_and_server_stays_responsive(self, language_server: SolidLanguageServer) -> None:
+        """Regression: mql-lsp-server is push-only (no ``diagnosticProvider``
+        capability), so ``request_text_document_diagnostics`` must take the
+        published-diagnostics path instead of sending a ``textDocument/diagnostic``
+        pull request that the server never answers — a pending pull request
+        deadlocks the request pipe and wedges every later request.
+        """
+        assert not language_server._supports_pull_diagnostics()
+
+        # must return within the published-diagnostics wait window, not hang
+        diagnostics = language_server.request_text_document_diagnostics("ExpertAdvisor.mq4", min_severity=2)
+        assert isinstance(diagnostics, list)
+
+        # the request pipe must not be wedged: a follow-up request still answers
+        symbols, _ = language_server.request_document_symbols("TradingClass.mq5").get_all_symbols_and_roots()
+        assert any(s.get("name") == "TradingClass" for s in symbols), "server wedged after diagnostics request"
