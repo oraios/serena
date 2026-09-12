@@ -21,6 +21,7 @@ from solidlsp.language_servers.mql_language_server import (
     INITIAL_MQL_VERSION,
     MQL_ALLOWED_HOSTS,
     MqlLanguageServer,
+    _fetch_release_checksums,
     _mql_sha,
 )
 from solidlsp.ls_exceptions import SolidLSPException
@@ -53,7 +54,8 @@ class TestMqlVersionConstants:
 
     def test_initial_version_is_v2_0_0_and_default_tracks_latest(self) -> None:
         """INITIAL is frozen at the introduction version; DEFAULT tracks the
-        latest verified release (bumped to v2.0.1 for issue #16 fix)."""
+        latest verified release (bumped to v2.0.1 for issue #16 fix).
+        """
         assert INITIAL_MQL_VERSION == "v2.0.0"
         assert DEFAULT_MQL_VERSION == "v2.0.1"
 
@@ -97,9 +99,26 @@ class TestMqlShaResolution:
         assert _mql_sha(DEFAULT_MQL_VERSION, "linux-x64") == DEFAULT_MQL_SHA256_BY_PLATFORM["linux-x64"]
 
     def test_arbitrary_version_resolves_to_none(self) -> None:
-        """Custom versions have no pinned hash: sha256 verification is skipped."""
+        """Custom versions have no pinned hash locally; the digest is resolved
+        from the release's CHECKSUMS.txt at install time (see
+        TestMqlVersionResolution.test_override_version_resolves_digests_via_checksums_txt).
+        """
         assert _mql_sha("v2.0.2", "linux-x64") is None
         assert _mql_sha("v9.9.9", "win-x64") is None
+
+    def test_fetch_release_checksums_parses_v2_0_1_file(self) -> None:
+        """``_fetch_release_checksums`` parses the real CHECKSUMS.txt format
+        (``<sha256>  ./<asset>`` lines, ``#`` comments) into a basename→digest map
+        that agrees with the pinned DEFAULT digests.
+        """
+        checksums = _fetch_release_checksums(DEFAULT_MQL_VERSION)
+        for platform_key, basename in _ASSET_BASENAME_BY_PLATFORM.items():
+            assert checksums[basename] == DEFAULT_MQL_SHA256_BY_PLATFORM[platform_key], platform_key
+
+    def test_fetch_release_checksums_missing_version_raises(self) -> None:
+        """A version without a release/CHECKSUMS.txt is refused, not silently unverified."""
+        with pytest.raises(SolidLSPException, match="CHECKSUMS.txt"):
+            _fetch_release_checksums("v0.0.0-does-not-exist")
 
 
 @pytest.mark.mql
@@ -201,7 +220,11 @@ class TestMqlVersionResolution:
         expected = os.path.join(str(tmp_path), "mql-lsp-v2.0.2", "mql-lsp-server")
         _write_fake_binary(expected)
 
-        path = provider._get_or_install_core_dependency()
+        with patch(
+            "solidlsp.language_servers.mql_language_server.MqlLanguageServer._resolve_override_digests",
+            return_value=dict.fromkeys(_ASSET_BASENAME_BY_PLATFORM, "0" * 64),
+        ):
+            path = provider._get_or_install_core_dependency()
 
         assert path == expected
 
@@ -215,24 +238,57 @@ class TestMqlVersionResolution:
 
         assert provider._get_or_install_core_dependency() == expected
 
-    def test_override_version_skips_sha256_verification(self, tmp_path: Path) -> None:
-        """Spec R3: for arbitrary versions the URL is used but sha256 is skipped
-        (no pinned hash for custom versions).
+    def test_override_version_resolves_digests_via_checksums_txt(self, tmp_path: Path) -> None:
+        """Spec R3 (post-audit): a custom ``mql_version`` override must resolve its
+        digests from the release's own CHECKSUMS.txt before downloading — never
+        download unverified.
         """
         provider = _make_provider(tmp_path, {"mql_version": "v2.0.2"})
-        _write_fake_binary(os.path.join(str(tmp_path), "mql-lsp-v2.0.2", "mql-lsp-server"))
+        digest = "a" * 64
 
-        with patch("solidlsp.language_servers.common.RuntimeDependencyCollection.install") as install:
-            # binary already present: install must not even be attempted
+        def fake_install(target_dir: str) -> dict[str, str]:
+            _write_fake_binary(os.path.join(target_dir, "mql-lsp-server"))
+            return {}
+
+        with (
+            patch(
+                "solidlsp.language_servers.mql_language_server.MqlLanguageServer._resolve_override_digests",
+                return_value=dict.fromkeys(_ASSET_BASENAME_BY_PLATFORM, digest),
+            ) as resolve,
+            patch(
+                "solidlsp.language_servers.common.RuntimeDependencyCollection.install",
+                side_effect=fake_install,
+            ) as install,
+        ):
             provider._get_or_install_core_dependency()
-            install.assert_not_called()
 
-        # the *dependency object* built for the override carries sha256=None
-        deps = MqlLanguageServer._runtime_dependencies("v2.0.2")
-        assert deps.get_dependencies_for_platform("linux-x64")[0].sha256 is None
-        # while pinned versions carry the digest
-        pinned = MqlLanguageServer._runtime_dependencies(DEFAULT_MQL_VERSION)
-        assert pinned.get_dependencies_for_platform("linux-x64")[0].sha256 == DEFAULT_MQL_SHA256_BY_PLATFORM["linux-x64"]
+            resolve.assert_called_once_with("v2.0.2")
+            install.assert_called_once()
+
+        # the install ran against the override's versioned dir with a resolved digest
+        assert install.call_args.args[0].endswith("mql-lsp-v2.0.2")
+
+    def test_override_version_refuses_install_when_checksums_unavailable(self, tmp_path: Path) -> None:
+        """A custom override whose CHECKSUMS.txt cannot be fetched must refuse the
+        install entirely — no unverified binary download may happen.
+        """
+        provider = _make_provider(tmp_path, {"mql_version": "v2.0.2"})
+
+        with (
+            patch(
+                "solidlsp.language_servers.mql_language_server._fetch_release_checksums",
+                side_effect=SolidLSPException("Could not fetch CHECKSUMS.txt"),
+            ),
+            patch(
+                "solidlsp.language_servers.common.RuntimeDependencyCollection.install",
+                side_effect=AssertionError("unverified download must never be attempted"),
+            ),
+            pytest.raises(SolidLSPException, match="CHECKSUMS"),
+        ):
+            provider._get_or_install_core_dependency()
+
+        # no install dir may be left behind
+        assert not os.path.exists(os.path.join(str(tmp_path), "mql-lsp-v2.0.2"))
 
     def test_stale_default_dir_is_not_reused_after_bump_simulation(self, tmp_path: Path) -> None:
         """Version-bump simulation (spec R3): a stale ``mql-lsp-v2.0.0`` dir must not
@@ -444,7 +500,14 @@ class TestMqlRealBinaryInstall:
         """Real 80MB v2.0.1 asset: downloaded from the pinned release URL, sha256-verified
         against DEFAULT_MQL_SHA256_BY_PLATFORM, installed into the versioned
         dir (DEFAULT no longer equals INITIAL after the v2.0.1 bump), chmod +x.
+
+        Network-dependent by design (it validates the pinning end to end).
+        Skipped when MQL_SKIP_REAL_DOWNLOAD_TESTS=1 so flaky GitHub/rate-limit
+        conditions cannot break the CI batch.
         """
+        if os.environ.get("MQL_SKIP_REAL_DOWNLOAD_TESTS") == "1":
+            pytest.skip("MQL_SKIP_REAL_DOWNLOAD_TESTS=1 (network-dependent test disabled)")
+
         provider = _make_provider(tmp_path)
 
         path = provider._get_or_install_core_dependency()
