@@ -39,6 +39,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     Serena's own tools to close the gap (#1852)
 
 * Language Servers:
+  - Add MQL support (MetaTrader 4/5): `.mq4`, `.mq5`, and `.mqh` files are served by
+    davalillo's mql-language-server, auto-downloaded and SHA-256-verified from GitHub
+    releases; configure the version via `ls_specific_settings.mql.mql_version`
   - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
     preserves explicit user settings across initialization and configuration requests (#1989)
     VTS initialization options now override defaults per top-level key rather than replacing the
