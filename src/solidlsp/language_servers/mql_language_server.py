@@ -10,13 +10,16 @@ sent to the server is chosen per file (mql4/mql5).
 import logging
 import os
 import platform
+import shutil
 import threading
 import time
 
+import requests
 from overrides import override
 
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
+from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection
@@ -29,6 +32,10 @@ MQL_ALLOWED_HOSTS = (
     "release-assets.githubusercontent.com",
     "objects.githubusercontent.com",
 )
+
+# Max wall-clock time to wait for the server's dynamic capability registrations
+# (client/registerCapability) after the initialized notification.
+MQL_CAPABILITY_REGISTRATION_TIMEOUT_S = 10.0
 
 # Version pinning convention (see eclipse_jdtls.py for the full spec):
 #   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
@@ -60,6 +67,38 @@ def _mql_sha(version: str, platform_key: str) -> str | None:
     return None
 
 
+def _fetch_release_checksums(version: str) -> dict[str, str]:
+    """Fetches the ``CHECKSUMS.txt`` asset of a release as a ``{asset basename: sha256}`` map.
+
+    Every mql-language-server release ships a ``CHECKSUMS.txt`` with one
+    ``<sha256>  ./<asset basename>`` line per asset (comment lines starting with
+    ``#`` are ignored). Used to verify custom ``mql_version`` overrides that have
+    no locally pinned digest; callers must treat a missing/failed fetch as
+    unverifiable rather than skipping integrity checks silently.
+    """
+    url = f"https://github.com/davalillo/mql-language-server/releases/download/{version}/CHECKSUMS.txt"
+    response: requests.Response | None = None
+    try:
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        checksums: dict[str, str] = {}
+        for raw_line in response.text.splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split()
+            if len(parts) != 2:
+                continue
+            sha, filename = parts
+            checksums[filename.lstrip("./")] = sha
+        return checksums
+    except requests.RequestException as ex:
+        raise SolidLSPException(f"Could not fetch CHECKSUMS.txt for mql-language-server {version}: {ex}") from ex
+    finally:
+        if response is not None:
+            response.close()
+
+
 # Release asset basenames per Serena platform id.
 _ASSET_BASENAME_BY_PLATFORM = {
     "linux-x64": "mql-lsp-server-linux-x64",
@@ -76,8 +115,9 @@ class MqlLanguageServer(SolidLanguageServer):
 
     You can pass the following entries in ``ls_specific_settings["mql"]``:
         - mql_version: Override the pinned mql-language-server version
-          downloaded by Serena (default: the bundled version). Custom-version
-          SHA256 sums are unknown, so verification is skipped for them.
+          downloaded by Serena (default: the bundled version). Custom versions
+          are verified against the release's own CHECKSUMS.txt; if that file
+          cannot be fetched, the install is refused.
     """
 
     @override
@@ -90,8 +130,21 @@ class MqlLanguageServer(SolidLanguageServer):
         return False
 
     @classmethod
-    def _runtime_dependencies(cls, version: str) -> RuntimeDependencyCollection:
+    def _resolve_override_digests(cls, version: str) -> dict[str, str | None]:
+        """Resolves per-platform digests for a custom version via its CHECKSUMS.txt.
+
+        Returns a full platform→digest map; platforms missing from the checksum file
+        get ``None`` (and their download will be refused by the verified chain).
+        A failed or missing CHECKSUMS.txt raises, refusing the install.
+        """
+        checksums = _fetch_release_checksums(version)
+        return {platform_key: checksums.get(basename) for platform_key, basename in _ASSET_BASENAME_BY_PLATFORM.items()}
+
+    @classmethod
+    def _runtime_dependencies(cls, version: str, sha256_by_platform: dict[str, str | None] | None = None) -> RuntimeDependencyCollection:
         base_url = f"https://github.com/davalillo/mql-language-server/releases/download/{version}"
+        if sha256_by_platform is None:
+            sha256_by_platform = {platform_key: _mql_sha(version, platform_key) for platform_key in _ASSET_BASENAME_BY_PLATFORM}
         return RuntimeDependencyCollection(
             [
                 RuntimeDependency(
@@ -101,7 +154,7 @@ class MqlLanguageServer(SolidLanguageServer):
                     platform_id=platform_key,
                     archive_type="binary",
                     binary_name="mql-lsp-server.exe" if platform_key == "win-x64" else "mql-lsp-server",
-                    sha256=_mql_sha(version, platform_key),
+                    sha256=sha256_by_platform[platform_key],
                     allowed_hosts=MQL_ALLOWED_HOSTS,
                 )
                 for platform_key in _ASSET_BASENAME_BY_PLATFORM
@@ -109,29 +162,63 @@ class MqlLanguageServer(SolidLanguageServer):
         )
 
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
+        @staticmethod
+        def _install_dir_name(version: str) -> str:
+            """Gets the install directory name for a version.
+
+            The legacy unversioned dir is reserved for INITIAL (see the version
+            pinning convention atop the module); every other version gets a
+            versioned subdir so that a DEFAULT bump never silently reuses stale
+            binaries.
+            """
+            return "mql-lsp" if version == INITIAL_MQL_VERSION else f"mql-lsp-{version}"
+
+        @staticmethod
+        def _prune_stale_install_dirs(ls_resources_dir: str, active_dir_name: str) -> None:
+            """Removes other MQL install directories left behind by earlier version bumps.
+
+            Each mql-lsp-server binary is ~80 MB, so superseded versions are deleted
+            instead of accumulating on disk. Failures are logged but never propagate:
+            pruning is opportunistic and must not break server startup.
+            """
+            try:
+                for entry in os.listdir(ls_resources_dir):
+                    if entry == active_dir_name or not (entry == "mql-lsp" or entry.startswith("mql-lsp-")):
+                        continue
+                    stale_dir = os.path.join(ls_resources_dir, entry)
+                    if not os.path.isdir(stale_dir):
+                        continue
+                    log.info("Pruning stale mql-lsp-server install directory: %s", stale_dir)
+                    shutil.rmtree(stale_dir, ignore_errors=True)
+            except OSError as ex:
+                log.warning("Could not prune stale mql-lsp-server install directories: %s", ex)
+
         def _get_or_install_core_dependency(self) -> str:
             """Resolve the pinned mql-language-server version and return the executable path."""
             version = self._custom_settings.get("mql_version", DEFAULT_MQL_VERSION)
             deps = MqlLanguageServer._runtime_dependencies(version)
             dependency = deps.get_single_dep_for_current_platform()
 
-            # legacy unversioned dir reserved for INITIAL; every other version gets a versioned subdir
-            # so that a DEFAULT bump never silently reuses stale binaries
-            # (at introduction INITIAL == DEFAULT, so the default install targets the
-            # legacy dir — matching upstream marksman behavior at its own introduction)
-            install_dir = (
-                os.path.join(self._ls_resources_dir, "mql-lsp")
-                if version == INITIAL_MQL_VERSION
-                else os.path.join(self._ls_resources_dir, f"mql-lsp-{version}")
-            )
+            install_dir = os.path.join(self._ls_resources_dir, self._install_dir_name(version))
             executable_path = deps.binary_path(install_dir)
             if not os.path.exists(executable_path):
+                if dependency.sha256 is None:
+                    # custom ``mql_version`` override: no locally pinned digest, so verify
+                    # against the release's own CHECKSUMS.txt (single fetch, host-allowed).
+                    # A failed/missing checksum file aborts the install instead of
+                    # downloading the binary unverified.
+                    sha256_by_platform = MqlLanguageServer._resolve_override_digests(version)
+                    deps = MqlLanguageServer._runtime_dependencies(version, sha256_by_platform)
+                    dependency = deps.get_single_dep_for_current_platform()
                 log.info("Downloading mql-lsp-server from %s to %s", dependency.url, install_dir)
                 deps.install(install_dir)
             if not os.path.exists(executable_path):
                 raise FileNotFoundError(f"Download failed? Could not find mql-lsp-server executable at {executable_path}")
             if platform.system() != "Windows":
                 os.chmod(executable_path, 0o755)
+
+            # active version is guaranteed present, so superseded installs can go
+            self._prune_stale_install_dirs(self._ls_resources_dir, self._install_dir_name(version))
             return executable_path
 
         def _create_launch_command(self, core_path: str) -> list[str]:
@@ -237,10 +324,16 @@ class MqlLanguageServer(SolidLanguageServer):
         # the server registers its feature providers asynchronously after `initialized`;
         # wait for the Serena-relevant ones before reporting readiness
         required = {"textDocument/documentSymbol", "textDocument/definition", "textDocument/references", "textDocument/hover"}
-        deadline = time.monotonic() + 10.0
+        deadline = time.monotonic() + MQL_CAPABILITY_REGISTRATION_TIMEOUT_S
         while not required.issubset(set(capability_names)) and time.monotonic() < deadline:
             time.sleep(0.1)
         missing = required - set(capability_names)
-        assert not missing, f"mql-lsp-server did not register required capabilities within 10s: {sorted(missing)}"
+        if missing:
+            # raise instead of assert: an assert would vanish under `python -O` and
+            # leave the server half-alive; start() cleans up the process on raise
+            raise SolidLSPException(
+                f"mql-lsp-server did not register required capabilities "
+                f"within {MQL_CAPABILITY_REGISTRATION_TIMEOUT_S:.0f}s: {sorted(missing)}"
+            )
 
         self.server_ready.set()
