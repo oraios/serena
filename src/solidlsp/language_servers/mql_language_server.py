@@ -49,13 +49,23 @@ INITIAL_MQL_SHA256_BY_PLATFORM = {
     "osx-arm64": "f7a0038aaf9d8df2bbdf1e3331bd21cb93c1e13108fe6de20ff68cc7e7ed8718",
     "win-x64": "dd11026e033fd2f703c4ca27fe6b730acc7283f1512dd165a546c59b270e730c",
 }
-DEFAULT_MQL_VERSION = "v2.0.1"
+DEFAULT_MQL_VERSION = "v2.1.0"
 DEFAULT_MQL_SHA256_BY_PLATFORM = {
-    # sha256 values from the v2.0.1 release CHECKSUMS.txt (GitHub release v2.0.1)
-    "linux-x64": "493d4f900876653afe10bbcdfd769c4ddab9761e0bc2fb5cbff91338aa88e156",
-    "osx-x64": "15f50e6305e051a9b01688c4904175503dfccd332e8166d824695af8542b6795",
-    "osx-arm64": "2d9a5dd0a1a0a72bbf49a1ea77fc2c03cebb4d4983d55859dd7cafdd9590e265",
-    "win-x64": "a3f4ef432fde7d9cd357b59fb0e60dc3c9530cb6ca31c6da4935eba8e50f0cdb",
+    # sha256 values from the v2.1.0 release (GitHub release API + CHECKSUMS.txt, cross-verified)
+    "linux-x64": "87c9e29571583c590969cbfebc8407c2e2cf562021a063920b6343fbaf8f492e",
+    "osx-x64": "94f5558bca2b3aee8621f776414bf2b96a75462845750ae37b6a9da99c8c6306",
+    "osx-arm64": "5dba86a6e466ca2c6f6fe910d87249758f7597341ad7d37e371c3e70ffc2762e",
+    "win-x64": "9870992f29b21a145f98ed686badb6e1a774427bb3f888f7b9485f2d648adae0",
+}
+# Historical DEFAULT digests (kept forever, mirroring the INITIAL scheme: a user who
+# overrides to any formerly-pinned version still gets hash verification).
+HISTORICAL_MQL_SHA256_BY_VERSION: dict[str, dict[str, str]] = {
+    "v2.0.1": {
+        "linux-x64": "493d4f900876653afe10bbcdfd769c4ddab9761e0bc2fb5cbff91338aa88e156",
+        "osx-x64": "15f50e6305e051a9b01688c4904175503dfccd332e8166d824695af8542b6795",
+        "osx-arm64": "2d9a5dd0a1a0a72bbf49a1ea77fc2c03cebb4d4983d55859dd7cafdd9590e265",
+        "win-x64": "a3f4ef432fde7d9cd357b59fb0e60dc3c9530cb6ca31c6da4935eba8e50f0cdb",
+    },
 }
 
 
@@ -64,6 +74,9 @@ def _mql_sha(version: str, platform_key: str) -> str | None:
         return INITIAL_MQL_SHA256_BY_PLATFORM[platform_key]
     if version == DEFAULT_MQL_VERSION:
         return DEFAULT_MQL_SHA256_BY_PLATFORM[platform_key]
+    historical = HISTORICAL_MQL_SHA256_BY_VERSION.get(version)
+    if historical is not None:
+        return historical[platform_key]
     return None
 
 

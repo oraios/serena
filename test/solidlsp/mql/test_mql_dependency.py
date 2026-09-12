@@ -54,10 +54,10 @@ class TestMqlVersionConstants:
 
     def test_initial_version_is_v2_0_0_and_default_tracks_latest(self) -> None:
         """INITIAL is frozen at the introduction version; DEFAULT tracks the
-        latest verified release (bumped to v2.0.1 for issue #16 fix).
+        latest verified release (v2.1.0 at the time of the PR).
         """
         assert INITIAL_MQL_VERSION == "v2.0.0"
-        assert DEFAULT_MQL_VERSION == "v2.0.1"
+        assert DEFAULT_MQL_VERSION == "v2.1.0"
 
     def test_initial_shas_match_v2_0_0_release(self) -> None:
         """INITIAL digests are frozen forever at their introduction values."""
@@ -106,7 +106,14 @@ class TestMqlShaResolution:
         assert _mql_sha("v2.0.2", "linux-x64") is None
         assert _mql_sha("v9.9.9", "win-x64") is None
 
-    def test_fetch_release_checksums_parses_v2_0_1_file(self) -> None:
+    def test_former_default_v2_0_1_resolves_from_historical_dict(self) -> None:
+        """A previously-pinned DEFAULT version keeps hash verification after a
+        DEFAULT bump via the historical digest registry.
+        """
+        v201 = _mql_sha("v2.0.1", "linux-x64")
+        assert v201 == "493d4f900876653afe10bbcdfd769c4ddab9761e0bc2fb5cbff91338aa88e156"
+
+    def test_fetch_release_checksums_parses_default_file(self) -> None:
         """``_fetch_release_checksums`` parses the real CHECKSUMS.txt format
         (``<sha256>  ./<asset>`` lines, ``#`` comments) into a basename→digest map
         that agrees with the pinned DEFAULT digests.
@@ -147,6 +154,14 @@ class TestMqlRuntimeDependencies:
         deps = MqlLanguageServer._runtime_dependencies("v2.0.1")
         dep = deps.get_dependencies_for_platform("linux-x64")[0]
         assert dep.url == "https://github.com/davalillo/mql-language-server/releases/download/v2.0.1/mql-lsp-server-linux-x64"
+
+    def test_former_default_keeps_hash_verification_after_bump(self) -> None:
+        """After a DEFAULT bump, the formerly-pinned version must still carry its
+        digest (historical registry), never fall into the unverified path.
+        """
+        deps = MqlLanguageServer._runtime_dependencies("v2.0.1")
+        dep = deps.get_dependencies_for_platform("linux-x64")[0]
+        assert dep.sha256 == "493d4f900876653afe10bbcdfd769c4ddab9761e0bc2fb5cbff91338aa88e156"
 
     def test_allowed_hosts_follow_ada_tuple(self) -> None:
         """The host tuple must include github.com AND the CDN redirect hosts (not bare github.com)."""
@@ -205,8 +220,8 @@ class TestMqlVersionResolution:
             assert provider._get_or_install_core_dependency() == expected
 
     def test_default_version_uses_versioned_dir_after_real_bump(self, tmp_path: Path) -> None:
-        """After the real v2.0.1 bump, DEFAULT no longer equals INITIAL, so the
-        default install resolves into ``mql-lsp-v2.0.1`` — the versioned dir.
+        """After the real v2.1.0 bump, DEFAULT no longer equals INITIAL, so the
+        default install resolves into ``mql-lsp-v2.1.0`` — the versioned dir.
         """
         provider = _make_provider(tmp_path)
         expected = os.path.join(str(tmp_path), f"mql-lsp-{DEFAULT_MQL_VERSION}", "mql-lsp-server")
@@ -491,13 +506,13 @@ class _FakeResponse:
 
 @pytest.mark.mql
 class TestMqlRealBinaryInstall:
-    """Runtime harness: the pinned v2.0.1 asset downloads, passes sha256 verification,
+    """Runtime harness: the pinned DEFAULT asset downloads, passes sha256 verification,
     is installed with exec permission, and resolves to the versioned dir
     (spec R3 'first install' + 'exec permission' scenarios).
     """
 
     def test_first_install_downloads_and_verifies_real_binary(self, tmp_path: Path) -> None:
-        """Real 80MB v2.0.1 asset: downloaded from the pinned release URL, sha256-verified
+        """Real DEFAULT (v2.1.0) asset: downloaded from the pinned release URL, sha256-verified
         against DEFAULT_MQL_SHA256_BY_PLATFORM, installed into the versioned
         dir (DEFAULT no longer equals INITIAL after the v2.0.1 bump), chmod +x.
 
