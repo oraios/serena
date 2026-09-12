@@ -43,6 +43,16 @@ def _get_platform_id() -> PlatformId:
     return PlatformUtils.get_platform_id()
 
 
+def _expected_binary_name() -> str:
+    """Binary filename the provider resolves for the current platform.
+
+    The win-x64 RuntimeDependency carries the ``.exe`` suffix
+    (``mql-language-server.py``), so expected paths and pre-seeded fake
+    binaries must match it exactly.
+    """
+    return "mql-lsp-server.exe" if _get_platform_id() == PlatformId.WIN_x64 else "mql-lsp-server"
+
+
 def _write_fake_binary(executable_path: str) -> None:
     Path(executable_path).parent.mkdir(parents=True, exist_ok=True)
     Path(executable_path).write_bytes(b"#!/bin/sh\n")
@@ -191,7 +201,7 @@ class TestMqlVersionResolution:
     def test_initial_version_uses_legacy_unversioned_dir(self, tmp_path: Path) -> None:
         """INITIAL_* resolves into the legacy unversioned ``mql-lsp`` dir."""
         provider = _make_provider(tmp_path, {"mql_version": INITIAL_MQL_VERSION})
-        expected = os.path.join(str(tmp_path), "mql-lsp", "mql-lsp-server")
+        expected = os.path.join(str(tmp_path), "mql-lsp", _expected_binary_name())
         _write_fake_binary(expected)
 
         path = provider._get_or_install_core_dependency()
@@ -214,7 +224,7 @@ class TestMqlVersionResolution:
             ),
         ):
             provider = _make_provider(tmp_path)
-            expected = os.path.join(str(tmp_path), f"mql-lsp-{bumped_default}", "mql-lsp-server")
+            expected = os.path.join(str(tmp_path), f"mql-lsp-{bumped_default}", _expected_binary_name())
             _write_fake_binary(expected)
 
             assert provider._get_or_install_core_dependency() == expected
@@ -224,20 +234,30 @@ class TestMqlVersionResolution:
         default install resolves into ``mql-lsp-v2.1.0`` — the versioned dir.
         """
         provider = _make_provider(tmp_path)
-        expected = os.path.join(str(tmp_path), f"mql-lsp-{DEFAULT_MQL_VERSION}", "mql-lsp-server")
+        expected = os.path.join(str(tmp_path), f"mql-lsp-{DEFAULT_MQL_VERSION}", _expected_binary_name())
         _write_fake_binary(expected)
 
-        assert provider._get_or_install_core_dependency() == expected
+        with patch(
+            "solidlsp.language_servers.common.RuntimeDependencyCollection.install",
+            side_effect=lambda target_dir: _write_fake_binary(os.path.join(target_dir, _expected_binary_name())) or {},
+        ):
+            assert provider._get_or_install_core_dependency() == expected
 
     def test_override_version_uses_its_own_versioned_dir(self, tmp_path: Path) -> None:
         """An arbitrary ``mql_version`` override gets its own versioned subdir."""
         provider = _make_provider(tmp_path, {"mql_version": "v2.0.2"})
-        expected = os.path.join(str(tmp_path), "mql-lsp-v2.0.2", "mql-lsp-server")
+        expected = os.path.join(str(tmp_path), "mql-lsp-v2.0.2", _expected_binary_name())
         _write_fake_binary(expected)
 
-        with patch(
-            "solidlsp.language_servers.mql_language_server.MqlLanguageServer._resolve_override_digests",
-            return_value=dict.fromkeys(_ASSET_BASENAME_BY_PLATFORM, "0" * 64),
+        with (
+            patch(
+                "solidlsp.language_servers.mql_language_server.MqlLanguageServer._resolve_override_digests",
+                return_value=dict.fromkeys(_ASSET_BASENAME_BY_PLATFORM, "0" * 64),
+            ),
+            patch(
+                "solidlsp.language_servers.common.RuntimeDependencyCollection.install",
+                side_effect=lambda target_dir: _write_fake_binary(os.path.join(target_dir, _expected_binary_name())) or {},
+            ),
         ):
             path = provider._get_or_install_core_dependency()
 
@@ -248,7 +268,7 @@ class TestMqlVersionResolution:
         versioned ``mql-lsp-{DEFAULT}`` dir).
         """
         provider = _make_provider(tmp_path)
-        expected = os.path.join(str(tmp_path), f"mql-lsp-{DEFAULT_MQL_VERSION}", "mql-lsp-server")
+        expected = os.path.join(str(tmp_path), f"mql-lsp-{DEFAULT_MQL_VERSION}", _expected_binary_name())
         _write_fake_binary(expected)
 
         assert provider._get_or_install_core_dependency() == expected
@@ -262,7 +282,7 @@ class TestMqlVersionResolution:
         digest = "a" * 64
 
         def fake_install(target_dir: str) -> dict[str, str]:
-            _write_fake_binary(os.path.join(target_dir, "mql-lsp-server"))
+            _write_fake_binary(os.path.join(target_dir, _expected_binary_name()))
             return {}
 
         with (
@@ -316,7 +336,7 @@ class TestMqlVersionResolution:
         the install is mocked to place the binary in the new dir.
         """
         stale_dir = os.path.join(str(tmp_path), "mql-lsp-v2.0.0")
-        _write_fake_binary(os.path.join(stale_dir, "mql-lsp-server"))
+        _write_fake_binary(os.path.join(stale_dir, _expected_binary_name()))
 
         bumped_default = "v2.0.2"
         bumped_sha = "0" * 64
@@ -331,22 +351,22 @@ class TestMqlVersionResolution:
             ),
             patch(
                 "solidlsp.language_servers.common.RuntimeDependencyCollection.install",
-                side_effect=lambda target_dir: _write_fake_binary(os.path.join(target_dir, "mql-lsp-server")) or {},
+                side_effect=lambda target_dir: _write_fake_binary(os.path.join(target_dir, _expected_binary_name())) or {},
             ),
         ):
             provider = _make_provider(tmp_path)
-            expected = os.path.join(str(tmp_path), f"mql-lsp-{bumped_default}", "mql-lsp-server")
+            expected = os.path.join(str(tmp_path), f"mql-lsp-{bumped_default}", _expected_binary_name())
 
             path = provider._get_or_install_core_dependency()
 
             assert path == expected
             # the stale dir must not have been reused
-            assert path != os.path.join(stale_dir, "mql-lsp-server")
+            assert path != os.path.join(stale_dir, _expected_binary_name())
 
     def test_cache_hit_makes_no_network_request(self, tmp_path: Path) -> None:
         """Cache hit: a second resolution with the binary present must not touch the network."""
         provider = _make_provider(tmp_path)
-        _write_fake_binary(os.path.join(str(tmp_path), f"mql-lsp-{DEFAULT_MQL_VERSION}", "mql-lsp-server"))
+        _write_fake_binary(os.path.join(str(tmp_path), f"mql-lsp-{DEFAULT_MQL_VERSION}", _expected_binary_name()))
 
         with patch(
             "solidlsp.language_servers.common.RuntimeDependencyCollection.install",
@@ -370,7 +390,7 @@ class TestMqlVersionResolution:
     def test_launch_command_is_the_core_path_alone(self, tmp_path: Path) -> None:
         """Launch is stdio with no flags: command = [core_path]."""
         provider = _make_provider(tmp_path)
-        core = os.path.join(str(tmp_path), f"mql-lsp-{DEFAULT_MQL_VERSION}", "mql-lsp-server")
+        core = os.path.join(str(tmp_path), f"mql-lsp-{DEFAULT_MQL_VERSION}", _expected_binary_name())
         _write_fake_binary(core)
 
         with patch(
@@ -402,14 +422,14 @@ class TestMqlSecurityRefusals:
         with pytest.raises(SolidLSPException, match="evil.example.com") as excinfo:
             FileUtils.download_file_verified(
                 dep.url,
-                str(tmp_path / "mql-lsp-server"),
+                str(tmp_path / _expected_binary_name()),
                 expected_sha256=dep.sha256,
                 allowed_hosts=dep.allowed_hosts,
             )
 
         # the refusal must come from host validation, not a network error
         assert "allowed hosts" in str(excinfo.value), f"expected host-validation refusal, got: {excinfo.value}"
-        assert not (tmp_path / "mql-lsp-server").exists(), "refused download must leave no artifact"
+        assert not (tmp_path / _expected_binary_name()).exists(), "refused download must leave no artifact"
 
     def test_sha256_mismatch_refuses_install_and_leaves_no_usable_binary(self, tmp_path: Path) -> None:
         """A downloaded asset whose digest differs from the pinned SHA must abort
@@ -434,12 +454,12 @@ class TestMqlSecurityRefusals:
         ):
             FileUtils.download_file_verified(
                 dep.url,
-                str(tmp_path / "mql-lsp-server"),
+                str(tmp_path / _expected_binary_name()),
                 expected_sha256=wrong_sha,
                 allowed_hosts=dep.allowed_hosts,
             )
 
-        assert not (tmp_path / "mql-lsp-server").exists(), "refused install must leave no usable binary"
+        assert not (tmp_path / _expected_binary_name()).exists(), "refused install must leave no usable binary"
 
     def test_provider_install_failure_leaves_no_executable_to_launch(self, tmp_path: Path) -> None:
         """End-to-end refusal path: with the real (host+sha enforcing) download
@@ -458,8 +478,9 @@ class TestMqlSecurityRefusals:
         ):
             provider._get_or_install_core_dependency()
 
-        binary_path = os.path.join(str(tmp_path), "mql-lsp", "mql-lsp-server")
-        assert not os.path.exists(binary_path), "failed install must leave no usable binary"
+        for binary_name in ("mql-lsp-server", "mql-lsp-server.exe"):
+            binary_path = os.path.join(str(tmp_path), "mql-lsp", binary_name)
+            assert not os.path.exists(binary_path), "failed install must leave no usable binary"
 
     def test_provider_uses_real_download_chain(self) -> None:
         """The MQL install must go through the verified download chain
@@ -528,7 +549,7 @@ class TestMqlRealBinaryInstall:
         path = provider._get_or_install_core_dependency()
 
         expected_dir = os.path.join(str(tmp_path), f"mql-lsp-{DEFAULT_MQL_VERSION}")
-        assert path == os.path.join(expected_dir, "mql-lsp-server")
+        assert path == os.path.join(expected_dir, _expected_binary_name())
         assert os.path.exists(path)
         # exec permission (non-Windows)
         if PlatformUtils.get_platform_id() != PlatformId.WIN_x64:
