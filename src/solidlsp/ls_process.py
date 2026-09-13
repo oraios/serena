@@ -664,8 +664,13 @@ class StdioLanguageServer(LanguageServerInterface):
                 self._process.stdin.writelines(msg)
                 self._process.stdin.flush()
             except (BrokenPipeError, ConnectionResetError, OSError) as e:
-                # Log the error but don't raise to prevent cascading failures
+                # The server is gone: fail fast with LanguageServerTerminatedException
+                # (the restart path's signal) instead of stranding the just-registered
+                # request until its timeout (#2004). Mirrors TCPLanguageServer.
                 log.error(f"Failed to write to stdin: {e}")
+                self._cancel_pending_requests(
+                    LanguageServerTerminatedException("Stdio send error", self.ls_id, cause=e)
+                )
                 return
 
 
