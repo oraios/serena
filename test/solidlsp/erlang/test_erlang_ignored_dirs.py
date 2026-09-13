@@ -23,7 +23,7 @@ def ls_with_ignored_dirs() -> Generator[SolidLanguageServer, None, None]:
 
 
 @pytest.mark.timeout(60)  # Add 60 second timeout
-@pytest.mark.xfail(reason="Known timeout issue on Ubuntu CI with Erlang LS server startup", strict=False)
+@pytest.mark.xfail(reason="Known timeout issue on Ubuntu CI with ELP server startup", strict=False)
 @pytest.mark.parametrize("ls_with_ignored_dirs", [LanguageServerId.ERLANG], indirect=True)
 def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     """Tests that request_full_symbol_tree ignores the configured directory."""
@@ -40,7 +40,7 @@ def test_symbol_tree_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
 
 
 @pytest.mark.timeout(60)  # Add 60 second timeout
-@pytest.mark.xfail(reason="Known timeout issue on Ubuntu CI with Erlang LS server startup", strict=False)
+@pytest.mark.xfail(reason="Known timeout issue on Ubuntu CI with ELP server startup", strict=False)
 @pytest.mark.parametrize("ls_with_ignored_dirs", [LanguageServerId.ERLANG], indirect=True)
 def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
     """Tests that find_references ignores the configured directory."""
@@ -67,7 +67,7 @@ def test_find_references_ignores_dir(ls_with_ignored_dirs: SolidLanguageServer):
 
 
 @pytest.mark.timeout(60)  # Add 60 second timeout
-@pytest.mark.xfail(reason="Known timeout issue on Ubuntu CI with Erlang LS server startup", strict=False)
+@pytest.mark.xfail(reason="Known timeout issue on Ubuntu CI with ELP server startup", strict=False)
 @pytest.mark.parametrize("repo_path", [LanguageServerId.ERLANG], indirect=True)
 def test_refs_and_symbols_with_glob_patterns(repo_path: Path) -> None:
     """Tests that refs and symbols with glob patterns are ignored."""
