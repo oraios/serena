@@ -18,6 +18,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Performance: the symbol caches were rewritten in full after every tool call that fetched new symbols,
     which takes noticeable time for large projects; they are now saved at most every 30 s, and always when
     language servers are stopped or restarted
+  - Fix: a language server request that timed out stayed registered in the pending-request table,
+    since entries were only removed when a response arrived; a server that is running but not
+    answering therefore leaked one entry per timed-out request for the lifetime of the server, and
+    a later cancellation counted those abandoned requests as live (#2003)
 
 * JetBrains:
   - Fix: When applying a non-symbolic edit, do not raise a post-edit exception during IDE file refresh
