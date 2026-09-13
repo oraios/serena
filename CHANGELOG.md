@@ -11,6 +11,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     in which the logging configuration override was effectively hard-coded.
     We now patch Uvicorn's log config constructor to prevent this.
     This affected both dashboard log retrieval and file logs written by Serena.
+  - Fix: a language server request that timed out stayed registered in the pending-request table,
+    since entries were only removed when a response arrived; a server that is running but not
+    answering therefore leaked one entry per timed-out request for the lifetime of the server, and
+    a later cancellation counted those abandoned requests as live (#2003)
    
 * Dashboard:
   - Show an `[untrusted]` indicator beside the active project name for untrusted projects,
