@@ -1,6 +1,7 @@
 """
 Language server-related tools
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import copy
 import os

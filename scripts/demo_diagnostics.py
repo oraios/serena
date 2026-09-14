@@ -5,6 +5,7 @@ The script creates a temporary Python file inside this repository, introduces on
 shows file and symbol diagnostics, then introduces another warning and verifies that the
 second edit reports only the newly introduced warning.
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import json
 import shutil

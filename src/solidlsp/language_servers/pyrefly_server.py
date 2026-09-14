@@ -10,6 +10,7 @@ You can pass the following entries in ``ls_specific_settings["python_pyrefly"]``
       before its reverse-dependency graph is built and miss importers of the renamed module.
     - workspace_indexing_limit: Override pyrefly's workspace indexing limit.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

@@ -6,6 +6,7 @@ You can pass the following entries in ``ls_specific_settings["python_ty"]``:
     - ty_version: Override the pinned ``ty`` version used with ``uvx`` / ``uv x``
       (default: the bundled Serena version).
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 

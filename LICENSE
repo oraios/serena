@@ -1,21 +1,84 @@
-MIT License
+Serena Licensing Overview
+=========================
 
-Copyright (c) 2025 Oraios AI
+This repository is licensed per component: SolidLSP under the MIT License and
+the Serena application under GPL-3.0-or-later.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Because MIT is compatible with the GPL, any distribution that combines both -
+such as the `serena-agent` package - is as a whole subject to the terms of
+GPL-3.0-or-later. This does not change the license of the SolidLSP files
+themselves: they remain MIT-licensed and may be obtained, extracted and used
+separately under MIT terms.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+The full license texts are in the LICENSES/ directory and are not modified in
+any way:
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+    LICENSES/MIT.txt               The MIT License
+    LICENSES/GPL-3.0-or-later.txt  The GNU General Public License, version 3
+
+Components
+----------
+
+  SolidLSP (src/solidlsp/, test/solidlsp/, test/resources/)
+      License: MIT (SPDX: MIT)
+      Copyright (c) 2025-2026 Jain & Panchenko IT-Berater Partnerschaft
+      (Oraios AI) and contributors
+
+      SolidLSP is the language-server client library that provides the basis
+      for Serena's free code-intelligence backend. It is permissive, reusable
+      infrastructure and remains MIT-licensed so that it can be used
+      independently of Serena under MIT terms. This is unaffected by the
+      licensing of the Serena application.
+
+      Some files in src/solidlsp/lsp_protocol_handler/ are derived from
+      OLSP (https://github.com/predragnikolic/OLSP), MIT-licensed; the
+      original notices are retained in those files.
+
+  Serena application (src/serena/, src/interprompt/, scripts/, test/serena/,
+  docs/ and everything else in this repository that is not listed above)
+      License: GPL-3.0-or-later (SPDX: GPL-3.0-or-later)
+      Copyright (c) 2025-2026 Jain & Panchenko IT-Berater Partnerschaft
+      (Oraios AI) and contributors
+
+      Serena is the application built on top of SolidLSP. Starting with the
+      v2 licensing transition (see "Historical cutoff" below), Serena
+      application code is licensed under the GNU General Public License,
+      version 3 or (at your option) any later version.
+
+Source files carry an "SPDX-License-Identifier" line indicating which of the
+two licenses applies to that file.
+
+Historical cutoff
+-----------------
+
+The license change is NOT retroactive.
+
+  * Serena originally began under the GNU General Public License (version 2).
+    It was changed to the MIT License on 2025-05-01 (commit 3e9384f5).
+  * All Serena releases and commits from that point up to and including the
+    cutoff below were released under the MIT License and remain available
+    under the MIT License.
+  * Serena v2 and all later application code are licensed under
+    GPL-3.0-or-later.
+
+    Last MIT-licensed release: v1.7.0
+    Last MIT-licensed commit:  74c38a65f03fc0764d7ee4b3016ef6a07572ed64
+    Marker tag:                mit-final
+
+Contributions that entered the Serena application under the MIT License before
+the cutoff remain incorporated in the GPL-licensed application; the MIT
+copyright and permission notice (LICENSES/MIT.txt) continues to apply to that
+historical code as required by its terms.
+
+Contributions
+-------------
+
+Contributions to this repository require acceptance of the Contributor License
+Agreement in CLA.md. See CONTRIBUTING.md for details.
+
+Why GPL?
+--------
+
+We want the best version of Serena to remain free. The GPL ensures that anyone
+who redistributes a derivative version of Serena must preserve the same
+software freedoms for its users.
