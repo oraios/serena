@@ -2,6 +2,15 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Licensing:
+  - **Breaking**: The Serena application (`src/serena`, `src/interprompt` and all other non-SolidLSP code) is now
+    licensed under GPL-3.0-or-later. SolidLSP (`src/solidlsp`) remains MIT-licensed. The repository is now
+    explicitly multi-licensed by component; see `LICENSE` for the overview, the historical cutoff and the rationale.
+    The change is not retroactive: all earlier releases and commits remain available under MIT.
+  - Source files now carry `SPDX-License-Identifier` headers
+  - Contributions require acceptance of the new Contributor License Agreement (`CLA.md`), enforced via CLA assistant;
+    see `CONTRIBUTING.md`
+
 * General:
   - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
