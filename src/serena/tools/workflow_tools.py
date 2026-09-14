@@ -1,6 +1,7 @@
 """
 Tools supporting the general workflow of the agent
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import platform
 

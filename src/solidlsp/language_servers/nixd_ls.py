@@ -4,6 +4,7 @@ Provides Nix specific instantiation of the LanguageServer class using nixd (Nix 
 
 Note: Windows is not supported as Nix itself doesn't support Windows natively.
 """
+# SPDX-License-Identifier: MIT
 
 import json
 import logging

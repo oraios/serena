@@ -49,6 +49,7 @@ Hard project requirements (failure modes if violated):
       run in the project. Without it, ngserver's `isInAngularProject` returns
       false for every file and template features silently return empty.
 """
+# SPDX-License-Identifier: MIT
 
 from __future__ import annotations
 
@@ -94,11 +95,6 @@ class AngularTypeScriptServer(TypeScriptLanguageServer):
     decorators, inline templates, templateUrl/styleUrls navigation, and
     cross-file references that span Angular templates.
     """
-
-    @classmethod
-    @override
-    def get_language_server_id(cls) -> LanguageServerId:
-        return LanguageServerId.TYPESCRIPT
 
     def get_source_fn_matcher(self) -> FilenameMatcher:
         # Use the Angular matcher so .html template files aren't filtered out of
