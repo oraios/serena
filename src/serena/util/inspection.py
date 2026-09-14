@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import logging
 from collections.abc import Callable, Iterator
 from typing import TypeVar

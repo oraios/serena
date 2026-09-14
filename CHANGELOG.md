@@ -2,6 +2,15 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Licensing:
+  - **Breaking**: The Serena application (`src/serena`, `src/interprompt` and all other non-SolidLSP code) is now
+    licensed under GPL-3.0-or-later. SolidLSP (`src/solidlsp`) remains MIT-licensed. The repository is now
+    explicitly multi-licensed by component; see `LICENSE` for the overview, the historical cutoff and the rationale.
+    The change is not retroactive: all earlier releases and commits remain available under MIT.
+  - Source files now carry `SPDX-License-Identifier` headers
+  - Contributions require acceptance of the new Contributor License Agreement (`CLA.md`), enforced via CLA assistant;
+    see `CONTRIBUTING.md`
+
 * General:
   - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
@@ -62,6 +71,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     rest of the session (#1871)
   - Fix: Exceptions raised during `LanguageServerManager.start` did not stop the language server subprocess if it was
     already started (#1949)
+  - Add: Installed Python packages can provide generic external language-server adapters through the
+    `serena.language_servers` entry-point group for explicit use in `project.yml`
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: `DartLanguageServer._start_server` discarded both `$/analyzerStatus` and
     `experimental/serverStatus`, the two notifications the Dart analysis server sends to report

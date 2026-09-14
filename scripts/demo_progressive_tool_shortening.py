@@ -5,6 +5,7 @@ printing the full result, then progressively tighter max_answer_chars
 to show the successive shortening stages. Both LSP and JetBrains backends
 are tested (JB is skipped if no IDE is running).
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import json
 from pprint import pprint
