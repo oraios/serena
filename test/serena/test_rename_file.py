@@ -14,6 +14,7 @@ import pytest
 
 from serena.code_editor import LanguageServerCodeEditor
 from serena.symbol import LanguageServerSymbolRetriever
+from solidlsp import ls_types
 from solidlsp.ls_config import LanguageServerId
 from test.conftest import get_pytest_markers, get_repo_path, project_with_explicit_ls_context
 
@@ -82,6 +83,27 @@ def test_move_typescript_module_updates_importers(ls_id: LanguageServerId) -> No
         index = (repo / "index.ts").read_text(encoding="utf-8")
         assert "./lib/greeters" in index, index
         assert "./formatters" not in index, index
+
+
+@pytest.mark.parametrize(
+    "ls_id",
+    [pytest.param(LanguageServerId.PYTHON_PYREFLY, marks=get_pytest_markers(LanguageServerId.PYTHON_PYREFLY), id="python_pyrefly")],
+)
+def test_a_rename_the_server_includes_in_its_edit_creates_the_target_directory(ls_id: LanguageServerId) -> None:
+    """
+    A server may put the rename itself among the edit's `documentChanges` (`kind: rename`); applying that operation
+    must create the target's parent directory like `rename_file` does when it moves the file itself.
+    """
+    with _editor_on_repo_copy(ls_id) as (editor, repo):
+        old_rel, new_rel = os.path.join("test_repo", "models.py"), os.path.join("test_repo", "moved", "deeper", "models.py")
+        workspace_edit = ls_types.WorkspaceEdit(
+            documentChanges=[{"kind": "rename", "oldUri": (repo / old_rel).as_uri(), "newUri": (repo / new_rel).as_uri()}]
+        )
+
+        assert editor._apply_workspace_edit(workspace_edit) == 1
+
+        assert not (repo / old_rel).exists()
+        assert (repo / new_rel).is_file()
 
 
 @pytest.mark.parametrize(

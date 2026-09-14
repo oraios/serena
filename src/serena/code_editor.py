@@ -343,7 +343,13 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
         def apply(self) -> None:
             old_abs_path = os.path.join(self._code_editor.project_root, self._old_relative_path)
             new_abs_path = os.path.join(self._code_editor.project_root, self._new_relative_path)
-            os.rename(old_abs_path, new_abs_path)
+            LanguageServerCodeEditor._move_file(old_abs_path, new_abs_path)
+
+    @staticmethod
+    def _move_file(old_abs_path: str, new_abs_path: str) -> None:
+        """Moves a file, creating the target's parent directories: a move into a directory that does not exist yet is a move."""
+        os.makedirs(os.path.dirname(new_abs_path), exist_ok=True)
+        os.rename(old_abs_path, new_abs_path)
 
     def _workspace_edit_to_edit_operations(self, workspace_edit: ls_types.WorkspaceEdit) -> list["LanguageServerCodeEditor.EditOperation"]:
         operations: list[LanguageServerCodeEditor.EditOperation] = []
@@ -439,8 +445,7 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
 
         # A server may include the rename itself among its document changes; then the move already happened.
         if os.path.exists(old_abs_path):
-            os.makedirs(os.path.dirname(new_abs_path), exist_ok=True)
-            os.rename(old_abs_path, new_abs_path)
+            self._move_file(old_abs_path, new_abs_path)
         lang_server.notify_did_rename_files(relative_path, new_relative_path)
 
         if num_edited_files == 0:
