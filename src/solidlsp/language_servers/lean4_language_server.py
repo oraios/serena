@@ -2,6 +2,7 @@
 Provides Lean 4 specific instantiation of the LanguageServer class.
 Uses the built-in Lean 4 language server (lean --server).
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import shutil

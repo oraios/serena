@@ -5,6 +5,7 @@ Uses a custom Python-based LSP server (pygls) for parsing .mrc files.
 The LSP server script is shipped as ``msl_lsp_server.py`` alongside this module
 and launched as a subprocess using the current Python interpreter.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os
