@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 import dataclasses
 import hashlib
 import json
@@ -31,7 +33,7 @@ from solidlsp.dependency_provider import (
     LanguageServerDependencyProviderUvx,
 )
 from solidlsp.initialize_params import DefaultInitializeParamsBuilder, InitializeParamsBuilder
-from solidlsp.ls_config import FilenameMatcher, LanguageServerConfig, LanguageServerId
+from solidlsp.ls_config import FilenameMatcher, LanguageServerConfig
 from solidlsp.ls_exceptions import InvalidTextLocationError, SolidLSPException
 from solidlsp.ls_process import DEFAULT_LS_REQUEST_TIMEOUT, LanguageServerInterface, StdioLanguageServer
 from solidlsp.ls_types import UnifiedSymbolInformation
@@ -418,10 +420,6 @@ class SolidLanguageServer(ABC):
             return logging.INFO
 
     @classmethod
-    def get_language_server_id(cls) -> LanguageServerId:
-        return LanguageServerId.from_ls_class(cls)
-
-    @classmethod
     def supports_implementation_request(cls) -> bool:
         """
         Return whether this language server supports ``textDocument/implementation``.
@@ -516,7 +514,7 @@ class SolidLanguageServer(ABC):
         """
         self.config = config
         self._solidlsp_settings = solidlsp_settings
-        ls_id = self.get_language_server_id()
+        ls_id = config.ls_id
         self._custom_settings = solidlsp_settings.get_ls_specific_settings(ls_id)
         """
         the (user-provided) language server-specific settings
@@ -535,7 +533,7 @@ class SolidLanguageServer(ABC):
         default language identifier to be passed to the language server in `textDocument/didOpen` notifications.
         """
         self.open_file_buffers: dict[str, LSPFileBuffer] = {}
-        self.ls_id = self.get_language_server_id()
+        self.ls_id = ls_id
         """
         identifies the language server (not to be confused with the language_id passed to the language server)
         """

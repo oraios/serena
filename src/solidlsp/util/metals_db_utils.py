@@ -9,6 +9,7 @@ instances sharing the same database. However, if a Metals process crashes withou
 proper cleanup, it can leave a stale lock file that prevents proper AUTO_SERVER
 coordination, causing new instances to fall back to in-memory database mode.
 """
+# SPDX-License-Identifier: MIT
 
 from __future__ import annotations
 
