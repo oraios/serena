@@ -78,13 +78,33 @@ class CodeEditor(Generic[TSymbol], ABC):
     def edited_file_context(self, relative_path: str) -> Iterator["CodeEditor.EditedFile"]:
         """
         Context manager for editing a file.
+
+        :param relative_path: the path of the file, relative to the project root. An absolute path is refused: the read
+            tools answer for a symbol defined outside the project (the standard library, an installed package) by the
+            absolute path of its file, and joining such a path to the project root would leave it absolute, so an edit
+            would land outside the project.
         """
-        if FileProxy.is_external_path(relative_path):
-            raise ValueError(f"Cannot edit external file: {relative_path}")
+        self._assert_editable_path(relative_path)
         with self._open_file_context(relative_path) as edited_file:
             yield edited_file
             # save the file
             self._save_edited_file(edited_file)
+
+    @staticmethod
+    def _assert_editable_path(relative_path: str) -> None:
+        """
+        Raises a ValueError unless `relative_path` can name a file of the project: an external path (as the JetBrains
+        plugin encodes them) or an absolute one is refused. The read tools answer for a symbol defined outside the
+        project (the standard library, an installed package) by the absolute path of its file, and joining such a path
+        to the project root leaves it absolute — an edit would land outside the project.
+        """
+        if FileProxy.is_external_path(relative_path):
+            raise ValueError(f"Cannot edit external file: {relative_path}")
+        if os.path.isabs(relative_path):
+            raise ValueError(
+                f"Cannot edit '{relative_path}': the path is absolute, so the file is not a file of the project "
+                "(a symbol defined in the standard library or an installed package is read-only)"
+            )
 
     def _save_edited_file(self, edited_file: "CodeEditor.EditedFile") -> None:
         abs_path = os.path.join(self.project_root, edited_file.relative_path)
@@ -111,6 +131,7 @@ class CodeEditor(Generic[TSymbol], ABC):
         :param relative_file_path: the relative path of the file in which the symbol is defined.
         :param body: the new body
         """
+        self._assert_editable_path(relative_file_path)
         symbol = self._find_unique_symbol(name_path, relative_file_path)
         start_pos = symbol.get_body_start_position_or_raise()
         end_pos = symbol.get_body_end_position_or_raise()
@@ -143,6 +164,7 @@ class CodeEditor(Generic[TSymbol], ABC):
         """
         Inserts content after the symbol with the given name in the given file.
         """
+        self._assert_editable_path(relative_file_path)
         symbol = self._find_unique_symbol(name_path, relative_file_path)
         # Note: for body to be available, the symbol dto that the symbol instance is built from
         # must have been retrieved either with body or at least with location.
@@ -184,6 +206,7 @@ class CodeEditor(Generic[TSymbol], ABC):
         """
         Inserts content before the symbol with the given name in the given file.
         """
+        self._assert_editable_path(relative_file_path)
         symbol = self._find_unique_symbol(name_path, relative_file_path)
         symbol_start_pos = symbol.get_body_start_position_or_raise()
 
@@ -239,6 +262,7 @@ class CodeEditor(Generic[TSymbol], ABC):
         """
         Deletes the symbol with the given name in the given file.
         """
+        self._assert_editable_path(relative_file_path)
         symbol = self._find_unique_symbol(name_path, relative_file_path)
         start_pos = symbol.get_body_start_position_or_raise()
         end_pos = symbol.get_body_end_position_or_raise()
@@ -387,6 +411,7 @@ class LanguageServerCodeEditor(CodeEditor[LanguageServerSymbol]):
         :param new_name: the new name
         :return: a status message
         """
+        self._assert_editable_path(relative_path)
         symbol = self._find_unique_symbol(name_path, relative_path)
         if not symbol.location.has_position_in_file():
             raise ValueError(f"Symbol '{name_path}' does not have a valid position in file for renaming")
@@ -482,6 +507,7 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
         :param rename_in_text_occurrences: whether to rename occurrences of the symbol in text
         :return: a status message
         """
+        self._assert_editable_path(relative_path)
         with JetBrainsPluginClient.from_project(self._project) as client:
             client.rename_symbol(
                 name_path=name_path,
