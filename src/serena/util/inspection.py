@@ -1,5 +1,4 @@
 import logging
-import os
 from collections.abc import Callable, Iterator
 from typing import TypeVar
 
@@ -57,11 +56,9 @@ def compute_language_server_support_composition(
     ls_file_counts: dict[LanguageServerId, int] = {}
     recognised_files = 0
     for file_path in all_files:
-        # Use just the filename for matching, not the full path
-        filename = os.path.basename(file_path)
         matched_any = False
         for ls_id, matcher in matchers.items():
-            if matcher.is_relevant_filename(filename):
+            if matcher.is_relevant_file(file_path):
                 ls_file_counts[ls_id] = ls_file_counts.get(ls_id, 0) + 1
                 matched_any = True
         if matched_any:

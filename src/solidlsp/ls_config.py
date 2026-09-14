@@ -29,7 +29,8 @@ class FilenameMatcher:
         :param shebang_interpreters: interpreter names (e.g. `python`, `bash`) that route an EXTENSIONLESS script to this
             language by its shebang line (`#!/usr/bin/env python3`, `#!/bin/bash`). A name is matched against the shebang's
             interpreter with a trailing version stripped (`python3.12` -> `python`), after resolving `env` (and its `-S`
-            and `VAR=value` arguments). Only files that exist are sniffed; a bare filename never matches by shebang.
+            and `VAR=value` arguments). Read only by :meth:`is_relevant_file`, and only for a file that exists;
+            :meth:`is_relevant_filename` decides by the name alone and never reads a file.
         """
         self._file_extensions = list(set(file_extensions)) if case_sensitive else list(set(ext.lower() for ext in file_extensions))
         self._case_sensitive = case_sensitive
@@ -77,36 +78,54 @@ class FilenameMatcher:
                 self._file_extensions.append(norm)
 
     def is_relevant_filename(self, fn: str) -> bool:
-        name = fn.lower() if not self._case_sensitive else fn
+        """
+        :param fn: a filename, optionally with its path
+        :return: whether the filename carries one of the registered extensions. Decided by the name alone — no file is
+            ever read, so a bare filename is as good as a full path; :meth:`is_relevant_file` is the question to ask
+            when the file itself is at hand (an extensionless script is routed by its shebang line only there)
+        """
+        if not self._case_sensitive:
+            fn = fn.lower()
         for ext in self._file_extensions:
-            if name.endswith(ext):
+            if fn.endswith(ext):
                 return True
-        return self._matches_shebang(fn)
+        return False
+
+    def is_relevant_file(self, path: str) -> bool:
+        """
+        :param path: the path of a file — absolute, or relative to the working directory
+        :return: whether the file is a source file of this matcher's language: its name carries one of the registered
+            extensions (:meth:`is_relevant_filename`), or it is an existing file without an extension whose shebang line
+            names one of the language's interpreters (`shebang_interpreters`). This is the one method that may read
+            the file, which is why it takes a path rather than a filename.
+        """
+        return self.is_relevant_filename(path) or self._matches_shebang(path)
 
     @property
     def shebang_interpreters(self) -> tuple[str, ...]:
         """The interpreter names that route an extensionless script to this matcher's language by its shebang line."""
         return self._shebang_interpreters
 
-    def _matches_shebang(self, fn: str) -> bool:
+    def _matches_shebang(self, path: str) -> bool:
         """
-        Whether `fn` is an existing EXTENSIONLESS file whose first line is a shebang naming one of this matcher's
+        Whether `path` is an existing EXTENSIONLESS file whose first line is a shebang naming one of this matcher's
         interpreters — the way `dev`, `bin/check-*` and the like are Python or shell scripts without saying so in
-        their name. Anything with an extension is decided by the extension alone.
+        their name. Anything with an extension is decided by the extension alone; a path that does not exist (a bare
+        filename among them) or is not a file cannot be read and does not match.
         """
-        if not self._shebang_interpreters or os.path.splitext(os.path.basename(fn))[1]:
+        if not self._shebang_interpreters or os.path.splitext(os.path.basename(path))[1]:
             return False
         try:
-            mtime = os.path.getmtime(fn)
+            mtime = os.path.getmtime(path)
         except OSError:
             return False  # not an existing path (a bare filename, a directory that vanished): nothing to sniff
-        if not os.path.isfile(fn):
+        if not os.path.isfile(path):
             return False
-        cached = self._shebang_verdicts.get(fn)
+        cached = self._shebang_verdicts.get(path)
         if cached is not None and cached[0] == mtime:
             return cached[1]
-        verdict = self._shebang_interpreter_of(fn) in self._shebang_interpreters
-        self._shebang_verdicts[fn] = (mtime, verdict)
+        verdict = self._shebang_interpreter_of(path) in self._shebang_interpreters
+        self._shebang_verdicts[path] = (mtime, verdict)
         return verdict
 
     @classmethod
