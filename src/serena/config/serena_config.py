@@ -645,6 +645,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
             fixed_tools=fixed_tools,
             included_optional_tools=included_optional_tools,
             read_only=data["read_only"],
+            edit_diagnostics=data["edit_diagnostics"],
             read_only_memory_patterns=data.get("read_only_memory_patterns", []),
             ignored_memory_patterns=data.get("ignored_memory_patterns", []),
             ignore_all_files_in_gitignore=data["ignore_all_files_in_gitignore"],
