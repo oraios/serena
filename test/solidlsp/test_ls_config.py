@@ -1,4 +1,4 @@
-from solidlsp.ls_config import FilenameMatcher
+from solidlsp.ls_config import AnchoredFilenameMatcher, FilenameMatcher, LanguageServerId
 
 
 class TestFilenameMatcherCaseSensitivity:
@@ -44,3 +44,59 @@ class TestFilenameMatcherCaseSensitivity:
         assert matcher.string_contains_relevant_filename("main.py")
         # ".py" embedded in ".python" is not a complete extension occurrence.
         assert not matcher.string_contains_relevant_filename("file.python")
+
+
+class TestAnchoredFilenameMatcher:
+    def test_matches_extensions_within_chart(self, tmp_path) -> None:
+        chart_root = tmp_path / "chart"
+        nested = chart_root / "templates" / "nested"
+        nested.mkdir(parents=True)
+        (chart_root / "Chart.yaml").touch()
+        matcher = AnchoredFilenameMatcher(".yaml", ".yml", ".tpl")
+
+        assert matcher.is_relevant_filename(str(nested / "deployment.yaml"))
+        assert matcher.is_relevant_filename(str(nested / "values.yml"))
+        assert matcher.is_relevant_filename(str(nested / "_helpers.tpl"))
+        assert not matcher.is_relevant_filename(str(nested / "README.md"))
+
+    def test_rejects_relative_paths_and_files_outside_chart(self, tmp_path) -> None:
+        chart_root = tmp_path / "chart"
+        (chart_root / "templates").mkdir(parents=True)
+        (chart_root / "Chart.yaml").touch()
+        matcher = AnchoredFilenameMatcher(".yaml")
+
+        assert not matcher.is_relevant_filename("deployment.yaml")
+        assert not matcher.is_relevant_filename(str(tmp_path / "outside.yaml"))
+
+    def test_max_walk_depth_is_inclusive(self, tmp_path) -> None:
+        chart_root = tmp_path / "chart"
+        shallow = chart_root / "templates"
+        deep = shallow / "nested"
+        deep.mkdir(parents=True)
+        (chart_root / "Chart.yaml").touch()
+        matcher = AnchoredFilenameMatcher(".yaml", max_walk_depth=1)
+
+        assert matcher.is_relevant_filename(str(shallow / "deployment.yaml"))
+        assert not matcher.is_relevant_filename(str(deep / "deployment.yaml"))
+
+    def test_reset_clears_cached_anchor_observations(self, tmp_path) -> None:
+        chart_root = tmp_path / "chart"
+        chart_root.mkdir()
+        candidate = chart_root / "values.yaml"
+        matcher = AnchoredFilenameMatcher(".yaml", max_walk_depth=0)
+
+        assert not matcher.is_relevant_filename(str(candidate))
+        (chart_root / "Chart.yaml").touch()
+        assert not matcher.is_relevant_filename(str(candidate))
+        matcher.reset()
+        assert matcher.is_relevant_filename(str(candidate))
+
+
+def test_helm_is_experimental_non_programming_and_chart_aware() -> None:
+    helm = LanguageServerId.HELM
+
+    assert helm.is_experimental()
+    assert not helm.is_programming_language()
+    assert helm.get_priority() == 0
+    assert isinstance(helm.get_source_fn_matcher(), AnchoredFilenameMatcher)
+    assert set(helm.get_source_fn_matcher().file_extensions) == {".yaml", ".yml", ".tpl"}

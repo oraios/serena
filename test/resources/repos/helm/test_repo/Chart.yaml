@@ -1,0 +1,6 @@
+apiVersion: v2
+name: demo-chart
+description: A minimal chart used by SolidLSP's helm-ls integration tests
+type: application
+version: 0.1.0
+appVersion: "1.0"

@@ -52,6 +52,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     Serena's own tools to close the gap (#1852)
 
 * Language Servers:
+  - Add experimental Helm language server support via mrjosh/helm-ls v0.5.4. It must be explicitly added to
+    `language_servers`; Serena downloads helm-ls automatically, and its chart-aware matcher handles `.yaml`, `.yml`,
+    and `.tpl` files beneath a `Chart.yaml` ancestor, so it can coexist with yaml.
   - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
     preserves explicit user settings across initialization and configuration requests (#1989)
     VTS initialization options now override defaults per top-level key rather than replacing the
