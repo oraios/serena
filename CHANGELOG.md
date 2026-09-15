@@ -19,6 +19,15 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add `auth_secret` to `serena_config.yml` for authenticating communication between Serena components
     and services. When missing, null, or empty, a random UUID is generated and persisted; existing values
     are preserved
+  - Fix: `start-mcp-server`/`project-server` could deadlock the entire process when the MCP
+    client host does not read the spawned server's stderr. The blocking stderr `StreamHandler`
+    eventually blocked inside `write()` once the stderr buffer (64 KiB socketpair) filled up,
+    holding the logging module's global lock and freezing every other thread that logs —
+    observed in practice as a tool whose work completed in milliseconds but never returned its
+    result, surfacing as a `tool_timeout` exactly `tool_timeout` seconds later. The stderr
+    handler is now non-blocking (direct writes on a non-blocking fd for pipes/sockets, dropping
+    records when the buffer is full); the log file and the dashboard's in-memory buffer remain
+    the lossless, authoritative streams
   - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
   - Fix: importing Serena no longer loads the `anthropic` package unless the Anthropic token counter is
     actually used; the unconditional import added seconds to CLI/MCP startup on some machines (#2012)
