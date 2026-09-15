@@ -28,6 +28,14 @@ Status of the `main` branch. Changes prior to the next official version change w
     a warning while the verdict checked `FindSymbolTool` only. A reference-search failure now fails
     the check; a symbol with no references is still a pass
 
+* Tools:
+  - Fix: `execute_shell_command` ran the command with no deadline of its own, so a command that did
+    not terminate outlived the tool call that was meant to bound it: the tool timeout discards the
+    task's result but cannot stop the thread it runs on, leaving the shell process (and that thread)
+    alive for the remaining lifetime of the server while the agent was told the call had timed out.
+    The command is now given a deadline derived from `tool_timeout`, and its process tree is
+    terminated -- with a kill fallback -- when that deadline passes (#1251)
+
 * Memories:
   - Fix: `save_memory`/`edit_memory` wrote directly to the memory file with `open(path, "w")`, which
     truncates it before the new content is written; a crash, OOM kill, or full disk partway through
