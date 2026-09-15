@@ -920,3 +920,71 @@ class TestGitignoreParserPermissionError:
         finally:
             # Restore permissions so teardown can clean up
             os.chmod(unreadable, old_mode)
+
+
+class TestWriteFileAtomicSymlinks:
+    """``write_file_atomic`` replaces ``open(path, "w")`` at its call sites, so it has to agree
+    with it about symlinks: a plain write follows the link and updates its target, whereas a bare
+    ``os.replace`` onto the link path would swap the link itself out for a regular file and leave
+    the target holding stale content (issue #1958 asks for symlink behaviour to be preserved
+    before source files use this).
+    """
+
+    @staticmethod
+    def _symlink_or_skip(link: Path, target: Path) -> None:
+        """Windows needs developer mode or admin rights to create a symlink; skip there rather
+        than fail, matching how ``test_memories_manager.py`` handles the same limitation.
+        """
+        try:
+            link.symlink_to(target)
+        except OSError as e:
+            pytest.skip(f"cannot create symlinks on this platform/permissions: {e}")
+
+    def test_writes_through_a_symlink_instead_of_replacing_it(self, tmp_path):
+        target = tmp_path / "real.txt"
+        target.write_text("old", encoding="utf-8")
+        link = tmp_path / "link.txt"
+        self._symlink_or_skip(link, target)
+
+        write_file_atomic(str(link), "new", encoding="utf-8")
+
+        assert link.is_symlink(), "the symlink must survive the write, not be replaced by a regular file"
+        assert target.read_text(encoding="utf-8") == "new", "the content must reach the link's target"
+
+    def test_writes_through_a_symlink_pointing_outside_its_directory(self, tmp_path):
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        target = outside / "real.txt"
+        target.write_text("old", encoding="utf-8")
+        inside = tmp_path / "inside"
+        inside.mkdir()
+        link = inside / "link.txt"
+        self._symlink_or_skip(link, target)
+
+        write_file_atomic(str(link), "new", encoding="utf-8")
+
+        assert link.is_symlink()
+        assert target.read_text(encoding="utf-8") == "new"
+        assert list(inside.iterdir()) == [link], "no temp file may be left beside the link"
+
+    def test_broken_symlink_creates_its_target(self, tmp_path):
+        """``open(path, "w")`` on a dangling link creates the target; this must do the same."""
+        target = tmp_path / "missing.txt"
+        link = tmp_path / "link.txt"
+        self._symlink_or_skip(link, target)
+
+        write_file_atomic(str(link), "new", encoding="utf-8")
+
+        assert link.is_symlink()
+        assert target.read_text(encoding="utf-8") == "new"
+
+    def test_regular_file_is_written_in_place(self, tmp_path):
+        """Control: the symlink handling must not change the ordinary case."""
+        target = tmp_path / "plain.txt"
+        target.write_text("old", encoding="utf-8")
+
+        write_file_atomic(str(target), "new", encoding="utf-8")
+
+        assert not target.is_symlink()
+        assert target.read_text(encoding="utf-8") == "new"
+        assert list(tmp_path.iterdir()) == [target]

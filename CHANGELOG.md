@@ -32,6 +32,14 @@ Status of the `main` branch. Changes prior to the next official version change w
     a warning while the verdict checked `FindSymbolTool` only. A reference-search failure now fails
     the check; a symbol with no references is still a pass
 
+* Tools:
+  - Fix: the file-editing tools saved the edited file with `open(path, "w")`, which truncates it
+    before the new content is complete, so a crash, an OOM kill or a full disk partway through the
+    write could leave a source file empty or half-written. Saves now go through the same atomic
+    temp-file-plus-`os.replace` helper that the memory writes already use. The helper resolves
+    symlinks first, so a symlinked file is still written through to its target rather than being
+    replaced by a regular file (#1958)
+
 * Memories:
   - Fix: `save_memory`/`edit_memory` wrote directly to the memory file with `open(path, "w")`, which
     truncates it before the new content is written; a crash, OOM kill, or full disk partway through

@@ -31,6 +31,11 @@ def write_file_atomic(path: str, content: str, *, encoding: str, newline: str | 
     :param encoding: the encoding to use for the write
     :param newline: passed through to the underlying ``open()`` call to control newline translation
     """
+    # ``open(path, "w")`` follows symlinks and writes through to the target, whereas replacing the
+    # link path itself would swap the link out for a regular file and leave its target holding the
+    # old content. Resolving first keeps this a drop-in replacement, and puts the temporary file in
+    # the destination's real directory, which is where it has to be for the rename to be atomic.
+    path = os.path.realpath(path)
     target_dir = os.path.dirname(path) or "."
     try:
         existing_mode: int | None = stat.S_IMODE(os.stat(path).st_mode)
