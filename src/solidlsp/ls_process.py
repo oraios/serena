@@ -653,7 +653,12 @@ class StdioLanguageServer(LanguageServerInterface):
             log.info("Language server stderr reader thread has terminated")
 
     def _send_payload(self, payload: StringDict) -> None:
-        if not self._process or not self._process.stdin:
+        # Read the process and its stdin once: `_stop` closes stdin, waits for the process to
+        # terminate and only then nulls `_process`, so a second read could see a different state
+        # than the one that was checked.
+        process = self._process
+        stdin = process.stdin if process else None
+        if not stdin:
             return
         self._trace("solidlsp", "ls", payload)
         msg = create_message(payload)
@@ -661,12 +666,14 @@ class StdioLanguageServer(LanguageServerInterface):
         # Use lock to prevent concurrent writes to stdin that cause buffer corruption
         with self._stdin_lock:
             try:
-                self._process.stdin.writelines(msg)
-                self._process.stdin.flush()
-            except (BrokenPipeError, ConnectionResetError, OSError) as e:
-                # The server is gone: fail fast with LanguageServerTerminatedException
-                # (the restart path's signal) instead of stranding the just-registered
-                # request until its timeout (#2004). Mirrors TCPLanguageServer.
+                stdin.writelines(msg)
+                stdin.flush()
+            except (BrokenPipeError, ConnectionResetError, OSError, ValueError) as e:
+                # The server is gone; a pipe that broke raises OSError, a stdin which `_stop`
+                # already closed raises ValueError. Either way fail fast with
+                # LanguageServerTerminatedException (the restart path's signal) instead of
+                # stranding the just-registered request until its timeout (#2004).
+                # Mirrors TCPLanguageServer.
                 log.error(f"Failed to write to stdin: {e}")
                 self._cancel_pending_requests(LanguageServerTerminatedException("Stdio send error", self.ls_id, cause=e))
                 return
