@@ -1247,6 +1247,21 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         self.projects.append(registered_project)
         self._persist_projects()
 
+    def remove_registered_project(self, registered_project: RegisteredProject) -> None:
+        """
+        Removes the given registered project, persisting the updated project list.
+        Only the registry entry is removed; the project's own files, including its project
+        configuration file, are left untouched.
+
+        Unlike :meth:`remove_project`, which resolves the project by name, this removes the
+        given entry itself and is therefore unambiguous when several registered projects
+        share a name.
+
+        :param registered_project: the project to remove, which must be an element of :attr:`projects`
+        """
+        self.projects.remove(registered_project)
+        self._persist_projects()
+
     def add_project_from_path(self, project_root: Path | str, asynchronous_autogen: bool = False) -> "Project":
         """
         Adds a new project to the Serena configuration from a given path, auto-generating the project

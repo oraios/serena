@@ -31,6 +31,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     exited 0 even when `FindReferencingSymbolsTool` had raised, because that failure was logged as
     a warning while the verdict checked `FindSymbolTool` only. A reference-search failure now fails
     the check; a symbol with no references is still a pass
+  - Add `project remove`, which unregisters a project from the project list in `serena_config.yml`,
+    addressed either by name or by path. Only the registry entry is removed; the project's own files,
+    including its project configuration, are left untouched (#2029)
 
 * Memories:
   - Fix: `save_memory`/`edit_memory` wrote directly to the memory file with `open(path, "w")`, which
