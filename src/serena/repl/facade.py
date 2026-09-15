@@ -478,17 +478,23 @@ class ApiScope:
         """
 
         def __init__(self) -> None:
-            self.is_included = True
+            self._is_included: bool | None = None
             self.method_inclusions: set[str] = set()
             self.method_exclusions: set[str] = set()
 
         def exclude_facade(self) -> None:
-            self.is_included = False
+            self._is_included = False
             self.method_inclusions = set()
             self.method_exclusions = set()
 
         def include_facade(self) -> None:
-            self.is_included = True
+            self._is_included = True
+
+        def is_facade_included(self, is_facade_optional: bool) -> bool:
+            if is_facade_optional:
+                return self._is_included is True
+            else:
+                return self._is_included is not False
 
         def exclude_method(self, method_name: str) -> None:
             self.method_inclusions.discard(method_name)
@@ -537,23 +543,24 @@ class ApiScope:
         """
         self._editing_excluded = True
 
-    def is_facade_enabled(self, facade_name: str) -> bool:
-        facade_scope = self._get_facade_scope(facade_name)
-        return facade_scope.is_included or len(facade_scope.method_inclusions) > 0
-
-    def is_method_enabled(self, facade_name: str, method_info: FacadeMethodInfo) -> bool:
+    def is_method_enabled(self, facade_name: str, method_info: FacadeMethodInfo, is_facade_optional: bool) -> bool:
         """
         :param facade_name: the name of the facade
         :param method_info: the method's metadata
-        :return: whether the method is enabled: optional methods (and all methods of an excluded facade) must be
-            explicitly included, other methods are enabled unless explicitly excluded; if editing is excluded,
-            editing methods are always disabled
+        :param is_facade_optional: whether the facade is optional (disabled by default and must be enabled explicitly)
+        :return: whether the method is enabled: optional methods (and all methods of a facade which is not included,
+            i.e. an excluded facade or an optional facade that was not explicitly included) must be explicitly
+            included, other methods are enabled unless explicitly excluded; if editing is excluded, editing
+            methods are always disabled
         """
         if self._editing_excluded and method_info.can_edit:
             return False
         facade_scope = self._get_facade_scope(facade_name)
-        if method_info.optional or not facade_scope.is_included:
+        # A method that would be disabled because the facade it is part of is not included
+        # or the method itself is optional must be explicitly included in order to be enabled.
+        if not facade_scope.is_facade_included(is_facade_optional) or method_info.optional:
             return method_info.name in facade_scope.method_inclusions
+        # A method that is not optional and whose facade is included is enabled unless it is explicitly excluded.
         else:
             return method_info.name not in facade_scope.method_exclusions
 
@@ -585,12 +592,13 @@ class Facade:
         self._methods[method.name] = method
 
     @staticmethod
-    def from_api(api: FacadeApi, api_scope: ApiScope) -> "Facade":
+    def from_api(api: FacadeApi, api_scope: ApiScope, *, is_optional: bool = False) -> "Facade":
         """
         Creates a facade wrapping the given implementation.
 
         :param api: the implementation; each of its methods decorated with `facade_method` becomes a facade method
         :param api_scope: API scope definition determining which methods are enabled
+        :param is_optional: whether the facade is optional (disabled by default and must be enabled explicitly)
         :return: the facade
         """
         facade = Facade(api.get_name_(), api.get_description_(), api.get_referenced_types_())
@@ -598,10 +606,16 @@ class Facade:
             method_info = get_facade_method_info(member)
             if method_info is None:
                 continue
-            is_enabled = api_scope.is_method_enabled(facade.name, method_info)
+            is_enabled = api_scope.is_method_enabled(facade.name, method_info, is_facade_optional=is_optional)
             facade._add_method(FacadeMethod(facade, member, method_info, enabled=is_enabled))
         facade._discover_referenced_types()
         return facade
+
+    def is_enabled(self) -> bool:
+        """
+        :return: whether the facade is enabled
+        """
+        return len(self.get_enabled_methods()) > 0
 
     def _discover_referenced_types(self) -> None:
         """

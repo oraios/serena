@@ -217,6 +217,22 @@ class TestFacade:
             scope.process(ApiInclusionDefinition(**kwargs))
         return scope
 
+    def test_optional_facade_is_opt_in(self) -> None:
+        # an optional facade is disabled unless it is included explicitly
+        facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope(), is_optional=True)
+        assert not facade.is_enabled()
+        assert facade.enabled_method_names == []
+
+        # including the facade enables its non-optional methods
+        facade = Facade.from_api(self.DummyApi(MagicMock()), self._scope(included_apis=["dummy"]), is_optional=True)
+        assert facade.is_enabled()
+        assert set(facade.enabled_method_names) == {"add", "secret", "rarely"}
+
+        # including a single method enables the facade with just that method
+        facade = Facade.from_api(self.DummyApi(MagicMock()), self._scope(included_apis=["dummy.add"]), is_optional=True)
+        assert facade.is_enabled()
+        assert facade.enabled_method_names == ["add"]
+
     def test_api_scope_facade_exclusion_and_method_inclusion(self) -> None:
         # excluding the facade disables everything
         facade = Facade.from_api(self.DummyApi(MagicMock()), self._scope(excluded_apis=["dummy"]))

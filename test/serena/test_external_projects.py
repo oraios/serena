@@ -86,6 +86,9 @@ def test_external_project_context_in_repl(
     server, port = project_server
     monkeypatch.setattr(ProjectServer, "PORT", port)  # let the REPL's external project context use the test server
 
+    # enable the optional "ext" facade
+    serena_config.included_apis = ["ext"]
+
     # the querying agent has another project active and queries the python test project
     agent = SerenaAgent(project="test_repo_typescript", serena_config=serena_config)
     agent.execute_task(lambda: None)
