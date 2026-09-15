@@ -472,18 +472,25 @@ class EditingToolWithDiagnostics(Tool, ToolMarkerCanEdit):
 
     ENABLE_DIAGNOSTICS: bool = False
     """
-    Global flag to enable/disable diagnostics for LSP-based editing tools derived from this class.
-    The feature is currently disabled, because per-edit diagnostics are a questionable feature, since individual
-    edits often intentionally introduce diagnostics (e.g. function signature mismatches or even syntax errors) that 
-    are then resolved in subsequent edits.
+    Global flag to enable diagnostics for LSP-based editing tools derived from this class, regardless of the project.
+    Off by default, because per-edit diagnostics are a questionable feature for many workflows, since individual
+    edits often intentionally introduce diagnostics (e.g. function signature mismatches or even syntax errors) that
+    are then resolved in subsequent edits. A project opts in through `edit_diagnostics: true` in its configuration.
     """
 
     DIAGNOSTICS_KEY = "diagnostics[warning-or-higher]"
+    DIAGNOSTICS_SOURCE_KEY = "diagnostics_from"
+    """
+    the key under which the answer names, per edited file, the language server whose diagnostics are reported —
+    one server's verdict is not every checker's (a project may grade with a second type checker at its gate)
+    """
 
     class DiagnosticsContext:
         def __init__(self, tool: "EditingToolWithDiagnostics", *edited_relative_paths: str) -> None:
             self._tool = tool
-            self._is_diagnostics_enabled = tool.ENABLE_DIAGNOSTICS and tool.agent.is_using_language_server()
+            self._is_diagnostics_enabled = (
+                tool.ENABLE_DIAGNOSTICS or tool._is_edit_diagnostics_configured()
+            ) and tool.agent.is_using_language_server()
             self._edited_files = [EditedFilePath(path, path) for path in edited_relative_paths]
             self._before_edit_diagnostics_snapshot: PublishedDiagnosticsSnapshot | None = None
             self._symbol_retriever: Optional["LanguageServerSymbolRetriever"] | None = None
@@ -517,8 +524,15 @@ class EditingToolWithDiagnostics(Tool, ToolMarkerCanEdit):
                 result_dict = {
                     "result": base_result,
                     EditingToolWithDiagnostics.DIAGNOSTICS_KEY: grouped_diagnostics,
+                    EditingToolWithDiagnostics.DIAGNOSTICS_SOURCE_KEY: {
+                        path: ls_id for path, ls_id in diagnostics_diff.get_language_server_ids().items() if path in grouped_diagnostics
+                    },
                 }
                 return self._tool._to_json(result_dict)
+
+    def _is_edit_diagnostics_configured(self) -> bool:
+        project = self.agent.get_active_project()
+        return project is not None and project.project_config.edit_diagnostics
 
 
 class EditedFileContext:

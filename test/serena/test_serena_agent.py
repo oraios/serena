@@ -1275,6 +1275,41 @@ class TestSerenaAgent:
 
     @pytest.mark.parametrize(
         "serena_agent",
+        [pytest.param(LanguageServerId.PYTHON, marks=get_pytest_markers(LanguageServerId.PYTHON), id="python_services")],
+        indirect=["serena_agent"],
+    )
+    def test_edit_diagnostics_are_a_project_setting_and_name_their_server(self, serena_agent: SerenaAgent):
+        """
+        With the global flag off, a project's `edit_diagnostics: true` turns per-edit diagnostics on, and the answer names
+        the language server they come from; with both off, an edit reports none.
+        """
+        relative_path = os.path.join("test_repo", "services.py")
+        replace_content_tool = serena_agent.get_tool(ReplaceContentTool)
+        project_config = serena_agent.get_active_project_or_raise().project_config
+        assert replace_content_tool.ENABLE_DIAGNOSTICS is False
+        assert project_config.edit_diagnostics is False
+
+        with project_file_modification_context(serena_agent, relative_path):
+            silent_result = replace_content_tool.apply(
+                relative_path=relative_path, needle="return container", repl="return missing_container", mode="literal"
+            )
+        assert EditingToolWithDiagnostics.DIAGNOSTICS_KEY not in silent_result
+
+        try:
+            project_config.edit_diagnostics = True
+            with project_file_modification_context(serena_agent, relative_path):
+                result = replace_content_tool.apply(
+                    relative_path=relative_path, needle="return container", repl="return missing_container", mode="literal"
+                )
+        finally:
+            project_config.edit_diagnostics = False
+
+        diagnostics = parse_edit_diagnostics_result(result)
+        assert "missing_container" in json.dumps(diagnostics[relative_path])
+        assert json.loads(result)[EditingToolWithDiagnostics.DIAGNOSTICS_SOURCE_KEY] == {relative_path: LanguageServerId.PYTHON.value}
+
+    @pytest.mark.parametrize(
+        "serena_agent",
         [
             pytest.param(LanguageServerId.PYTHON, marks=get_pytest_markers(LanguageServerId.PYTHON), id="python_container_body"),
             pytest.param(LanguageServerId.PYTHON_TY, marks=get_pytest_markers(LanguageServerId.PYTHON_TY), id="python_ty_container_body"),
