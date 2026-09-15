@@ -61,11 +61,25 @@ class ResponseToolStats(BaseModel):
     stats: dict[str, dict[str, int]]
 
 
+class ResponseFacadeMethod(BaseModel):
+    name: str
+    is_enabled: bool
+
+
+class ResponseFacade(BaseModel):
+    name: str
+    is_enabled: bool
+    methods: list[ResponseFacadeMethod]
+
+
 class ResponseConfigOverview(BaseModel):
     active_project: dict[str, str | None]
     context: dict[str, str]
     modes: list[dict[str, str]]
     active_tools: list[str]
+    agent_interface: str
+    language_backend: str
+    facades: list[ResponseFacade] | None
     tool_stats_summary: dict[str, dict[str, int]]
     registered_projects: list[dict[str, str | bool]]
     available_tools: list[dict[str, str | bool]]
@@ -608,6 +622,19 @@ class SerenaDashboardAPI:
         if self._agent.is_tool_function_available(ReadMemoryTool) and project is not None:
             available_memories = project.memory_manager.list_memories().get_full_list()
 
+        # Get the availability of the REPL's facades and their methods (REPL interface only)
+        facades = None
+        if self._agent.get_agent_interface().is_repl():
+            availability_info = self._agent.get_repl().entrypoint.get_facade_availability_info()
+            facades = [
+                ResponseFacade(
+                    name=facade_info.name,
+                    is_enabled=facade_info.is_enabled,
+                    methods=[ResponseFacadeMethod(name=m.name, is_enabled=m.is_enabled) for m in facade_info.methods],
+                )
+                for facade_info in availability_info.facades
+            ]
+
         # Get list of languages for the active project
         ls_ids = []
         if project is not None:
@@ -623,6 +650,9 @@ class SerenaDashboardAPI:
             context=context_info,
             modes=modes_info,
             active_tools=active_tools,
+            agent_interface=self._agent.get_agent_interface().value,
+            language_backend=self._agent.get_language_backend().value,
+            facades=facades,
             tool_stats_summary=tool_stats_summary,
             registered_projects=registered_projects,
             available_tools=available_tools,

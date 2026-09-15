@@ -8,6 +8,7 @@ import ast
 import logging
 import re
 import traceback
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from ..session import SerenaSession
@@ -19,6 +20,35 @@ if TYPE_CHECKING:
     from ..tools.tools_base import Tool
 
 log = logging.getLogger(__name__)
+
+
+class FacadeAvailabilityInfo:
+    """
+    Represents information on the availability of facades and the methods therein
+    """
+
+    @dataclass
+    class FacadeInfo:
+        name: str
+        is_enabled: bool
+        methods: list["FacadeAvailabilityInfo.MethodInfo"]
+
+    @dataclass
+    class MethodInfo:
+        name: str
+        is_enabled: bool
+
+    def __init__(self):
+        self.facades: list[FacadeAvailabilityInfo.FacadeInfo] = []
+
+    def add_facade(self, facade: Facade, is_enabled: bool):
+        def is_method_enabled(m: FacadeMethod) -> bool:
+            return is_enabled and m.enabled
+
+        methods_info = [
+            FacadeAvailabilityInfo.MethodInfo(name=method.name, is_enabled=is_method_enabled(method)) for method in facade.get_methods()
+        ]
+        self.facades.append(FacadeAvailabilityInfo.FacadeInfo(name=facade.name, is_enabled=is_enabled, methods=methods_info))
 
 
 class SerenaReplEntrypoint:
@@ -35,12 +65,24 @@ class SerenaReplEntrypoint:
         self._facades: dict[str, Facade] = {}
         self._current_session: SerenaSession | None = None
         self._current_namespace: dict[str, Any] | None = None
+        self._facade_availability_info = FacadeAvailabilityInfo()
         registered_facade_names = []
         for facade in facades:
-            if api_scope.is_facade_enabled(facade.name):
-                self._register(facade)
+            is_facade_enabled = api_scope.is_facade_enabled(facade.name)
+            self._facade_availability_info.add_facade(facade, is_facade_enabled)
+            if is_facade_enabled:
+                if facade.name in self._facades:
+                    raise ValueError(f"Duplicate facade name: {facade.name}")
+                self._facades[facade.name] = facade
+                setattr(self, facade.name, facade)
                 registered_facade_names.append(facade.name)
         log.info("Registered %d/%d facades: %s", len(registered_facade_names), len(facades), registered_facade_names)
+
+    def get_facade_availability_info(self) -> FacadeAvailabilityInfo:
+        """
+        :return: the availability of all facades and their methods (enabled or disabled)
+        """
+        return self._facade_availability_info
 
     def get_enabled_methods(self) -> list[FacadeMethod]:
         """
@@ -116,12 +158,6 @@ class SerenaReplEntrypoint:
         for name in items:
             del self._current_namespace[name]
         return f"Removed {len(items)} persisted item(s)."
-
-    def _register(self, facade: Facade) -> None:
-        if facade.name in self._facades:
-            raise ValueError(f"Duplicate facade name: {facade.name}")
-        self._facades[facade.name] = facade
-        setattr(self, facade.name, facade)
 
     def _get_facade(self, name: str) -> Facade:
         if name not in self._facades:

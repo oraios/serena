@@ -643,6 +643,12 @@ class Facade:
         """
         return [m for m in self._methods.values() if m.enabled]
 
+    def get_methods(self) -> list[FacadeMethod]:
+        """
+        :return: the list of all methods, regardless of whether they are enabled (e.g. for changing their enabled state)
+        """
+        return list(self._methods.values())
+
     def get_types(self) -> list[ReferencedType]:
         """
         :return: the types referenced by the facade's methods
