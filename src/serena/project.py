@@ -383,7 +383,7 @@ class Project(ToStringMixin):
                         )
             return rel_file_paths
 
-    def _create_file_collection(self, relative_path: str, *, code_files_only: bool, skip_ignored_files: bool) -> FileCollection:
+    def create_file_collection(self, relative_path: str, *, code_files_only: bool, skip_ignored_files: bool) -> FileCollection:
         """
         Creates the file collection for the given relative path.
 
@@ -446,9 +446,7 @@ class Project(ToStringMixin):
         :param skip_ignored_files: whether to skip ignored files; has no effect if `code_files_only` is True
         :return: list of matches
         """
-        file_collection = self._create_file_collection(
-            relative_path, code_files_only=code_files_only, skip_ignored_files=skip_ignored_files
-        )
+        file_collection = self.create_file_collection(relative_path, code_files_only=code_files_only, skip_ignored_files=skip_ignored_files)
         return search_files(
             file_collection,
             pattern,

@@ -179,6 +179,26 @@ class NamedToolInclusionDefinition(ToolInclusionDefinition):
 
 
 @dataclass
+class ApiInclusionDefinition:
+    """
+    Defines which APIs to include/exclude in Serena's operation.
+    A single API inclusion/exclusion can either be a full facade (facade name, which encompasses all of its methods, e.g. "lsp")
+    or a method of a facade (facade name + method name, e.g. "lsp.find_symbol").
+    """
+
+    included_apis: Sequence[str] = ()
+    excluded_apis: Sequence[str] = ()
+
+
+@dataclass
+class NamedApiInclusionDefinition(ApiInclusionDefinition):
+    name: str | None = None
+
+    def __str__(self) -> str:
+        return f"ApiInclusionDefinition[{self.name}]"
+
+
+@dataclass
 class ModeSelectionDefinition:
     default_modes: Sequence[str] | None = None
 
@@ -194,6 +214,37 @@ class ModeSelectionDefinitionWithBaseModes(ModeSelectionDefinition):
 @dataclass
 class ModeSelectionDefinitionWithAddedModes(ModeSelectionDefinition):
     added_modes: Sequence[str] | None = None
+
+
+class AgentInterface(Enum):
+    """
+    The interface through which the agent (LLM) accesses Serena's functionality.
+    """
+
+    TOOLS = "tools"
+    """
+    The classic tool interface: each operation is a separate tool, and the set of tools is configurable
+    (via tool inclusions/exclusions in the configuration, context, modes and project).
+    """
+    REPL = "REPL"
+    """
+    The REPL interface: operations are accessed programmatically via the serena_repl tool, which executes Python code.
+    The set of tools is fixed (the REPL tool and the tools required for session management) and tool inclusions/exclusions
+    do not apply; the operations available in the REPL are configured via API inclusions/exclusions instead.
+    """
+
+    @staticmethod
+    def from_str(interface_str: str) -> "AgentInterface":
+        for interface in AgentInterface:
+            if interface.value.lower() == interface_str.lower():
+                return interface
+        raise ValueError(f"Unknown agent interface '{interface_str}': valid values are {[i.value for i in AgentInterface]}")
+
+    def is_tools(self) -> bool:
+        return self == AgentInterface.TOOLS
+
+    def is_repl(self) -> bool:
+        return self == AgentInterface.REPL
 
 
 class LanguageBackend(Enum):
@@ -274,7 +325,7 @@ class LineEnding(Enum):
 
 
 @dataclass
-class SharedConfig(ToolInclusionDefinition, ToStringMixin):
+class SharedConfig(ToolInclusionDefinition, ApiInclusionDefinition, ToStringMixin):
     """Shared between SerenaConfig and ProjectConfig, the latter used to override values in the form
     (same as in ModeSelectionDefinition).
     The defaults here shall be none and should be set to the global default values in SerenaConfig.
@@ -282,6 +333,7 @@ class SharedConfig(ToolInclusionDefinition, ToStringMixin):
 
     symbol_info_budget: float | None = None
     language_backend: LanguageBackend | None = None
+    agent_interface: AgentInterface | None = None
     line_ending: LineEnding | None = None
     read_only_memory_patterns: list[str] = field(default_factory=list)
     ignored_memory_patterns: list[str] = field(default_factory=list)
@@ -612,6 +664,8 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
 
         language_backend_value = data.get("language_backend")
         language_backend = LanguageBackend.from_str(language_backend_value) if language_backend_value else None
+        agent_interface_value = data.get("agent_interface")
+        agent_interface = AgentInterface.from_str(agent_interface_value) if agent_interface_value else None
 
         line_ending_value = data.get("line_ending")
         line_ending = LineEnding.from_str(line_ending_value) if line_ending_value else None
@@ -621,6 +675,8 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         fixed_tools = data["fixed_tools"] or []
         excluded_tools = data["excluded_tools"] or []
         included_optional_tools = data["included_optional_tools"] or []
+        excluded_apis = data.get("excluded_apis") or []
+        included_apis = data.get("included_apis") or []
         additional_workspace_folders = data.get("ls_additional_workspace_folders") or []
 
         if "base_modes" in data and data["base_modes"] is not None:
@@ -635,6 +691,8 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
             excluded_tools=excluded_tools,
             fixed_tools=fixed_tools,
             included_optional_tools=included_optional_tools,
+            excluded_apis=excluded_apis,
+            included_apis=included_apis,
             read_only=data["read_only"],
             read_only_memory_patterns=data.get("read_only_memory_patterns", []),
             ignored_memory_patterns=data.get("ignored_memory_patterns", []),
@@ -643,6 +701,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
             encoding=data["encoding"],
             line_ending=line_ending,
             language_backend=language_backend,
+            agent_interface=agent_interface,
             added_modes=data["added_modes"],
             default_modes=data["default_modes"],
             symbol_info_budget=symbol_info_budget,
@@ -667,6 +726,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         # map fields using non-primitive types to a YAML-compatible representation
         d["language_servers"] = [lang.get_key() for lang in self.language_servers]
         d["language_backend"] = self.language_backend.value if self.language_backend is not None else None
+        d["agent_interface"] = self.agent_interface.value if self.agent_interface is not None else None
         d["line_ending"] = self.line_ending.value if self.line_ending is not None else None
 
         return d
@@ -932,6 +992,12 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
 
     # settings with overridden defaults
 
+    agent_interface: AgentInterface = AgentInterface.TOOLS
+    """
+    the agent interface to use (unless overridden by the active project's configuration).
+    Defaults to TOOLS for backward compatibility (as users without this settings will get this default).
+    The default for new users is defined in the template file.
+    """
     language_backend: LanguageBackend = LanguageBackend.LSP
     """
     the language backend to use for code understanding features
@@ -960,7 +1026,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
     # *** static members ***
 
     CONFIG_FILE = "serena_config.yml"
-    CONFIG_FIELDS_WITH_TYPE_CONVERSION = {"projects", "language_backend", "line_ending"}
+    CONFIG_FIELDS_WITH_TYPE_CONVERSION = {"projects", "language_backend", "agent_interface", "line_ending"}
 
     # *** methods ***
     @classmethod
@@ -1109,6 +1175,15 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
                     language_backend = LanguageBackend.JETBRAINS
                 del loaded_commented_yaml["jetbrains"]
         instance.language_backend = language_backend
+
+        # determine agent interface
+        agent_interface: AgentInterface | None = get_dataclass_default(SerenaConfig, "agent_interface")
+        if "agent_interface" in loaded_commented_yaml:
+            agent_interface_value = loaded_commented_yaml["agent_interface"]
+            agent_interface = AgentInterface.from_str(agent_interface_value)
+        else:
+            num_migrations += 1
+        instance.agent_interface = agent_interface
 
         # determine line ending
         line_ending_value = loaded_commented_yaml.get("line_ending")
@@ -1353,6 +1428,9 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         # convert language backend to string
         commented_yaml["language_backend"] = self.language_backend.value
 
+        # convert agent interface to string (None if not configured)
+        commented_yaml["agent_interface"] = self.agent_interface.value if self.agent_interface is not None else None
+
         # convert line ending to string
         commented_yaml["line_ending"] = self.line_ending.value
 
@@ -1442,7 +1520,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         """
         Propagate settings from this configuration to individual components that are statically configured
         """
-        from serena.tools import JetBrainsPluginClient
+        from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
 
         JetBrainsPluginClient.set_server_address(self.jetbrains_plugin_server_address)
 
@@ -1458,6 +1536,25 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
             if GlobMatcher(pattern).matches(project_root_str):
                 return True
         return False
+
+    def determine_agent_interface(self, project_config: "ProjectConfig | None" = None, log_choice: bool = False) -> AgentInterface:
+        """
+        Determines the effective agent interface: the project configuration takes precedence over the global configuration;
+        if neither configures an interface, the tool interface is used.
+
+        :param project_config: the configuration of the project to be activated, if any
+        :param log_choice: whether to log the choice
+        :return: the effective agent interface
+        """
+        if project_config is not None and project_config.agent_interface is not None:
+            agent_interface, source = project_config.agent_interface, "project configuration"
+        elif self.agent_interface is not None:
+            agent_interface, source = self.agent_interface, "global configuration"
+        else:
+            agent_interface, source = AgentInterface.TOOLS, "default"
+        if log_choice:
+            log.info(f"Using agent interface '{agent_interface.value}' ({source})")
+        return agent_interface
 
     def determine_language_backend(self, project_config: ProjectConfig | None = None, log_choice: bool = False):
         language_backend = self.language_backend

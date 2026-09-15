@@ -1,29 +1,40 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import logging
-from collections import Counter
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
-import serena.jetbrains.jetbrains_types as jb
-from serena.code_editor import JetBrainsCodeEditor
-from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
-from serena.jetbrains.jetbrains_types import SymbolDTO, SymbolDTOUtil
-from serena.symbol import JetBrainsSymbolDictGrouper
+from serena.symbol import SymbolDictGrouper
 from serena.tools import Tool, ToolMarkerBeta, ToolMarkerOptional, ToolMarkerSymbolicEdit, ToolMarkerSymbolicRead
-from serena.util.text_utils import find_text_coordinates
+
+if TYPE_CHECKING:
+    from serena.repl.api.jb_api import JetBrainsApi
 
 log = logging.getLogger(__name__)
 
 
-class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class JetBrainsApiMixin:
+    """
+    Mixin for tools which delegate to the JetBrains API.
+    The API is imported locally, since the API module refers to the tools (as corresponding tools).
+    """
+
+    def _api(self) -> "JetBrainsApi":
+        from serena.repl.api.jb_api import JetBrainsApi
+
+        tool = cast(Tool, cast(object, self))
+        return JetBrainsApi(tool.agent)
+
+
+class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Performs a global (or local) search for symbols using the JetBrains backend
     """
 
-    # groups top-level symbols only; children are grouped separately by _group_children_by_type
-    symbol_dict_grouper = JetBrainsSymbolDictGrouper(
-        ["relative_path", "type"], ["type"], collapse_singleton=True, map_name_path_to_name=True
-    )
+    @property
+    def symbol_dict_grouper(self) -> SymbolDictGrouper:
+        from serena.repl.api.jb_api import JetBrainsApi
+
+        return JetBrainsApi.find_symbol_grouper_
 
     def apply(
         self,
@@ -75,76 +86,40 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
         :param max_answer_chars: max characters for the result (-1 for default). If exceeded, no content/a shortened result is returned.
         :return: symbols matching the name.
         """
-        # check input
-        # - pattern with only wildcards is invalid, but in some cases we delegate to the overview tool
-        if name_path_pattern.replace("*", "").replace("/", "") == "":
-            if relative_path:
-                if self.project.relative_path_exists(relative_path, require_file=True):
-                    overview_tool = self.agent.get_tool(JetBrainsGetSymbolsOverviewTool)
-                    overview_response = overview_tool.apply(relative_path, depth=depth)
-                    return self._wrapped_tool_response(
-                        overview_response, f"Wildcard-only pattern not admitted; used {overview_tool.get_name()} instead"
-                    )
-            raise ValueError("name_path_pattern must not be empty or contain only wildcards; consider using the overview tool")
-
-        if include_body:
-            depth = 0  # ignore user-specified depth if body is requested
-
         name_path_pattern = self._sanitize_input_param(name_path_pattern)
-
         if relative_path:
             relative_path = self._sanitize_input_param(relative_path)
-        if relative_path == ".":
-            relative_path = None
 
-        if relative_path is not None and relative_path.startswith(jb.JB_EXTERNAL_FILE_PREFIX):
-            search_deps = True
+        # for a wildcard-only pattern restricted to a file, delegate to the overview tool
+        if name_path_pattern.replace("*", "").replace("/", "") == "" and relative_path:
+            if self.project.relative_path_exists(relative_path, require_file=True):
+                overview_tool = self.agent.get_tool(JetBrainsGetSymbolsOverviewTool)
+                overview_response = overview_tool.apply(relative_path, depth=depth)
+                return self._wrapped_tool_response(
+                    overview_response, f"Wildcard-only pattern not admitted; used {overview_tool.get_name()} instead"
+                )
 
-        with JetBrainsPluginClient.from_project(self.project) as client:
-            if include_body:
-                include_quick_info = False
-                include_documentation = False
-            else:
-                if include_info:
-                    include_documentation = True
-                    include_quick_info = False
-                else:
-                    # If no additional information is requested, we still include the quick info (type signature)
-                    include_documentation = False
-                    include_quick_info = True
-            symbol_collection_response = client.find_symbol(
-                name_path=name_path_pattern,
-                relative_path=relative_path,
+        return (
+            self._api()
+            .find_symbol(
+                name_path_pattern,
                 depth=depth,
+                relative_path=relative_path,
                 include_body=include_body,
-                include_documentation=include_documentation,
-                include_quick_info=include_quick_info,
+                include_info=include_info,
                 search_deps=search_deps,
+                max_matches=max_matches,
+                max_answer_chars=max_answer_chars,
             )
-        symbols = symbol_collection_response["symbols"]
-
-        def create_shortened_result() -> str:
-            """Shortened results containing symbol types and identifiers (path + name_path) only, without children"""
-            dicts: list[SymbolDTO] = [
-                {"name_path": s["name_path"], "type": s["type"], "relative_path": s["relative_path"]} for s in symbols
-            ]
-            grouped = self.symbol_dict_grouper.group(dicts)
-            return f"Names with paths:\n{self._to_json(grouped)}"
-
-        n_matches = len(symbols)
-        if 0 < max_matches < n_matches:
-            return f"Matched {n_matches}>{max_matches=} symbols.\n" + create_shortened_result()
-
-        grouped_symbols = self.symbol_dict_grouper.group(symbols)
-        result = self._to_json(grouped_symbols)
-        return self._limit_length(result, max_answer_chars, shortened_result_factories=[create_shortened_result])
+            .represent()
+        )
 
     @classmethod
     def get_param_aliases(cls) -> dict[str, str]:
         return {"name_path": "name_path_pattern"}
 
 
-class JetBrainsMoveTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMarkerBeta):
+class JetBrainsMoveTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Moves a symbol, file or directory to a new location using the JetBrains backend, updating all references
     """
@@ -180,21 +155,11 @@ class JetBrainsMoveTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMa
         :param target_relative_path: the relative path of the target directory or file.
         :param target_parent_name_path: the name path of the target parent symbol.
         """
-        name_path = name_path or None
-        target_relative_path = target_relative_path or None
-        target_parent_name_path = target_parent_name_path or None
         relative_path = self._sanitize_input_param(relative_path)
-        with JetBrainsPluginClient.from_project(self.project) as client:
-            response_dict = client.move(
-                name_path=name_path,
-                relative_path=relative_path,
-                target_parent_name_path=target_parent_name_path,
-                target_relative_path=target_relative_path,
-            )
-        return self._to_json(response_dict)
+        return self._api().move(relative_path, name_path, target_relative_path, target_parent_name_path).represent()
 
 
-class JetBrainsSafeDeleteTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMarkerBeta):
+class JetBrainsSafeDeleteTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Safely deletes a symbol using the JetBrains backend, checking for remaining usages first
     """
@@ -223,18 +188,10 @@ class JetBrainsSafeDeleteTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, 
             remove symbols that become unused after the deletion. Default is False.
         """
         relative_path = self._sanitize_input_param(relative_path)
-        name_path = name_path or None
-        with JetBrainsPluginClient.from_project(self.project) as client:
-            response_dict = client.safe_delete(
-                name_path=name_path,
-                relative_path=relative_path,
-                delete_even_if_used=delete_even_if_used,
-                propagate=propagate,
-            )
-        return self._to_json(response_dict)
+        return self._api().safe_delete(relative_path, name_path, delete_even_if_used, propagate).represent()
 
 
-class JetBrainsInlineSymbol(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMarkerBeta):
+class JetBrainsInlineSymbol(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Inlines a symbol using the JetBrains backend, replacing all call sites with the symbol's body
     """
@@ -258,21 +215,19 @@ class JetBrainsInlineSymbol(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, To
             May be ignored in some cases (e.g. when inlining a class).
         """
         relative_path = self._sanitize_input_param(relative_path)
-        with JetBrainsPluginClient.from_project(self.project) as client:
-            response_dict = client.inline_symbol(
-                name_path=name_path,
-                relative_path=relative_path,
-                keep_definition=keep_definition,
-            )
-        return self._to_json(response_dict)
+        return self._api().inline_symbol(name_path, relative_path, keep_definition).represent()
 
 
-class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Finds symbols that reference the given symbol using the JetBrains backend
     """
 
-    symbol_dict_grouper = JetBrainsSymbolDictGrouper(["relative_path", "type"], ["type"], collapse_singleton=True)
+    @property
+    def symbol_dict_grouper(self) -> SymbolDictGrouper:
+        from serena.repl.api.jb_api import JetBrainsApi
+
+        return JetBrainsApi.references_grouper_
 
     def apply(
         self,
@@ -292,52 +247,19 @@ class JetBrainsFindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, ToolMark
         :param max_answer_chars: max characters for the result (-1 for default). If exceeded, no content/a shortened result is returned.
         """
         relative_path = self._sanitize_input_param(relative_path)
-        with JetBrainsPluginClient.from_project(self.project) as client:
-            response_dict = client.find_references(
-                name_path=name_path,
-                relative_path=relative_path,
-                include_quick_info=False,
-            )
-        symbol_dicts = response_dict["symbols"]
-
-        # replace reference line number (if present) by actual line/context
-        for symbol_dict in symbol_dicts:
-            if "reference_line_no" in symbol_dict:
-                ref_line = symbol_dict["reference_line_no"]
-                ref_relative_path = symbol_dict["relative_path"]
-                if not SymbolDTOUtil.is_external_symbol(symbol_dict) and ref_line is not None and ref_line >= 0:
-                    content_around_ref = self.project.retrieve_content_around_line(
-                        relative_file_path=ref_relative_path, line=ref_line, context_lines_before=1, context_lines_after=1
-                    )
-                    symbol_dict["context"] = content_around_ref.to_display_string()
-                    del symbol_dict["reference_line_no"]
-
-        # capture file paths before grouping
-        ref_paths = [s.get("relative_path", "unknown") for s in symbol_dicts]
-
-        result = self.symbol_dict_grouper.group(symbol_dicts)
-
-        def create_shortened_result_counts_per_file() -> str:
-            return f"Reference counts per file:\n{self._to_json(Counter(ref_paths))}"
-
-        def create_shortened_result_num_results() -> str:
-            return f"Found {len(ref_paths)} references."
-
-        result_json = self._to_json(result)
-        return self._limit_length(
-            result_json,
-            max_answer_chars,
-            shortened_result_factories=[create_shortened_result_counts_per_file, create_shortened_result_num_results],
-        )
+        return self._api().find_referencing_symbols(name_path, relative_path, max_answer_chars).represent()
 
 
-class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Retrieves an overview of the top-level symbols within a specified file using the JetBrains backend
     """
 
-    USE_COMPACT_FORMAT = True
-    symbol_dict_grouper = JetBrainsSymbolDictGrouper(["type"], ["type"], collapse_singleton=True, map_name_path_to_name=True)
+    @property
+    def symbol_dict_grouper(self) -> SymbolDictGrouper:
+        from serena.repl.api.jb_api import JetBrainsApi
+
+        return JetBrainsApi.overview_grouper_
 
     def apply(
         self,
@@ -357,94 +279,14 @@ class JetBrainsGetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOp
         :param max_answer_chars: max characters for the result (-1 for default). If exceeded, no content/a shortened result is returned.
         :param include_file_documentation: whether to include the file's docstring. Default False.
         """
-        if depth == -1:
-            if relative_path.endswith((".java", ".kt")):
-                depth = 1
-            else:
-                depth = 0
-
         relative_path = self._sanitize_input_param(relative_path)
-        with JetBrainsPluginClient.from_project(self.project) as client:
-            symbol_overview = client.get_symbols_overview(
-                relative_path=relative_path, depth=depth, include_file_documentation=include_file_documentation
-            )
-
-        if self.USE_COMPACT_FORMAT:
-            symbols = symbol_overview["symbols"]
-
-            grouped_symbols = self.symbol_dict_grouper.group(symbols)
-
-            shortened_result_factories = []
-
-            # create full result
-            result: dict[str, Any] = {"symbols": grouped_symbols}
-            documentation = symbol_overview.pop("documentation", None)
-            if documentation:
-                result["docstring"] = documentation
-                shortened_result_factories.append(lambda: self._to_json(grouped_symbols))  # shortened result without docstring
-            json_result = self._to_json(result)
-
-            if depth > 0:
-
-                def create_short_result_depth_0() -> str:
-                    depth_0_symbols = [d.copy() for d in symbols]
-                    for d in depth_0_symbols:
-                        d.pop("children", None)
-                    compact_depth_0_result = self.symbol_dict_grouper.group(depth_0_symbols)
-                    return "Depth 0 overview:\n" + self._to_json(compact_depth_0_result)
-
-                shortened_result_factories.append(create_short_result_depth_0)
-
-            def create_short_result_type_counts() -> str:
-                type_names = [d.get("type", "unknown") for d in symbols]
-                return f"Symbol counts by type:\n{self._to_json(Counter(type_names))}"
-
-            shortened_result_factories.append(create_short_result_type_counts)
-        else:
-            # this path is currently abandoned, consider introducing shortened results if ever needed
-            shortened_result_factories = None
-            json_result = self._to_json(symbol_overview)
-
-        return self._limit_length(json_result, max_answer_chars, shortened_result_factories=shortened_result_factories)
+        return self._api().get_symbols_overview(relative_path, depth, max_answer_chars, include_file_documentation).represent()
 
 
-class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Retrieves the type hierarchy (supertypes and/or subtypes) of a symbol using the JetBrains backend
     """
-
-    @staticmethod
-    def _transform_hierarchy_nodes(nodes: list[jb.TypeHierarchyNodeDTO] | None) -> dict[str, list]:
-        """
-        Transform a list of TypeHierarchyNode into a file-grouped compact format.
-
-        Returns a dict where keys are relative_paths and values are lists of either:
-        - "SymbolNamePath" (leaf node)
-        - {"SymbolNamePath": {nested_file_grouped_children}} (node with children)
-        """
-        if not nodes:
-            return {}
-
-        result: dict[str, list] = {}
-
-        for node in nodes:
-            symbol = node["symbol"]
-            name_path = symbol["name_path"]
-            rel_path = symbol["relative_path"]
-            children = node.get("children", [])
-
-            if rel_path not in result:
-                result[rel_path] = []
-
-            if children:
-                # Node with children - recurse
-                nested = JetBrainsTypeHierarchyTool._transform_hierarchy_nodes(children)
-                result[rel_path].append({name_path: nested})
-            else:
-                # Leaf node
-                result[rel_path].append(name_path)
-
-        return result
 
     def apply(
         self,
@@ -460,51 +302,17 @@ class JetBrainsTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptiona
         :param name_path: name path of the symbol for which to get the type hierarchy.
         :param relative_path: the relative path to the file containing the symbol.
         :param hierarchy_type: which hierarchy to retrieve: "super" for parent classes/interfaces,
-            "sub" for subclasses/implementations, or "both" for both directions. Default is "sub".
+            "sub" for subclasses/implementations, or "both" for both directions. Default is "both".
         :param depth: depth limit for hierarchy traversal (None or 0 for unlimited). Default is 1.
         :param max_answer_chars: max characters for the JSON result. If exceeded, no content is returned.
             -1 means the default value from the config will be used.
         :return: Compact JSON with file-grouped hierarchy. Error string if not applicable.
         """
         relative_path = self._sanitize_input_param(relative_path)
-        with JetBrainsPluginClient.from_project(self.project) as client:
-            subtypes = None
-            supertypes = None
-            levels_not_included = {}
-
-            if hierarchy_type in ("super", "both"):
-                supertypes_response = client.get_supertypes(
-                    name_path=name_path,
-                    relative_path=relative_path,
-                    depth=depth,
-                )
-                if "num_levels_not_included" in supertypes_response:
-                    levels_not_included["supertypes"] = supertypes_response["num_levels_not_included"]
-                supertypes = self._transform_hierarchy_nodes(supertypes_response.get("hierarchy"))
-
-            if hierarchy_type in ("sub", "both"):
-                subtypes_response = client.get_subtypes(
-                    name_path=name_path,
-                    relative_path=relative_path,
-                    depth=depth,
-                )
-                if "num_levels_not_included" in subtypes_response:
-                    levels_not_included["subtypes"] = subtypes_response["num_levels_not_included"]
-                subtypes = self._transform_hierarchy_nodes(subtypes_response.get("hierarchy"))
-
-            result_dict: dict[str, dict | list] = {}
-            if supertypes is not None:
-                result_dict["supertypes"] = supertypes
-            if subtypes is not None:
-                result_dict["subtypes"] = subtypes
-            if levels_not_included:
-                result_dict["levels_not_included"] = levels_not_included
-
-            result = self._to_json(result_dict)
-        return self._limit_length(result, max_answer_chars)
+        return self._api().get_type_hierarchy(name_path, relative_path, hierarchy_type, depth, max_answer_chars).represent()
 
 
-class JetBrainsFindDeclarationTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class JetBrainsFindDeclarationTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Finds the declaration of a symbol using the JetBrains backend
     """
@@ -523,20 +331,10 @@ class JetBrainsFindDeclarationTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptio
         """
         relative_path = self._sanitize_input_param(relative_path)
         regex = self._sanitize_input_param(regex)
-
-        editor = self.create_code_editor()
-        content = editor.read_file(relative_path)
-        coords = find_text_coordinates(content, regex, require_unique=True)
-        assert coords is not None
-        with JetBrainsPluginClient.from_project(self.project) as client:
-            symbol_collection = client.find_declaration(
-                relative_path=relative_path, line=coords.line, col=coords.col, include_quick_info=False, include_body=include_body
-            )
-        result = self._to_json(symbol_collection)
-        return result
+        return self._api().find_declaration(relative_path, regex, include_body).represent()
 
 
-class JetBrainsFindImplementationsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class JetBrainsFindImplementationsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Finds the implementations of a symbol using the JetBrains backend
     """
@@ -548,17 +346,10 @@ class JetBrainsFindImplementationsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerO
         :param relative_path: the relative path to the source file containing the symbol for which to find implementations.
         :param name_path: name path of the symbol for which to find implementations
         """
-        with JetBrainsPluginClient.from_project(self.project) as client:
-            symbol_collection = client.find_implementations(
-                relative_path=relative_path,
-                name_path=name_path,
-                include_quick_info=False,
-            )
-        result = self._to_json(symbol_collection)
-        return result
+        return self._api().find_implementations(relative_path, name_path).represent()
 
 
-class JetBrainsRenameTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
+class JetBrainsRenameTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Renames a symbol, file or directory throughout the codebase using the JetBrains backend.
     """
@@ -584,18 +375,10 @@ class JetBrainsRenameTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional):
         :param rename_in_text_occurrences: whether to also rename occurrences in text. Default True.
         :return: a status message
         """
-        code_editor = JetBrainsCodeEditor(self.project)
-        result = code_editor.rename_symbol(
-            name_path=name_path,
-            relative_path=relative_path,
-            new_name=new_name,
-            rename_in_comments=rename_in_comments,
-            rename_in_text_occurrences=rename_in_text_occurrences,
-        )
-        return self._to_json(result)
+        return self._api().rename(relative_path, new_name, name_path, rename_in_comments, rename_in_text_occurrences).represent()
 
 
-class JetBrainsDebugTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
+class JetBrainsDebugTool(Tool, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Provides debugging functionality (run configs, breakpoints, stepping, inspection, and evaluation)
     via a persistent debug REPL connected to the JetBrains IDE.
@@ -617,15 +400,10 @@ class JetBrainsDebugTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
         :param repl_key: identifier for the REPL instance. State persists across calls with the same key.
         :return: string representation of the result
         """
-        with JetBrainsPluginClient.from_project(self.project) as client:
-            if expression:
-                response = client.debug_eval(repl_key=repl_key, expression=expression)
-            else:
-                response = client.debug_close(repl_key=repl_key)
-            return response.get("result", str(response))
+        return self._api().debug_eval(expression, repl_key)
 
 
-class JetBrainsRunInspectionsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class JetBrainsRunInspectionsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Runs JetBrains IDE inspections on a file and returns the results.
     """
@@ -655,19 +433,12 @@ class JetBrainsRunInspectionsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOption
             -1 means the default value from the config will be used.
         :return: JSON string with inspection results including severity, message, and location.
         """
-        with JetBrainsPluginClient.from_project(self.project) as client:
-            response_dict = client.run_inspections(
-                relative_path=relative_path,
-                min_severity=min_severity,
-                inspection_names=inspection_names,
-                start_line=start_line,
-                end_line=end_line,
-            )
-        result = self._to_json(response_dict)
-        return self._limit_length(result, max_answer_chars)
+        return (
+            self._api().run_inspections(relative_path, min_severity, inspection_names, start_line, end_line, max_answer_chars).represent()
+        )
 
 
-class JetBrainsListInspectionsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class JetBrainsListInspectionsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Lists available JetBrains IDE inspections, optionally filtered by language or group.
     """
@@ -689,10 +460,4 @@ class JetBrainsListInspectionsTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptio
             -1 means the default value from the config will be used.
         :return: JSON string with the list of available inspections including name, group path, and language.
         """
-        with JetBrainsPluginClient.from_project(self.project) as client:
-            response_dict = client.list_inspections(
-                language=language,
-                group_path_contains=group_path_contains,
-            )
-        result = self._to_json(response_dict)
-        return self._limit_length(result, max_answer_chars)
+        return self._api().list_inspections(language, group_path_contains, max_answer_chars).represent()

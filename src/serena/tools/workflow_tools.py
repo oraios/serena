@@ -3,12 +3,11 @@ Tools supporting the general workflow of the agent
 """
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import platform
-
 from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional, WriteMemoryTool
+from serena.tools.memory_tools import MemoryApiMixin
 
 
-class OnboardingTool(Tool):
+class OnboardingTool(Tool, MemoryApiMixin):
     """
     Performs onboarding (identifying the project structure and essential tasks, e.g. for testing or building).
     """
@@ -20,14 +19,10 @@ class OnboardingTool(Tool):
 
         :return: instructions on how to create the onboarding information
         """
-        write_memory_tool_available = self.agent.tool_is_exposed(WriteMemoryTool.get_name_from_cls())
+        write_memory_tool_available = self.agent.is_tool_function_available(WriteMemoryTool)
         if not write_memory_tool_available:
             return "Memory writing tool not activated, skipping onboarding."
-        system = platform.system()
-        # seed the project-local memory-maintenance memory (or detect a global override) so
-        # the prompt can point the agent at the conventions before it writes anything
-        memory_maintenance_name = self.memory_manager.ensure_memory_maintenance_memory()
-        return self.prompt_factory.create_onboarding_prompt(system=system, memory_maintenance_name=memory_maintenance_name)
+        return self._api().onboarding()
 
 
 class InitialInstructionsTool(Tool, ToolMarkerDoesNotRequireActiveProject):
