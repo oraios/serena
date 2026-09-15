@@ -15,6 +15,12 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
+  - Perf: `search_for_pattern` resolved each match's line number by rescanning the file from the
+    beginning (O(n) per match, O(n*m) total for m matches). `search_text` now precomputes line start
+    offsets once per file (O(n)) and resolves each match via binary search (O(log n) per match);
+    on a synthetic 12k-line file with 723 matches, match-coordinate resolution drops from ~1764 ms
+    to ~2 ms. Results are byte-for-byte identical to the previous implementation, verified against
+    `TextUtils.get_line_col_from_index` including `\r\n`, bare `\r` and mixed line-ending edge cases
   - Fix: `TextUtils.insert_text_at_position` returned a wrong position when the inserted text merged
     with an adjacent character into a single newline sequence (e.g. a `\n` inserted directly after an
     existing `\r`); the position is now determined from the resulting text
