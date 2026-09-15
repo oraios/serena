@@ -833,6 +833,27 @@ Supported settings:
 |---|---|---|
 | `lua_language_server_version` | `3.15.0` | Override the bundled `lua-language-server` version Serena downloads when it cannot use an existing installation from PATH or common install locations. |
 
+#### EmmyLua Analyzer
+
+The experimental Rust-based EmmyLua Analyzer backend is selected explicitly with `language: lua_emmylua`. Serena downloads the pinned release for the current platform and verifies its SHA-256 checksum.
+
+Supported settings under `ls_specific_settings.lua_emmylua`:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed download | Override the `emmylua_ls` executable path. |
+| `emmylua_ls_version` | `0.25.1` | Select the EmmyLua Analyzer release to download. The default release is checksum-verified; custom release versions should be used only when the release asset is trusted. |
+
+Example:
+
+```yaml
+languages:
+  - name: lua_emmylua
+ls_specific_settings:
+  lua_emmylua:
+    ls_path: /opt/emmylua_ls
+```
+
 
 #### Luau
 
