@@ -52,6 +52,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     Serena's own tools to close the gap (#1852)
 
 * Language Servers:
+  - Fix: Godot's GDScript parser can report a symbol's end column one column past the
+    line-end convention every other language server follows (closing a node's range from
+    the next lookahead token instead of the last consumed one, when that lookahead is a
+    synthesized newline); `replace_symbol_body` on the last function in a file silently
+    consumed the separating blank line as a result. `GodotLanguageServer` now corrects this
+    specific, measured overshoot when building its high-level document symbols (#1974)
   - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
     preserves explicit user settings across initialization and configuration requests (#1989)
     VTS initialization options now override defaults per top-level key rather than replacing the
