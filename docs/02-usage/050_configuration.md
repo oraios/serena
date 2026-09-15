@@ -880,6 +880,16 @@ Supported settings:
 | `matlab_path` | auto-detected | Path to the MATLAB installation. This overrides `MATLAB_PATH` and auto-detection, but not Serena's managed extension download. |
 | `matlab_extension_version` | `1.3.9` | Override the MathWorks VS Code extension version Serena downloads. |
 
+#### MQL
+
+Serena uses [mql-language-server](https://github.com/davalillo/mql-language-server) for MQL4 (`.mq4`), MQL5 (`.mq5`), and MQL include (`.mqh`) support. The server binary is downloaded automatically from GitHub releases.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `mql_version` | `v2.1.0` | Override the mql-language-server version Serena downloads. The pinned default and all other versions are verified against the release's `CHECKSUMS.txt`; an install is refused if that file cannot be fetched. |
+
 #### Nix
 
 Serena uses [nixd](https://github.com/nix-community/nixd) for Nix support.
