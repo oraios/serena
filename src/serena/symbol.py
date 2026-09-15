@@ -638,17 +638,19 @@ class LanguageServerSymbolRetriever:
         """Retrieves information for multiple symbols while staying within a time budget.
 
         The request_hover operation used here is potentially expensive, we optimize by grouping by file
-        and stop executing it (returning the info as None) after the symbol_info_budget is exceeded.
-        The hover budget is 5s by default
+        and stop executing it after the symbol_info_budget is exceeded.
+        The hover budget is 10s by default.
 
         Groups symbols by file path to minimize file switching overhead and uses a per-file
         cache keyed by (line, col) to avoid duplicate hover lookups.
 
         The hover budget (symbol_info_budget) limits total time spent on hover
-        requests. If exceeded, remaining symbols get info=None (partial results).
+        requests. If exceeded, remaining symbols get an explanatory note instead of hover information.
 
         :param symbols: list of symbols to get info for
-        :return: a dict mapping each processable symbol to its info (or None if unavailable). Symbols with missing location attributes (relative_path/line/column is None) are skipped and omitted from the result.
+        :return: a dict mapping each processable symbol to its info, a budget-exhaustion note if not queried,
+            or None if the language server returned no information. Symbols with missing location attributes
+            (relative_path/line/column is None) are skipped and omitted from the result.
         """
         if not symbols:
             return {}
@@ -690,10 +692,7 @@ class LanguageServerSymbolRetriever:
                     # symbol_info_budget_seconds=0 disables the budget mechanism (the first inequality)
                     if 0 < symbol_info_budget_seconds <= hover_spent_seconds:
                         skipped_due_to_budget += 1
-                        info = None
-                        # log once when budget exceeded
-                        if skipped_due_to_budget == 1:
-                            log.debug("Skipping further hover operations due to budget exceeded")
+                        info = "[Symbol information omitted because symbol_info_budget was exhausted.]"
                     else:
                         line = sym.line
                         column = sym.column
@@ -709,6 +708,9 @@ class LanguageServerSymbolRetriever:
             if debug_enabled:
                 file_elapsed_ms = (perf_counter() - t0_file) * 1000
                 per_file_stats.append((file_path, file_hover_lookups, file_elapsed_ms))
+
+        if skipped_due_to_budget:
+            log.info("Skipped information for %d symbols because symbol_info_budget was exhausted", skipped_due_to_budget)
 
         if debug_enabled:
             total_elapsed_ms = (perf_counter() - t0_total) * 1000
