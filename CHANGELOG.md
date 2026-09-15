@@ -21,6 +21,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: process-tree cleanup signaled descendant language-server processes without waiting for them,
     which could leave grandchildren as zombies; cleanup now waits for the discovered descendants (#1464)
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
+  - Docs: `trusted_project_path_patterns` now documents how to trust a single project. Trust is decided by
+    the project's root path, so a `<project root>/**` entry matches only paths below the root and therefore
+    trusts no project at all; the template now shows the bare root form alongside the parent-directory
+    glob (#2001)
 
 * CLI:
   - Fix: `project health-check` reported `Health check passed - All tools working correctly` and
