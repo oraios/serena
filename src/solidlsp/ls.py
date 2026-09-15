@@ -1450,6 +1450,11 @@ class SolidLanguageServer(ABC):
             self.column = column
             self.request_name = request_name
             self.skip_ignored_paths = True
+            self.keep_external_locations = False
+            """
+            whether a location outside the repository and its workspace folders (the standard library, an installed
+            package) is returned, marked `external`, rather than skipped
+            """
 
         def execute(self) -> list[ls_types.Location]:
             self._ensure_server_started()
@@ -1513,20 +1518,26 @@ class SolidLanguageServer(ABC):
             abs_path = PathUtils.uri_to_path(uri)
             rel_path_str = PathUtils.get_relative_path(abs_path, self.language_server.repository_root_path)
 
-            if rel_path_str is None:
-                log.warning(
-                    "Found a %s in a path outside the repository, probably the LS is parsing things in installed packages or in the standardlib! "
-                    "Path: %s. This is a bug but we currently simply skip these locations.",
-                    self.request_name,
-                    abs_path,
-                )
-                return None
-
             # skip locations of generated files that are not present on disk
             # (language servers may report e.g. compiled classes under build output)
             if not os.path.exists(abs_path):
                 log.info("%s found symbol at non-existent path: %s", self.request_name, abs_path)
                 return None
+
+            if (
+                rel_path_str is None
+                or not self.language_server.PathWorkspaceStatus.from_abs_resolved_path(
+                    Path(abs_path).resolve(), self.language_server
+                ).is_in_workspace_folder
+            ):
+                # the standard library or an installed package: not a file of the project. (A relative path with
+                # `..` would be computed for it on the same drive, and opening it would fail the workspace check.)
+                if not self.keep_external_locations:
+                    log.info(
+                        "%s found a location outside the repository and its workspace folders, skipping: %s", self.request_name, abs_path
+                    )
+                    return None
+                return ls_types.Location(uri=uri, range=range_d, absolutePath=str(abs_path), relativePath=None, external=True)
 
             if self.skip_ignored_paths and self.language_server.is_ignored_path(rel_path_str):
                 log.info("%s found symbol in ignored path: %s", self.request_name, rel_path_str)
@@ -1554,6 +1565,8 @@ class SolidLanguageServer(ABC):
                 column,
                 request_name=request_name,
             )
+            # a definition in the standard library or an installed package is an answer, not noise
+            self.keep_external_locations = True
 
         def send_request(self) -> object | None:
             return self.language_server._send_definition_request(
@@ -2877,10 +2890,10 @@ class SolidLanguageServer(ABC):
         # Select the preferred definition (subclasses can override _get_preferred_definition)
         definition = self._get_preferred_definition(definitions)
         def_path = definition["relativePath"]
-        if def_path is None:
-            return None
         def_line = definition["range"]["start"]["line"]
         def_col = definition["range"]["start"]["character"]
+        if def_path is None:
+            return self._request_external_defining_symbol(definition, include_body=include_body)
 
         return self._request_symbol_at_location(
             def_path,
@@ -2888,6 +2901,27 @@ class SolidLanguageServer(ABC):
             def_col,
             include_body=include_body,
         )
+
+    def _request_external_defining_symbol(
+        self, definition: ls_types.Location, include_body: bool
+    ) -> ls_types.UnifiedSymbolInformation | None:
+        """
+        The symbol defined at a location outside the repository and its workspace folders — the standard library, an
+        installed package. It is read (never edited) by its ABSOLUTE path, which the file-opening machinery accepts as
+        it stands (joining an absolute path to the repository root leaves it absolute, and a path without `..` meets
+        no workspace check), and the answer is marked `external` so that callers do not take the path for a project
+        file. The document symbols are cached under that absolute path like any other file's.
+
+        :param definition: the definition's location, as `request_definition` answered it (`relativePath` None).
+        :param include_body: whether to include the body of the symbol in the result.
+        :return: the symbol information for the definition, or None if the server reports no symbol there.
+        """
+        abs_path = definition["absolutePath"]
+        start = definition["range"]["start"]
+        symbol = self._request_symbol_at_location(abs_path, start["line"], start["character"], include_body=include_body)
+        if symbol is not None and "location" in symbol:
+            symbol["location"]["external"] = True
+        return symbol
 
     def request_implementing_symbols(
         self,
