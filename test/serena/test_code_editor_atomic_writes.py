@@ -10,6 +10,7 @@ without a language server.
 
 import os
 import stat
+import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -114,6 +115,22 @@ class TestSourceFileSaveIsAtomic:
         assert source.read_text(encoding="utf-8") == "new\n"
         assert list(tmp_path.iterdir()) == [source]
 
+    def test_save_into_a_subdirectory(self, tmp_path):
+        """Every other test writes at the project root; the relative path is joined and resolved,
+        so a nested file has to work the same way.
+        """
+        package = tmp_path / "pkg" / "sub"
+        package.mkdir(parents=True)
+        source = package / "module.py"
+        source.write_text("old\n", encoding="utf-8")
+
+        editor = self._editor(tmp_path)
+        with editor.edited_file_context("pkg/sub/module.py") as edited:
+            edited.set_contents("new\n")
+
+        assert source.read_text(encoding="utf-8") == "new\n"
+        assert list(package.iterdir()) == [source], "no temp file may be left beside the source"
+
     def test_save_writes_through_a_symlinked_source_file(self, tmp_path):
         """A symlinked source file must keep being written through to its target, as
         ``open(path, "w")`` did; the link itself must not be replaced by a regular file.
@@ -137,6 +154,9 @@ class TestSourceFileSaveIsAtomic:
         assert link.is_symlink(), "the source file's symlink must survive the edit"
         assert target.read_text(encoding="utf-8") == "new\n", "the edit must reach the link's target"
 
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="Windows does not model POSIX permission bits; chmod only toggles the read-only flag"
+    )
     def test_save_preserves_the_executable_bit(self, tmp_path):
         script = tmp_path / "run.sh"
         script.write_text("#!/bin/sh\necho old\n", encoding="utf-8")
@@ -162,7 +182,9 @@ class TestSourceFileSaveIsAtomic:
         source = tmp_path / "module.py"
         source.write_text("alt\n", encoding="latin-1")
 
-        editor = self._editor(tmp_path, encoding="latin-1")
+        # newline is pinned so this test is about the encoding alone: LineEnding.NATIVE yields
+        # newline=None, under which Python translates "\n" to os.linesep on write
+        editor = self._editor(tmp_path, encoding="latin-1", newline="\n")
         with editor.edited_file_context("module.py") as edited:
             edited.set_contents("café\n")
 

@@ -978,6 +978,36 @@ class TestWriteFileAtomicSymlinks:
         assert link.is_symlink()
         assert target.read_text(encoding="utf-8") == "new"
 
+    def test_writes_through_a_symlinked_parent_directory(self, tmp_path):
+        """The path is resolved in full, so a symlinked *directory* on the way to the file is
+        followed too, and the temporary file is created in the destination's real directory (it has
+        to be on the same filesystem as the destination for the rename to be atomic).
+        """
+        real_dir = tmp_path / "real_dir"
+        real_dir.mkdir()
+        target = real_dir / "file.txt"
+        target.write_text("old", encoding="utf-8")
+        link_dir = tmp_path / "link_dir"
+        self._symlink_or_skip(link_dir, real_dir)
+
+        write_file_atomic(str(link_dir / "file.txt"), "new", encoding="utf-8")
+
+        assert link_dir.is_symlink(), "the directory symlink must survive"
+        assert target.read_text(encoding="utf-8") == "new"
+        assert list(real_dir.iterdir()) == [target], "no temp file may be left in the real directory"
+
+    def test_non_ascii_filename_round_trips(self, tmp_path):
+        target = tmp_path / "測試檔案.txt"
+        try:
+            target.write_text("old", encoding="utf-8")
+        except (OSError, UnicodeError) as e:
+            pytest.skip(f"cannot create non-ASCII filenames on this filesystem: {e}")
+
+        write_file_atomic(str(target), "new", encoding="utf-8")
+
+        assert target.read_text(encoding="utf-8") == "new"
+        assert list(tmp_path.iterdir()) == [target]
+
     def test_regular_file_is_written_in_place(self, tmp_path):
         """Control: the symlink handling must not change the ordinary case."""
         target = tmp_path / "plain.txt"
