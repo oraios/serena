@@ -12,6 +12,15 @@ Status of the `main` branch. Changes prior to the next official version change w
     see `CONTRIBUTING.md`
 
 * General:
+  - Fix: `start-mcp-server`/`project-server` could deadlock the entire process when the MCP
+    client host does not read the spawned server's stderr. The blocking stderr `StreamHandler`
+    eventually blocked inside `write()` once the stderr buffer (64 KiB socketpair) filled up,
+    holding the logging module's global lock and freezing every other thread that logs —
+    observed in practice as a tool whose work completed in milliseconds but never returned its
+    result, surfacing as a `tool_timeout` exactly `tool_timeout` seconds later. The stderr
+    handler is now non-blocking (direct writes on a non-blocking fd for pipes/sockets, dropping
+    records when the buffer is full); the log file and the dashboard's in-memory buffer remain
+    the lossless, authoritative streams
   - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
