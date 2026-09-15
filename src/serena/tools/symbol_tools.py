@@ -7,7 +7,7 @@ import copy
 import os
 from collections import Counter, defaultdict
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Literal
 
 from serena.symbol import LanguageServerSymbol, LanguageServerSymbolDictGrouper
 from serena.tools import (
@@ -356,7 +356,9 @@ class FindImplementationsTool(Tool, ToolMarkerSymbolicRead):
         max_answer_chars: int = -1,
     ) -> str:
         """
-        Finds implementations of the symbol at the given `name_path`.
+        Finds implementations of the symbol at the given `name_path`: the methods overriding an abstract method,
+        the classes implementing an interface. For a class or interface whose language server reports no
+        implementations, its direct subtypes are returned instead (where the server provides a type hierarchy).
 
         :param name_path: the symbol's name path
         :param relative_path: the relative path to the file containing the symbol for which to find implementations.
@@ -389,6 +391,68 @@ class FindImplementationsTool(Tool, ToolMarkerSymbolicRead):
         if include_info:
             info_by_symbol = symbol_retriever.request_info_for_symbol_batch(implementing_symbols)
             for s, s_dict in zip(implementing_symbols, symbol_dicts, strict=True):
+                if symbol_info := info_by_symbol.get(s):
+                    s_dict["info"] = symbol_info
+                    s_dict.pop("name", None)  # name is included in the info
+
+        result = self._to_json(symbol_dicts)
+        return self._limit_length(result, max_answer_chars)
+
+
+class FindTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+    """
+    Finds the subtypes or supertypes of a class/interface using the language server backend's type hierarchy.
+    """
+
+    # noinspection PyDefaultArgument
+    def apply(
+        self,
+        name_path: str,
+        relative_path: str,
+        direction: Literal["subtypes", "supertypes"] = "subtypes",
+        include_info: bool = False,
+        include_kinds: list[int] = [],  # noqa: B006
+        exclude_kinds: list[int] = [],  # noqa: B006
+        max_answer_chars: int = -1,
+    ) -> str:
+        """
+        Finds the subtypes (the classes extending it, the types implementing it) or the supertypes
+        (the bases it extends, the interfaces it implements) of the type at the given `name_path`, as the language
+        server reports them: the direct ones per the LSP specification, though some servers (pyrefly) include the
+        indirect ones too. Types defined outside the project (the standard library, installed packages) are not
+        included. Empty when the server provides no type hierarchy.
+
+        :param name_path: the type's name path
+        :param relative_path: the relative path to the file containing the type. Must be a file, not a directory.
+        :param direction: "subtypes" (default) or "supertypes"
+        :param include_info: whether to include additional info (hover-like, typically including docstring and signature)
+            about the resulting types.
+        :param include_kinds: (optional) limits results to the given LSP symbol kinds (integers)
+        :param exclude_kinds: (optional) list of LSP symbol kinds (integers) to exclude.
+        :param max_answer_chars: max result length; -1 for default
+        :return: a list of JSON objects with the related types
+        """
+        self.project.ls_sync_file_system_changes()
+
+        parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
+        parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
+        symbol_retriever = self.create_language_server_symbol_retriever()
+
+        if direction == "subtypes":
+            related_types = symbol_retriever.find_subtype_symbols(
+                name_path, relative_file_path=relative_path, include_kinds=parsed_include_kinds, exclude_kinds=parsed_exclude_kinds
+            )
+        elif direction == "supertypes":
+            related_types = symbol_retriever.find_supertype_symbols(
+                name_path, relative_file_path=relative_path, include_kinds=parsed_include_kinds, exclude_kinds=parsed_exclude_kinds
+            )
+        else:
+            raise ValueError(f"direction must be 'subtypes' or 'supertypes', got {direction!r}")
+
+        symbol_dicts = [dict(s.to_dict(kind=True, relative_path=True, depth=0, body=False, body_location=True)) for s in related_types]
+        if include_info:
+            info_by_symbol = symbol_retriever.request_info_for_symbol_batch(related_types)
+            for s, s_dict in zip(related_types, symbol_dicts, strict=True):
                 if symbol_info := info_by_symbol.get(s):
                     s_dict["info"] = symbol_info
                     s_dict.pop("name", None)  # name is included in the info
