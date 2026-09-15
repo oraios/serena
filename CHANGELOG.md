@@ -103,6 +103,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     symbols, which was applied outside the caches; the processing of language servers that post-process
     symbols (e.g. Go, Nix, Fortran, F#, Vue) was therefore repeated on every request or, if it mutated
     symbols in place, re-applied to already processed cached results
+  - Fix: C# solution/project discovery traversed and opened paths matched by the configured ignore
+    patterns (incl. `.gitignore`), slowing down startup and loading ignored projects in Roslyn (#1999)
 
 CLI:
   - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)

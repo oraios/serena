@@ -232,6 +232,23 @@ class TestCSharpSolutionProjectOpening:
             # file1.txt should be found first (breadth-first)
             assert filenames[0] == "file1.txt"
 
+    def test_breadth_first_file_scan_skips_ignored_paths(self):
+        """Test that breadth_first_file_scan neither yields ignored files nor traverses ignored directories."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+
+            # Create a project, an ignored directory containing a project and an ignored project file
+            (temp_path / "src").mkdir()
+            (temp_path / "src" / "App.csproj").touch()
+            (temp_path / "vendor" / "nested").mkdir(parents=True)
+            (temp_path / "vendor" / "nested" / "Vendored.csproj").touch()
+            (temp_path / "Generated.csproj").touch()
+
+            ignored_paths = {"vendor", "Generated.csproj"}
+            files = list(breadth_first_file_scan(str(temp_path), lambda relative_path: relative_path in ignored_paths))
+
+            assert [os.path.relpath(f, temp_path) for f in files] == [os.path.join("src", "App.csproj")]
+
     def test_find_solution_or_project_file_with_solution(self):
         """Test that find_solution_or_project_file prefers .sln files."""
         with tempfile.TemporaryDirectory() as temp_dir:
