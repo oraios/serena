@@ -88,8 +88,15 @@ expression is the result. No `return` (a top-level `return` yields a SyntaxError
 
 ## Availability policy
 
-- Keep as much functionality as possible in the REPL; do not mirror the contexts' tool exclusions.
-  Reads must stay in (composability); exclusions can only steer the model, never enforce anything.
+- Keep as much functionality as possible in the REPL; exclude nothing by default.
+  * Do not derive API exclusions from tool exclusions automatically (not via the `corresponding_tool`
+    correspondence, not via an option): contexts exclude tools mostly because the *host* provides equivalents
+    (`read_file`, `find_file`, `replace_content`, shell). In the REPL those reads are what makes operations
+    composable (read → filter → return a summary), and a host tool cannot participate in REPL code.
+  * The host's better-integrated edit tools (diff view, undo) are a matter of guidance in the context prompt,
+    not of availability: exclusions can only steer the model, never enforce anything.
+  * For users migrating from tool mode: prefer a startup hint listing the `excluded_apis` entries corresponding
+    to their own (global/project, not context/mode) tool exclusions over any automatic derivation.
 - Python code can always modify the system; the REPL tool is inherently fully privileged, regardless of
   facade scope or the project's `read_only` setting (which only makes Serena's own API refuse edits).
   A "read-only REPL" is not feasible and must not be promised.
