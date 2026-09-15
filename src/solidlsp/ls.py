@@ -145,6 +145,10 @@ class LSPFileBuffer:
             current_contents = self.contents
             if self._read_file_modified_date != self._read_file_modified_date_passed_to_ls:
                 self._read_file_modified_date_passed_to_ls = self._read_file_modified_date
+                # bump the version: the LSP spec requires didChange versions to increase
+                # monotonically after the version announced in didOpen (warm-buffer reuse
+                # previously re-sent the unchanged version, which servers discard)
+                self.version += 1
                 self.language_server.server.notify.did_change_text_document(
                     {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
                         LSPConstants.TEXT_DOCUMENT: {
