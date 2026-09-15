@@ -25,6 +25,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     the project's root path, so a `<project root>/**` entry matches only paths below the root and therefore
     trusts no project at all; the template now shows the bare root form alongside the parent-directory
     glob (#2001)
+  - Fix: a language server request that timed out stayed registered in the pending-request table,
+    since entries were only removed when a response arrived; a server that is running but not
+    answering therefore leaked one entry per timed-out request for the lifetime of the server, and
+    a later cancellation counted those abandoned requests as live (#2003)
 
 * CLI:
   - Fix: `project health-check` reported `Health check passed - All tools working correctly` and
