@@ -2984,10 +2984,8 @@ class SolidLanguageServer(ABC):
         high_level_fingerprint = self._document_symbols_cache_fingerprint()
         if high_level_fingerprint is not None:
             version.append(high_level_fingerprint)
-        raw_fingerprint = self._raw_document_symbols_cache_fingerprint()
-        if raw_fingerprint is not None:
-            version.append(raw_fingerprint)
-        return version[0] if len(version) == 1 else tuple(version)
+        version.append(self._raw_document_symbols_cache_version())
+        return tuple(version)
 
     def _save_raw_document_symbols_cache(self) -> None:
         cache_file = self.cache_dir / self.RAW_DOCUMENT_SYMBOL_CACHE_FILENAME

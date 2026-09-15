@@ -52,6 +52,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     Serena's own tools to close the gap (#1852)
 
 * Language Servers:
+  - Fix: High-level document symbol cache was not invalidated when the LS-specific low-level result 
+    version changed
   - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
     preserves explicit user settings across initialization and configuration requests (#1989)
     VTS initialization options now override defaults per top-level key rather than replacing the
