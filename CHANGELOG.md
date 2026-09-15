@@ -12,6 +12,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     see `CONTRIBUTING.md`
 
 * General:
+  - Add: `get_symbols_overview` accepts directory paths, returning the symbol overview for every
+    analyzable file in the directory grouped by file; a `max_files` safeguard (default 20) raises
+    an error instead of returning a partial overview when the directory contains too many files (#1412)
   - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
