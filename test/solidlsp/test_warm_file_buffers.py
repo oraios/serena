@@ -148,8 +148,6 @@ def test_close_all_warm_buffers_on_stop(tmp_path) -> None:
     assert events == ["didOpen", "didOpen"]
     assert len(server._warm_file_buffers) == 2
 
-    stop_calls: list[dict] = []
-    server.server.stop.side_effect = lambda *a, **kw: stop_calls.append({})
     server.stop(shutdown_timeout=2.0)
 
     assert not server._warm_file_buffers
