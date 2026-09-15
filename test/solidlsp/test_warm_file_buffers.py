@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock
 
+import pathspec
+
 from solidlsp.ls import SolidLanguageServer
 
 
@@ -39,6 +41,26 @@ def _make_server(tmp_path) -> tuple[SolidLanguageServer, list[str], MagicMock]:
     language_server.language_id = "python"
     language_server.server = server
     language_server._path_contains_dots = lambda _p: False
+    return language_server, events, server
+
+
+def _make_location_request_server(tmp_path) -> tuple[SolidLanguageServer, list[str], MagicMock]:
+    """Like _make_server, but wired for the location-request path (references etc.).
+
+    The mock answers textDocument/references with one location, so SymbolLocationRequest
+    can run end-to-end without a real language server.
+
+    :return: tuple of (server, events list, the notify mock)
+    """
+    from solidlsp.ls_config import LanguageServerId
+
+    language_server, events, server = _make_server(tmp_path)
+    language_server.ls_id = LanguageServerId.PYTHON
+    language_server._has_waited_for_cross_file_references = True
+    language_server._ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, [])  # nothing ignored
+    server.send.references.return_value = [
+        {"uri": (tmp_path / "sample.py").as_uri(), "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 1}}}
+    ]
     return language_server, events, server
 
 
@@ -154,3 +176,27 @@ def test_warm_buffer_ttl_is_lazy_evicted(tmp_path) -> None:
     # eviction happened during the next open_file: old buffer closed, new one opened
     assert events.count("didClose") == 1
     assert events.count("didOpen") == 2
+
+
+def test_location_request_bypasses_warm_buffer(tmp_path) -> None:
+    """A SymbolLocationRequest (references/definition/implementation) must not reuse a
+    warm buffer: servers like the Solidity LS only fold a document into their cross-file
+    reference graph when they receive it via didOpen, and a warm reuse with an unchanged
+    file sends no notification at all. The request path therefore evicts the warm buffer
+    and forces a fresh didOpen.
+    """
+    (tmp_path / "sample.py").write_text("x = 1\n", encoding="utf-8")
+    server, events, _ = _make_location_request_server(tmp_path)
+
+    # warm the buffer with a plain open/close (as any file tool would)
+    with server.open_file("sample.py"):
+        pass
+    assert events == ["didOpen"]
+    assert server._warm_file_buffers
+
+    # a references request on the unchanged file must go through a fresh didOpen
+    locations = server.request_references("sample.py", line=0, column=0)
+    assert locations  # the mocked location came back
+    assert events == ["didOpen", "didClose", "didOpen"], (
+        f"request must evict the warm buffer (didClose) and reopen with a fresh didOpen, got {events}"
+    )

@@ -1525,6 +1525,12 @@ class SolidLanguageServer(ABC):
             # arm indexing tracking before didOpen so that the subsequent wait can
             # observe the indexing progress triggered by opening the file
             self.language_server._pre_open_for_cross_file_references()
+            # Location requests depend on cross-file analysis: some servers only fold
+            # a document into their reference graph when they receive it via didOpen
+            # (e.g. the Solidity language server). Reusing a warm buffer can skip the
+            # didOpen entirely (file unchanged on disk), so evict the warm buffer to
+            # force a full open/close cycle, as before the warm-buffer cache.
+            self.language_server.invalidate_warm_buffer(self.relative_file_path)
             with self.language_server.open_file(self.relative_file_path):
                 self.language_server._wait_for_cross_file_references_if_needed()
                 try:
