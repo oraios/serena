@@ -119,7 +119,7 @@ class JetBrainsFindSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, 
         return {"name_path": "name_path_pattern"}
 
 
-class JetBrainsMoveTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMarkerBeta, JetBrainsApiMixin):
+class JetBrainsMoveTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Moves a symbol, file or directory to a new location using the JetBrains backend, updating all references
     """
@@ -159,7 +159,7 @@ class JetBrainsMoveTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMa
         return self._api().move(relative_path, name_path, target_relative_path, target_parent_name_path).represent()
 
 
-class JetBrainsSafeDeleteTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMarkerBeta, JetBrainsApiMixin):
+class JetBrainsSafeDeleteTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Safely deletes a symbol using the JetBrains backend, checking for remaining usages first
     """
@@ -191,7 +191,7 @@ class JetBrainsSafeDeleteTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, 
         return self._api().safe_delete(relative_path, name_path, delete_even_if_used, propagate).represent()
 
 
-class JetBrainsInlineSymbol(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, ToolMarkerBeta, JetBrainsApiMixin):
+class JetBrainsInlineSymbol(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Inlines a symbol using the JetBrains backend, replacing all call sites with the symbol's body
     """
@@ -378,7 +378,7 @@ class JetBrainsRenameTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, JetB
         return self._api().rename(relative_path, new_name, name_path, rename_in_comments, rename_in_text_occurrences).represent()
 
 
-class JetBrainsDebugTool(Tool, ToolMarkerOptional, ToolMarkerBeta, JetBrainsApiMixin):
+class JetBrainsDebugTool(Tool, ToolMarkerOptional, JetBrainsApiMixin):
     """
     Provides debugging functionality (run configs, breakpoints, stepping, inspection, and evaluation)
     via a persistent debug REPL connected to the JetBrains IDE.
