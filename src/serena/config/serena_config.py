@@ -992,6 +992,12 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
 
     # settings with overridden defaults
 
+    agent_interface: AgentInterface = AgentInterface.TOOLS
+    """
+    the agent interface to use (unless overridden by the active project's configuration).
+    Defaults to TOOLS for backward compatibility (as users without this settings will get this default).
+    The default for new users is defined in the template file.
+    """
     language_backend: LanguageBackend = LanguageBackend.LSP
     """
     the language backend to use for code understanding features
@@ -1171,10 +1177,10 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         instance.language_backend = language_backend
 
         # determine agent interface
-        agent_interface_value = loaded_commented_yaml.get("agent_interface")
-        agent_interface: AgentInterface | None = None
+        agent_interface: AgentInterface | None = get_dataclass_default(SerenaConfig, "agent_interface")
         if "agent_interface" in loaded_commented_yaml:
-            agent_interface = AgentInterface.from_str(agent_interface_value) if agent_interface_value else None
+            agent_interface_value = loaded_commented_yaml["agent_interface"]
+            agent_interface = AgentInterface.from_str(agent_interface_value)
         else:
             num_migrations += 1
         instance.agent_interface = agent_interface

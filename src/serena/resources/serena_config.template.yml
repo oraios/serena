@@ -15,9 +15,8 @@ language_backend: LSP
 #      The set of tools is fixed (the REPL tool and the tools required for session management), and the tool
 #      inclusion/exclusion settings do not apply; instead, the operations available in the REPL are configured
 #      via the API inclusion/exclusion settings (excluded_apis etc.).
-# Leave empty to use Serena's default (currently "tools").
-# The interface is fixed at startup and can be overridden per project.
-agent_interface:
+# The interface is fixed at startup; it can be overridden by the project activated at startup.
+agent_interface: tools
 
 # line ending convention to use when writing source files.
 # Possible values: "lf" (Unix), "crlf" (Windows), "native" (platform default).
