@@ -190,6 +190,41 @@ class TestSearchText:
 
         assert len(matches) == 0
 
+    def test_search_text_crlf_line_numbers(self):
+        """Matches in CRLF content report the same line numbers as with LF endings."""
+        crlf = "alpha\r\nbeta\r\ngamma\r\n"
+        lf = "alpha\nbeta\ngamma\n"
+        crlf_matches = search_text("beta", content=crlf)
+        lf_matches = search_text("beta", content=lf)
+        assert len(crlf_matches) == 1
+        assert len(lf_matches) == 1
+        assert crlf_matches[0].start_line == lf_matches[0].start_line == 1
+        assert crlf_matches[0].end_line == lf_matches[0].end_line == 1
+
+    def test_search_text_bare_cr_line_numbers(self):
+        r"""Bare \r line endings produce separate lines, matching TextStepper semantics."""
+        content = "alpha\rbeta\r"
+        matches = search_text("beta", content=content)
+        assert len(matches) == 1
+        assert matches[0].start_line == 1
+        assert matches[0].end_line == 1
+
+    def test_search_text_match_at_boundaries(self):
+        """Matches at the very start and very end of the content resolve to sane line numbers."""
+        content = "first\nmiddle\nlast"
+        first = search_text("first", content=content)
+        assert first[0].start_line == 0
+        last = search_text("last", content=content)
+        assert last[0].start_line == 2
+
+    def test_search_text_multiline_match_line_range(self):
+        """A multiline match spanning several lines reports the full matched range."""
+        content = "a\nTARGET_START\nb\nc\nTARGET_END\nd\n"
+        matches = search_text("TARGET_START[\\s\\S]*?TARGET_END", content=content)
+        assert len(matches) == 1
+        assert matches[0].start_line == 1
+        assert matches[0].end_line == 4
+
 
 # Mock file reader that always returns matching content
 def mock_reader_always_match(file_path: str) -> str:

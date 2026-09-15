@@ -13,7 +13,7 @@ from joblib import Parallel, delayed
 from sensai.util.string import ToStringMixin
 
 from serena.util.file_proxy import FileCollection, FileProxy
-from solidlsp.ls_utils import TextUtils
+from solidlsp.ls_utils import TextCoordinates, TextUtils
 
 log = logging.getLogger(__name__)
 
@@ -150,6 +150,10 @@ def search_text(
     lines = TextUtils.split_lines(content)
     total_lines = len(lines)
 
+    # precompute line start offsets once so that each match's coordinates can be resolved via binary search
+    # instead of re-scanning the text from the beginning for every match
+    coordinates = TextCoordinates(content)
+
     # For multiline matches, optionally use DOTALL so '.' matches newlines
     flags = (re.MULTILINE | re.DOTALL) if multiline else 0
     compiled_pattern = re.compile(pattern, flags)
@@ -159,9 +163,10 @@ def search_text(
         end_pos = match.end()
 
         # Find the line numbers for the start and end positions
-        start_line_num = TextUtils.get_line_from_index(content, start_pos)
-        end_line_num = TextUtils.get_line_from_index(content, end_pos)
-        if end_line_num > start_line_num and TextUtils.get_line_col_from_index(content, end_pos)[1] == 0:
+        start_loc = coordinates.line_col_at_index(start_pos)
+        end_loc = coordinates.line_col_at_index(end_pos)
+        start_line_num, end_line_num = start_loc.line, end_loc.line
+        if end_line_num > start_line_num and end_loc.col == 0:
             # `end_pos` is exclusive, so if it is at the start of a line, the match ends with the
             # preceding line's newline and does not extend into the line that `end_pos` points to
             end_line_num -= 1
