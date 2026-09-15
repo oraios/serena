@@ -25,6 +25,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     the project's root path, so a `<project root>/**` entry matches only paths below the root and therefore
     trusts no project at all; the template now shows the bare root form alongside the parent-directory
     glob (#2001)
+  - Fix: a request whose write to the language server's stdin failed stayed pending until its
+    timeout, because `StdioLanguageServer._send_payload` logged the failure and returned. The
+    failure now surfaces as `LanguageServerTerminatedException`, the signal the restart path acts
+    on, both for a broken pipe and for a stdin that shutdown had already closed (#2004)
 
 * CLI:
   - Fix: `project health-check` reported `Health check passed - All tools working correctly` and
