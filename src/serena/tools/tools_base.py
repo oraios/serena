@@ -12,15 +12,16 @@ from mcp import Implementation
 from mcp.server.fastmcp import Context
 from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metadata
 from sensai.util import logging
+from sensai.util.helper import mark_used
 from sensai.util.string import dict_string
 
-from serena.code_editor import EditedFileContext  # noqa: F401  (re-exported for tools)
+from serena.code_editor import EditedFileContext
 from serena.config.serena_config import LanguageBackend
 from serena.lsp.lsp_diagnostics import DiagnosticsContext
 from serena.memories.memory_manager import MemoryManager
 from serena.project import Project
 from serena.prompt_factory import PromptFactory
-from serena.repl.facade import SUCCESS_RESULT  # noqa: F401  (re-exported for tools)
+from serena.repl.facade import SUCCESS_RESULT
 from serena.util.class_decorators import singleton
 from serena.util.inspection import iter_subclasses
 from serena.util.text_utils import TextOutputUtils
@@ -31,6 +32,8 @@ if TYPE_CHECKING:
     from serena.code_editor import CodeEditor, LanguageServerCodeEditor
     from serena.symbol import LanguageServerSymbolRetriever
 
+
+mark_used(SUCCESS_RESULT, EditedFileContext)  # backward compatibility
 log = logging.getLogger(__name__)
 T = TypeVar("T")
 
