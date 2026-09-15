@@ -591,6 +591,16 @@ class SolidLanguageServer(ABC):
         """
         self._abs_workspace_folders_all = self._abs_workspace_folders_indexed + self._abs_workspace_folders_additional
 
+        # Warm file buffer cache: buffers that were recently closed are kept
+        # here for a short TTL so that a rapid didOpen → didClose → didOpen
+        # cycle (common when Serena's EditedFileContext processes sequential
+        # edits on the same file) reuses the existing LSP document via
+        # didChange instead of sending a full didOpen with the entire file
+        # content. This eliminates redundant full-file transfers over stdin
+        # and avoids the LSP's create-from-scratch + full-parse overhead.
+        self._warm_file_buffers: dict[str, tuple["LSPFileBuffer", float]] = {}
+        self._warm_buffer_ttl: float = 30.0
+
     @property
     def custom_settings(self) -> SolidLSPSettings.CustomLSSettings:
         """
@@ -1299,12 +1309,28 @@ class SolidLanguageServer(ABC):
             absolute_file_path = absolute_file_path.resolve()
         uri = absolute_file_path.as_uri()
 
+        # Lazy cleanup of expired warm buffers BEFORE the reuse decision: an expired buffer
+        # must be closed (didClose) and re-created with a fresh didOpen, not silently reused.
+        self._evict_expired_warm_buffers()
+
         if uri in self.open_file_buffers:
             fb = self.open_file_buffers[uri]
             assert fb.uri == uri
             assert fb.ref_count >= 1
 
             fb.ref_count += 1
+            if open_in_ls:
+                fb.ensure_open_in_ls()
+        elif uri in self._warm_file_buffers:
+            # Reuse a recently-closed buffer: the LSP document is still open
+            # on the server side, so we avoid a full didOpen (which sends the
+            # entire file content over stdin and forces the server to parse
+            # from scratch). ensure_open_in_ls will send a didChange if the
+            # file's mtime has changed since the buffer was warmed, or do
+            # nothing if the content is unchanged.
+            fb, _ = self._warm_file_buffers.pop(uri)
+            fb.ref_count = 1
+            self.open_file_buffers[uri] = fb
             if open_in_ls:
                 fb.ensure_open_in_ls()
         else:
@@ -1327,8 +1353,45 @@ class SolidLanguageServer(ABC):
         finally:
             fb.ref_count -= 1
             if fb.ref_count == 0:
-                fb.close()
+                # Move to warm cache instead of closing immediately.
+                # The LSP document stays open on the server side; if the
+                # file is reopened within the TTL, we avoid a full didOpen.
+                self._warm_file_buffers[uri] = (fb, monotonic() + self._warm_buffer_ttl)
                 del self.open_file_buffers[uri]
+
+    def _evict_expired_warm_buffers(self) -> None:
+        """Close and discard warm buffers whose TTL has expired."""
+        now = monotonic()
+        expired = [uri for uri, (_, expiry) in self._warm_file_buffers.items() if expiry <= now]
+        for uri in expired:
+            fb, _ = self._warm_file_buffers.pop(uri)
+            fb.close()
+
+    def close_all_warm_buffers(self) -> None:
+        """Close all warm buffers, sending didClose to the LSP for each.
+
+        Should be called when the language server is being shut down so that
+        no stale documents remain open on the server side.
+        """
+        for uri, (fb, _) in list(self._warm_file_buffers.items()):
+            fb.close()
+            del self._warm_file_buffers[uri]
+
+    def invalidate_warm_buffer(self, relative_file_path: str) -> None:
+        """Close and discard the warm buffer for the given file, if any.
+
+        Should be called when an external file change is detected (e.g. via
+        ``workspace/didChangeWatchedFiles``) so that the next ``open_file``
+        call creates a fresh buffer with a full didOpen, rather than reusing
+        a warm buffer whose cached content is stale.
+        """
+        absolute_file_path = Path(self.repository_root_path, relative_file_path)
+        if self._path_contains_dots(relative_file_path):
+            absolute_file_path = absolute_file_path.resolve()
+        uri = absolute_file_path.as_uri()
+        if uri in self._warm_file_buffers:
+            fb, _ = self._warm_file_buffers.pop(uri)
+            fb.close()
 
     @contextmanager
     def _open_file_context(
@@ -3221,6 +3284,10 @@ class SolidLanguageServer(ABC):
 
         :param shutdown_timeout: time, in seconds, to wait for the server to shutdown gracefully before killing it
         """
+        try:
+            self.close_all_warm_buffers()
+        except Exception as e:
+            log.warning(f"Exception while closing warm file buffers: {e}")
         try:
             self.server.stop(timeout=shutdown_timeout)
         except Exception as e:

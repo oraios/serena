@@ -12,6 +12,14 @@ Status of the `main` branch. Changes prior to the next official version change w
     see `CONTRIBUTING.md`
 
 * General:
+  - Perf: symbolic editing tools (e.g. `replace_symbol_body`) open and close the LSP document on
+    every operation; consecutive operations on the same file therefore re-sent the full file
+    content via didOpen and forced the language server to re-parse it. Recently closed file
+    buffers are now kept warm for 30 seconds and reused on reopen: the LSP document is updated
+    via didChange (or left untouched when the file did not change), and the didClose is deferred
+    until the buffer is evicted. A reproducible benchmark (`scripts/profile_warm_buffers.py`)
+    shows, for 20 sequential edits on a 5000-line file, didOpen/didClose reduced from 20/19 to
+    1/0 and a 45% reduction of bytes sent to the language server
   - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`

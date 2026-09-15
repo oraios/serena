@@ -362,6 +362,16 @@ class LanguageServerFileChangeNotifier:
             except Exception as e:
                 log.error("Failed to notify language server of watched file changes", exc_info=e)
 
+            # Invalidate warm buffers for changed/deleted files so that the
+            # next open_file creates a fresh buffer (full didOpen) instead of
+            # reusing a warm buffer whose cached content is stale.
+            for rel_path, change_type in events:
+                if change_type in (FileChangeType.Changed, FileChangeType.Deleted):
+                    try:
+                        ls.invalidate_warm_buffer(rel_path)
+                    except Exception:
+                        pass
+
             # A didChangeWatchedFiles(Created) notification alone is not enough for every backend
             # (observed with pyright) to fold a brand-new file into its cross-file reference graph;
             # an open/close cycle forces the parse+bind that Serena's own file tools trigger via

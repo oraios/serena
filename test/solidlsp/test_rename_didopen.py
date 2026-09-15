@@ -31,6 +31,8 @@ def test_request_rename_symbol_edit_opens_file_before_rename(tmp_path) -> None:
     language_server.repository_root_path = str(tmp_path)
     language_server.server_started = True
     language_server.open_file_buffers = {}
+    language_server._warm_file_buffers = {}
+    language_server._warm_buffer_ttl = 30.0
     language_server._encoding = "utf-8"
     language_server.language_id = "typescript"
     language_server.server = server
@@ -42,4 +44,7 @@ def test_request_rename_symbol_edit_opens_file_before_rename(tmp_path) -> None:
         new_name="y",
     )
     assert result is None
-    assert events == ["didOpen", "rename", "didClose"]
+    # with the warm file buffer cache, the buffer is not closed (didClose) when the
+    # open_file context exits: it is kept warm for the TTL and closed lazily later
+    assert events == ["didOpen", "rename"]
+    assert language_server._warm_file_buffers  # buffer retained for fast reopen
