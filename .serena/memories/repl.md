@@ -83,7 +83,10 @@ expression is the result. No `return` (a top-level `return` yields a SyntaxError
   (a capability constraint, e.g. clients that handle the REPL badly), with the user's preference choosing among them.
 - `included_apis`/`excluded_apis` (references `facade` or `facade.method`) in global config, context, modes,
   project config; applied in that order via `ApiScope` (exclusions first, then inclusions; later definitions win).
-  Optional methods and all methods of an excluded facade must be included explicitly.
+- Opt-in rule: methods of a facade that is not included (excluded, or optional without explicit inclusion) and
+  optional methods are enabled only if included explicitly; all other methods are enabled unless excluded.
+  Facades can be optional (`Facade.from_api(..., is_optional=True)`, e.g. `ext`, mirroring optional tools);
+  `Facade.is_enabled()` is derived: a facade is available iff it has at least one enabled method.
 - The REPL is rebuilt whenever the active tools are updated (mode switch, project activation).
 
 ## Availability policy

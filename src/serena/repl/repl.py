@@ -41,14 +41,9 @@ class FacadeAvailabilityInfo:
     def __init__(self):
         self.facades: list[FacadeAvailabilityInfo.FacadeInfo] = []
 
-    def add_facade(self, facade: Facade, is_enabled: bool):
-        def is_method_enabled(m: FacadeMethod) -> bool:
-            return is_enabled and m.enabled
-
-        methods_info = [
-            FacadeAvailabilityInfo.MethodInfo(name=method.name, is_enabled=is_method_enabled(method)) for method in facade.get_methods()
-        ]
-        self.facades.append(FacadeAvailabilityInfo.FacadeInfo(name=facade.name, is_enabled=is_enabled, methods=methods_info))
+    def add_facade(self, facade: Facade):
+        methods_info = [FacadeAvailabilityInfo.MethodInfo(name=method.name, is_enabled=method.enabled) for method in facade.get_methods()]
+        self.facades.append(FacadeAvailabilityInfo.FacadeInfo(name=facade.name, is_enabled=facade.is_enabled(), methods=methods_info))
 
 
 class SerenaReplEntrypoint:
@@ -68,9 +63,8 @@ class SerenaReplEntrypoint:
         self._facade_availability_info = FacadeAvailabilityInfo()
         registered_facade_names = []
         for facade in facades:
-            is_facade_enabled = api_scope.is_facade_enabled(facade.name)
-            self._facade_availability_info.add_facade(facade, is_facade_enabled)
-            if is_facade_enabled:
+            self._facade_availability_info.add_facade(facade)
+            if facade.is_enabled():
                 if facade.name in self._facades:
                     raise ValueError(f"Duplicate facade name: {facade.name}")
                 self._facades[facade.name] = facade

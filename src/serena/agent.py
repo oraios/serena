@@ -1344,7 +1344,7 @@ class SerenaAgent:
                 Facade.from_api(EditApi(self), api_scope),
                 Facade.from_api(MemoryApi(self), api_scope),
                 Facade.from_api(ShellApi(self), api_scope),
-                Facade.from_api(ExternalProjectsApi(self), api_scope),
+                Facade.from_api(ExternalProjectsApi(self), api_scope, is_optional=True),
             ]
             if self._language_backend.is_lsp():
                 facades.append(Facade.from_api(LspApi(self), api_scope))
