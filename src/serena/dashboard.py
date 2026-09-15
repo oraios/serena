@@ -1030,9 +1030,28 @@ class SerenaDashboardTrayManager:
             log.info("Unregistered instance on port %d", port)
             return {"status": "unregistered"}
 
+    @staticmethod
+    def _run_in_ui_thread(fn: Callable[[], None]) -> None:
+        """
+        Runs a UI mutation in the thread in which the platform's UI toolkit requires it to run.
+
+        On macOS, AppKit demands that mutations of the status item happen on the main thread, and
+        recent macOS versions terminate the process with SIGTRAP when they do not. The tray manager
+        reaches such mutations from Flask request handlers and from the alive-check thread, so the
+        call has to be marshalled. On other platforms it is made directly.
+
+        :param fn: the UI mutation to run
+        """
+        if sys.platform == "darwin":
+            from PyObjCTools import AppHelper
+
+            AppHelper.callAfter(fn)
+        else:
+            fn()
+
     def _update_menu(self) -> None:
         if self._tray_icon:
-            self._tray_icon.update_menu()
+            self._run_in_ui_thread(self._tray_icon.update_menu)
 
     def _build_menu_items(self) -> tuple[Any, ...]:
         """
