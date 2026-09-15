@@ -696,6 +696,32 @@ class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
         return status_message
 
 
+class RenameFileTool(Tool, ToolMarkerSymbolicEdit):
+    """
+    Renames or moves a file, updating the code that refers to it (imports) through the language server.
+    """
+
+    def apply(
+        self,
+        relative_path: str,
+        new_relative_path: str,
+    ) -> str:
+        """
+        Renames or moves the file at `relative_path` to `new_relative_path` and updates the code that refers to it —
+        the import statements in other files, as proposed by the language server (`workspace/willRenameFiles`).
+        The directory may change (a move); missing parent directories are created. Files only, not directories.
+        Afterwards, search the codebase for the old name to catch references the language server does not track
+        (strings, configuration, documentation) or does not rewrite (pyrefly leaves relative imports alone).
+
+        :param relative_path: the relative path of the file to rename or move
+        :param new_relative_path: the relative path the file shall have afterwards
+        :return: result summary naming how many files had their references updated
+        """
+        self.project.ls_sync_file_system_changes()
+        code_editor = self.create_ls_code_editor()
+        return code_editor.rename_file(relative_path, new_relative_path)
+
+
 class SafeDeleteSymbol(Tool, ToolMarkerSymbolicEdit):
     def apply(
         self,

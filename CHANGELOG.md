@@ -10,6 +10,15 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Source files now carry `SPDX-License-Identifier` headers
   - Contributions require acceptance of the new Contributor License Agreement (`CLA.md`), enforced via CLA assistant;
     see `CONTRIBUTING.md`
+* Tools:
+  - Add `rename_file`: renames or moves a file and updates the code that imports it, as the language server
+    proposes through `workspace/willRenameFiles` (Python via pyright/basedpyright/ty/pyrefly, TypeScript; other
+    servers that implement the request work unchanged). Files only; the tool's answer says when the server
+    proposed no edits, so the caller knows to search for the old name. With pyrefly, configure
+    `ls_specific_settings: {python_pyrefly: {indexing_mode: lazy-blocking}}`: in its default lazy-non-blocking
+    mode pyrefly may answer before its reverse-dependency graph is built and miss importers (measured: 1 of 5
+    dependents seen right after start-up, all 5 a few seconds later); in blocking mode the answer is complete,
+    the index completing cancels the first request and Serena's existing retry re-asks.
 
 * General:
   - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
@@ -52,6 +61,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     Serena's own tools to close the gap (#1852)
 
 * Language Servers:
+  - The Python servers (pyright, basedpyright, ty, pyrefly) and the TypeScript server advertise the
+    `workspace.fileOperations` (willRename/didRename) client capability.
   - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
     preserves explicit user settings across initialization and configuration requests (#1989)
     VTS initialization options now override defaults per top-level key rather than replacing the
