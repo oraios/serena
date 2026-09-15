@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from typing import Literal, NotRequired, TypedDict
 
 JB_EXTERNAL_FILE_PREFIX = "<ext:"

@@ -1,6 +1,7 @@
 """
 The Serena Model Context Protocol (MCP) Server
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import dataclasses
 import os
@@ -35,7 +36,7 @@ from serena.constants import (
 from serena.util.inspection import compute_language_server_support_composition
 from serena.util.text_utils import GlobMatcher
 from serena.util.yaml import YamlCommentNormalisation, load_yaml, normalise_yaml_comments, save_yaml, transfer_yaml_comments
-from solidlsp.ls_config import LanguageServerId
+from solidlsp.ls_config import LanguageServerId, LanguageServerIdLike, LanguageServerRegistry
 
 from ..analytics import RegisteredTokenCountEstimator
 from ..util.class_decorators import singleton
@@ -321,7 +322,7 @@ class ProjectConfigAutoGenerationMode(Enum):
 @dataclass(kw_only=True)
 class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
     project_name: str
-    language_servers: list[LanguageServerId]
+    language_servers: list[LanguageServerIdLike]
     ignored_paths: list[str] = field(default_factory=list)
     ls_workspace_folders: list[str] = field(default_factory=lambda: ["."])
     ls_additional_workspace_folders: list[str] = field(default_factory=list)
@@ -358,7 +359,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
     @classmethod
     def _determine_project_language_servers(
         cls, project_root: str, interactive: bool, serena_config: "SerenaConfig"
-    ) -> list[LanguageServerId]:
+    ) -> list[LanguageServerIdLike]:
         log.info("Determining suitable language servers for the project")
 
         # determine language servers to be considered and their priorities
@@ -452,7 +453,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
                     determined_languages = cls._determine_project_language_servers(
                         str(project_root), interactive=interactive, serena_config=serena_config
                     )
-                    languages_to_use = [l.value for l in determined_languages]
+                    languages_to_use = [l.get_key() for l in determined_languages]
             else:
                 languages_to_use = [lang.value for lang in languages]
             config_with_comments, _ = cls._load_yaml_dict(PROJECT_TEMPLATE_FILE)
@@ -580,19 +581,14 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         """
         # map languages to list of enum items, checking for errors
         lang_name_mapping = {"javascript": "typescript"}
-        ls_ids: list[LanguageServerId] = []
+        ls_ids: list[LanguageServerIdLike] = []
+        ls_registry = LanguageServerRegistry.get_instance()
         for ls_str in data["language_servers"]:
-            orig_language_str = ls_str
-            try:
-                ls_str = ls_str.lower()
-                if ls_str in lang_name_mapping:
-                    ls_str = lang_name_mapping[ls_str]
-                ls_id = LanguageServerId(ls_str)
-                ls_ids.append(ls_id)
-            except ValueError as e:
-                raise ValueError(
-                    f"Invalid language server: '{orig_language_str}'.\nValid values are: {[l.value for l in LanguageServerId]}"
-                ) from e
+            ls_str = ls_str.lower()
+            if ls_str in lang_name_mapping:
+                ls_str = lang_name_mapping[ls_str]
+            ls_id = ls_registry.resolve(ls_str)
+            ls_ids.append(ls_id)
 
         # Validate activation_command_timeout
         activation_command_timeout_raw = data.get("activation_command_timeout", 180.0)
@@ -669,7 +665,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
                 del d[k]
 
         # map fields using non-primitive types to a YAML-compatible representation
-        d["language_servers"] = [lang.value for lang in self.language_servers]
+        d["language_servers"] = [lang.get_key() for lang in self.language_servers]
         d["language_backend"] = self.language_backend.value if self.language_backend is not None else None
         d["line_ending"] = self.line_ending.value if self.line_ending is not None else None
 
@@ -958,6 +954,8 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
     the path to the configuration file to which updates of the configuration shall be saved;
     if None, the configuration is not saved to disk
     """
+    _projects_at_load: set[str] = field(default_factory=set, repr=False)
+    """Project roots present when this configuration instance was last persisted."""
 
     # *** static members ***
 
@@ -1095,6 +1093,8 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
                 project_config=project_config,
             )
             instance.projects.append(project)
+
+        instance._projects_at_load = {str(project.project_root) for project in instance.projects}
 
         # determine language backend
         language_backend = get_dataclass_default(SerenaConfig, "language_backend")
@@ -1295,22 +1295,38 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         self._persist_projects()
 
     def _persist_projects(self) -> None:
-        """
-        Persists the list of registered projects, merging it with the list currently found on disk
-        (parallel agent instances may have added or removed projects in the meantime).
+        """Persist this instance's project-list changes without undoing concurrent edits.
+
+        The disk copy is reloaded because multiple agent processes may update the global
+        configuration concurrently. The instance baseline lets us distinguish this instance's
+        removals and additions from changes made by another process: unchanged baseline projects
+        follow the current disk copy, while removed baseline projects are filtered out and newly
+        added instance projects are appended.
         """
         if self.config_file_path is None:
             return
+
         persisted = SerenaConfig.from_config_file()
+        current_projects_by_path = {str(project.project_root): project for project in self.projects}
+        current_paths = set(current_projects_by_path)
+        removed_paths = self._projects_at_load - current_paths
+        added_paths = current_paths - self._projects_at_load
+
         combined_projects = []
         handled_project_paths = set()
-        for p in persisted.projects + self.projects:
-            str_path = str(p.project_root)
-            if str_path not in handled_project_paths:
-                combined_projects.append(p)
-                handled_project_paths.add(str_path)
+        for project in persisted.projects:
+            project_path = str(project.project_root)
+            if project_path not in removed_paths:
+                combined_projects.append(project)
+                handled_project_paths.add(project_path)
+        for project_path in added_paths:
+            if project_path not in handled_project_paths:
+                combined_projects.append(current_projects_by_path[project_path])
+                handled_project_paths.add(project_path)
+
         persisted.projects = combined_projects
         persisted._save()
+        self._projects_at_load = current_paths
 
     def _save(self) -> None:
         """

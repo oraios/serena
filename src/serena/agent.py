@@ -1,6 +1,7 @@
 """
 The Serena Model Context Protocol (MCP) Server
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import json
 import multiprocessing
@@ -41,7 +42,7 @@ from serena.config.serena_config import (
     ToolInclusionDefinition,
 )
 from serena.dashboard import SerenaDashboardAPI, SerenaDashboardTrayManager, SerenaDashboardViewer, open_url_in_browser
-from serena.jetbrains import jetbrains_plugin_client
+from serena.jetbrains import launch_coordinator as jetbrains_launch_coordinator
 from serena.ls_manager import LanguageServerManager
 from serena.memories.memory_manager import MemoryManager
 from serena.project import Project
@@ -61,7 +62,7 @@ from serena.tools import (
 from serena.util.gui import system_has_usable_display
 from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
-from solidlsp.ls_config import LanguageServerId
+from solidlsp.ls_config import LanguageServerIdLike
 from solidlsp.util import subprocess_util
 from solidlsp.util.subprocess_util import terminate_process_tree_with_kill_fallback
 
@@ -1081,7 +1082,7 @@ class SerenaAgent:
         else:
             msg = f"The project with name '{proj.project_name}' at {proj.project_root} is activated.\n"
         if self._language_backend == LanguageBackend.LSP:
-            language_servers_str = ", ".join([ls.value for ls in proj.project_config.language_servers])
+            language_servers_str = ", ".join([ls.get_key() for ls in proj.project_config.language_servers])
             msg += f"Active language servers: {language_servers_str}.\n"
         msg += f"File encoding: {proj.project_config.encoding}.\n"
 
@@ -1326,18 +1327,13 @@ class SerenaAgent:
 
         # for JetBrains mode, search for plugin server and spawn IDE (if not found and launch command provided)
         elif self.get_language_backend().is_jetbrains():
-            try:
-                client = jetbrains_plugin_client.JetBrainsPluginClient.from_project(project, log_warning=False)
+            client = jetbrains_launch_coordinator.find_plugin_server(project)
+            if client is not None:
                 log.info("Found Serena JetBrains Plugin server: %s", client)
-            except jetbrains_plugin_client.ServerNotFoundError:
+            else:
                 log.info("Serena JetBrains Plugin server not found for project %s", project.project_name)
                 if self.serena_config.jetbrains_launch_command:
-                    cmd = subprocess_util.convert_shell_cmd([self.serena_config.jetbrains_launch_command, project.project_root])
-                    log.info("Launching IDE with command: %s", cmd)
-                    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-                    stdout, stderr = p.communicate()
-                    if p.returncode != 0:
-                        log.error(f"Failed to launch JetBrains IDE: {stderr.decode('utf-8')}")
+                    jetbrains_launch_coordinator.launch_and_wait_for_plugin_server(project, self.serena_config.jetbrains_launch_command)
 
     def activate_project_from_path_or_name(
         self, project_root_or_name: str, update_active_modes: bool = True, update_active_tools: bool = True
@@ -1441,7 +1437,7 @@ class SerenaAgent:
         """
         self.get_active_project_or_raise().create_language_server_manager()
 
-    def add_language_server(self, ls_id: LanguageServerId) -> None:
+    def add_language_server(self, ls_id: LanguageServerIdLike) -> None:
         """
         Adds a new language server to the active project, spawning the respective language server and updating the project configuration.
         The addition is scheduled via the agent's task executor and executed synchronously, i.e. the method returns
@@ -1449,16 +1445,16 @@ class SerenaAgent:
 
         :param ls_id: the language server to add
         """
-        self.execute_task(lambda: self.get_active_project_or_raise().add_language_server(ls_id), name=f"AddLanguage:{ls_id.value}")
+        self.execute_task(lambda: self.get_active_project_or_raise().add_language_server(ls_id), name=f"AddLanguage:{ls_id.get_key()}")
 
-    def remove_language_server(self, ls_id: LanguageServerId) -> None:
+    def remove_language_server(self, ls_id: LanguageServerIdLike) -> None:
         """
         Removes a language server from the active project, shutting down the respective server and updating the project configuration.
         The removal is scheduled via the agent's task executor and executed asynchronously.
 
         :param ls_id: the language to remove
         """
-        self.issue_task(lambda: self.get_active_project_or_raise().remove_language_server(ls_id), name=f"RemoveLanguage:{ls_id.value}")
+        self.issue_task(lambda: self.get_active_project_or_raise().remove_language_server(ls_id), name=f"RemoveLanguage:{ls_id.get_key()}")
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
         return self._all_tools[tool_class]
@@ -1503,7 +1499,7 @@ class SerenaAgent:
         tool_class = ToolRegistry().get_tool_class_by_name(tool_name)
         return self.get_tool(tool_class)
 
-    def get_active_language_server_ids(self) -> list[LanguageServerId]:
+    def get_active_language_server_ids(self) -> list[LanguageServerIdLike]:
         ls_manager = self.get_language_server_manager()
         if ls_manager is None:
             return []

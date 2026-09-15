@@ -604,6 +604,48 @@ class TestSerenaConfigLoadSave:
 
         assert len(resulting_config.projects) == 4
 
+    def test_remove_project_persists_across_reload(self):
+        """Removing a project must update the on-disk project registry."""
+        p1 = self._make_project_dir("project1", 'project_name: "project1"\nlanguages: ["python"]\n')
+        p2 = self._make_project_dir("project2", 'project_name: "project2"\nlanguages: ["python"]\n')
+        self._write_master_config([p1, p2])
+
+        config = SerenaConfig.from_config_file(generate_if_missing=False)
+        config.remove_project("project2")
+
+        reloaded = SerenaConfig.from_config_file(generate_if_missing=False)
+        assert [project.project_config.project_name for project in reloaded.projects] == ["project1"]
+
+    def test_remove_project_preserves_concurrent_addition(self):
+        """A removal must not discard a project added by another config instance."""
+        p1 = self._make_project_dir("project1", 'project_name: "project1"\nlanguages: ["python"]\n')
+        p2 = self._make_project_dir("project2", 'project_name: "project2"\nlanguages: ["python"]\n')
+        p3 = self._make_project_dir("project3", 'project_name: "project3"\nlanguages: ["python"]\n')
+        self._write_master_config([p1, p2])
+
+        removing_config = SerenaConfig.from_config_file(generate_if_missing=False)
+        adding_config = SerenaConfig.from_config_file(generate_if_missing=False)
+        adding_config.add_project_from_path(p3)
+        removing_config.remove_project("project2")
+
+        reloaded = SerenaConfig.from_config_file(generate_if_missing=False)
+        assert {project.project_config.project_name for project in reloaded.projects} == {"project1", "project3"}
+
+    def test_add_project_preserves_concurrent_removal(self):
+        """An addition must not resurrect a project removed by another config instance."""
+        p1 = self._make_project_dir("project1", 'project_name: "project1"\nlanguages: ["python"]\n')
+        p2 = self._make_project_dir("project2", 'project_name: "project2"\nlanguages: ["python"]\n')
+        p3 = self._make_project_dir("project3", 'project_name: "project3"\nlanguages: ["python"]\n')
+        self._write_master_config([p1, p2])
+
+        removing_config = SerenaConfig.from_config_file(generate_if_missing=False)
+        adding_config = SerenaConfig.from_config_file(generate_if_missing=False)
+        removing_config.remove_project("project2")
+        adding_config.add_project_from_path(p3)
+
+        reloaded = SerenaConfig.from_config_file(generate_if_missing=False)
+        assert {project.project_config.project_name for project in reloaded.projects} == {"project1", "project3"}
+
 
 class TestGetRegisteredProjectWithDanglingProject:
     """A registered project whose root directory was deleted (e.g. a removed git
@@ -723,3 +765,37 @@ class TestProjectConfigActivationCommand:
         data["activation_command_timeout"] = -10
         with pytest.raises(ValueError, match="activation_command_timeout must be positive"):
             ProjectConfig._from_dict(data, local_override_keys=[])
+
+
+class TestTrustedProjectPathPatterns:
+    """Pins the trust semantics that `serena_config.template.yml` documents by example."""
+
+    @staticmethod
+    def _config(*patterns: str) -> SerenaConfig:
+        return SerenaConfig(
+            gui_log_window=False,
+            web_dashboard=False,
+            trusted_project_path_patterns=list(patterns),
+        )
+
+    def test_bare_project_root_trusts_that_project(self):
+        """The documented way to trust a single project: its root path, without a trailing glob."""
+        root = "/opt/dev/projects/my_trusted_project"
+        assert self._config(root).is_trusted_project_path(root)
+
+    def test_project_root_with_trailing_glob_trusts_nothing(self):
+        """`<root>/**` matches only paths below the root, and trust is decided by the root itself.
+
+        This is why the template documents the bare form; the difference is invisible otherwise.
+        """
+        root = "/opt/dev/projects/my_trusted_project"
+        assert not self._config(root + "/**").is_trusted_project_path(root)
+
+    def test_parent_directory_glob_trusts_projects_below_it(self):
+        parent = self._config("/home/user/projects/**")
+        assert parent.is_trusted_project_path("/home/user/projects/some_project")
+        assert not parent.is_trusted_project_path("/home/user/projects")
+
+    def test_unrelated_path_is_not_trusted(self):
+        """Control: the patterns above are not vacuously true."""
+        assert not self._config("/opt/dev/projects/my_trusted_project", "/home/user/projects/**").is_trusted_project_path("/somewhere/else")

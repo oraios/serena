@@ -1,6 +1,7 @@
 """
 The Serena Model Context Protocol (MCP) Server
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import sys
 from collections.abc import AsyncIterator, Iterator
@@ -20,6 +21,7 @@ from mcp.types import ToolAnnotations
 from pydantic_settings import SettingsConfigDict
 from sensai.util import logging
 
+from serena import __version__
 from serena.agent import (
     SerenaAgent,
 )
@@ -390,6 +392,9 @@ class SerenaMCPFactory:
             port=port,
             instructions=instructions,
         )
+        # FastMCP currently falls back to the installed mcp SDK version when no version is set.
+        # Set the low-level server value explicitly so MCP clients identify Serena correctly.
+        mcp._mcp_server.version = __version__
         return mcp
 
     @asynccontextmanager

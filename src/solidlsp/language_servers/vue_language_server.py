@@ -2,6 +2,7 @@
 Vue Language Server implementation using @vue/language-server (Volar) with companion TypeScript LS.
 Operates in hybrid mode: Vue LS handles .vue files, TypeScript LS handles .ts/.js files.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os
@@ -36,17 +37,6 @@ log = logging.getLogger(__name__)
 
 class VueTypeScriptServer(TypeScriptLanguageServer):
     """TypeScript LS configured with @vue/typescript-plugin for Vue file support."""
-
-    @classmethod
-    @override
-    def get_language_server_id(cls) -> LanguageServerId:
-        """Return TYPESCRIPT since this is a TypeScript language server variant.
-
-        Note: VueTypeScriptServer is a companion server that uses TypeScript's language server
-        with the Vue TypeScript plugin. It reports as TYPESCRIPT to maintain compatibility
-        with the TypeScript language server infrastructure.
-        """
-        return LanguageServerId.TYPESCRIPT
 
     def get_source_fn_matcher(self) -> FilenameMatcher:
         # must override with Vue-specific matcher to ensure .vue files are included (as they can be discovered via references,
@@ -176,6 +166,7 @@ class VueLanguageServer(SolidLanguageServer):
             ProcessLaunchInfo(cmd=vue_lsp_executable_path, cwd=repository_root_path),
             "vue",
             solidlsp_settings,
+            cache_version_raw_document_symbols=2,
         )
         self.server_ready = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
@@ -868,7 +859,7 @@ class VueLanguageServer(SolidLanguageServer):
         return prefer_non_node_modules_definition(definitions)
 
     @override
-    def _request_document_symbols(
+    def _request_raw_document_symbols(
         self, relative_file_path: str, file_data: LSPFileBuffer | None
     ) -> list[SymbolInformation] | list[DocumentSymbol] | None:
         """
@@ -883,7 +874,7 @@ class VueLanguageServer(SolidLanguageServer):
         We filter out Property symbols that have a matching Variable with the same name
         at a different location (the definition), keeping only the definition.
         """
-        symbols = super()._request_document_symbols(relative_file_path, file_data)
+        symbols = super()._request_raw_document_symbols(relative_file_path, file_data)
 
         if symbols is None or len(symbols) == 0:
             return symbols

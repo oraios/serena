@@ -6,6 +6,7 @@ You can pass the following entries in ``ls_specific_settings["toml"]``:
     - taplo_version: Override the pinned Taplo version downloaded by Serena
       (default: the bundled Serena version).
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

@@ -2,17 +2,13 @@
 Regression test for #925: FsAutoComplete's selectionRange for a `module <Name>` declaration
 points at the `module` keyword rather than at `<Name>`, so hovering a module reports the
 generic keyword's docs instead of the module's own (confirmed by dsyme and MischaPanch in the
-issue thread). This pins FSharpLanguageServer._fix_module_selection_range and the
-request_document_symbols override directly, without spinning up FsAutoComplete: F# language
+issue thread). This pins FSharpLanguageServer._fix_module_selection_range directly, without spinning up FsAutoComplete: F# language
 server tests are unconditionally disabled (test/conftest.py, category 1, "F# language server is
 currently unreliable"), so a live-LS test can never run here or on CI.
 """
 
-from contextlib import contextmanager
-
 from solidlsp import ls_types
 from solidlsp.language_servers.fsharp_language_server import FSharpLanguageServer
-from solidlsp.ls import DocumentSymbols, SolidLanguageServer
 
 
 def _bare_fsharp_server() -> FSharpLanguageServer:
@@ -98,35 +94,3 @@ class TestFixModuleSelectionRange:
         fixed = server._fix_module_selection_range(symbol, file_content)
 
         assert fixed is symbol
-
-
-class TestRequestDocumentSymbolsWiring:
-    def test_fixes_every_symbol_in_the_tree_not_just_roots(self, monkeypatch) -> None:
-        """End-to-end wiring test: the override must fix nested symbols too, mirroring the
-        already-merged fortran_language_server.py recursive-fix pattern this follows.
-        """
-        outer = _module_symbol("Outer", line=0, start_char=0, end_char=6)
-        inner = _module_symbol("Inner", line=1, start_char=4, end_char=10)
-        outer["children"] = [inner]
-
-        file_content = "module Outer\n    module Inner =\n        let x = 1\n"
-
-        def fake_super_request_document_symbols(self, relative_file_path, file_buffer=None):
-            return DocumentSymbols([outer])
-
-        monkeypatch.setattr(SolidLanguageServer, "request_document_symbols", fake_super_request_document_symbols)
-
-        server = _bare_fsharp_server()
-
-        @contextmanager
-        def fake_open_file(relative_file_path):
-            yield type("FakeFileData", (), {"contents": file_content})()
-
-        monkeypatch.setattr(server, "open_file", fake_open_file)
-
-        result = server.request_document_symbols("Test.fs")
-
-        root = result.root_symbols[0]
-        assert root["selectionRange"]["start"] == {"line": 0, "character": 7}
-        child = root["children"][0]
-        assert child["selectionRange"]["start"] == {"line": 1, "character": 11}
