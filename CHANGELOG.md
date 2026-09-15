@@ -52,6 +52,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     Serena's own tools to close the gap (#1852)
 
 * Language Servers:
+  - Fix: Nixd could return a transient empty hover response while initial analysis was completing;
+    retry the request within a bounded interval and exercise Nix hover coverage against a supported
+    nixpkgs-backed selector (#1040)
   - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
     preserves explicit user settings across initialization and configuration requests (#1989)
     VTS initialization options now override defaults per top-level key rather than replacing the
