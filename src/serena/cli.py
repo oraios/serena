@@ -768,6 +768,27 @@ class ProjectCommands(AutoRegisteringGroup):
 
     @staticmethod
     @click.command(
+        "remove",
+        help="Remove a project from Serena's project registry. "
+        "The project's own files, including its project configuration, are left untouched.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument("project", type=PROJECT_TYPE)
+    def remove(project: str) -> None:
+        serena_config = SerenaConfig.from_config_file()
+        registered_project_names = serena_config.project_names
+        try:
+            registered_project = serena_config.get_registered_project(project)
+        except ValueError as e:
+            # raised when the name is ambiguous; the message names the candidate locations
+            raise click.ClickException(str(e))
+        if registered_project is None:
+            raise click.ClickException(f"No registered project found for '{project}'; registered project names: {registered_project_names}")
+        serena_config.remove_registered_project(registered_project)
+        click.echo(f"Removed project '{registered_project.project_name}' ({registered_project.project_root}) from the project registry.")
+
+    @staticmethod
+    @click.command(
         "index",
         help="Index a project by saving symbols to the LSP cache. Auto-creates project.yml if it doesn't exist.",
         context_settings={"max_content_width": _MAX_CONTENT_WIDTH},

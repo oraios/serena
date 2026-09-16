@@ -23,6 +23,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     FIFOs nor made non-blocking, so stderr writes there remain blocking (as before); the log
     file and the dashboard's in-memory buffer remain the lossless, authoritative streams
   - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
+  - Fix: importing Serena no longer loads the `anthropic` package unless the Anthropic token counter is
+    actually used; the unconditional import added seconds to CLI/MCP startup on some machines (#2012)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
   - Fix: `TextUtils.insert_text_at_position` returned a wrong position when the inserted text merged
@@ -41,6 +43,17 @@ Status of the `main` branch. Changes prior to the next official version change w
     exited 0 even when `FindReferencingSymbolsTool` had raised, because that failure was logged as
     a warning while the verdict checked `FindSymbolTool` only. A reference-search failure now fails
     the check; a symbol with no references is still a pass
+  - Add `project remove`, which unregisters a project from the project list in `serena_config.yml`,
+    addressed either by name or by path. Only the registry entry is removed; the project's own files,
+    including its project configuration, are left untouched (#2029)
+
+* Tools:
+  - Fix: the file-editing tools saved the edited file with `open(path, "w")`, which truncates it
+    before the new content is complete, so a crash, an OOM kill or a full disk partway through the
+    write could leave a source file empty or half-written. Saves now go through the same atomic
+    temp-file-plus-`os.replace` helper that the memory writes already use. The helper resolves
+    symlinks first, so a symlinked file is still written through to its target rather than being
+    replaced by a regular file (#1958)
 
 * Memories:
   - Fix: `save_memory`/`edit_memory` wrote directly to the memory file with `open(path, "w")`, which
@@ -62,6 +75,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     Serena's own tools to close the gap (#1852)
 
 * Language Servers:
+  - Fix: High-level document symbol cache was not invalidated when the LS-specific low-level result 
+    version changed
   - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
     preserves explicit user settings across initialization and configuration requests (#1989)
     VTS initialization options now override defaults per top-level key rather than replacing the
