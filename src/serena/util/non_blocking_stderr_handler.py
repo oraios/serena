@@ -24,8 +24,10 @@ class NonBlockingStderrHandler(logging.Handler):
     The write strategy is determined once at construction time and is one of:
 
     * non-blocking ``os.write`` on a pipe/socket file descriptor made non-blocking: when the
-      buffer is full (``BlockingIOError``) or only part of the message fits, the record is
-      dropped instead of blocking the logging lock
+      buffer is full (``BlockingIOError``), the record is dropped instead of blocking the
+      logging lock. Records longer than the fd's atomic write size (``PIPE_BUF``) are
+      truncated to it first, so that a partially free buffer can never elicit a partial
+      write (POSIX guarantees all-or-nothing writes only up to ``PIPE_BUF``)
     * plain ``os.write`` on other file descriptors (tty, regular file): these have no bounded
       buffer that a non-draining consumer would let fill up
     * plain ``stream.write`` when the stream has no usable file descriptor (e.g. ``StringIO``)
@@ -98,7 +100,15 @@ class NonBlockingStderrHandler(logging.Handler):
         Writes records on a pipe/socket file descriptor made non-blocking, so that a full
         buffer raises ``BlockingIOError`` (caught by the handler, which then drops the
         record) instead of blocking the caller.
+
+        Records longer than the fd's atomic write size are truncated before writing:
+        POSIX guarantees all-or-nothing behaviour for non-blocking pipe writes only up to
+        ``PIPE_BUF`` bytes (queryable via ``os.fpathconf(fd, "PC_PIPE_BUF")``) — a longer
+        record would be written partially when the buffer had some but not enough free
+        space, corrupting the stream with a truncated, newline-less record.
         """
+
+        _TRUNCATION_SUFFIX = "... [truncated]\n"
 
         def __init__(self, fd: int) -> None:
             super().__init__(fd)
@@ -108,6 +118,22 @@ class NonBlockingStderrHandler(logging.Handler):
                 # non-blocking mode is unavailable (e.g. os.set_blocking does not exist on
                 # Windows); degrade to blocking writes, as with a plain StreamHandler
                 pass
+            try:
+                atomic_write_size = os.fpathconf(fd, "PC_PIPE_BUF")
+            except (AttributeError, OSError, ValueError):
+                atomic_write_size = None
+            # POSIX requires PIPE_BUF >= 512; treat a missing/invalid value conservatively
+            self._atomic_write_size = atomic_write_size if atomic_write_size and atomic_write_size > 0 else 512
+
+        def write(self, msg: str) -> None:
+            encoded = msg.encode(errors="replace")
+            suffix = self._TRUNCATION_SUFFIX.encode()
+            if len(encoded) > self._atomic_write_size:
+                # reserve 3 bytes: a truncation point inside a multi-byte sequence may
+                # expand to a 3-byte replacement character when decoded
+                payload = encoded[: self._atomic_write_size - len(suffix) - 3].decode(errors="replace")
+                encoded = (payload + self._TRUNCATION_SUFFIX).encode(errors="replace")
+            os.write(self._fd, encoded)
 
     def __init__(self, stream=None, level: int = logging.NOTSET) -> None:
         """
