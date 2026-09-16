@@ -3,6 +3,7 @@ This file contains various utility functions like I/O operations, handling paths
 """
 # SPDX-License-Identifier: MIT
 
+import bisect
 import gzip
 import hashlib
 import logging
@@ -15,6 +16,7 @@ import tempfile
 import uuid
 import zipfile
 from collections.abc import Sequence
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path, PurePath
 from typing import Literal, cast
@@ -177,6 +179,75 @@ class TextStepper:
         lines.append(last_line)
 
         return lines
+
+
+@dataclass(frozen=True, kw_only=True)
+class LineCol:
+    """
+    Represents a position in a text as a pair of 0-based line and column numbers.
+    """
+
+    line: int
+    """the 0-based line number"""
+
+    col: int
+    """the 0-based column number"""
+
+
+class TextCoordinates:
+    r"""
+    Provides line/column coordinates for character indices in a text, backed by a privately cached table of line start
+    offsets.
+
+    The table is built once upon construction and mirrors the line semantics of :class:`TextStepper`: "\n", "\r\n"
+    and a bare "\r" are all treated as line separators (as defined by the Language Server Protocol). Resolving a
+    coordinate then requires only a binary search, independent of the text length.
+    """
+
+    def __init__(self, text: str):
+        """
+        :param text: the text in which character indices are to be located
+        """
+        self._text = text
+        self._line_starts = self._compute_line_starts()
+
+    def line_col_at_index(self, index: int) -> LineCol:
+        r"""
+        Returns the line/column coordinates corresponding to the given character index.
+
+        An index pointing at the "\n" of a "\r\n" sequence denotes the beginning of the following line
+        (column 0), in the same way as a cursor insertion position between "\r" and "\n" does.
+
+        :param index: the 0-based index in the text; must not exceed the text length
+        :return: the coordinates corresponding to the index
+        :raises InvalidTextLocationError: if the index is negative or greater than the text length
+        """
+        # determine the line containing the index, which is the last line whose start does not exceed the index
+        if index < 0 or index > len(self._text):
+            raise InvalidTextLocationError(f"{index=}")
+        line_num = bisect.bisect_right(self._line_starts, index) - 1
+        line_start = self._line_starts[line_num]
+
+        # an index pointing at the "\n" of a "\r\n" pair maps to the beginning of the following line
+        if index > 0 and self._text[index - 1] == "\r" and self._text[index : index + 1] == "\n":
+            return LineCol(line=line_num + 1, col=0)
+
+        return LineCol(line=line_num, col=index - line_start)
+
+    def _compute_line_starts(self) -> list[int]:
+        """
+        Computes the character offsets at which the lines of the text begin, using a TextStepper to process
+        the text line by line.
+
+        :return: a list where entry i is the 0-based character offset at which line i starts;
+            entry 0 is always 0
+        """
+        line_starts = [0]
+        text_stepper = TextStepper(self._text)
+        while text_stepper.step_line():
+            if text_stepper.is_newline:
+                line_starts.append(text_stepper.line_start_idx)
+        return line_starts
 
 
 class TextUtils:

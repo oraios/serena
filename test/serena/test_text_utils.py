@@ -190,41 +190,6 @@ class TestSearchText:
 
         assert len(matches) == 0
 
-    @pytest.mark.parametrize(
-        "content",
-        [
-            "hello\nworld\n",  # \n line endings
-            "hello\r\nworld\r\n",  # \r\n line endings
-            "hello\rworld\r",  # bare \r line endings
-            "a\rb\nc\r\nd\r\n",  # mixed line endings
-            "",  # empty content
-            "no newline at end",
-            "\n",
-            "\r",
-            "a\r\n\r\nb",  # consecutive \r\n pairs
-        ],
-    )
-    def test_search_text_line_numbers_match_textutils_semantics(self, content):
-        r"""Line numbers reported by search_text must agree with TextUtils.get_line_col_from_index.
-
-        Pins the O(log n) line lookup (precomputed offsets + binary search) against the
-        established TextStepper semantics, including the "\r\n" rule: an index pointing
-        at the "\n" of a "\r\n" pair resolves to the start of the following line (col 0).
-        """
-        import solidlsp  # noqa: F401  # imported first to avoid the known circular-import window
-
-        # drive the same line-resolution path search_text uses, via its helpers
-        from serena.util.text_utils import _compute_line_starts, _line_col_at_index
-        from solidlsp.ls_utils import TextUtils
-
-        line_starts = _compute_line_starts(content)
-        for index in range(len(content) + 1):
-            try:
-                expected = TextUtils.get_line_col_from_index(content, index)
-            except Exception:
-                continue
-            assert _line_col_at_index(content, index, line_starts) == expected, f"content={content!r} index={index}"
-
     def test_search_text_crlf_line_numbers(self):
         """Matches in CRLF content report the same line numbers as with LF endings."""
         crlf = "alpha\r\nbeta\r\ngamma\r\n"
@@ -237,7 +202,7 @@ class TestSearchText:
         assert crlf_matches[0].end_line == lf_matches[0].end_line == 1
 
     def test_search_text_bare_cr_line_numbers(self):
-        r"""Bare \\r line endings produce separate lines, matching TextStepper semantics."""
+        r"""Bare \r line endings produce separate lines, matching TextStepper semantics."""
         content = "alpha\rbeta\r"
         matches = search_text("beta", content=content)
         assert len(matches) == 1

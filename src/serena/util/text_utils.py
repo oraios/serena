@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import bisect
 import hashlib
 import logging
 import re
@@ -14,7 +13,7 @@ from joblib import Parallel, delayed
 from sensai.util.string import ToStringMixin
 
 from serena.util.file_proxy import FileCollection, FileProxy
-from solidlsp.ls_utils import TextUtils
+from solidlsp.ls_utils import TextCoordinates, TextUtils
 
 log = logging.getLogger(__name__)
 
@@ -151,11 +150,9 @@ def search_text(
     lines = TextUtils.split_lines(content)
     total_lines = len(lines)
 
-    # Precompute line start offsets once (O(n)) so that each match's line number
-    # can be resolved via binary search (O(log n)) instead of re-scanning the
-    # text from the beginning with TextStepper (O(n) per call).
-    # The semantics mirror TextStepper: \n, \r\n, and \r are all line separators.
-    line_starts = _compute_line_starts(content)
+    # precompute line start offsets once so that each match's coordinates can be resolved via binary search
+    # instead of re-scanning the text from the beginning for every match
+    coordinates = TextCoordinates(content)
 
     # For multiline matches, optionally use DOTALL so '.' matches newlines
     flags = (re.MULTILINE | re.DOTALL) if multiline else 0
@@ -166,9 +163,10 @@ def search_text(
         end_pos = match.end()
 
         # Find the line numbers for the start and end positions
-        start_line_num, _ = _line_col_at_index(content, start_pos, line_starts)
-        end_line_num, end_col = _line_col_at_index(content, end_pos, line_starts)
-        if end_line_num > start_line_num and end_col == 0:
+        start_loc = coordinates.line_col_at_index(start_pos)
+        end_loc = coordinates.line_col_at_index(end_pos)
+        start_line_num, end_line_num = start_loc.line, end_loc.line
+        if end_line_num > start_line_num and end_loc.col == 0:
             # `end_pos` is exclusive, so if it is at the start of a line, the match ends with the
             # preceding line's newline and does not extend into the line that `end_pos` points to
             end_line_num -= 1
@@ -192,66 +190,6 @@ def search_text(
         matches.append(MatchedConsecutiveLines(lines=context_lines, source_file_path=source_file_path))
 
     return matches
-
-
-def _compute_line_starts(content: str) -> list[int]:
-    r"""Compute the character offset at which each line begins.
-
-    Handles ``\\n``, ``\\r\\n``, and ``\\r`` line endings, matching the
-    semantics of :class:`TextStepper` in ``solidlsp.ls_utils``.
-
-    :param content: the full text to scan
-    :return: a list where ``result[i]`` is the 0-based character offset
-        at which line ``i`` starts; ``result[0]`` is always ``0``
-    """
-    starts = [0]
-    i = 0
-    n = len(content)
-    while i < n:
-        lf = content.find("\n", i)
-        if lf == -1:
-            break
-        cr = content.find("\r", i, lf)
-        if cr != -1:
-            next_start = cr + 2 if cr + 1 < n and content[cr + 1] == "\n" else cr + 1
-        else:
-            next_start = lf + 1
-        starts.append(next_start)
-        i = next_start
-    # Handle trailing \r-only newlines that have no \n after them
-    # (TextStepper processes these as separate lines too)
-    last = starts[-1]
-    while last < n:
-        cr = content.find("\r", last)
-        if cr == -1:
-            break
-        next_start = cr + 2 if cr + 1 < n and content[cr + 1] == "\n" else cr + 1
-        if next_start > n:
-            break
-        starts.append(next_start)
-        last = next_start
-    return starts
-
-
-def _line_col_at_index(content: str, index: int, line_starts: list[int]) -> tuple[int, int]:
-    r"""Compute the (0-based line, 0-based column) for a character index.
-
-    Mirrors the semantics of :meth:`TextUtils.get_line_col_from_index`: an index
-    that points at the ``\\n`` of a ``\\r\\n`` sequence belongs to the beginning of
-    the following line with column 0 (the ``\\n`` is the final character of the
-    newline sequence, and the position it denotes is the start of the next line).
-
-    :param content: the full text
-    :param index: the character index
-    :param line_starts: precomputed line start offsets from :func:`_compute_line_starts`
-    :return: a tuple (0-based line number, 0-based column number)
-    """
-    line_num = bisect.bisect_right(line_starts, index) - 1
-    # an index pointing at the "\n" of a "\r\n" pair maps to (next line, 0),
-    # exactly as TextUtils.get_line_col_from_index reports it
-    if index > 0 and content[index - 1] == "\r" and content[index : index + 1] == "\n":
-        return line_num + 1, 0
-    return line_num, index - line_starts[line_num]
 
 
 class GlobMatcher(ToStringMixin):

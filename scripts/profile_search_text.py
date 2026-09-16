@@ -22,8 +22,7 @@ import sys
 import time
 
 import solidlsp  # noqa: F401  # imported first: solidlsp must resolve before serena.util.text_utils (known circular-import window)
-from serena.util.text_utils import _compute_line_starts, _line_col_at_index
-from solidlsp.ls_utils import TextUtils
+from solidlsp.ls_utils import TextCoordinates, TextUtils
 
 
 def generate_synthetic_content(num_lines: int, match_identifier: str, match_frequency: float = 0.15) -> str:
@@ -67,14 +66,15 @@ def resolve_before(content: str, compiled_pattern: re.Pattern) -> list[tuple[int
 
 
 def resolve_after(content: str, compiled_pattern: re.Pattern) -> list[tuple[int, int]]:
-    """Resolves line coordinates the way this PR proposes (precomputed offsets + bisect)."""
-    line_starts = _compute_line_starts(content)
+    """Resolves line coordinates the way this PR proposes (cached line starts + binary search)."""
+    coordinates = TextCoordinates(content)
     results = []
     for match in compiled_pattern.finditer(content):
         start_pos, end_pos = match.start(), match.end()
-        s, _ = _line_col_at_index(content, start_pos, line_starts)
-        e, e_col = _line_col_at_index(content, end_pos, line_starts)
-        if e > s and e_col == 0:
+        s = coordinates.line_col_at_index(start_pos).line
+        end_loc = coordinates.line_col_at_index(end_pos)
+        e = end_loc.line
+        if e > s and end_loc.col == 0:
             e -= 1
         results.append((s, e))
     return results
