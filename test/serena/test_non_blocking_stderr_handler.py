@@ -1,4 +1,3 @@
-import fcntl
 import io
 import logging
 import os
@@ -123,10 +122,6 @@ class TestNonBlockingStderrHandlerDelivery:
         handler.emit(logging.LogRecord("n", logging.INFO, "p", 1, "hello", (), None))
         assert "hello" in buf.getvalue()
 
-    @pytest.mark.skipif(
-        not hasattr(fcntl, "F_SETPIPE_SZ") or not hasattr(os, "fpathconf"),
-        reason="requires F_SETPIPE_SZ to control the pipe capacity deterministically",
-    )
     def test_partial_free_pipe_drops_record_instead_of_truncating(self):
         """A pipe left with some free space (< PIPE_BUF) must drop a record that does not
         fit atomically (EAGAIN, caught by emit()) — never write a truncated record.
@@ -135,6 +130,9 @@ class TestNonBlockingStderrHandlerDelivery:
         may fill the remaining space partially. A truncated, newline-less record would
         corrupt the stream for the reader.
         """
+        if sys.platform == "win32" or not hasattr(os, "fpathconf"):
+            pytest.skip("requires POSIX pipes with a configurable capacity (F_SETPIPE_SZ)")
+        fcntl = pytest.importorskip("fcntl")  # POSIX-only module, absent on Windows
         read_fd, write_fd = os.pipe()
         try:
             fcntl.fcntl(write_fd, fcntl.F_SETPIPE_SZ, 8192)
