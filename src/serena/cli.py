@@ -349,9 +349,8 @@ class TopLevelCommands(AutoRegisteringGroup):
 
         # initialize logging, using INFO level initially (will later be adjusted by SerenaAgent according to the config)
         #   * memory log handler (for use by GUI/Dashboard)
-        #   * non-blocking stderr handler (for direct console output, which will also be captured by clients like Claude Desktop);
-        #     non-blocking because some MCP client hosts never read the spawned process' stderr, and a blocking handler would
-        #     eventually deadlock the whole application once the stderr buffer fills up (see the handler's docstring)
+        #   * non-blocking stderr handler (for direct console output, which will also be captured by clients like
+        #     Claude Desktop; see the handler's docstring for why it must be non-blocking)
         #   * file handler
         # (Note that stdout must never be used for logging, as it is used by the MCP server to communicate with the client.)
         Logger.root.setLevel(logging.INFO)
@@ -486,7 +485,7 @@ class TopLevelCommands(AutoRegisteringGroup):
     ) -> None:
         from serena.project_server import ProjectServer
 
-        # initialize logging (non-blocking stderr handler: see the start-mcp-server site above)
+        # initialize logging (non-blocking stderr handler: see the handler's docstring)
         Logger.root.setLevel(logging.INFO)
         formatter = logging.Formatter(SERENA_LOG_FORMAT)
         stderr_handler = NonBlockingStderrHandler()
