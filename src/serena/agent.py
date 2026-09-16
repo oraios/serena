@@ -53,8 +53,6 @@ from serena.repl.api.cfg_api import ConfigApi
 from serena.repl.api.edit_api import EditApi
 from serena.repl.api.ext_api import ExternalProjectsApi
 from serena.repl.api.fs_api import FsApi
-from serena.repl.api.jb_api import JetBrainsApi
-from serena.repl.api.lsp_api import LspApi
 from serena.repl.api.mem_api import MemoryApi
 from serena.repl.api.shell_api import ShellApi
 from serena.repl.facade import ApiScope, Facade
@@ -1319,6 +1317,19 @@ class SerenaAgent:
                 "Consider adjusting your configuration to include these tools if you want to use them."
             )
 
+    def create_default_facade_list(self, api_scope: ApiScope) -> list[Facade]:
+        """
+        :return: the default list of facades provided by Serena itself, not including any language backend-specific facades
+        """
+        return [
+            Facade.from_api(ConfigApi(self), api_scope),
+            Facade.from_api(FsApi(self), api_scope),
+            Facade.from_api(EditApi(self), api_scope),
+            Facade.from_api(MemoryApi(self), api_scope),
+            Facade.from_api(ShellApi(self), api_scope),
+            Facade.from_api(ExternalProjectsApi(self), api_scope, is_optional=True),
+        ]
+
     def get_repl(self) -> SerenaRepl:
         """
         :return: the REPL instance for this agent, creating it if necessary
@@ -1337,20 +1348,7 @@ class SerenaAgent:
             if not self._is_dashboard_openable(self.serena_config):
                 api_scope.process(NamedApiInclusionDefinition(name="Dashboard", excluded_apis=["cfg.open_dashboard"]))
 
-            # gather facades
-            facades = [
-                Facade.from_api(ConfigApi(self), api_scope),
-                Facade.from_api(FsApi(self), api_scope),
-                Facade.from_api(EditApi(self), api_scope),
-                Facade.from_api(MemoryApi(self), api_scope),
-                Facade.from_api(ShellApi(self), api_scope),
-                Facade.from_api(ExternalProjectsApi(self), api_scope, is_optional=True),
-            ]
-            if self._language_backend.is_lsp():
-                facades.append(Facade.from_api(LspApi(self), api_scope))
-            elif self._language_backend.is_jetbrains():
-                facades.append(Facade.from_api(JetBrainsApi(self), api_scope))
-
+            facades = self.create_default_facade_list(api_scope) + self._language_backend.create_facades(self, api_scope)
             self._repl = SerenaRepl(facades, api_scope)
         return self._repl
 

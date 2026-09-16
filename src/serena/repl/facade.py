@@ -570,8 +570,9 @@ class Facade:
     A named group of related operations which an LLM can invoke from REPL code.
     """
 
-    def __init__(self, name: str, description: str, types: Sequence[ReferencedType] = ()) -> None:
+    def __init__(self, name: str, description: str, is_optional: bool = False, types: Sequence[ReferencedType] = ()) -> None:
         # NOTE: attributes are set via object.__setattr__ because __getattr__ is overridden
+        object.__setattr__(self, "_is_optional", is_optional)
         object.__setattr__(self, "_name", name)
         object.__setattr__(self, "_description", description)
         object.__setattr__(self, "_methods", {})
@@ -601,7 +602,7 @@ class Facade:
         :param is_optional: whether the facade is optional (disabled by default and must be enabled explicitly)
         :return: the facade
         """
-        facade = Facade(api.get_name_(), api.get_description_(), api.get_referenced_types_())
+        facade = Facade(api.get_name_(), api.get_description_(), is_optional, api.get_referenced_types_())
         for name, member in inspect.getmembers(api, predicate=inspect.ismethod):
             method_info = get_facade_method_info(member)
             if method_info is None:
@@ -616,6 +617,12 @@ class Facade:
         :return: whether the facade is enabled
         """
         return len(self.get_enabled_methods()) > 0
+
+    def is_optional(self) -> bool:
+        """
+        :return: whether the facade is optional, i.e. disabled unless it is explicitly included
+        """
+        return self._is_optional
 
     def _discover_referenced_types(self) -> None:
         """

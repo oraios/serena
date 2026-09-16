@@ -44,7 +44,9 @@ from ..util.cli_util import ask_yes_no
 from ..util.dataclass import get_dataclass_default
 
 if TYPE_CHECKING:
+    from ..agent import SerenaAgent
     from ..project import Project
+    from ..repl.facade import ApiScope, Facade
     from ..tools.tools_base import Tool
 
 log = logging.getLogger(__name__)
@@ -293,6 +295,19 @@ class LanguageBackend(Enum):
                 }
             case _:
                 raise NotImplementedError()
+
+    def create_facades(self, agent: "SerenaAgent", api_scope: "ApiScope") -> list["Facade"]:
+        from ..repl.facade import Facade
+
+        if self.is_lsp():
+            from ..repl.api.lsp_api import LspApi
+
+            return [Facade.from_api(LspApi(agent), api_scope)]
+        elif self.is_jetbrains():
+            from ..repl.api.jb_api import JetBrainsApi
+
+            return [Facade.from_api(JetBrainsApi(agent), api_scope)]
+        return []
 
 
 class LineEnding(Enum):
