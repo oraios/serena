@@ -1,3 +1,4 @@
+import fcntl
 import io
 import logging
 import os
@@ -121,3 +122,35 @@ class TestNonBlockingStderrHandlerDelivery:
         handler = NonBlockingStderrHandler(stream=buf)
         handler.emit(logging.LogRecord("n", logging.INFO, "p", 1, "hello", (), None))
         assert "hello" in buf.getvalue()
+
+    @pytest.mark.skipif(
+        not hasattr(fcntl, "F_SETPIPE_SZ") or not hasattr(os, "fpathconf"),
+        reason="requires F_SETPIPE_SZ to control the pipe capacity deterministically",
+    )
+    def test_partial_free_pipe_drops_record_instead_of_truncating(self):
+        """A pipe left with some free space (< PIPE_BUF) must drop a record that does not
+        fit atomically (EAGAIN, caught by emit()) — never write a truncated record.
+
+        POSIX guarantees all-or-nothing writes only up to PIPE_BUF bytes; longer writes
+        may fill the remaining space partially. A truncated, newline-less record would
+        corrupt the stream for the reader.
+        """
+        read_fd, write_fd = os.pipe()
+        try:
+            fcntl.fcntl(write_fd, fcntl.F_SETPIPE_SZ, 8192)
+            filler = b"y" * (8192 - 2000)  # leave 2000 bytes free (< PIPE_BUF on Linux/macOS)
+            os.write(write_fd, filler)
+            stream = os.fdopen(write_fd, "w", encoding="utf-8")
+            handler = NonBlockingStderrHandler(stream=stream)
+
+            record_text = "m" + "x" * 5000  # > PIPE_BUF, > the 2000 free bytes
+            handler.emit(logging.LogRecord("n", logging.INFO, "p", 1, record_text, (), None))
+
+            data = os.read(read_fd, 65536)
+            assert data == filler, (
+                f"the pipe must contain exactly the filler bytes; got {len(data)} bytes "
+                f"(expected {len(filler)}) — a partial record was written"
+            )
+        finally:
+            os.close(read_fd)
+            stream.close()
