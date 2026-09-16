@@ -203,9 +203,9 @@ class TestPHPantom:
         with project_with_ls_context(LanguageServerId.PHP_PHPANTOM, str(repo_path)) as project:
             symbol_retriever = LanguageServerSymbolRetriever(project)
             symbols = symbol_retriever.find("Welcome", within_relative_path="src/Welcome.php")
-            info_by_symbol = symbol_retriever.request_info_for_symbol_batch(symbols)
+            info_batch = symbol_retriever.request_info_for_symbol_batch(symbols)
 
-        welcome_infos = [info for symbol, info in info_by_symbol.items() if symbol.name == "Welcome"]
+        welcome_infos = [info for symbol, info in info_batch.info_by_symbol.items() if symbol.name == "Welcome"]
         assert welcome_infos, "Expected Welcome symbol info to be available"
         assert any(info and "Welcome service docs." in info for info in welcome_infos)
 

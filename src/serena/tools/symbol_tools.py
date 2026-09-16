@@ -232,10 +232,12 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
             )
             for s in symbols
         ]
+        skipped_due_to_budget = 0
         if not include_body and include_info:
-            info_by_symbol = symbol_retriever.request_info_for_symbol_batch(symbols)
+            info_batch = symbol_retriever.request_info_for_symbol_batch(symbols)
+            skipped_due_to_budget = info_batch.skipped_due_to_budget
             for s, s_dict in zip(symbols, symbol_dicts, strict=True):
-                if symbol_info := info_by_symbol.get(s):
+                if symbol_info := info_batch.info_by_symbol.get(s):
                     # In python 3.15 we could specify extra_items=True in the TypedDict definition,
                     # https://peps.python.org/pep-0728/
                     # If we ever upgrade to 3.15, we can remove the type: ignore[typeddict-unknown-key]
@@ -243,6 +245,8 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
 
         grouped_symbol_dicts = self.symbol_dict_grouper.group(symbol_dicts)
         result = self._to_json(grouped_symbol_dicts)
+        if skipped_due_to_budget:
+            result = f"Note: symbol_info_budget exhausted; info omitted for {skipped_due_to_budget} symbol(s).\n" + result
         return self._limit_length(result, max_answer_chars, shortened_result_factories=[create_short_result_relative_path_to_name_paths])
 
     @classmethod
@@ -386,14 +390,18 @@ class FindImplementationsTool(Tool, ToolMarkerSymbolicRead):
         symbol_dicts = [
             dict(s.to_dict(kind=True, relative_path=True, depth=0, body=include_body, body_location=True)) for s in implementing_symbols
         ]
+        skipped_due_to_budget = 0
         if include_info:
-            info_by_symbol = symbol_retriever.request_info_for_symbol_batch(implementing_symbols)
+            info_batch = symbol_retriever.request_info_for_symbol_batch(implementing_symbols)
+            skipped_due_to_budget = info_batch.skipped_due_to_budget
             for s, s_dict in zip(implementing_symbols, symbol_dicts, strict=True):
-                if symbol_info := info_by_symbol.get(s):
+                if symbol_info := info_batch.info_by_symbol.get(s):
                     s_dict["info"] = symbol_info
                     s_dict.pop("name", None)  # name is included in the info
 
         result = self._to_json(symbol_dicts)
+        if skipped_due_to_budget:
+            result = f"Note: symbol_info_budget exhausted; info omitted for {skipped_due_to_budget} symbol(s).\n" + result
         return self._limit_length(result, max_answer_chars)
 
 

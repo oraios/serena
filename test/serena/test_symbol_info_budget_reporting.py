@@ -72,9 +72,11 @@ def test_find_symbol_distinguishes_budget_skip_from_missing_info(
         assert result != missing_info_result, (
             "find_symbol returned identical output for budget-skipped info and genuinely missing info: " + result
         )
-        output = json.loads(result)
+        note, _, json_part = result.partition("\n")
+        assert note == "Note: symbol_info_budget exhausted; info omitted for 1 symbol(s)."
+        output = json.loads(json_part)
         assert output[0]["info"] == "Documented function"
-        assert output[1]["info"] == "[Symbol information omitted because symbol_info_budget was exhausted.]"
+        assert "info" not in output[1]
         assert "Skipped information for 1 symbols because symbol_info_budget was exhausted" in caplog.text
     else:
         assert server.request_hover.call_count == 2
