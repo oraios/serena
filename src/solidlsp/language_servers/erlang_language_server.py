@@ -129,6 +129,10 @@ class ErlangLanguageServer(SolidLanguageServer):
             None,
             "erlang",
             solidlsp_settings,
+            # bumped from the implicit 1 used while Erlang was served by the archived erlang_ls:
+            # ELP reports a different raw document-symbol shape, so cache entries written by the
+            # old server must not be reused for unchanged files.
+            cache_version_raw_document_symbols=2,
         )
 
         self.set_request_timeout(120.0)
