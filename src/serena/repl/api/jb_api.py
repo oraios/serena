@@ -211,6 +211,7 @@ class JetBrainsApi(FacadeApi):
     ) -> JetBrainsSymbolCollection:
         """
         Finds symbols and code entities (classes, methods, etc.) based on the given name path pattern.
+
         The returned symbol information can be used for edits or further queries.
         Specify `depth > 0` to retrieve children (e.g., methods of a class).
         Important: through `search_deps=True` dependencies can be searched, which
@@ -283,9 +284,9 @@ class JetBrainsApi(FacadeApi):
     @facade_method(corresponding_tool=JetBrainsFindReferencingSymbolsTool)
     def find_referencing_symbols(self, name_path: str, relative_path: str, max_answer_chars: int = -1) -> JetBrainsSymbolCollection:
         """
-        Finds all symbols that reference the given symbol — its callers / usages / dependents, i.e. the
-        symbols whose own definition (e.g. a method body) contains a reference to it. For each, returns its
-        name path, file, and the surrounding line of code.
+        Finds all symbols that reference the given symbol (its callers / usages / dependents)
+        i.e. the symbols whose own definition (e.g. a method body) contains a reference to it.
+        For each, returns its name path, file, and the surrounding line of code.
 
         :param name_path: name path of the symbol for which to find references
         :param relative_path: the relative path to the file containing the symbol (must be a file, not a directory)
@@ -317,8 +318,9 @@ class JetBrainsApi(FacadeApi):
         self, relative_path: str, depth: int = -1, max_answer_chars: int = -1, include_file_documentation: bool = False
     ) -> JetBrainsSymbolsOverview:
         """
-        Gets an overview of the top-level symbols defined in the given file (classes, methods, fields) — its
-        STRUCTURE, without their bodies. This is the cheap, structure-first way to learn what a file
+        Gets an overview of the top-level symbols defined in the given file (classes, methods, fields).
+
+        Returns STRUCTURE only, without bodies. This is the cheap, structure-first way to learn what a file
         contains: it costs far less context than reading the whole file.
 
         :param relative_path: the relative path to the file to get the overview of
@@ -443,6 +445,7 @@ class JetBrainsApi(FacadeApi):
     ) -> JsonObject:
         """
         Renames a symbol, file or directory throughout the codebase.
+
         Note: renaming in comments/text is on a best-effort basis by the IDE; if the symbol name is non-unique, further
         verification is recommended.
 
@@ -473,6 +476,7 @@ class JetBrainsApi(FacadeApi):
     ) -> JsonObject:
         """
         Moves a symbol, file or directory to a different location and automatically updates all references to affected symbols.
+
         **Important**: this should always be preferred to naive moving (e.g. via file system operations or edits)
         as it is much more reliable and efficient. It is always safe to use. For some symbols, moving may not be applicable,
         and will result in no edits and a suitable error message.
@@ -510,6 +514,7 @@ class JetBrainsApi(FacadeApi):
     ) -> JsonObject:
         """
         Safely deletes a symbol, file, or directory, checking for usages first and propagating deletion, if desired.
+
         Propagation means it is possible to request deleting of usages and cleaning up of unused code.
         Propagation is powerful for cleaning up code but should be used with care.
         **Important**: this should always be preferred to naive deleting (e.g. via file system operations or edits).
@@ -534,13 +539,13 @@ class JetBrainsApi(FacadeApi):
     @facade_method(beta=True, can_edit=True, corresponding_tool=JetBrainsInlineSymbol)
     def inline_symbol(self, name_path: str, relative_path: str, keep_definition: bool = False) -> JsonObject:
         """
-        Inlines a symbol (usually a method/function, but also classes may be amenable to inlining,
-        which turns invocation into anonymous class creation),
-        replacing all call sites with the symbol's body.
+        Inlines a symbol, replacing all call sites with the symbol's body.
+
         **Important**: this should always be preferred to naive inlining (e.g. via searching for references and
         editing them).
 
-        :param name_path: the name path of the symbol to inline.
+        :param name_path: the name path of the symbol to inline (usually a method/function, but also classes may be amenable to inlining,
+            which turns invocation into anonymous class creation)
         :param relative_path: the relative path to the file containing the symbol to inline.
         :param keep_definition: whether to keep the original method definition after inlining all call sites.
             May be ignored in some cases (e.g. when inlining a class).
@@ -564,6 +569,7 @@ class JetBrainsApi(FacadeApi):
     ) -> JsonObject:
         """
         Runs IDE inspections (code analysis) on the given file and returns the problems found.
+
         This leverages the full power of JetBrains' static analysis engine, including language-specific
         inspections, type checking, potential bugs, code style issues, and more.
 
@@ -591,8 +597,9 @@ class JetBrainsApi(FacadeApi):
         self, language: str | None = None, group_path_contains: str | None = None, max_answer_chars: int = -1
     ) -> JsonObject:
         """
-        Lists the available IDE inspections. Use this to discover which inspections can be passed
-        to `run_inspections` via `inspection_names`.
+        Lists available IDE inspections.
+
+        Use this to discover which inspections can be passed to `run_inspections` via `inspection_names`.
 
         :param language: optional language to filter by (e.g. "Java", "Python", "Kotlin").
         :param group_path_contains: optional substring to match against the inspection group path
@@ -605,7 +612,7 @@ class JetBrainsApi(FacadeApi):
 
     # debugging
 
-    @facade_method(beta=True)
+    @facade_method()
     def debug_eval_info(self) -> str:
         """
         Provides usage information for the debug REPL (method `debug_eval`)
@@ -614,7 +621,7 @@ class JetBrainsApi(FacadeApi):
         """
         return self._agent.prompt_factory.create_info_jet_brains_debug_repl()
 
-    @facade_method(beta=True, corresponding_tool=JetBrainsDebugTool)
+    @facade_method(corresponding_tool=JetBrainsDebugTool)
     def debug_eval(self, expression: str, repl_key: str = "default") -> str:
         """
         Provides debugging functionality (run configs, breakpoints, stepping, inspection, and evaluation)

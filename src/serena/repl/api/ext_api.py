@@ -82,12 +82,16 @@ class ExternalProjectsApi(FacadeApi):
     @facade_method(corresponding_tool=QueryProjectTool)
     def project_context(self, project_name: str) -> ExternalProjectContextManager:
         """
-        Provides a context (for use in a `with` statement) within which all facades operate on the given external
-        project instead of the active one, with read-only access: e.g.
-        `with s.ext.project_context("other"): result = s.lsp.find_symbol("Foo")`.
+        Provides a context (for use in a `with` statement) within which all facades operate on the given external project
+        instead of the active one, with read-only access.
+
+        Example:
+        `with s.ext.project_context("other"): result = s.lsp.find_symbol("Foo")`
+
         Results obtained within the context can be used after it (they are self-contained).
 
         :param project_name: the name (or root path) of the project, as listed by `list_projects`
         :return: the context manager
+
         """
         return ExternalProjectContextManager(self._agent, project_name)

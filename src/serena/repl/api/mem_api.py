@@ -78,7 +78,7 @@ class MemoryApi(FacadeApi):
     @facade_method(corresponding_tool=ReadMemoryTool)
     def read_memory(self, memory_name: str) -> str:
         """
-        Reads a memory that is likely to be relevant to the current task, inferring relevance e.g. from the name.
+        Reads a memory.
 
         :param memory_name: the name of the memory
         :return: the memory's content
@@ -88,7 +88,8 @@ class MemoryApi(FacadeApi):
     @facade_method(can_edit=True, corresponding_tool=WriteMemoryTool)
     def write_memory(self, memory_name: str, content: str, max_chars: int = -1) -> str:
         """
-        Writes information about this project that can be useful for future tasks in md format.
+        Writes information (about the active project) to a memory.
+
         The name should be meaningful and can include "/" to organize into topics.
         If explicitly instructed, use the "global/" prefix for writing a memory that is shared across projects.
         References to other memories should be inside backticks and prefixed with mem:,

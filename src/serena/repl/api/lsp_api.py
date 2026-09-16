@@ -381,8 +381,9 @@ class LspApi(FacadeApi):
     @facade_method(uses_project_server=True, optional=True, corresponding_tool=RestartLanguageServerTool)
     def restart_language_server(self) -> str:
         """
-        Restarts the language server(s). Use this only on explicit user request or after confirmation;
-        it may be necessary if a language server hangs.
+        Restarts the language server(s).
+
+        Use this only on explicit user request or after confirmation; it may be necessary if a language server hangs.
 
         :return: a success message
         """
@@ -394,8 +395,9 @@ class LspApi(FacadeApi):
     @facade_method(uses_project_server=True, corresponding_tool=GetSymbolsOverviewTool)
     def get_symbols_overview(self, relative_path: str, depth: int = -1, max_answer_chars: int = -1) -> LspSymbolCollection:
         """
-        Gets an overview of the top-level symbols defined in the given file (classes, methods, fields) — its
-        STRUCTURE, without their bodies. This is the cheap, structure-first way to learn what a file
+        Gets an overview of the symbols defined in the given file (classes, methods, fields, functions, etc.)
+
+        Returns STRUCTURE only, without bodies. This is the cheap, structure-first way to learn what a file
         contains: it costs far less context than reading the whole file.
 
         :param relative_path: the relative path to the file to get the overview of
@@ -450,6 +452,7 @@ class LspApi(FacadeApi):
     ) -> LspSymbolCollection:
         """
         Finds symbols and code entities (classes, methods, etc.) based on the given name path pattern.
+
         The returned symbol information can be used for edits or further queries.
         Specify `depth > 0` to also retrieve children/descendants (e.g., methods of a class).
 
@@ -534,8 +537,9 @@ class LspApi(FacadeApi):
         max_answer_chars: int = -1,
     ) -> LspReferenceCollection:
         """
-        Finds references to the symbol at the given `name_path`. The result will contain metadata about the referencing symbols
-        as well as a short code snippet around the reference.
+        Finds references to the symbol at the given `name_path`.
+
+        The result will contain metadata about the referencing symbols as well as a short code snippet around the reference.
 
         :param name_path: name path of the symbol
         :param relative_path: the relative path to the file containing the symbol for which to find references.
@@ -656,7 +660,9 @@ class LspApi(FacadeApi):
         self, relative_path: str, start_line: int = 0, end_line: int = -1, min_severity: int = 4, max_answer_chars: int = -1
     ) -> LspDiagnostics:
         """
-        Gets diagnostics for a file. Diagnostics are grouped as `relative_path -> severity -> name_path -> diagnostics_results`.
+        Gets diagnostics for a file.
+
+        Diagnostics are grouped as `relative_path -> severity -> name_path -> diagnostics_results`.
         If a diagnostic cannot be mapped to a symbol, it is grouped under the special name path `<file>`.
 
         :param relative_path: the relative path to the file to inspect.
@@ -694,9 +700,10 @@ class LspApi(FacadeApi):
         max_answer_chars: int = -1,
     ) -> LspDiagnostics:
         """
-        Gets diagnostics for the specified symbol. When `check_symbol_references` is true, diagnostics for all
-        referencing symbols are also included. The result is grouped as
-        `relative_path -> severity -> name_path -> diagnostics_results`.
+        Gets diagnostics for the specified symbol.
+
+        When `check_symbol_references` is true, diagnostics for all referencing symbols are also included.
+        The result is grouped as `relative_path -> severity -> name_path -> diagnostics_results`.
 
         :param name_path: the name path of the symbol to inspect.
         :param reference_file: optional file path used to disambiguate the symbol search.
