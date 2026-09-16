@@ -433,6 +433,27 @@ class TestPreToolUseRemindAboutSerenaHook:
         assert hook.is_read_call() is True
         assert hook.is_read_code_file_call() is True
 
+    @pytest.mark.parametrize("client", [HookClient.CLAUDE_CODE, HookClient.CODEBUDDY])
+    @pytest.mark.parametrize(
+        "command",
+        ["cat config/deploy.yaml", "rg -n foo src/main.py"],
+        ids=["read-like", "grep-like"],
+    )
+    def test_non_shell_mcp_tool_with_command_parameter_is_not_classified(self, client: HookClient, command: str, tmp_path: Path):
+        """An MCP tool that merely names a parameter ``command`` must not count as a shell read/grep.
+
+        Only the client's native shell tool (``Bash``) carries a real command line; any other tool
+        whose payload happens to have a ``command`` field would otherwise feed the read/grep
+        counters and, past the threshold, get denied although it never touched a shell.
+        """
+        payload = _base_input("mcp__deploy__run_task", tool_input={"command": command, "task_name": "deploy"})
+        with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            hook = PreToolUseRemindAboutSymbolicToolsHook(client)
+
+        assert hook.is_grep_call() is False
+        assert hook.is_read_call() is False
+        assert hook.is_read_file_call() is False
+
     def test_malformed_shell_command_does_not_raise(self, tmp_path: Path):
         payload = _base_input("Bash", tool_input={"command": "rg 'unterminated"})
         with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):

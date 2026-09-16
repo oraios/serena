@@ -294,6 +294,14 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
     _SHELL_COMMAND_SEPARATORS: frozenset[str] = frozenset(("&&", "||", ";", "|", "&"))
     _SHELL_COMMAND_WRAPPERS: frozenset[str] = frozenset(("command", "exec"))
 
+    #: Tool names that carry a *native* shell command line for clients that address their
+    #: shell by a fixed tool name (Claude Code / CodeBuddy's ``Bash`` tool). Lowercase because
+    #: :attr:`_tool_name` is lowercased on ingest. Used to gate shell-command classification so
+    #: that an unrelated MCP tool which merely happens to name a parameter ``command`` is not
+    #: mistaken for a shell read/grep. Codex and Grok are excluded on purpose: their shell tool
+    #: names vary across releases, and their payloads are already command-keyed on ``main``.
+    _NATIVE_SHELL_TOOL_NAMES: frozenset[str] = frozenset(("bash",))
+
     #: file suffixes for source-like files where symbolic tools are usually more
     #: appropriate than repeated raw reads. Lowercase and extension-only.
     #: Note: ``search_for_pattern`` is always available regardless of extension and
@@ -451,10 +459,19 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             return [(self._command_name, arguments)]
         return []
 
+    def _is_native_shell_tool(self) -> bool:
+        """:return: whether the tool name is the client's native shell tool.
+
+        Guards the shell-command classification for clients whose shell is addressed by a fixed
+        tool name, so that an unrelated MCP tool carrying a ``command`` parameter is not counted
+        as a read/grep (and eventually denied) even though it never touched a shell.
+        """
+        return self._tool_name in self._NATIVE_SHELL_TOOL_NAMES
+
     def is_grep_call(self) -> bool:
         shell_grep = any(name in self._GREP_SHELL_COMMANDS for name, _ in self._shell_command_invocations())
         if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
-            return self._tool_name == "grep" or "search_for_pattern" in self._tool_name or shell_grep
+            return self._tool_name == "grep" or "search_for_pattern" in self._tool_name or (self._is_native_shell_tool() and shell_grep)
         if self._client in (HookClient.GROK, HookClient.CODEX):
             return self._tool_name == "grep" or shell_grep
         # heuristic for other clients
@@ -463,7 +480,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
     def is_read_call(self) -> bool:
         shell_read = any(name in self._READ_SHELL_COMMANDS for name, _ in self._shell_command_invocations())
         if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
-            return self._tool_name == "read" or "read_file" in self._tool_name or shell_read
+            return self._tool_name == "read" or "read_file" in self._tool_name or (self._is_native_shell_tool() and shell_read)
         if self._client in (HookClient.GROK, HookClient.CODEX):
             return self._tool_name == "read_file" or shell_read
         # heuristic for other clients
