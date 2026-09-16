@@ -1,6 +1,7 @@
 """
 Provides Java specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Java.
 """
+# SPDX-License-Identifier: MIT
 
 import dataclasses
 import hashlib

@@ -1,6 +1,7 @@
 """
 CSharp Language Server using Roslyn Language Server (Official Roslyn-based LSP server from NuGet.org)
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

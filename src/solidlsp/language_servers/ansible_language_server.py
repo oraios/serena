@@ -2,6 +2,7 @@
 Provides Ansible specific instantiation of the LanguageServer class using ansible-language-server.
 Contains various configurations and settings specific to Ansible YAML files (playbooks, roles, etc.).
 """
+# SPDX-License-Identifier: MIT
 
 import fnmatch
 import logging

@@ -1,6 +1,7 @@
 """
 Provides PHP specific instantiation of the LanguageServer class using PHPantom.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

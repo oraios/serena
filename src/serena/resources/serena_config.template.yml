@@ -210,9 +210,13 @@ project_serena_folder_location: "$projectDir/.serena"
 #       ?  matches any single character except path separators
 #   [abc]  matches any single character in the set (here: a, b, or c)
 # Path separators are normalised internally, so on Windows, both / and \ can be used in the patterns.
+# A pattern is matched against the project's root path itself. To trust one specific project, therefore
+# give its root path as-is: appending "/**" to it matches only paths *below* the root and consequently
+# matches no project root at all.
 # Example:
 #   trusted_project_path_patterns:
-#     - /home/user/projects/**
+#     - /opt/dev/projects/my_trusted_project   # trusts exactly this project
+#     - /home/user/projects/**                 # trusts every project located below this directory
 #     - C:\Users\Anna\Dev\work\**
 # The pattern "**" matches any project path, so it can be used to trust all projects.
 trusted_project_path_patterns: []

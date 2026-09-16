@@ -15,6 +15,7 @@ Example configuration for large projects:
       kotlin:
         jvm_options: '-Xmx4G -XX:+UseG1GC'
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

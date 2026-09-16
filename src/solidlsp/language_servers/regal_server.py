@@ -1,4 +1,5 @@
 """Regal Language Server implementation for Rego policy files."""
+# SPDX-License-Identifier: MIT
 
 import logging
 import shutil
