@@ -19,8 +19,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     observed in practice as a tool whose work completed in milliseconds but never returned its
     result, surfacing as a `tool_timeout` exactly `tool_timeout` seconds later. The stderr
     handler is now non-blocking (direct writes on a non-blocking fd for pipes/sockets, dropping
-    records when the buffer is full); the log file and the dashboard's in-memory buffer remain
-    the lossless, authoritative streams
+    records when the buffer is full); on Windows, anonymous pipes can neither be detected as
+    FIFOs nor made non-blocking, so stderr writes there remain blocking (as before); the log
+    file and the dashboard's in-memory buffer remain the lossless, authoritative streams
   - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
