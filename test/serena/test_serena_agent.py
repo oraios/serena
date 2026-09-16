@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from copy import copy
 from dataclasses import dataclass
 from typing import Literal, cast
+from unittest.mock import patch
 
 import pytest
 from _pytest.mark import Mark, MarkDecorator, ParameterSet
@@ -1411,11 +1412,27 @@ class TestSerenaAgent:
     def test_get_symbols_overview_directory_raises_when_exceeds_max_files(self, serena_agent: SerenaAgent):
         """
         Tests that giving a directory with more analyzable files than max_files
-        raises ValueError with guidance to narrow the path (Issue #1412 maintainer feedback).
+        raises ValueError with guidance to narrow the path, and that the guard fires
+        before any document-symbol request is issued (Issue #1412 maintainer feedback).
         """
         overview_tool = serena_agent.get_tool(GetSymbolsOverviewTool)
-        with pytest.raises(ValueError, match="max_files=1"):
+        lang_server = next(serena_agent.get_language_server_manager_or_raise().iter_language_servers())
+
+        call_count = 0
+        original_request = lang_server.request_document_symbols
+
+        def counting_request_document_symbols(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            return original_request(*args, **kwargs)
+
+        with (
+            patch.object(lang_server, "request_document_symbols", counting_request_document_symbols),
+            pytest.raises(ValueError, match="max_files=1"),
+        ):
             overview_tool.apply(relative_path="test_repo", depth=0, max_files=1)
+
+        assert call_count == 0, f"Expected the max_files guard to fire before any LSP request, got {call_count} document-symbol requests"
 
     @pytest.mark.parametrize(
         "serena_agent",

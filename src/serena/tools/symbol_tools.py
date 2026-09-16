@@ -106,17 +106,31 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
 
     def _apply_directory(self, relative_path: str, depth: int = 0, max_answer_chars: int = -1, max_files: int = 20) -> str:
         symbol_retriever = self.create_language_server_symbol_retriever()
-        path_to_symbols = symbol_retriever.get_symbol_overview(relative_path)
+        lang_server = symbol_retriever.get_language_server(relative_path)
 
-        total_files = len(path_to_symbols)
+        # Pre-count the files the directory walk would analyze, applying the same ignore rules as
+        # request_full_symbol_tree, so that max_files bounds the language-server work (one
+        # document-symbol request per file) rather than only the size of the returned JSON.
+        counted_files: list[str] = []
+        for root, dirs, files in os.walk(os.path.join(self.project.project_root, relative_path)):
+            rel_root = os.path.relpath(root, self.project.project_root)
+            dirs[:] = [d for d in dirs if not lang_server.is_ignored_path(os.path.join(rel_root, d))]
+            for file_name in files:
+                rel_file_path = os.path.join(rel_root, file_name)
+                if not lang_server.is_ignored_path(rel_file_path):
+                    counted_files.append(rel_file_path)
+
+        total_files = len(counted_files)
         if total_files > max_files:
-            sample = list(path_to_symbols.keys())[:5]
+            sample = counted_files[:5]
             raise ValueError(
                 f"Directory {relative_path} contains {total_files} analyzable files, which exceeds "
                 f"max_files={max_files}. Narrow the path to a more specific subdirectory, or learn the "
                 f"repository layout from memories before asking for a broad overview. "
                 f"Sample files found: {sample}"
             )
+
+        path_to_symbols = symbol_retriever.get_symbol_overview(relative_path)
 
         def child_inclusion_predicate(s: LanguageServerSymbol) -> bool:
             return not s.is_low_level()
