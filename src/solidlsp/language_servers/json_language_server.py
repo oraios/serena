@@ -2,6 +2,7 @@
 Provides JSON specific instantiation of the LanguageServer class using vscode-json-languageserver.
 Contains various configurations and settings specific to JSON files.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

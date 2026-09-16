@@ -5,6 +5,7 @@ Both Godot 3 and Godot 4 (tested through 4.6.x) use this port.
 
 The editor must be open with its built-in language server enabled (default).
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

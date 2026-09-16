@@ -1,4 +1,5 @@
 """Haxe language server integration using vshaxe/haxe-language-server."""
+# SPDX-License-Identifier: MIT
 
 import glob
 import hashlib

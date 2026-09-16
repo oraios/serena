@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 import dataclasses
 import hashlib
 import json
@@ -31,7 +33,7 @@ from solidlsp.dependency_provider import (
     LanguageServerDependencyProviderUvx,
 )
 from solidlsp.initialize_params import DefaultInitializeParamsBuilder, InitializeParamsBuilder
-from solidlsp.ls_config import FilenameMatcher, LanguageServerConfig, LanguageServerId
+from solidlsp.ls_config import FilenameMatcher, LanguageServerConfig
 from solidlsp.ls_exceptions import InvalidTextLocationError, SolidLSPException
 from solidlsp.ls_process import DEFAULT_LS_REQUEST_TIMEOUT, LanguageServerInterface, StdioLanguageServer
 from solidlsp.ls_types import UnifiedSymbolInformation
@@ -416,10 +418,6 @@ class SolidLanguageServer(ABC):
             return logging.INFO
 
     @classmethod
-    def get_language_server_id(cls) -> LanguageServerId:
-        return LanguageServerId.from_ls_class(cls)
-
-    @classmethod
     def supports_implementation_request(cls) -> bool:
         """
         Return whether this language server supports ``textDocument/implementation``.
@@ -514,7 +512,7 @@ class SolidLanguageServer(ABC):
         """
         self.config = config
         self._solidlsp_settings = solidlsp_settings
-        ls_id = self.get_language_server_id()
+        ls_id = config.ls_id
         self._custom_settings = solidlsp_settings.get_ls_specific_settings(ls_id)
         """
         the (user-provided) language server-specific settings
@@ -533,7 +531,7 @@ class SolidLanguageServer(ABC):
         default language identifier to be passed to the language server in `textDocument/didOpen` notifications.
         """
         self.open_file_buffers: dict[str, LSPFileBuffer] = {}
-        self.ls_id = self.get_language_server_id()
+        self.ls_id = ls_id
         """
         identifies the language server (not to be confused with the language_id passed to the language server)
         """
@@ -2959,7 +2957,7 @@ class SolidLanguageServer(ABC):
         to the high-level document symbol information.
 
         Language servers must implement this method/change the return value if
-        the `request_document_symbols` implementation (or any of the methods called by it)
+        the `_build_document_symbols_from_raw_symbols` implementation (or any of the methods called by it)
         are changed to modify the returned content.
 
         Whenever the value changes, the high-level document symbols cache will be invalidated and re-populated.
@@ -2986,10 +2984,8 @@ class SolidLanguageServer(ABC):
         high_level_fingerprint = self._document_symbols_cache_fingerprint()
         if high_level_fingerprint is not None:
             version.append(high_level_fingerprint)
-        raw_fingerprint = self._raw_document_symbols_cache_fingerprint()
-        if raw_fingerprint is not None:
-            version.append(raw_fingerprint)
-        return version[0] if len(version) == 1 else tuple(version)
+        version.append(self._raw_document_symbols_cache_version())
+        return tuple(version)
 
     def _save_raw_document_symbols_cache(self) -> None:
         cache_file = self.cache_dir / self.RAW_DOCUMENT_SYMBOL_CACHE_FILENAME
