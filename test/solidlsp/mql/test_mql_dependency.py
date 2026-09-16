@@ -47,10 +47,21 @@ def _expected_binary_name() -> str:
     """Binary filename the provider resolves for the current platform.
 
     The win-x64 RuntimeDependency carries the ``.exe`` suffix
-    (``mql-language-server.py``), so expected paths and pre-seeded fake
+    (``mql_language_server.py``), so expected paths and pre-seeded fake
     binaries must match it exactly.
     """
     return "mql-lsp-server.exe" if _get_platform_id() == PlatformId.WIN_x64 else "mql-lsp-server"
+
+
+def _skip_if_real_downloads_disabled() -> None:
+    """Skips the calling test when real GitHub downloads are disabled.
+
+    Network-dependent tests validate the pinning end to end and keep running
+    in CI; ``MQL_SKIP_REAL_DOWNLOAD_TESTS=1`` is a local escape hatch so flaky
+    GitHub/rate-limit conditions cannot break a local batch.
+    """
+    if os.environ.get("MQL_SKIP_REAL_DOWNLOAD_TESTS") == "1":
+        pytest.skip("MQL_SKIP_REAL_DOWNLOAD_TESTS=1 (network-dependent test disabled)")
 
 
 def _write_fake_binary(executable_path: str) -> None:
@@ -128,12 +139,16 @@ class TestMqlShaResolution:
         (``<sha256>  ./<asset>`` lines, ``#`` comments) into a basename→digest map
         that agrees with the pinned DEFAULT digests.
         """
+        _skip_if_real_downloads_disabled()
+
         checksums = _fetch_release_checksums(DEFAULT_MQL_VERSION)
         for platform_key, basename in _ASSET_BASENAME_BY_PLATFORM.items():
             assert checksums[basename] == DEFAULT_MQL_SHA256_BY_PLATFORM[platform_key], platform_key
 
     def test_fetch_release_checksums_missing_version_raises(self) -> None:
         """A version without a release/CHECKSUMS.txt is refused, not silently unverified."""
+        _skip_if_real_downloads_disabled()
+
         with pytest.raises(SolidLSPException, match="CHECKSUMS.txt"):
             _fetch_release_checksums("v0.0.0-does-not-exist")
 
@@ -541,8 +556,7 @@ class TestMqlRealBinaryInstall:
         Skipped when MQL_SKIP_REAL_DOWNLOAD_TESTS=1 so flaky GitHub/rate-limit
         conditions cannot break the CI batch.
         """
-        if os.environ.get("MQL_SKIP_REAL_DOWNLOAD_TESTS") == "1":
-            pytest.skip("MQL_SKIP_REAL_DOWNLOAD_TESTS=1 (network-dependent test disabled)")
+        _skip_if_real_downloads_disabled()
 
         provider = _make_provider(tmp_path)
 
