@@ -133,7 +133,10 @@ class TestNonBlockingStderrHandlerDelivery:
         if sys.platform == "win32" or not hasattr(os, "fpathconf"):
             pytest.skip("requires POSIX pipes with a configurable capacity (F_SETPIPE_SZ)")
         fcntl = pytest.importorskip("fcntl")  # POSIX-only module, absent on Windows
+        if not hasattr(fcntl, "F_SETPIPE_SZ"):
+            pytest.skip("requires F_SETPIPE_SZ to configure the pipe capacity (Linux-specific)")
         read_fd, write_fd = os.pipe()
+        stream = None
         try:
             fcntl.fcntl(write_fd, fcntl.F_SETPIPE_SZ, 8192)
             filler = b"y" * (8192 - 2000)  # leave 2000 bytes free (< PIPE_BUF on Linux/macOS)
@@ -151,4 +154,5 @@ class TestNonBlockingStderrHandlerDelivery:
             )
         finally:
             os.close(read_fd)
-            stream.close()
+            if stream is not None:
+                stream.close()
