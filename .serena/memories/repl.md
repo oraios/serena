@@ -5,6 +5,9 @@ whose attributes are facades (`s.lsp`, `s.edit`, `s.fs`, `s.mem`, `s.shell`, `s.
 Code runs like a notebook cell (module-level exec in the session namespace); the value of a trailing
 expression is the result. No `return` (a top-level `return` yields a SyntaxError with a hint).
 
+IMPORTANT: The REPL interface is a BETA feature. If you encounter any issues, please report them
+but do not submit PRs for it (except for trivial fixes); the implementation is still evolving.
+
 ## Structure
 
 - `repl/api/*_api.py`: `FacadeApi` implementations = the single implementation of each operation.

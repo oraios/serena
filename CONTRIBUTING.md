@@ -12,6 +12,7 @@ The following types of contributions can be submitted directly via pull requests
 For other changes, please open an issue first to discuss your ideas with the maintainers.
 
 Do not submit pull requests for beta features (unless they are trivial bug fixes); instead, provide feedback via issues or discussions.
+At present, the Serena REPL is a beta feature.
 
 ## Licensing and Contributor License Agreement (CLA)
 

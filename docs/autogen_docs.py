@@ -162,6 +162,8 @@ def autogen_tool_list(target_filename = "01-about/035_tools.md"):
             "While both interfaces offer the same general functionality for the most part, "
             "the REPL interface addresses several limitations inherent in the tool-based approach (see [advantages](repl-advantages) below).\n\n"
         )
+        f.write("\n\n:::{note}\nThe Serena REPL is an unreleased BETA feature. Please provide feedback; if you encounter issues, report them.\n:::\n\n")
+
 
         def tools_section():
             f.write("## Tools (Classic Interface)\n\n")

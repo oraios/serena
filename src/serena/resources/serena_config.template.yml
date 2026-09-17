@@ -16,6 +16,7 @@ language_backend: LSP
 #      inclusion/exclusion settings do not apply; instead, the operations available in the REPL are configured
 #      via the API inclusion/exclusion settings (excluded_apis etc.).
 # The interface is fixed at startup; it can be overridden by the project activated at startup.
+# IMPORTANT: The REPL interface is a BETA feature. Please provide feedback; if you encounter issues, report them.
 agent_interface: tools
 
 # line ending convention to use when writing source files.
