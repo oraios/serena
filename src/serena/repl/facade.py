@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from serena.code_editor import CodeEditor
     from serena.tools import Tool
 
-    from .external_project import ExternalProjectContext
+    from .external_project import ExternalProjectExecution
 
 log = logging.getLogger(__name__)
 TCallable = TypeVar("TCallable", bound=Callable[..., Any])
@@ -253,7 +253,10 @@ class FacadeMethodInfo:
     uses_project_server: bool = False
     """
     whether the method requires the project's language servers and must therefore be executed in the project server
-    when an external project is queried (see `ExternalProjectContext`)
+    when an external project is queried (see `ExternalProjectContext`).
+    Edit operations are always executed in the project server, regardless of this flag, since they implicitly
+    use the CodeEditor, which requires language servers when using the LSP backend.
+    Polymorphic edit operations therefore must not set this flag to True.
     """
     corresponding_tool: "type[Tool] | None" = None
     """the classic tool offering the same functionality, if any"""
@@ -285,7 +288,7 @@ def facade_method(
     :param beta: whether the method is in beta
     :param can_edit: whether the method can modify the codebase
     :param niche: whether the method is rarely needed (its documentation is then only summarised in the facade's description)
-    :param uses_project_server: whether the method must be executed in the project server when an external project is queried
+    :param uses_project_server: whether the method must be executed remotely in the project server when an external project is queried
     :param corresponding_tool: the classic tool offering the same functionality, if any
     :return: the decorator
     """
@@ -406,12 +409,11 @@ class FacadeMethod:
         return f"{self.facade_name}.{self.name}"
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        external_project = self.parent.get_external_project_()
-        if external_project is not None:
-            if self.info.can_edit:
-                raise ValueError(f"{self.qualified_name} cannot be called while an external project is being queried (read-only access)")
-            if external_project.executes_remotely(self.info.uses_project_server):
-                return external_project.call(self.facade_name, self.name, args, kwargs)
+        external_project_execution = self.parent.get_external_project_()
+        if external_project_execution is not None:
+            external_project_execution.check_call_permission(self)
+            if external_project_execution.is_called_remotely(self):
+                return external_project_execution.call_remotely(self.facade_name, self.name, args, kwargs)
         return self._implementation(*args, **kwargs)
 
     def get_implementation_(self) -> Callable[..., Any]:
@@ -579,13 +581,13 @@ class Facade:
         object.__setattr__(self, "_types", {t.name: t for t in types})
         object.__setattr__(self, "_external_project", None)
 
-    def set_external_project_(self, external_project: "ExternalProjectContext | None") -> None:
+    def set_external_project_(self, external_project: "ExternalProjectExecution | None") -> None:
         """
         :param external_project: the context of the external project being queried (None if the active project is used)
         """
         object.__setattr__(self, "_external_project", external_project)
 
-    def get_external_project_(self) -> "ExternalProjectContext | None":
+    def get_external_project_(self) -> "ExternalProjectExecution | None":
         return self._external_project
 
     def _add_method(self, method: FacadeMethod) -> None:

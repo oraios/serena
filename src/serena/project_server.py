@@ -36,7 +36,7 @@ class QueryProjectRequest(BaseModel):
 
 class CallFacadeMethodRequest(BaseModel):
     """
-    Request model for the /call_facade_method endpoint: the execution of a (read-only) REPL facade method
+    Request model for the /call_facade_method endpoint: the execution of a REPL facade method
     in the context of a project.
     """
 
@@ -166,14 +166,11 @@ class ProjectServer:
         """
         Handles a /call_facade_method request by executing the facade method on the agent's REPL facades in the
         context of the specified project (see `_query_project` regarding the lock).
-        Only methods which use the project server and do not edit are admissible.
         """
         project = self._get_project(req.project_name)
         with self._active_project_lock, self._agent.active_project_context(project):
             facade = self._agent.get_repl().entrypoint.get_facade_(req.facade_name)
             method = facade.get_method(req.method_name)
-            if not method.enabled or method.info.can_edit or not method.info.uses_project_server:
-                raise ValueError(f"Method '{req.facade_name}.{req.method_name}' cannot be executed via the project server")
             return self._agent.execute_task(lambda: method(*req.args, **req.kwargs))
 
     def run(self) -> None:

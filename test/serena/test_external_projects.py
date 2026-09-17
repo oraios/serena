@@ -71,10 +71,6 @@ def test_facade_method_results_are_transferred_from_the_project_server(project_s
     assert result.symbols[0].body.startswith("def create_user")
     assert "create_user" in result.represent()
 
-    # editing methods are refused
-    with pytest.raises(ValueError, match="cannot be executed"):
-        client.call_facade_method("test_repo_python", "lsp", "rename_symbol", ["create_user", "test_repo/services.py", "x"], {})
-
 
 @pytest.mark.python
 @pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.PYTHON), reason="python tests are disabled in this environment")
@@ -96,7 +92,7 @@ def test_external_project_context_in_repl(
         tool = agent.get_tool(SerenaReplTool)
         session_id = agent.create_session().session_id
         code = (
-            'with s.ext.project_context("test_repo_python"):\n'
+            'with s.ext.read_project_context("test_repo_python"):\n'
             '    result = s.lsp.find_symbol("create_user")\n'
             "[s.name for s in result.symbols]"
         )

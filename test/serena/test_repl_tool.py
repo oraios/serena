@@ -7,10 +7,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from serena.config.serena_config import ApiInclusionDefinition
+from serena.config.serena_config import ApiInclusionDefinition, LanguageBackend
 from serena.repl.api.edit_api import EditApi
 from serena.repl.api.lsp_api import LspApi
-from serena.repl.external_project import ExternalProjectContext
+from serena.repl.external_project import ExternalProjectExecution
 from serena.repl.facade import ApiScope, Facade, FacadeApi, FacadeMethodInfo, facade_method
 from serena.repl.repl import SerenaRepl
 from serena.session import SerenaSession
@@ -83,29 +83,51 @@ class TestReplExecution:
         overview = rebuilt_repl.execute("facades()", session)
         assert "s.edit" in overview and "s.lsp" not in overview
 
-    def test_external_project_dispatch(self) -> None:
-        class FakeExternalProject(ExternalProjectContext):
+    @pytest.mark.parametrize("backend", [LanguageBackend.LSP, LanguageBackend.JETBRAINS])
+    @pytest.mark.parametrize("read_only", [True, False])
+    def test_external_project_dispatch(self, backend: LanguageBackend, read_only: bool) -> None:
+        agent = MagicMock()
+        agent.get_language_backend.return_value = backend
+
+        class FakeExternalProject(ExternalProjectExecution):
             def __init__(self) -> None:
-                super().__init__("other", remote_execution=True)
+                super().__init__("other", read_only=read_only, agent=agent)
                 self.calls: list[tuple[str, str, tuple, dict]] = []
 
-            def call(self, facade_name: str, method_name: str, args: tuple, kwargs: dict) -> str:
+            def call_remotely(self, facade_name: str, method_name: str, args: tuple, kwargs: dict) -> str:
                 self.calls.append((facade_name, method_name, args, kwargs))
                 return "remote result"
 
-        facades = [Facade.from_api(LspApi(MagicMock()), ApiScope()), Facade.from_api(EditApi(MagicMock()), ApiScope())]
+        class LocalApi(FacadeApi):
+            @facade_method(can_edit=True)
+            def write(self, content: str) -> str:
+                return f"local result: {content}"
+
+        # expose a server-backed read and a backend-dependent write
+        facades = [Facade.from_api(LspApi(agent), ApiScope()), Facade.from_api(LocalApi(agent, "local", "local operations"), ApiScope())]
         repl = SerenaRepl(facades, ApiScope())
         external_project = FakeExternalProject()
         repl.entrypoint.set_external_project_(external_project)
 
-        # methods using the project server are executed remotely, editing methods are refused
+        # methods explicitly requiring the project server are executed remotely
         assert repl.execute('s.lsp.find_symbol("Foo", depth=1)') == "remote result"
         assert external_project.calls == [("lsp", "find_symbol", ("Foo",), {"depth": 1})]
-        assert "read-only" in repl.execute('s.edit.replace_content("a.py", "x", "y", "literal")')
 
-        # without remote execution (JetBrains backend), methods run locally
-        repl.entrypoint.set_external_project_(ExternalProjectContext("other", remote_execution=False))
-        assert "remote result" not in repl.execute('s.info("lsp.find_symbol")')
+        # writes obey the context's access mode and use the selected backend
+        result = repl.execute('s.local.write("content")')
+        if read_only:
+            assert "PermissionError" in result and "read-only" in result
+            assert len(external_project.calls) == 1
+        elif backend.is_lsp():
+            assert result == "remote result"
+            assert external_project.calls[-1] == ("local", "write", ("content",), {})
+        else:
+            assert result == "local result: content"
+            assert len(external_project.calls) == 1
+
+        # leaving the external execution context restores local execution
+        repl.entrypoint.set_external_project_(None)
+        assert repl.execute('s.local.write("restored")') == "local result: restored"
 
     def test_facade_discovery(self, repl: SerenaRepl) -> None:
         overview = repl.execute("s.info()")

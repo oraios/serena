@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClientManager
 from serena.tools import ListQueryableProjectsTool, QueryProjectTool
 
-from ..external_project import ExternalProjectContext
+from ..external_project import ExternalProjectExecution
 from ..facade import FacadeApi, facade_method
 from ..representable import JsonObject, JsonObjectRenderer
 
@@ -24,14 +24,16 @@ class ExternalProjectContextManager:
     executed in the project's server. Contexts cannot be nested.
     """
 
-    def __init__(self, agent: "SerenaAgent", project_name: str) -> None:
+    def __init__(self, agent: "SerenaAgent", project_name: str, read_only: bool) -> None:
         """
         :param agent: the agent
         :param project_name: the name (or root path) of the registered external project
+        :param read_only: whether the context is read-only
         """
         self._agent = agent
         self._project_name = project_name
         self._active_project_context = None
+        self._read_only = read_only
 
     def __enter__(self) -> None:
         entrypoint = self._agent.get_repl().entrypoint
@@ -46,9 +48,8 @@ class ExternalProjectContextManager:
         self._active_project_context = self._agent.active_project_context(project)
         self._active_project_context.__enter__()
 
-        # switch the facades to the external project (remote execution of language server operations for the LSP backend)
-        remote_execution = self._agent.get_language_backend().is_lsp()
-        entrypoint.set_external_project_(ExternalProjectContext(registered_project.project_name, remote_execution))
+        # switch the facades to the external project
+        entrypoint.set_external_project_(ExternalProjectExecution(registered_project.project_name, self._read_only, self._agent))
 
     def __exit__(self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: TracebackType | None) -> None:
         self._agent.get_repl().entrypoint.set_external_project_(None)
@@ -80,7 +81,7 @@ class ExternalProjectsApi(FacadeApi):
         return JsonObject(result, JsonObjectRenderer(self._agent, -1))
 
     @facade_method(corresponding_tool=QueryProjectTool)
-    def project_context(self, project_name: str) -> ExternalProjectContextManager:
+    def read_project_context(self, project_name: str) -> ExternalProjectContextManager:
         """
         Provides a context (for use in a `with` statement) within which all facades operate on the given external project
         instead of the active one, with read-only access.
@@ -94,4 +95,21 @@ class ExternalProjectsApi(FacadeApi):
         :return: the context manager
 
         """
-        return ExternalProjectContextManager(self._agent, project_name)
+        return ExternalProjectContextManager(self._agent, project_name, read_only=True)
+
+    @facade_method(optional=True)
+    def project_context(self, project_name: str) -> ExternalProjectContextManager:
+        """
+        Provides a context (for use in a `with` statement) within which all facades operate on the given external project
+        instead of the active one (read and write operations are possible).
+
+        Example:
+        `with s.ext.project_context("other"): result = s.lsp.find_symbol("Foo")`
+
+        Results obtained within the context can be used after it (they are self-contained).
+
+        :param project_name: the name (or root path) of the project, as listed by `list_projects`
+        :return: the context manager
+
+        """
+        return ExternalProjectContextManager(self._agent, project_name, read_only=False)

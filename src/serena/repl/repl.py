@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from ..session import SerenaSession
-from .external_project import ExternalProjectContext
+from .external_project import ExternalProjectExecution
 from .facade import ApiScope, Facade, FacadeMethod, ReferencedType
 from .representable import Representable
 
@@ -96,7 +96,7 @@ class SerenaReplEntrypoint:
                 return True
         return False
 
-    def set_external_project_(self, external_project: "ExternalProjectContext | None") -> None:
+    def set_external_project_(self, external_project: "ExternalProjectExecution | None") -> None:
         """
         :param external_project: the context of the external project being queried by the currently executing code
             (None if the active project is used); propagated to all facades
@@ -104,7 +104,7 @@ class SerenaReplEntrypoint:
         for facade in self._facades.values():
             facade.set_external_project_(external_project)
 
-    def get_external_project_(self) -> "ExternalProjectContext | None":
+    def get_external_project_(self) -> "ExternalProjectExecution | None":
         external_projects = {facade.get_external_project_() for facade in self._facades.values()}
         return next(iter(external_projects)) if external_projects else None
 

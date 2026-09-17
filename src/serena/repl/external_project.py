@@ -8,8 +8,11 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from serena.project_server import ProjectServerClient
 
+    from ..agent import SerenaAgent
+    from .facade import FacadeMethod
 
-class ExternalProjectContext:
+
+class ExternalProjectExecution:
     """
     The context in which facade methods are executed while an external project is being queried:
     methods which use the project server (see `FacadeMethodInfo.uses_project_server`) are executed remotely
@@ -17,26 +20,39 @@ class ExternalProjectContext:
     locally against the temporarily switched project. Editing methods are not permitted.
     """
 
-    def __init__(self, project_name: str, remote_execution: bool) -> None:
+    def __init__(self, project_name: str, read_only: bool, agent: "SerenaAgent") -> None:
         """
         :param project_name: the name of the external project
-        :param remote_execution: whether methods using the project server are to be executed remotely
-            (False for the JetBrains backend, where the IDE serves all projects)
+        :param read_only: whether the external project is to be treated as read-only (editing methods are not permitted)
         """
         self.project_name = project_name
-        self._remote_execution = remote_execution
         self._client: ProjectServerClient | None = None
+        self._read_only = read_only
+        self._agent = agent
 
-    def executes_remotely(self, uses_project_server: bool) -> bool:
+    def is_called_remotely(self, method: "FacadeMethod") -> bool:
         """
-        :param uses_project_server: whether the method in question uses the project server
-        :return: whether the method is to be executed remotely
+        :param method: the method to check
+        :return: whether the given method must be executed remotely
         """
-        return self._remote_execution and uses_project_server
+        # Any method that uses the project server must be executed remotely,
+        # as does any edit operation when using the LSP backend (as edit operations indirectly
+        # use the language server via the CodeEditor abstraction)
+        return method.info.uses_project_server or (self._agent.get_language_backend().is_lsp() and method.info.can_edit)
 
-    def call(self, facade_name: str, method_name: str, args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
+    def check_call_permission(self, method: "FacadeMethod") -> None:
         """
-        Executes the given facade method in the external project's server.
+        Checks whether the given method is permitted to be called in the context of this external project execution.
+        Raises an exception if the method is not permitted.
+
+        :param method: the facade method to check
+        """
+        if self._read_only and method.info.can_edit:
+            raise PermissionError(f"Editing methods are not permitted in read-only external project execution: {method.qualified_name}")
+
+    def call_remotely(self, facade_name: str, method_name: str, args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
+        """
+        Executes the given facade method remotely via the project server.
 
         :param facade_name: the facade's name
         :param method_name: the method's name
