@@ -196,6 +196,36 @@ initial_prompt: |
 
 For advanced users, Serena's configuration can be further customized.
 
+### Connection access tokens (HTTP MCP)
+
+When several MCP clients share one Serena server over `sse` or `streamable-http`, you can
+give each connection a bearer token with either **read** or **edit** rights (oraios/serena#1971).
+
+```yaml
+connection_access_tokens:
+  "reader-secret-token": read
+  "writer-secret-token": edit
+```
+
+How it works (MCP SDK auth, not a Serena login system):
+
+1. HTTP requests must send `Authorization: Bearer <token>`.
+2. The MCP SDK verifies the token through a `TokenVerifier` that looks it up in this map.
+   Missing or unknown tokens are rejected **before any tool runs**.
+3. Each verified token carries a scope: `read` or `edit` (`required_scopes` floor is `read`).
+4. **read**: editing tools are rejected on every call; query tools work.
+5. **edit**: all tools.
+6. **stdio** ignores this setting (a single local client already controls the process).
+7. Empty mapping (default) disables auth entirely.
+
+Limitation: the MCP `tools/list` response is process-global, so read-only clients still
+*see* editing tools in the list; every editing call is refused at execution time. Full
+per-connection tool lists need per-session tool managers or client-side filtering.
+
+Serena only restricts its own MCP tools. It does not sandbox an agent's terminal or other
+file-editing paths outside Serena. Revoke a token by removing it from the map and
+restarting the server.
+
 ### Serena Data Directory
 
 The Serena user data directory (where configuration, language server files, logs, etc. are stored) defaults to `~/.serena`.
