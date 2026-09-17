@@ -73,6 +73,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     specific, measured overshoot when building its high-level document symbols (#1974)
   - Fix: High-level document symbol cache was not invalidated when the LS-specific low-level result 
     version changed
+  - Fix: A language server's cache directory was determined by the language_id rather than 
+    the language server identifier's key. The two identifiers coincided in most cases.
   - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
     preserves explicit user settings across initialization and configuration requests (#1989)
     VTS initialization options now override defaults per top-level key rather than replacing the
