@@ -28,6 +28,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     trusts no project at all; the template now shows the bare root form alongside the parent-directory
     glob (#2001)
 
+* General:
+  - Add optional `connection_access_tokens` mapping for HTTP MCP transports: each bearer token maps to
+    `read` or `edit`. Tokens are verified through the MCP SDK `TokenVerifier` protocol. Invalid/missing
+    tokens are rejected by the SDK auth middleware before any tool runs; read connections cannot invoke
+    editing tools (checked per call via scopes). Stdio is unaffected (#1971)
+
 * CLI:
   - Fix: `project health-check` reported `Health check passed - All tools working correctly` and
     exited 0 even when `FindReferencingSymbolsTool` had raised, because that failure was logged as
