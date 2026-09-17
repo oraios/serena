@@ -141,6 +141,10 @@ CLI:
 * Dependencies:
   - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
 
+* Security:
+  - Fix: `PyJWT` was pinned to 2.12.0 in the dev-extra security-pin block, which carries
+    CVE-2026-48526 (HMAC/asymmetric algorithm-confusion auth bypass); bumped to 2.13.0 (#1934)
+
 # v1.7.0 (2026-08-09)
 
 * General:
