@@ -578,6 +578,17 @@ class ReferenceInLanguageServerSymbol(ToStringMixin):
         return self.symbol.location.relative_path
 
 
+@dataclass
+class SymbolInfoBatchResult:
+    """Result of a batched symbol info retrieval, including budget-exhaustion accounting."""
+
+    info_by_symbol: dict["LanguageServerSymbol", str | None]
+    """Maps each processable symbol to its hover info, or None if unavailable or skipped due to budget."""
+
+    skipped_due_to_budget: int
+    """Number of symbols for which hover was not requested because symbol_info_budget was exhausted."""
+
+
 class LanguageServerSymbolRetriever:
     def __init__(self, project: Project) -> None:
         """
@@ -634,24 +645,27 @@ class LanguageServerSymbolRetriever:
     def request_info_for_symbol_batch(
         self,
         symbols: list[LanguageServerSymbol],
-    ) -> dict[LanguageServerSymbol, str | None]:
+    ) -> SymbolInfoBatchResult:
         """Retrieves information for multiple symbols while staying within a time budget.
 
         The request_hover operation used here is potentially expensive, we optimize by grouping by file
         and stop executing it (returning the info as None) after the symbol_info_budget is exceeded.
-        The hover budget is 5s by default
+        The hover budget is 10s by default.
 
         Groups symbols by file path to minimize file switching overhead and uses a per-file
         cache keyed by (line, col) to avoid duplicate hover lookups.
 
         The hover budget (symbol_info_budget) limits total time spent on hover
-        requests. If exceeded, remaining symbols get info=None (partial results).
+        requests. If exceeded, remaining symbols get info=None (partial results); the number of
+        symbols affected is reported via the result's skipped_due_to_budget count.
 
         :param symbols: list of symbols to get info for
-        :return: a dict mapping each processable symbol to its info (or None if unavailable). Symbols with missing location attributes (relative_path/line/column is None) are skipped and omitted from the result.
+        :return: a SymbolInfoBatchResult with the per-symbol info (or None if unavailable) and the
+            count of symbols skipped due to budget exhaustion. Symbols with missing location attributes
+            (relative_path/line/column is None) are omitted from info_by_symbol.
         """
         if not symbols:
-            return {}
+            return SymbolInfoBatchResult(info_by_symbol={}, skipped_due_to_budget=0)
 
         debug_enabled = log.isEnabledFor(logging.DEBUG)
         t0_total = perf_counter() if debug_enabled else 0.0
@@ -691,9 +705,6 @@ class LanguageServerSymbolRetriever:
                     if 0 < symbol_info_budget_seconds <= hover_spent_seconds:
                         skipped_due_to_budget += 1
                         info = None
-                        # log once when budget exceeded
-                        if skipped_due_to_budget == 1:
-                            log.debug("Skipping further hover operations due to budget exceeded")
                     else:
                         line = sym.line
                         column = sym.column
@@ -710,6 +721,9 @@ class LanguageServerSymbolRetriever:
                 file_elapsed_ms = (perf_counter() - t0_file) * 1000
                 per_file_stats.append((file_path, file_hover_lookups, file_elapsed_ms))
 
+        if skipped_due_to_budget:
+            log.info("Skipped information for %d symbols because symbol_info_budget was exhausted", skipped_due_to_budget)
+
         if debug_enabled:
             total_elapsed_ms = (perf_counter() - t0_total) * 1000
             total_symbols = len(symbols)
@@ -725,7 +739,7 @@ class LanguageServerSymbolRetriever:
             for file_path, lookup_count, elapsed_ms in per_file_stats:
                 log.debug(f"perf: {file_path=} {lookup_count=} {elapsed_ms=:.2f}")
 
-        return info_by_symbol
+        return SymbolInfoBatchResult(info_by_symbol=info_by_symbol, skipped_due_to_budget=skipped_due_to_budget)
 
     def can_analyze_file(self, relative_file_path: str) -> bool:
         return self._ls_manager.has_suitable_ls_for_file(relative_file_path)

@@ -306,12 +306,13 @@ class TestHoverBudget:
 
         # All 3 symbols should have info (no budget exceeded)
         assert call_count == 3
-        assert all(info is not None for info in result.values())
-        assert len(result) == 3
+        assert all(info is not None for info in result.info_by_symbol.values())
+        assert len(result.info_by_symbol) == 3
+        assert result.skipped_due_to_budget == 0
 
     @pytest.mark.parametrize("project_with_ls", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_budget_exceeded_partial_info(self, project_with_ls: Project, monkeypatch: pytest.MonkeyPatch):
-        """With a small budget, hover lookups stop and remaining symbols get None info."""
+        """With a small budget, hover lookups stop and remaining symbols get None info, reported via skipped_due_to_budget."""
         project_with_ls.serena_config.symbol_info_budget = 0.1
         project_with_ls.project_config.symbol_info_budget = 0.1
 
@@ -343,15 +344,14 @@ class TestHoverBudget:
         # Budget is 0.1s, each call takes 0.05s, so only 2 calls should succeed
         # After 2 calls: 0.1s >= 0.1s budget, remaining 3 should be skipped
         assert call_count == 2
-        assert len(result) == 5
+        assert len(result.info_by_symbol) == 5
+        assert result.skipped_due_to_budget == 3
 
-        # First 2 symbols should have info, last 3 should be None
-        result_list = list(result.values())
+        # First 2 symbols should have info, last 3 should be None (reported via skipped_due_to_budget)
+        result_list = list(result.info_by_symbol.values())
         assert result_list[0] is not None
         assert result_list[1] is not None
-        assert result_list[2] is None
-        assert result_list[3] is None
-        assert result_list[4] is None
+        assert all(info is None for info in result_list[2:])
 
     @pytest.mark.parametrize("project_with_ls", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_budget_zero_means_unlimited(self, project_with_ls: Project, monkeypatch: pytest.MonkeyPatch):
@@ -378,7 +378,8 @@ class TestHoverBudget:
 
         # All 5 symbols should be looked up (no budget limit)
         assert call_count == 5
-        assert all(info is not None for info in result.values())
+        assert all(info is not None for info in result.info_by_symbol.values())
+        assert result.skipped_due_to_budget == 0
 
     @pytest.mark.parametrize("project_with_ls", PYTHON_BACKEND_LANGUAGES, indirect=True)
     def test_project_budget_overrides_global(self, project_with_ls: Project, monkeypatch: pytest.MonkeyPatch):
@@ -444,4 +445,4 @@ class TestHoverBudget:
 
         # Global budget is 10s, all 3 should succeed
         assert call_count == 3
-        assert all(info is not None for info in result.values())
+        assert all(info is not None for info in result.info_by_symbol.values())

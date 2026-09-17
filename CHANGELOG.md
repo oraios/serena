@@ -11,6 +11,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Contributions require acceptance of the new Contributor License Agreement (`CLA.md`), enforced via CLA assistant;
     see `CONTRIBUTING.md`
 
+* Tools:
+  - Fix: report budget-skipped symbol information in tool results and log the skipped count at INFO level (#2006)
+
 * General:
   - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
   - Fix: importing Serena no longer loads the `anthropic` package unless the Anthropic token counter is
