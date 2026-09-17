@@ -25,8 +25,8 @@ def _make_dart_ls(custom_settings: dict | None = None) -> DartLanguageServer:
 def test_dart_defaults_to_omitting_root_uri():
     builder = _make_dart_ls()._create_initialize_params_builder()
     params = builder.build()
-    assert "rootUri" not in params
-    assert "rootPath" not in params
+    assert params["rootUri"] is None
+    assert params["rootPath"] is None
     assert params["workspaceFolders"]
 
 

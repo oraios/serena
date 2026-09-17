@@ -25,10 +25,11 @@ def test_default_builder_sets_root_uri():
     assert "rootPath" in params
 
 
-def test_builder_can_omit_root_uri():
+def test_builder_sends_null_root_uri_when_disabled():
     builder = DefaultInitializeParamsBuilder(_FakeLS(), set_root_uri=False)
     params = builder.build()
-    assert "rootUri" not in params
-    assert "rootPath" not in params
+    # keys must be present (Dart rejects undefined rootUri); values are null
+    assert params["rootUri"] is None
+    assert params["rootPath"] is None
     assert params["processId"] is not None
     assert params["clientInfo"] == {"name": "Serena"}

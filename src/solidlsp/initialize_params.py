@@ -64,6 +64,12 @@ class DefaultInitializeParamsBuilder(InitializeParamsBuilder):
         if self._set_root_uri:
             self._set("rootPath", root_abs_path)
             self._set("rootUri", pathlib.Path(root_abs_path).as_uri())
+        else:
+            # Some servers (Dart) reject initialize when the key is absent
+            # ("params.rootUri must not be undefined"). Send explicit null so the
+            # field is present but not used as an analysis root (#2045).
+            self._set("rootPath", None)
+            self._set("rootUri", None)
 
         if self._set_workspace_folders:
             abs_workspace_paths = self._ls.config.get_absolute_workspace_folders(root_abs_path)
