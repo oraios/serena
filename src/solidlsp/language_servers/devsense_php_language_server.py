@@ -8,6 +8,7 @@ language-server executable and communicates over LSP stdio.
 import logging
 import os
 import shutil
+from collections.abc import Hashable
 from time import sleep
 
 from overrides import override
@@ -129,8 +130,20 @@ class DevsensePHPLanguageServer(SolidLanguageServer):
         if file_filter:
             self.ls_id.get_source_fn_matcher().add_extensions(*file_filter)
 
+        self._did_sleep_before_references = False
+
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
+
+    @override
+    def _raw_document_symbols_cache_fingerprint(self) -> Hashable | None:
+        """Isolate the document-symbol cache from Intelephense/PHPantom.
+
+        All PHP servers use language_id ``php`` and therefore the same cache directory, but they
+        report different raw document-symbol shapes. Including the ls_id in the fingerprint
+        prevents Devsense from reusing cache entries written by another PHP language server.
+        """
+        return self.ls_id.value
 
     def _create_base_initialize_params(self) -> dict:
         """Return initialization parameters accepted by Devsense PHP LS."""
@@ -203,5 +216,9 @@ class DevsensePHPLanguageServer(SolidLanguageServer):
 
     @override
     def _send_references_request(self, relative_file_path: str, line: int, column: int):
-        sleep(1)
+        # Devsense, like other PHP servers, needs a short settle period after startup before
+        # cross-file references are reliable. Sleep only once per server instance.
+        if not self._did_sleep_before_references:
+            sleep(1)
+            self._did_sleep_before_references = True
         return super()._send_references_request(relative_file_path, line, column)
