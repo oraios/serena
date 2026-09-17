@@ -154,12 +154,14 @@ class DiagnosticsDiff:
         symbol_retriever: "LanguageServerSymbolRetriever",
     ):
         grouped_diagnostics = GroupedDiagnostics()
+        language_server_ids: dict[str, str] = {}
 
         for edited_file_path in edited_files:
             try:
                 language_server = symbol_retriever.get_language_server(edited_file_path.after_relative_path)
             except:
                 continue
+            language_server_ids[edited_file_path.after_relative_path] = language_server.ls_id.value
 
             published_diagnostics = language_server.request_published_text_document_diagnostics(
                 relative_file_path=edited_file_path.after_relative_path,
@@ -200,6 +202,11 @@ class DiagnosticsDiff:
                 grouped_diagnostics.add(edited_file_path.after_relative_path, name_path, diagnostic)
 
         self._grouped_diagnostics = grouped_diagnostics
+        self._language_server_ids = language_server_ids
 
     def get_grouped_diagnostics(self) -> GroupedDiagnostics:
         return self._grouped_diagnostics
+
+    def get_language_server_ids(self) -> dict[str, str]:
+        """:return: for each edited file whose diagnostics were requested, the id of the language server that answered"""
+        return self._language_server_ids

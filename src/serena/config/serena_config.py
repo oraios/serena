@@ -327,6 +327,11 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
     ls_workspace_folders: list[str] = field(default_factory=lambda: ["."])
     ls_additional_workspace_folders: list[str] = field(default_factory=list)
     read_only: bool = False
+    edit_diagnostics: bool = False
+    """
+    whether editing tools report the diagnostics (warnings and errors) an edit newly introduced in the edited files,
+    as determined by the language server. Off by default: intermediate edits often introduce diagnostics on purpose.
+    """
     ignore_all_files_in_gitignore: bool = True
     initial_prompt: str = ""
     encoding: str = DEFAULT_SOURCE_FILE_ENCODING
@@ -636,6 +641,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
             fixed_tools=fixed_tools,
             included_optional_tools=included_optional_tools,
             read_only=data["read_only"],
+            edit_diagnostics=data["edit_diagnostics"],
             read_only_memory_patterns=data.get("read_only_memory_patterns", []),
             ignored_memory_patterns=data.get("ignored_memory_patterns", []),
             ignore_all_files_in_gitignore=data["ignore_all_files_in_gitignore"],
