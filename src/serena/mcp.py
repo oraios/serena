@@ -26,7 +26,7 @@ from serena.agent import (
     SerenaAgent,
 )
 from serena.config.context_mode import SerenaAgentContext
-from serena.config.serena_config import LanguageBackend, ModeSelectionDefinition, SerenaConfig
+from serena.config.serena_config import AgentInterface, LanguageBackend, ModeSelectionDefinition, SerenaConfig
 from serena.constants import DEFAULT_CONTEXT, SERENA_LOG_FORMAT
 from serena.tools import Tool, ToolCallError
 from serena.util.exception import show_fatal_exception_safe
@@ -326,6 +326,7 @@ class SerenaMCPFactory:
         port: int = 8000,
         mode_selection_def: ModeSelectionDefinition | None = None,
         language_backend: LanguageBackend | None = None,
+        agent_interface: AgentInterface | None = None,
         enable_web_dashboard: bool | None = None,
         enable_gui_log_window: bool | None = None,
         open_web_dashboard: bool | None = None,
@@ -341,6 +342,7 @@ class SerenaMCPFactory:
         :param port: The port to bind to
         :param mode_selection_def: the mode selection definition to apply
         :param language_backend: the language backend to use, overriding the configuration setting.
+        :param agent_interface: the agent interface to use, overriding the configuration setting.
         :param enable_web_dashboard: Whether to enable the web dashboard. If not specified, will take the value from the serena configuration.
         :param enable_gui_log_window: Whether to enable the GUI log window. It currently does not work on macOS, and setting this to True will be ignored then.
             If not specified, will take the value from the serena configuration.
@@ -371,6 +373,8 @@ class SerenaMCPFactory:
                 config.tool_timeout = tool_timeout
             if language_backend is not None:
                 config.language_backend = language_backend
+            if agent_interface is not None:
+                config.agent_interface = agent_interface
 
             self.agent = self._create_serena_agent(config, modes=mode_selection_def, project_activation_error=project_activation_error)
 

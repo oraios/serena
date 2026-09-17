@@ -23,6 +23,7 @@ from serena import serena_version
 from serena.config.client_setup import client_setup_handlers
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import (
+    AgentInterface,
     LanguageBackend,
     ModeSelectionDefinition,
     ModeSelectionDefinitionWithAddedModes,
@@ -264,6 +265,13 @@ class TopLevelCommands(AutoRegisteringGroup):
         help="Override the configured language backend.",
     )
     @click.option(
+        "--agent-interface",
+        type=click.Choice([i.value for i in AgentInterface], case_sensitive=False),
+        default=None,
+        help="Override the configured agent interface: 'tools' (one tool per operation) or "
+        "'REPL' (Python code execution via the serena_repl tool, with a fixed set of tools).",
+    )
+    @click.option(
         "--transport",
         type=click.Choice(["stdio", "sse", "streamable-http"]),
         default="stdio",
@@ -325,6 +333,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         default_modes: Sequence[str],
         added_modes: Sequence[str],
         language_backend: str | None,
+        agent_interface: str | None,
         transport: Literal["stdio", "sse", "streamable-http"],
         host: str,
         port: int,
@@ -385,6 +394,7 @@ class TopLevelCommands(AutoRegisteringGroup):
             port=port,
             mode_selection_def=mode_selection_def,
             language_backend=LanguageBackend.from_str(language_backend) if language_backend else None,
+            agent_interface=AgentInterface.from_str(agent_interface) if agent_interface else None,
             enable_web_dashboard=enable_web_dashboard,
             open_web_dashboard=open_web_dashboard,
             enable_gui_log_window=enable_gui_log_window,
@@ -953,7 +963,7 @@ class ProjectCommands(AutoRegisteringGroup):
         # NOTE: completely written by Claude Code, only functionality was reviewed, not implementation
         from serena.agent import SerenaAgent
         from serena.project import Project
-        from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, GetSymbolsOverviewTool
+        from serena.repl.api.lsp_api import LspApi
 
         logging.configure(level=logging.INFO)
         project_path = os.path.abspath(project)
@@ -998,61 +1008,55 @@ class ProjectCommands(AutoRegisteringGroup):
                 if not target_file:
                     raise ProjectCommands._HealthCheckFailure("No analyzable files found")
 
-                # Get tools from agent
-                overview_tool = agent.get_tool(GetSymbolsOverviewTool)
-                find_symbol_tool = agent.get_tool(FindSymbolTool)
-                find_refs_tool = agent.get_tool(FindReferencingSymbolsTool)
+                api = LspApi(agent)
 
-                # Test 1: Get symbols overview
-                log.info("Testing GetSymbolsOverviewTool on file: %s", target_file)
-                overview_data = agent.execute_task(lambda: overview_tool.get_symbol_overview(target_file))
-                log.info(f"GetSymbolsOverviewTool returned: {overview_data}")
+                # Test 1: symbols overview
+                log.info("Testing get_symbols_overview on file: %s", target_file)
+                overview = agent.execute_task(lambda: api.get_symbols_overview(target_file))
+                log.info(f"get_symbols_overview returned: {overview.represent()}")
 
-                if not overview_data:
+                if len(overview) == 0:
                     raise ProjectCommands._HealthCheckFailure(f"No symbols found in target file {target_file}")
 
                 # Extract suitable symbol (prefer class or function over variables)
-                preferred_kinds = {SymbolKind.Class.name, SymbolKind.Function.name, SymbolKind.Method.name, SymbolKind.Constructor.name}
-                selected_symbol = None
-                for symbol in overview_data:
-                    if symbol.get("kind") in preferred_kinds:
-                        selected_symbol = symbol
-                        break
+                preferred_kinds = {SymbolKind.Class, SymbolKind.Function, SymbolKind.Method, SymbolKind.Constructor}
+                selected_symbol = next((s for s in overview.symbols if s.symbol_kind in preferred_kinds), None)
 
                 # If no preferred symbol found, use first available
-                if not selected_symbol:
-                    selected_symbol = overview_data[0]
+                if selected_symbol is None:
+                    selected_symbol = overview.symbols[0]
                     log.info("No class or function found, using first available symbol")
 
-                symbol_name = selected_symbol["name"]
-                symbol_kind = selected_symbol["kind"]
-                log.info("Using symbol for testing: %s (kind: %s)", symbol_name, symbol_kind)
+                symbol_name = selected_symbol.name
+                log.info("Using symbol for testing: %s (kind: %s)", symbol_name, selected_symbol.symbol_kind_name)
 
-                # Test 2: FindSymbolTool
-                log.info("Testing FindSymbolTool for symbol: %s", symbol_name)
-                with find_symbol_tool.symbol_dict_grouper.disabled_context():
+                # Test 2: find_symbol
+                log.info("Testing find_symbol for symbol: %s", symbol_name)
+                with LspApi.find_symbol_dict_grouper_.disabled_context():
                     find_symbol_result = agent.execute_task(
-                        lambda: find_symbol_tool.apply(symbol_name, relative_path=target_file, include_body=True)
+                        lambda: api.find_symbol(symbol_name, relative_path=target_file, include_body=True).represent()
                     )
                 find_symbol_data = json.loads(find_symbol_result)
-                log.info("FindSymbolTool found %d matches for symbol %s", len(find_symbol_data), symbol_name)
+                log.info("find_symbol found %d matches for symbol %s", len(find_symbol_data), symbol_name)
                 if not find_symbol_data:
                     raise ProjectCommands._HealthCheckFailure("FindSymbolTool returned no results")
 
-                # Test 3: FindReferencingSymbolsTool
-                log.info("Testing FindReferencingSymbolsTool for symbol: %s", symbol_name)
+                # Test 3: find_referencing_symbols
+                log.info("Testing find_referencing_symbols for symbol: %s", symbol_name)
                 try:
-                    with find_refs_tool.symbol_dict_grouper.disabled_context():
-                        find_refs_result = agent.execute_task(lambda: find_refs_tool.apply(symbol_name, relative_path=target_file))
+                    with LspApi.references_grouper_.disabled_context():
+                        find_refs_result = agent.execute_task(
+                            lambda: api.find_referencing_symbols(symbol_name, relative_path=target_file).represent()
+                        )
                         find_refs_data = json.loads(find_refs_result)
-                        log.info("FindReferencingSymbolsTool found %d references for symbol %s", len(find_refs_data), symbol_name)
+                        log.info("find_referencing_symbols found %d references for symbol %s", len(find_refs_data), symbol_name)
                 except Exception as e:
                     # A symbol with no references at all is a legitimate result, so the number of
                     # references is not asserted - but a *failure* of the reference search means the
                     # language server is not functional, which is the single thing this command is
                     # asked to determine. Logging it as a warning let the command print
                     # "All tools working correctly" and exit 0 after the search had already failed.
-                    raise ProjectCommands._HealthCheckFailure(f"FindReferencingSymbolsTool failed for symbol {symbol_name}: {e}") from e
+                    raise ProjectCommands._HealthCheckFailure(f"find_referencing_symbols failed for symbol {symbol_name}: {e}") from e
 
                 log.info("Health check completed successfully")
 

@@ -3,12 +3,14 @@
 import json
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional, Self
 
+from serena.util.text_utils import TextOutputUtils
 from solidlsp import ls_types
 from solidlsp.lsp_protocol_handler.lsp_types import DiagnosticSeverity
 
 if TYPE_CHECKING:
+    from serena.agent import SerenaAgent
     from serena.symbol import LanguageServerSymbolRetriever
 
 
@@ -203,3 +205,55 @@ class DiagnosticsDiff:
 
     def get_grouped_diagnostics(self) -> GroupedDiagnostics:
         return self._grouped_diagnostics
+
+
+class DiagnosticsContext:
+    ENABLE_DIAGNOSTICS_DEFAULT: bool = False
+    """
+    Global flag to enable/disable diagnostics for LSP-based editing tools derived from this class.
+    The feature is currently disabled, because per-edit diagnostics are a questionable feature, since individual
+    edits often intentionally introduce diagnostics (e.g. function signature mismatches or even syntax errors) that 
+    are then resolved in subsequent edits.
+    """
+
+    DIAGNOSTICS_KEY = "diagnostics[warning-or-higher]"
+
+    def __init__(self, agent: "SerenaAgent", *edited_relative_paths: str, enable: bool = ENABLE_DIAGNOSTICS_DEFAULT) -> None:
+        self._is_diagnostics_enabled = enable and agent.is_using_language_server()
+        self._edited_files = [EditedFilePath(path, path) for path in edited_relative_paths]
+        self._before_edit_diagnostics_snapshot: PublishedDiagnosticsSnapshot | None = None
+        self._symbol_retriever: Optional["LanguageServerSymbolRetriever"] | None = None
+        if self._is_diagnostics_enabled:
+            from serena.symbol import LanguageServerSymbolRetriever  # local import to avoid a circular dependency
+
+            self._symbol_retriever = LanguageServerSymbolRetriever(agent.get_active_project_or_raise())
+            self._before_edit_diagnostics_snapshot = PublishedDiagnosticsSnapshot(self._edited_files, self._symbol_retriever)
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+    def format_result(
+        self,
+        base_result: str,
+    ) -> str:
+        if not self._is_diagnostics_enabled:
+            return base_result
+
+        if self._before_edit_diagnostics_snapshot is None:
+            return base_result
+
+        assert self._symbol_retriever is not None
+        diagnostics_diff = DiagnosticsDiff(self._before_edit_diagnostics_snapshot, self._edited_files, self._symbol_retriever)
+        grouped_diagnostics = diagnostics_diff.get_grouped_diagnostics().get_dict()
+
+        if not grouped_diagnostics:
+            return base_result
+        else:
+            result_dict = {
+                "result": base_result,
+                self.DIAGNOSTICS_KEY: grouped_diagnostics,
+            }
+            return TextOutputUtils.to_json(result_dict)

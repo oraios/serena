@@ -4,12 +4,14 @@ import shutil
 import tempfile
 from copy import deepcopy
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 
 from serena.agent import SerenaAgent
 from serena.config.serena_config import (
     DEFAULT_PROJECT_SERENA_FOLDER_LOCATION,
+    AgentInterface,
     LanguageBackend,
     ProjectConfig,
     RegisteredProject,
@@ -218,6 +220,68 @@ class TestProjectConfigLanguageBackend:
         assert config.language_backend is None
 
 
+class TestAgentInterface:
+    """Tests for the agent_interface setting (global and per project)."""
+
+    @staticmethod
+    def _project_config(agent_interface: AgentInterface | None) -> ProjectConfig:
+        return ProjectConfig(project_name="test", language_servers=[LanguageServerId.PYTHON], agent_interface=agent_interface)
+
+    def test_agent_interface_roundtrips_through_project_yaml(self):
+        assert self._project_config(AgentInterface.REPL)._to_yaml_dict()["agent_interface"] == "REPL"
+        assert self._project_config(None)._to_yaml_dict()["agent_interface"] is None
+
+    def test_agent_interface_parsed_from_project_dict(self):
+        data, _ = ProjectConfig._load_yaml_dict(PROJECT_TEMPLATE_FILE)
+        data["project_name"] = "test"
+        data["languages"] = ["python"]
+        data["agent_interface"] = "repl"  # case-insensitive
+        assert ProjectConfig._from_dict(data, local_override_keys=[]).agent_interface == AgentInterface.REPL
+        data.pop("agent_interface")
+        assert ProjectConfig._from_dict(data, local_override_keys=[]).agent_interface is None
+
+    def test_determine_agent_interface_precedence(self):
+        # default
+        assert SerenaConfig().determine_agent_interface() == AgentInterface.TOOLS
+        assert SerenaConfig().determine_agent_interface(self._project_config(None)) == AgentInterface.TOOLS
+        # global configuration
+        assert SerenaConfig(agent_interface=AgentInterface.REPL).determine_agent_interface() == AgentInterface.REPL
+        # project configuration takes precedence
+        config = SerenaConfig(agent_interface=AgentInterface.REPL)
+        assert config.determine_agent_interface(self._project_config(AgentInterface.TOOLS)) == AgentInterface.TOOLS
+        assert config.determine_agent_interface(self._project_config(None)) == AgentInterface.REPL
+
+    def test_repl_toolset_is_fixed_and_repl_follows_project_activation(self):
+        """
+        In REPL mode, neither the exposed nor the active toolset is affected by tool inclusion/exclusion definitions
+        (here: the project's exclusions and read-only setting), whereas the REPL's API scope follows the active project.
+        """
+        config, name = _make_config_with_project("test_proj")
+        config.agent_interface = AgentInterface.REPL
+        project_config = config.projects[0].project_config
+        project_config.excluded_tools = ["initial_instructions", "serena_repl"]
+        project_config.excluded_apis = ["mem"]
+        project_config.read_only = True
+
+        agent = SerenaAgent(project=None, serena_config=config)
+        try:
+            # before activation: the fixed toolset and the full set of facades
+            fixed_toolset = {"serena_repl", "initial_instructions", "activate_project"}
+            assert {t.get_name() for t in agent.get_exposed_tool_instances()} == fixed_toolset
+            assert set(agent.get_active_tool_names()) == fixed_toolset
+            overview = agent.get_repl().entrypoint.overview()
+            assert "s.mem" in overview
+            # the dashboard is disabled in the test configuration, so opening it is not offered
+            assert "s.cfg" in overview and "open_dashboard" not in overview
+
+            # after activation: the toolset is unchanged, the REPL reflects the project's API exclusions
+            agent.activate_project_from_path_or_name(name)
+            assert set(agent.get_active_tool_names()) == fixed_toolset
+            assert "s.mem" not in agent.get_repl().entrypoint.overview()
+        finally:
+            agent.on_shutdown(timeout=5)
+
+
 def _make_config_with_project(
     project_name: str,
     language_backend: LanguageBackend | None = None,
@@ -297,6 +361,35 @@ class TestEffectiveLanguageBackend:
         try:
             with pytest.raises(ValueError, match="Cannot activate project"):
                 agent.activate_project_from_path_or_name("jb_proj")
+        finally:
+            agent.on_shutdown(timeout=5)
+
+    def test_activate_project_switches_backend_with_repl_interface(self):
+        """With the REPL interface, post-init activation of a project with a different backend switches the backend."""
+        config, name = _make_config_with_project("lsp_proj", language_backend=None, global_backend=LanguageBackend.LSP)
+        config.agent_interface = AgentInterface.REPL
+        jb_project = Project(
+            project_root=str(Path(__file__).parent.parent / "resources" / "repos" / "java" / "test_repo"),
+            project_config=ProjectConfig(
+                project_name="jb_proj",
+                language_servers=[LanguageServerId.JAVA],
+                language_backend=LanguageBackend.JETBRAINS,
+            ),
+            serena_config=config,
+        )
+        config.projects.append(RegisteredProject.from_project_instance(jb_project))
+
+        agent = SerenaAgent(project=name, serena_config=config)
+        try:
+            assert agent.get_language_backend() == LanguageBackend.LSP
+            assert "s.lsp" in agent.get_repl().entrypoint.overview()
+
+            # the backend and everything depending on it follow the activated project
+            agent.activate_project_from_path_or_name("jb_proj")
+            assert agent.get_language_backend() == LanguageBackend.JETBRAINS
+            overview = agent.get_repl().entrypoint.overview()
+            assert "s.jb" in overview and "s.lsp" not in overview
+            assert "jetbrains" in [m.name for m in agent.get_active_modes().get_modes(include_background_base_modes=True)]
         finally:
             agent.on_shutdown(timeout=5)
 
@@ -542,6 +635,36 @@ class TestSerenaConfigLoadSave:
         self.master_config_path.write_text("projects:\n")
         config = SerenaConfig.from_config_file(generate_if_missing=False)
         assert config.projects == []
+
+    @pytest.mark.parametrize("setting", ["", "auth_secret: null\n", 'auth_secret: ""\n'])
+    def test_unset_auth_secret_is_generated_and_persisted(self, setting: str) -> None:
+        # load an existing configuration without a usable secret
+        self.master_config_path.write_text("projects: []\n" + setting)
+        config = SerenaConfig.from_config_file(generate_if_missing=False)
+
+        # subsequent loads retain the generated random UUID
+        assert UUID(config.auth_secret).version == 4
+        assert SerenaConfig.from_config_file(generate_if_missing=False).auth_secret == config.auth_secret
+
+    def test_configured_auth_secret_is_preserved(self) -> None:
+        # retain a user-provided secret across loading and migration
+        self.master_config_path.write_text("projects: []\nauth_secret: custom-secret\n")
+        assert SerenaConfig.from_config_file(generate_if_missing=False).auth_secret == "custom-secret"
+        assert SerenaConfig.from_config_file(generate_if_missing=False).auth_secret == "custom-secret"
+
+    def test_new_config_has_persistent_auth_secret(self) -> None:
+        # generate the configuration from the template and retain its secret
+        config = SerenaConfig.from_config_file()
+        assert UUID(config.auth_secret).version == 4
+        assert SerenaConfig.from_config_file().auth_secret == config.auth_secret
+
+    def test_direct_config_instances_have_distinct_auth_secrets(self) -> None:
+        # directly constructed configurations receive independent secrets
+        first = SerenaConfig()
+        second = SerenaConfig()
+        assert UUID(first.auth_secret).version == 4
+        assert UUID(second.auth_secret).version == 4
+        assert first.auth_secret != second.auth_secret
 
     def test_malformed_project_is_skipped_with_warning(self, caplog):
         """A malformed project.yml must not abort loading of the others."""

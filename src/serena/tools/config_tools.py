@@ -1,11 +1,29 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from typing import TYPE_CHECKING, cast
+
 from sensai.util.helper import mark_used
 
 from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional
 
+if TYPE_CHECKING:
+    from serena.repl.api.cfg_api import ConfigApi
 
-class OpenDashboardTool(Tool, ToolMarkerOptional, ToolMarkerDoesNotRequireActiveProject):
+
+class ConfigApiMixin:
+    """
+    Mixin for tools which delegate to the configuration API.
+    The API is imported locally, since the API module refers to the tools (as corresponding tools).
+    """
+
+    def _api(self) -> "ConfigApi":
+        from serena.repl.api.cfg_api import ConfigApi
+
+        tool = cast(Tool, cast(object, self))
+        return ConfigApi(tool.agent)
+
+
+class OpenDashboardTool(Tool, ToolMarkerOptional, ToolMarkerDoesNotRequireActiveProject, ConfigApiMixin):
     """
     Opens the Serena web dashboard in the default web browser.
     The dashboard provides logs, session information, and tool usage statistics.
@@ -15,10 +33,7 @@ class OpenDashboardTool(Tool, ToolMarkerOptional, ToolMarkerDoesNotRequireActive
         """
         Opens the Serena web dashboard in the default web browser.
         """
-        if self.agent.open_dashboard():
-            return f"Serena web dashboard has been opened in the user's default web browser: {self.agent.get_dashboard_url()}"
-        else:
-            return f"Serena web dashboard could not be opened automatically; tell the user to open it via {self.agent.get_dashboard_url()}"
+        return self._api().open_dashboard()
 
 
 class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
@@ -56,7 +71,7 @@ class RemoveProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerO
         return f"Successfully removed project '{project_name}' from configuration."
 
 
-class GetCurrentConfigTool(Tool):
+class GetCurrentConfigTool(Tool, ConfigApiMixin):
     """
     Prints the current configuration of the agent, including the active and available projects, tools, contexts, and modes.
     """
@@ -65,4 +80,4 @@ class GetCurrentConfigTool(Tool):
         """
         Print the current configuration of the agent, including the active and available projects, tools, contexts, and modes.
         """
-        return self.agent.get_current_config_overview()
+        return self._api().get_current_config()

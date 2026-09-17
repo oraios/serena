@@ -14,12 +14,12 @@ from _pytest.mark import Mark, MarkDecorator, ParameterSet
 
 from serena.agent import SerenaAgent
 from serena.config.context_mode import SerenaAgentContext
-from serena.config.serena_config import ProjectConfig, RegisteredProject, SerenaConfig
+from serena.config.serena_config import AgentInterface, ProjectConfig, RegisteredProject, SerenaConfig
+from serena.lsp.lsp_diagnostics import DiagnosticsContext
 from serena.project import Project
 from serena.tools import (
     SUCCESS_RESULT,
     ActivateProjectTool,
-    EditingToolWithDiagnostics,
     FindDeclarationTool,
     FindImplementationsTool,
     FindReferencingSymbolsTool,
@@ -30,6 +30,7 @@ from serena.tools import (
     ReplaceInFilesTool,
     ReplaceSymbolBodyTool,
     SafeDeleteSymbol,
+    SerenaReplTool,
     Tool,
 )
 from solidlsp.ls_config import LanguageServerId
@@ -824,9 +825,9 @@ def read_project_file(project: Project, relative_path: str) -> str:
 
 def parse_edit_diagnostics_result(result: str) -> dict:
     """Utility function to parse the diagnostic payload returned by edit tools."""
-    assert EditingToolWithDiagnostics.DIAGNOSTICS_KEY in result
+    assert DiagnosticsContext.DIAGNOSTICS_KEY in result
     d = json.loads(result)
-    return d[EditingToolWithDiagnostics.DIAGNOSTICS_KEY]
+    return d[DiagnosticsContext.DIAGNOSTICS_KEY]
 
 
 @contextmanager
@@ -898,6 +899,43 @@ class TestSerenaAgent:
             assert "activate_project" not in exposed
             assert {"find_symbol", "get_symbols_overview", "replace_symbol_body"} <= exposed
             assert "Serena's code intelligence tools" in agent.create_system_prompt()
+        finally:
+            agent.on_shutdown(timeout=5)
+
+    @pytest.mark.python
+    @pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.PYTHON), reason="python tests are disabled in this environment")
+    @pytest.mark.parametrize("context_name", ["desktop-app", "grok"], ids=["multi_project", "single_project"])
+    def test_repl_interface_exposes_fixed_toolset(self, serena_config, context_name: str):
+        # the toolset is fixed regardless of tool inclusions/exclusions (e.g. the context's or the configuration's);
+        # only the single-project property of the context matters (no project activation in that case)
+        serena_config.agent_interface = AgentInterface.REPL
+        serena_config.included_optional_tools = ["get_diagnostics_for_symbol"]
+        context = SerenaAgentContext.from_name(context_name)
+        agent = SerenaAgent(project="test_repo_python", serena_config=serena_config, context=context)
+        agent.execute_task(lambda: None)
+        try:
+            exposed = {tool.get_name() for tool in agent.get_exposed_tool_instances()}
+            expected = {"serena_repl", "initial_instructions"} | (set() if context.single_project else {"activate_project"})
+            assert exposed == expected
+            assert "s.lsp" in agent.get_tool(SerenaReplTool).apply(agent.create_session().session_id, "s.info()")
+
+            # the facade listing is part of the (fixed) tool description in single-project sessions,
+            # and of the activation message otherwise (where the facades depend on the activated project)
+            tool_description = agent.get_tool(SerenaReplTool).get_apply_docstring()
+            activation_message = agent.get_project_activation_message("test_session")
+            assert ("s.lsp:" in tool_description) == context.single_project
+            assert ("s.lsp:" in activation_message) == (not context.single_project)
+
+            # prompts refer to operations by their qualified REPL names, e.g. `lsp.find_symbol` instead of the tool name
+            system_prompt = agent.create_system_prompt()
+            assert "`lsp.find_symbol`" in system_prompt
+            assert "`find_symbol`" not in system_prompt
+
+            # the instructions establish a session, whose id can be used with session-aware tools
+            session_id_match = re.search(r"session id is `(\w+)`", system_prompt)
+            assert session_id_match is not None
+            session_id = session_id_match.group(1)
+            assert "s.lsp" in agent.get_tool(SerenaReplTool).apply(session_id, "s.info()")
         finally:
             agent.on_shutdown(timeout=5)
 

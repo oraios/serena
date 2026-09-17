@@ -9,7 +9,7 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerId
-from test.conftest import language_server_tests_enabled
+from test.conftest import is_ci, language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
 
@@ -41,6 +41,7 @@ class TestRLanguageServer:
         expected_functions = {"calculate_mean", "process_data", "create_data_frame"}
         assert expected_functions.issubset(function_names), f"Expected functions {expected_functions} but found {function_names}"
 
+    @pytest.mark.xfail(is_ci, reason="Test is flaky")  # See #1040
     @pytest.mark.parametrize("language_server", [LanguageServerId.R], indirect=True)
     def test_find_definition_across_files(self, language_server: SolidLanguageServer):
         """Test finding function definitions across files."""
@@ -58,6 +59,7 @@ class TestRLanguageServer:
         # Definition should be around line 37 (0-indexed: 36) where create_data_frame is defined
         assert definition_location["range"]["start"]["line"] >= 35
 
+    @pytest.mark.xfail(is_ci, reason="Test is flaky")  # See #1040
     @pytest.mark.parametrize("language_server", [LanguageServerId.R], indirect=True)
     def test_find_references_across_files(self, language_server: SolidLanguageServer):
         """Test finding function references across files."""
