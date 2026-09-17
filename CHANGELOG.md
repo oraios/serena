@@ -28,6 +28,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     trusts no project at all; the template now shows the bare root form alongside the parent-directory
     glob (#2001)
 
+* Language Servers:
+  - Scala: terminate Bloop build-server daemons that Metals self-daemonized and that survived
+    `stop()` as orphans re-parented to PID 1 (#1816)
+
 * CLI:
   - Fix: `project health-check` reported `Health check passed - All tools working correctly` and
     exited 0 even when `FindReferencingSymbolsTool` had raised, because that failure was logged as
