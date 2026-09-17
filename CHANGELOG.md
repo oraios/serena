@@ -66,6 +66,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     command and Serena waits for the plugin server to become reachable before proceeding (#1864)
 
 * Hooks:
+  - Add opt-in `serena-hooks enforce` hard-block mode with directive Serena replacement calls for direct
+    code searches and reads, plus configurable code-file extensions (#1470)
   - Fix: Codex's documented hook wiring only routes `remind` through `PreToolUse` on `Bash`, so its
     reset-on-Serena-tool-use branch was unreachable there and reminder counters never cleared after a
     successful Serena call. Add a `serena-hooks reset` command and a `PostToolUse` example matched to
