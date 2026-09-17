@@ -301,10 +301,13 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
             if not include_body:
                 ref_relative_path = ref.symbol.location.relative_path
                 assert ref_relative_path is not None, f"Referencing symbol {ref.symbol.name} has no relative path, this is likely a bug."
-                content_around_ref = self.project.retrieve_content_around_line(
-                    relative_file_path=ref_relative_path, line=ref.line, context_lines_before=1, context_lines_after=1
-                )
-                ref_dict["content_around_reference"] = content_around_ref.to_display_string()
+                try:
+                    content_around_ref = self.project.retrieve_content_around_line(
+                        relative_file_path=ref_relative_path, line=ref.line, context_lines_before=1, context_lines_after=1
+                    )
+                    ref_dict["content_around_reference"] = content_around_ref.to_display_string()
+                except UnicodeDecodeError:
+                    ref_dict["content_around_reference"] = "<unreadable: file encoding differs from project encoding>"
             reference_dicts.append(ref_dict)
 
         # capture lightweight reference data before grouping
