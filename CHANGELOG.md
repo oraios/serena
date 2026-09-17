@@ -12,6 +12,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     see `CONTRIBUTING.md`
 
 * General:
+  - Add `auth_secret` to `serena_config.yml` for authenticating communication between Serena components
+    and services. When missing, null, or empty, a random UUID is generated and persisted; existing values
+    are preserved
   - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`

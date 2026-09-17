@@ -4,6 +4,7 @@ import shutil
 import tempfile
 from copy import deepcopy
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 
@@ -634,6 +635,36 @@ class TestSerenaConfigLoadSave:
         self.master_config_path.write_text("projects:\n")
         config = SerenaConfig.from_config_file(generate_if_missing=False)
         assert config.projects == []
+
+    @pytest.mark.parametrize("setting", ["", "auth_secret: null\n", 'auth_secret: ""\n'])
+    def test_unset_auth_secret_is_generated_and_persisted(self, setting: str) -> None:
+        # load an existing configuration without a usable secret
+        self.master_config_path.write_text("projects: []\n" + setting)
+        config = SerenaConfig.from_config_file(generate_if_missing=False)
+
+        # subsequent loads retain the generated random UUID
+        assert UUID(config.auth_secret).version == 4
+        assert SerenaConfig.from_config_file(generate_if_missing=False).auth_secret == config.auth_secret
+
+    def test_configured_auth_secret_is_preserved(self) -> None:
+        # retain a user-provided secret across loading and migration
+        self.master_config_path.write_text("projects: []\nauth_secret: custom-secret\n")
+        assert SerenaConfig.from_config_file(generate_if_missing=False).auth_secret == "custom-secret"
+        assert SerenaConfig.from_config_file(generate_if_missing=False).auth_secret == "custom-secret"
+
+    def test_new_config_has_persistent_auth_secret(self) -> None:
+        # generate the configuration from the template and retain its secret
+        config = SerenaConfig.from_config_file()
+        assert UUID(config.auth_secret).version == 4
+        assert SerenaConfig.from_config_file().auth_secret == config.auth_secret
+
+    def test_direct_config_instances_have_distinct_auth_secrets(self) -> None:
+        # directly constructed configurations receive independent secrets
+        first = SerenaConfig()
+        second = SerenaConfig()
+        assert UUID(first.auth_secret).version == 4
+        assert UUID(second.auth_secret).version == 4
+        assert first.auth_secret != second.auth_secret
 
     def test_malformed_project_is_skipped_with_warning(self, caplog):
         """A malformed project.yml must not abort loading of the others."""

@@ -235,5 +235,9 @@ project_serena_folder_location: "$projectDir/.serena"
 # The pattern "**" matches any project path, so it can be used to trust all projects.
 trusted_project_path_patterns: []
 
+# shared secret for authenticating communication between Serena components and services.
+# Keep this value private. When missing, null, or empty, a random UUID is generated and saved on load.
+auth_secret:
+
 # the list of registered project paths (updated automatically).
 projects: []

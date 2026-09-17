@@ -16,6 +16,7 @@ from enum import Enum
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Self, TypeVar
+from uuid import uuid4
 
 import yaml
 from ruamel.yaml.comments import CommentedMap
@@ -945,6 +946,11 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
     # *** fields that are mapped directly to/from the configuration file (DO NOT RENAME) ***
 
     projects: list[RegisteredProject] = field(default_factory=list)
+    auth_secret: str = field(default_factory=lambda: str(uuid4()), repr=False)
+    """
+    shared secret for authenticating communication between Serena components and services.
+    A random UUID is generated and persisted when the configuration setting is missing or empty.
+    """
     gui_log_window: bool = False
     log_level: int = logging.INFO
     trace_lsp_communication: bool = False
@@ -1137,6 +1143,11 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         for field_name in instance._iter_config_file_mapped_fields_without_type_conversion():
             assert hasattr(instance, field_name)
             setattr(instance, field_name, get_value_or_default(field_name))
+
+        # generate a persistent authentication secret for explicitly unset settings
+        if not instance.auth_secret:
+            instance.auth_secret = str(uuid4())
+            num_migrations += 1
 
         # read projects
         if "projects" not in loaded_commented_yaml:
