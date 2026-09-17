@@ -7,6 +7,7 @@ from collections.abc import Hashable
 
 from overrides import override
 
+from solidlsp.initialize_params import DefaultInitializeParamsBuilder, InitializeParamsBuilder
 from solidlsp.ls import RawDocumentSymbol, SolidLanguageServer
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -54,6 +55,12 @@ class DartLanguageServer(SolidLanguageServer):
     You can pass the following entries in ``ls_specific_settings["dart"]``:
         - dart_sdk_version: Override the pinned Dart SDK version downloaded by Serena
           (default: the bundled Serena version).
+        - set_root_uri: Whether to send the deprecated ``rootUri``/``rootPath`` fields in
+          the LSP ``initialize`` request (default: false). The Dart analysis server adds
+          both ``rootUri`` and every ``workspaceFolders`` entry to its analysis roots
+          without de-duplication, so on a monorepo root that is not a Dart package the
+          whole tree is analysed and the server burns CPU at idle (oraios/serena#2045).
+          Set to true only if a single-package project relies on ``rootUri`` alone.
     """
 
     # Mirrors pyright_server.py / basedpyright_server.py: a bounded wait for the server's own
@@ -72,6 +79,11 @@ class DartLanguageServer(SolidLanguageServer):
         # Set once the Dart analysis server reports it has finished its initial workspace scan,
         # via either notification it sends for this (see _start_server).
         self.analysis_complete = threading.Event()
+
+    def _create_initialize_params_builder(self) -> InitializeParamsBuilder:
+        dart_settings = self._custom_settings or {}
+        set_root_uri = bool(dart_settings.get("set_root_uri", False))
+        return DefaultInitializeParamsBuilder(self, set_root_uri=set_root_uri)
 
     @override
     def _document_symbols_cache_fingerprint(self) -> Hashable:

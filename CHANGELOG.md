@@ -23,10 +23,27 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: process-tree cleanup signaled descendant language-server processes without waiting for them,
     which could leave grandchildren as zombies; cleanup now waits for the discovered descendants (#1464)
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
+  - Add optional `connection_access_tokens` mapping for HTTP MCP transports: each bearer token maps to
+    `read` (query tools only) or `edit` (all tools). Read-only connections omit editing tools from
+    `tools/list` and reject editing tool calls. Stdio is unaffected (#1971)
   - Docs: `trusted_project_path_patterns` now documents how to trust a single project. Trust is decided by
     the project's root path, so a `<project root>/**` entry matches only paths below the root and therefore
     trusts no project at all; the template now shows the bare root form alongside the parent-directory
     glob (#2001)
+  - Docs: TypeScript configuration now explains monorepo cross-package references and why
+    `find_referencing_symbols` is silently partial without tsconfig project references (#1939)
+
+* Language Servers:
+  - Dart: omit the deprecated `rootUri`/`rootPath` initialize fields by default (configurable via
+    `ls_specific_settings.dart.set_root_uri`) so a monorepo root is not analysed as an additional
+    Dart analysis root, which burned ~1 CPU core at idle (#2045)
+  - GDScript: clamp symbol range ends so `replace_symbol_body` no longer deletes the blank line
+    before the next function (#1952)
+  - Scala: terminate Bloop build-server daemons that Metals self-daemonized and that survived
+    `stop()` as orphans re-parented to PID 1 (#1816)
+  - Java: expose `maven_import_enabled`, `gradle_import_enabled`, `update_build_configuration` and
+    `autobuild_enabled` in `ls_specific_settings.java` without replacing Serena's built-in JDTLS
+    settings block (#1976)
 
 * CLI:
   - Fix: `project health-check` reported `Health check passed - All tools working correctly` and

@@ -41,7 +41,7 @@ class GodotLanguageServer(SolidLanguageServer):
 
     # Bump whenever _fix_range_end/_fix_symbol_ranges below changes, so a stale cached
     # high-level result (from before this fix existed) is not served back to callers.
-    _DOCUMENT_SYMBOLS_CACHE_VERSION = 1
+    _DOCUMENT_SYMBOLS_CACHE_VERSION = 2
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings) -> None:
         self._godot_version = self._detect_godot_version(repository_root_path)
@@ -193,15 +193,47 @@ class GodotLanguageServer(SolidLanguageServer):
 
     @staticmethod
     def _fix_symbol_ranges(symbol: Any, lines: list[str]) -> None:
-        """Recursively apply :meth:`_fix_range_end` to a (raw or unified) symbol and its children."""
+        """Recursively apply range corrections to a (raw or unified) symbol and its children."""
         location = symbol.get("location")
         if location is not None:
             GodotLanguageServer._fix_range_end(location.get("range", {}), lines)
+            GodotLanguageServer._clamp_trailing_blank_lines(location.get("range", {}), lines)
         symbol_range = symbol.get("range")
         if symbol_range is not None:
             GodotLanguageServer._fix_range_end(symbol_range, lines)
+            GodotLanguageServer._clamp_trailing_blank_lines(symbol_range, lines)
         selection_range = symbol.get("selectionRange")
         if selection_range is not None:
             GodotLanguageServer._fix_range_end(selection_range, lines)
         for child in symbol.get("children") or []:
             GodotLanguageServer._fix_symbol_ranges(child, lines)
+
+    @staticmethod
+    def _clamp_trailing_blank_lines(rng: Any, lines: list[str]) -> None:
+        """Clamp a symbol range so its end does not include trailing blank lines.
+
+        Godot's parser often closes a function's range at the start of the next top-level
+        construct (or on the blank separator line). ``replace_symbol_body`` then deletes
+        inter-symbol trivia together with the body (oraios/serena#1952). Walk the end
+        position back to the last non-blank line of the symbol itself; never move past
+        the range start.
+        """
+        end = rng.get("end")
+        if end is None:
+            return
+        end_line = end.get("line")
+        if end_line is None:
+            return
+        start = rng.get("start") or {}
+        start_line = start.get("line", 0)
+        line = end_line
+        # an end at column 0 means the end_line itself is not part of the body content
+        if end.get("character") == 0 and line > start_line:
+            line -= 1
+        while line > start_line and (line >= len(lines) or not lines[line].strip()):
+            line -= 1
+        if line < start_line or not (0 <= line < len(lines)):
+            return
+        if line != end_line or end.get("character") != len(lines[line]):
+            end["line"] = line
+            end["character"] = len(lines[line])

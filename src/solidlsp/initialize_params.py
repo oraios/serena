@@ -40,10 +40,11 @@ class InitializeParamsBuilder(ABC):
 
 
 class DefaultInitializeParamsBuilder(InitializeParamsBuilder):
-    def __init__(self, ls: "SolidLanguageServer", set_workspace_folders: bool = True):
+    def __init__(self, ls: "SolidLanguageServer", set_workspace_folders: bool = True, set_root_uri: bool = True):
         super().__init__()
         self._ls = ls
         self._set_workspace_folders = set_workspace_folders
+        self._set_root_uri = set_root_uri
 
     @staticmethod
     def _create_workspace_folder_entry(path: str) -> WorkspaceFolder:
@@ -54,9 +55,15 @@ class DefaultInitializeParamsBuilder(InitializeParamsBuilder):
         root_abs_path = self._ls.repository_root_path
 
         self._set("processId", os.getpid())
-        self._set("rootPath", root_abs_path)
-        self._set("rootUri", pathlib.Path(root_abs_path).as_uri())
         self._set("clientInfo", {"name": "Serena"})
+
+        # Some servers (notably the Dart analysis server) treat rootUri as an additional
+        # analysis root on top of workspaceFolders, with no de-duplication. When both are
+        # the monorepo root this can cause unbounded indexing; omit rootUri/rootPath and
+        # rely on workspaceFolders alone (oraios/serena#2045).
+        if self._set_root_uri:
+            self._set("rootPath", root_abs_path)
+            self._set("rootUri", pathlib.Path(root_abs_path).as_uri())
 
         if self._set_workspace_folders:
             abs_workspace_paths = self._ls.config.get_absolute_workspace_folders(root_abs_path)
