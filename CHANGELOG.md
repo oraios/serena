@@ -28,6 +28,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     trusts no project at all; the template now shows the bare root form alongside the parent-directory
     glob (#2001)
 
+* Language Servers:
+  - Dart: omit the deprecated `rootUri`/`rootPath` initialize fields by default (configurable via
+    `ls_specific_settings.dart.set_root_uri`) so a monorepo root is not analysed as an additional
+    Dart analysis root, which burned ~1 CPU core at idle (#2045)
+
 * CLI:
   - Fix: `project health-check` reported `Health check passed - All tools working correctly` and
     exited 0 even when `FindReferencingSymbolsTool` had raised, because that failure was logged as
