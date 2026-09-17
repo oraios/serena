@@ -54,6 +54,9 @@ class NonBlockingStderrHandler(logging.Handler):
 
     _PIPE_NOWAIT = 0x00000001
     _ERROR_NO_DATA = 232
+    _ERROR_BROKEN_PIPE = 109
+    _ERROR_PIPE_NOT_CONNECTED = 233
+    _WINDOWS_FULL_PIPE_ERRORS = frozenset({_ERROR_NO_DATA, _ERROR_BROKEN_PIPE, _ERROR_PIPE_NOT_CONNECTED})
 
     class _RecordWriter:
         """
@@ -177,9 +180,10 @@ class NonBlockingStderrHandler(logging.Handler):
             try:
                 os.write(self._fd, msg.encode(errors="replace"))
             except OSError as e:
-                # full non-blocking pipe (ERROR_NO_DATA) or closed handle: drop, never block
-                if getattr(e, "winerror", None) == NonBlockingStderrHandler._ERROR_NO_DATA:
-                    raise BlockingIOError(NonBlockingStderrHandler._ERROR_NO_DATA, "pipe full") from e
+                # full non-blocking pipe or peer gone: drop, never block
+                winerror = getattr(e, "winerror", None)
+                if winerror in NonBlockingStderrHandler._WINDOWS_FULL_PIPE_ERRORS:
+                    raise BlockingIOError(winerror, "pipe full or disconnected") from e
                 raise
 
     def __init__(self, stream=None, level: int = logging.NOTSET) -> None:
