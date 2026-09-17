@@ -262,7 +262,9 @@ DSH does not currently expose a separate `SessionEnd` event. Serena's DSH output
 `hookSpecificOutput` shape as Claude Code, so the bridge can consume `permissionDecision` and
 `permissionDecisionReason` without a client-specific wrapper. The bridge supports deny/ask responses for
 `PreToolUse`, but does not use Claude Code's `allow` response for pre-approval, so Serena's `auto-approve`
-hook is intentionally not configured for DSH.
+hook is intentionally not configured for DSH. Native `Bash` search/read commands are classified the same
+way as Claude Code's Grep/Read tools (gated on the `Bash` tool name so unrelated MCP tools with a
+`command` parameter are not counted).
 
 ## VSCode
 

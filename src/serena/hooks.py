@@ -387,7 +387,16 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             self._file_path = str(file_path).strip() or None
 
     def is_grep_call(self) -> bool:
-        if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY, HookClient.DSH):
+        # DSH is Claude Code-compatible and routes shell work through the native Bash tool.
+        # Gate shell classification on that tool name so an unrelated MCP tool with a
+        # ``command`` parameter is not counted (same concern as #1928 for Claude/CodeBuddy).
+        if self._client is HookClient.DSH:
+            return (
+                self._tool_name == "grep"
+                or "search_for_pattern" in self._tool_name
+                or (self._tool_name == "bash" and self._is_shell_command_call() and self._command_name in self._GREP_SHELL_COMMANDS)
+            )
+        if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
             return self._tool_name == "grep" or "search_for_pattern" in self._tool_name
         if self._client == HookClient.GROK:
             return self._tool_name == "grep" or (self._is_shell_command_call() and self._command_name in self._GREP_SHELL_COMMANDS)
@@ -397,7 +406,13 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         return "grep" in self._tool_name
 
     def is_read_call(self) -> bool:
-        if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY, HookClient.DSH):
+        if self._client is HookClient.DSH:
+            return (
+                self._tool_name == "read"
+                or "read_file" in self._tool_name
+                or (self._tool_name == "bash" and self._is_shell_command_call() and self._command_name in self._READ_SHELL_COMMANDS)
+            )
+        if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
             return self._tool_name == "read" or "read_file" in self._tool_name
         if self._client == HookClient.GROK:
             return self._tool_name == "read_file" or (self._is_shell_command_call() and self._command_name in self._READ_SHELL_COMMANDS)
@@ -425,7 +440,11 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         if self._file_path is not None:
             return self._is_code_file_path(self._file_path)
 
-        if self._client in (HookClient.CODEX, HookClient.GROK) and self._command_args_str is not None:
+        # Codex/Grok always carry a shell command; DSH only when the call came from native Bash.
+        inspect_shell_paths = self._client in (HookClient.CODEX, HookClient.GROK) or (
+            self._client is HookClient.DSH and self._tool_name == "bash"
+        )
+        if inspect_shell_paths and self._command_args_str is not None:
             return any(self._is_code_file_path(argument) for argument in self._iter_shell_path_arguments())
 
         return True

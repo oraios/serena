@@ -1370,6 +1370,39 @@ class TestDSHHookClient:
         assert grep_hook.is_grep_call()
         assert read_hook.is_read_code_file_call()
 
+    def test_dsh_bash_classifies_shell_grep_and_read(self, tmp_path: Path) -> None:
+        """DSH routes shell work through Claude Code's native Bash tool."""
+        with (
+            patch("sys.stdin", _make_stdin(_base_input("Bash", tool_input={"command": "rg -n foo src/main.py"}))),
+            patch("serena.hooks.serena_home_dir", str(tmp_path)),
+        ):
+            grep_hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.DSH)
+        with (
+            patch("sys.stdin", _make_stdin(_base_input("Bash", tool_input={"command": "cat src/main.py"}))),
+            patch("serena.hooks.serena_home_dir", str(tmp_path)),
+        ):
+            read_hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.DSH)
+        with (
+            patch("sys.stdin", _make_stdin(_base_input("Bash", tool_input={"command": "cat README.md"}))),
+            patch("serena.hooks.serena_home_dir", str(tmp_path)),
+        ):
+            markdown_read_hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.DSH)
+
+        assert grep_hook.is_grep_call() is True
+        assert read_hook.is_read_call() is True
+        assert read_hook.is_read_code_file_call() is True
+        assert markdown_read_hook.is_read_call() is True
+        assert markdown_read_hook.is_read_code_file_call() is False
+
+    def test_dsh_non_shell_mcp_tool_with_command_parameter_is_not_classified(self, tmp_path: Path) -> None:
+        payload = _base_input("mcp__deploy__run_task", tool_input={"command": "cat /etc/secrets.env", "task_name": "print-config"})
+        with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.DSH)
+
+        assert hook.is_grep_call() is False
+        assert hook.is_read_call() is False
+        assert hook.is_read_file_call() is False
+
     def test_dsh_uses_claude_compatible_deny_payload(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
             _execute_remind_hook(HookClient.DSH, _base_input("grep"), tmp_path)
