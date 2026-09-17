@@ -1,6 +1,7 @@
 """
 Tools supporting the execution of (external) commands
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import os.path
 

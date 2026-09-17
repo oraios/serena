@@ -3,6 +3,7 @@ Language Server implementation for TypeScript/JavaScript using https://github.co
 which provides TypeScript language server functionality via VSCode's TypeScript extension
 (contrary to typescript-language-server, which uses the TypeScript compiler directly).
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

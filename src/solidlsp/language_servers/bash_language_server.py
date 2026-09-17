@@ -2,6 +2,7 @@
 Provides Bash specific instantiation of the LanguageServer class using bash-language-server.
 Contains various configurations and settings specific to Bash scripting.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

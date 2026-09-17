@@ -9,7 +9,7 @@
 
 <div align="center">
   <a href="https://discord.com/invite/cVUNQmnV4r"><img src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&labelColor=0a0e14&logo=discord&logoColor=5865F2" alt="discord"></a>
-  <a href="https://github.com/oraios/serena/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-b0e8ff?style=flat-square&labelColor=0a0e14" alt="license"></a>
+  <a href="https://github.com/oraios/serena/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-b0e8ff?style=flat-square&labelColor=0a0e14" alt="license: GPL-3.0-or-later"></a>
 </div>
 <br>
 
@@ -261,5 +261,15 @@ Please refer to the [user guide](https://oraios.github.io/serena/02-usage/000_in
 A significant part of Serena, especially support for various languages, was contributed by the open source community.
 We are very grateful for the many contributors who made this possible and who played an important role in making Serena
 what it is today.
+
+## License
+
+Serena is licensed per component: **SolidLSP** (`src/solidlsp`) under the [MIT License](LICENSES/MIT.txt),
+the **Serena application** (everything else) under [GPL-3.0-or-later](LICENSES/GPL-3.0-or-later.txt).
+Distributions combining both are as a whole subject to the GPL.
+
+See [LICENSE](LICENSE) for the authoritative overview and the
+[license documentation](https://oraios.github.io/serena/01-about/060_license.html) for the background.
+Contributions require acceptance of our [CLA](CLA.md); see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 <!-- mcp-name: io.github.oraios/serena -->

@@ -2,8 +2,19 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Licensing:
+  - **Breaking**: The Serena application (`src/serena`, `src/interprompt` and all other non-SolidLSP code) is now
+    licensed under GPL-3.0-or-later. SolidLSP (`src/solidlsp`) remains MIT-licensed. The repository is now
+    explicitly multi-licensed by component; see `LICENSE` for the overview, the historical cutoff and the rationale.
+    The change is not retroactive: all earlier releases and commits remain available under MIT.
+  - Source files now carry `SPDX-License-Identifier` headers
+  - Contributions require acceptance of the new Contributor License Agreement (`CLA.md`), enforced via CLA assistant;
+    see `CONTRIBUTING.md`
+
 * General:
   - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
+  - Fix: importing Serena no longer loads the `anthropic` package unless the Anthropic token counter is
+    actually used; the unconditional import added seconds to CLI/MCP startup on some machines (#2012)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
   - Fix: `TextUtils.insert_text_at_position` returned a wrong position when the inserted text merged
@@ -12,12 +23,27 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: process-tree cleanup signaled descendant language-server processes without waiting for them,
     which could leave grandchildren as zombies; cleanup now waits for the discovered descendants (#1464)
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
+  - Docs: `trusted_project_path_patterns` now documents how to trust a single project. Trust is decided by
+    the project's root path, so a `<project root>/**` entry matches only paths below the root and therefore
+    trusts no project at all; the template now shows the bare root form alongside the parent-directory
+    glob (#2001)
 
 * CLI:
   - Fix: `project health-check` reported `Health check passed - All tools working correctly` and
     exited 0 even when `FindReferencingSymbolsTool` had raised, because that failure was logged as
     a warning while the verdict checked `FindSymbolTool` only. A reference-search failure now fails
     the check; a symbol with no references is still a pass
+  - Add `project remove`, which unregisters a project from the project list in `serena_config.yml`,
+    addressed either by name or by path. Only the registry entry is removed; the project's own files,
+    including its project configuration, are left untouched (#2029)
+
+* Tools:
+  - Fix: the file-editing tools saved the edited file with `open(path, "w")`, which truncates it
+    before the new content is complete, so a crash, an OOM kill or a full disk partway through the
+    write could leave a source file empty or half-written. Saves now go through the same atomic
+    temp-file-plus-`os.replace` helper that the memory writes already use. The helper resolves
+    symlinks first, so a symlinked file is still written through to its target rather than being
+    replaced by a regular file (#1958)
 
 * Memories:
   - Fix: `save_memory`/`edit_memory` wrote directly to the memory file with `open(path, "w")`, which
@@ -41,6 +67,16 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Language Servers:
   - Add the experimental Rust-based EmmyLua Analyzer backend as `lua_emmylua`, with managed
     cross-platform downloads and SHA-256 verification; the default `lua` backend remains unchanged
+  - Fix: Godot's GDScript parser can report a symbol's end column one column past the
+    line-end convention every other language server follows (closing a node's range from
+    the next lookahead token instead of the last consumed one, when that lookahead is a
+    synthesized newline); `replace_symbol_body` on the last function in a file silently
+    consumed the separating blank line as a result. `GodotLanguageServer` now corrects this
+    specific, measured overshoot when building its high-level document symbols (#1974)
+  - Fix: High-level document symbol cache was not invalidated when the LS-specific low-level result 
+    version changed
+  - Fix: A language server's cache directory was determined by the language_id rather than 
+    the language server identifier's key. The two identifiers coincided in most cases.
   - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
     preserves explicit user settings across initialization and configuration requests (#1989)
     VTS initialization options now override defaults per top-level key rather than replacing the
@@ -58,6 +94,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     rest of the session (#1871)
   - Fix: Exceptions raised during `LanguageServerManager.start` did not stop the language server subprocess if it was
     already started (#1949)
+  - Add: Installed Python packages can provide generic external language-server adapters through the
+    `serena.language_servers` entry-point group for explicit use in `project.yml`
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: `DartLanguageServer._start_server` discarded both `$/analyzerStatus` and
     `experimental/serverStatus`, the two notifications the Dart analysis server sends to report

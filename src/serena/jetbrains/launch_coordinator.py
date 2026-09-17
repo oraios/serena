@@ -3,6 +3,7 @@ Coordinates the launching of JetBrains IDE instances triggered by Serena's own
 `jetbrains_launch_command`, so that concurrent Serena sessions activating different
 projects at (nearly) the same time do not race each other into the same IDE launch.
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import hashlib
 import logging

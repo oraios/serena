@@ -5,6 +5,7 @@ File and file system-related tools, specifically for
   * creating files
   * editing at the file level
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import os
 from collections import defaultdict
