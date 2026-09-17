@@ -7,6 +7,7 @@ import dataclasses
 import os
 import re
 import shutil
+import stat
 import threading
 from collections.abc import Iterator, Sequence
 from copy import deepcopy
@@ -1121,6 +1122,17 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
                 raise FileNotFoundError(f"Serena configuration file not found: {config_file_path}")
             log.info(f"Serena configuration file not found at {config_file_path}, autogenerating...")
             cls._generate_config_file(config_file_path)
+
+        # restrict access to the owner's read/write permissions (as the config file contains secrets)
+        if os.name == "posix":
+            current_mode = stat.S_IMODE(os.stat(config_file_path).st_mode)
+            if current_mode != 0o600:
+                try:
+                    os.chmod(config_file_path, 0o600)
+                except Exception as e:
+                    log.error("Failed to restrict permissions of Serena configuration %s to 0600: %s", config_file_path, e)
+                else:
+                    log.info("Changed permissions of Serena configuration %s from %04o to 0600", config_file_path, current_mode)
 
         # load the configuration
         log.info(f"Loading Serena configuration from {config_file_path}")
