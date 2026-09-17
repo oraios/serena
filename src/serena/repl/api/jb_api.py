@@ -399,7 +399,7 @@ class JetBrainsApi(FacadeApi):
     @facade_method(corresponding_tool=JetBrainsFindDeclarationTool)
     def find_declaration(self, relative_path: str, regex: str, include_body: bool = False) -> JetBrainsSymbolCollection:
         r"""
-        Finds the declaration of a symbol.
+        Finds the declaration of a symbol based on an occurrence of the symbol in a source file, specified by a regex.
 
         :param relative_path: the relative path to the source file containing the symbol for which to find the declaration.
         :param regex: a regular expression with one group, where the group matches the symbol for which to perform the lookup.

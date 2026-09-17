@@ -609,7 +609,7 @@ class LspApi(FacadeApi):
         include_info: bool = False,
     ) -> LspSymbol:
         r"""
-        Finds the declaration of a symbol.
+        Finds the declaration of a symbol based on an occurrence of the symbol in a source file, specified by a regex.
 
         :param relative_path: the relative path to the source file containing the symbol for which to find the declaration.
         :param regex: a regular expression with one group, where the group matches the symbol for which to perform the lookup.
