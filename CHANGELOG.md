@@ -36,6 +36,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     glob (#2001)
 
 * CLI:
+  - Add `download-ls-dependencies` to prefetch runtime dependencies for selected language servers, or all
+    non-experimental servers with `--all`, for environments with restricted network access (#664)
   - Fix: `project health-check` reported `Health check passed - All tools working correctly` and
     exited 0 even when `FindReferencingSymbolsTool` had raised, because that failure was logged as
     a warning while the verdict checked `FindSymbolTool` only. A reference-search failure now fails
