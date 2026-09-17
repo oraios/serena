@@ -833,7 +833,7 @@ def parse_edit_diagnostics_result(result: str) -> dict:
 @contextmanager
 def project_file_modification_context(serena_agent: SerenaAgent, relative_path: str) -> Iterator[None]:
     """Context manager to modify a project file and revert the changes after use."""
-    project = serena_agent.get_active_project()
+    project = serena_agent.get_active_project_or_raise()
     file_path = os.path.join(project.project_root, relative_path)
 
     # Read the original content
@@ -1455,6 +1455,7 @@ class TestPromptProvision:
 
         # now activate another project which dynamically enables a new mode (no-onboarding)
         reg_project = serena_agent.serena_config.get_registered_project(project_name2)
+        assert reg_project is not None
         reg_project.project_config.default_modes = ["no-onboarding"]
         expected_new_mode_message = "The onboarding process is not applied."
         result2 = self._call_tool(serena_agent, ActivateProjectTool, project=project_name2, session_id=session1)

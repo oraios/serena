@@ -152,7 +152,6 @@ no-matching-overload = "ignore"
 not-subscriptable = "ignore"
 parameter-already-assigned = "ignore"
 too-many-positional-arguments = "ignore"
-unresolved-attribute = "ignore"
 unsupported-operator = "ignore"
 
 [tool.poe.env]
