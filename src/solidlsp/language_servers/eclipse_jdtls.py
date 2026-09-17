@@ -130,6 +130,14 @@ class EclipseJDTLS(SolidLanguageServer):
         - maven_user_settings: Path to Maven settings.xml file (default: ~/.m2/settings.xml)
         - gradle_user_home: Path to Gradle user home directory (default: ~/.gradle)
         - gradle_wrapper_enabled: Whether to use the project's Gradle wrapper (default: false)
+        - maven_import_enabled: Whether JDTLS imports Maven projects (default: true). Disable on
+              Gradle-only repositories to skip pom.xml detection work.
+        - gradle_import_enabled: Whether JDTLS imports Gradle projects (default: true). Disable on
+              Maven-only repositories to skip Gradle detection work.
+        - update_build_configuration: What JDTLS does after pom.xml/build.gradle changes:
+              "disabled", "interactive" (default), or "automatic".
+        - autobuild_enabled: Whether JDTLS rebuilds after edits (default: true). Disable on very
+              large repositories to reduce background CPU.
         - gradle_java_home: Path to JDK for Gradle (default: null, falls back to JAVA_HOME when
               use_system_java_home is true, then the bundled JRE)
         - use_system_java_home: Whether to use the system's JAVA_HOME for JDTLS itself and, when
@@ -709,6 +717,10 @@ class EclipseJDTLS(SolidLanguageServer):
                 "use_system_java_home",
                 "maven_offline",
                 "runtimes",
+                "maven_import_enabled",
+                "gradle_import_enabled",
+                "update_build_configuration",
+                "autobuild_enabled",
             )
             workspace_settings = {key: custom_settings.settings[key] for key in workspace_setting_keys if key in custom_settings.settings}
             workspace_settings_json = json.dumps(workspace_settings, sort_keys=True, separators=(",", ":"))
@@ -967,6 +979,19 @@ class EclipseJDTLS(SolidLanguageServer):
             f"Gradle wrapper {'enabled' if gradle_wrapper_enabled else 'disabled'} (configurable via ls_specific_settings -> java -> gradle_wrapper_enabled)"
         )
 
+        # Project import / rebuild behaviour (oraios/serena#1976). Defaults match the previous
+        # hard-coded values so existing projects see no change.
+        maven_import_enabled = bool(self._custom_settings.get("maven_import_enabled", True))
+        gradle_import_enabled = bool(self._custom_settings.get("gradle_import_enabled", True))
+        update_build_configuration = self._custom_settings.get("update_build_configuration", "interactive")
+        if update_build_configuration not in ("disabled", "interactive", "automatic"):
+            log.warning(
+                f"Invalid update_build_configuration value {update_build_configuration!r}; "
+                f"expected one of disabled|interactive|automatic; using 'interactive'"
+            )
+            update_build_configuration = "interactive"
+        autobuild_enabled = bool(self._custom_settings.get("autobuild_enabled", True))
+
         # Gradle Java home: explicit setting, system JAVA_HOME when requested, then bundled runtime.
         gradle_java_home = self._resolve_gradle_java_home()
 
@@ -1143,7 +1168,7 @@ class EclipseJDTLS(SolidLanguageServer):
                         "errors": {"incompleteClasspath": {"severity": "error"}},
                         "configuration": {
                             "checkProjectSettingsExclusions": False,
-                            "updateBuildConfiguration": "interactive",
+                            "updateBuildConfiguration": update_build_configuration,
                             "maven": {
                                 "userSettings": maven_settings_path,
                                 "globalSettings": None,
@@ -1159,12 +1184,12 @@ class EclipseJDTLS(SolidLanguageServer):
                         "trace": {"server": "verbose"},
                         "import": {
                             "maven": {
-                                "enabled": True,
+                                "enabled": maven_import_enabled,
                                 "offline": {"enabled": False},
                                 "disableTestClasspathFlag": False,
                             },
                             "gradle": {
-                                "enabled": True,
+                                "enabled": gradle_import_enabled,
                                 "wrapper": {"enabled": gradle_wrapper_enabled},
                                 "version": None,
                                 "home": "abs(static/gradle-7.3.3)",
@@ -1207,7 +1232,7 @@ class EclipseJDTLS(SolidLanguageServer):
                             "exportJar": {"targetPath": "${workspaceFolder}/${workspaceFolderBasename}.jar"},
                         },
                         "contentProvider": {"preferred": None},
-                        "autobuild": {"enabled": True},
+                        "autobuild": {"enabled": autobuild_enabled},
                         "maxConcurrentBuilds": 1,
                         "selectionRange": {"enabled": True},
                         "showBuildStatusOnStart": {"enabled": "notification"},
