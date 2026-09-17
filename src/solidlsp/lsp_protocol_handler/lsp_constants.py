@@ -1,6 +1,7 @@
 """
 This module contains constants used in the LSP protocol.
 """
+# SPDX-License-Identifier: MIT
 
 
 class LSPConstants:

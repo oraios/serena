@@ -1,6 +1,7 @@
 """
 Provides PHP specific instantiation of the LanguageServer class using Phpactor.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

@@ -8,7 +8,6 @@ language-server executable and communicates over LSP stdio.
 import logging
 import os
 import shutil
-from collections.abc import Hashable
 from time import sleep
 
 from overrides import override
@@ -134,16 +133,6 @@ class DevsensePHPLanguageServer(SolidLanguageServer):
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
-
-    @override
-    def _raw_document_symbols_cache_fingerprint(self) -> Hashable | None:
-        """Isolate the document-symbol cache from Intelephense/PHPantom.
-
-        All PHP servers use language_id ``php`` and therefore the same cache directory, but they
-        report different raw document-symbol shapes. Including the ls_id in the fingerprint
-        prevents Devsense from reusing cache entries written by another PHP language server.
-        """
-        return self.ls_id.value
 
     def _create_base_initialize_params(self) -> dict:
         """Return initialization parameters accepted by Devsense PHP LS."""

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 import dataclasses
 import hashlib
 import json
@@ -31,7 +33,7 @@ from solidlsp.dependency_provider import (
     LanguageServerDependencyProviderUvx,
 )
 from solidlsp.initialize_params import DefaultInitializeParamsBuilder, InitializeParamsBuilder
-from solidlsp.ls_config import FilenameMatcher, LanguageServerConfig, LanguageServerId
+from solidlsp.ls_config import FilenameMatcher, LanguageServerConfig
 from solidlsp.ls_exceptions import InvalidTextLocationError, SolidLSPException
 from solidlsp.ls_process import DEFAULT_LS_REQUEST_TIMEOUT, LanguageServerInterface, StdioLanguageServer
 from solidlsp.ls_types import UnifiedSymbolInformation
@@ -416,10 +418,6 @@ class SolidLanguageServer(ABC):
             return logging.INFO
 
     @classmethod
-    def get_language_server_id(cls) -> LanguageServerId:
-        return LanguageServerId.from_ls_class(cls)
-
-    @classmethod
     def supports_implementation_request(cls) -> bool:
         """
         Return whether this language server supports ``textDocument/implementation``.
@@ -514,7 +512,7 @@ class SolidLanguageServer(ABC):
         """
         self.config = config
         self._solidlsp_settings = solidlsp_settings
-        ls_id = self.get_language_server_id()
+        ls_id = config.ls_id
         self._custom_settings = solidlsp_settings.get_ls_specific_settings(ls_id)
         """
         the (user-provided) language server-specific settings
@@ -533,7 +531,7 @@ class SolidLanguageServer(ABC):
         default language identifier to be passed to the language server in `textDocument/didOpen` notifications.
         """
         self.open_file_buffers: dict[str, LSPFileBuffer] = {}
-        self.ls_id = self.get_language_server_id()
+        self.ls_id = ls_id
         """
         identifies the language server (not to be confused with the language_id passed to the language server)
         """
@@ -548,7 +546,7 @@ class SolidLanguageServer(ABC):
         self._published_diagnostics_condition = threading.Condition()
 
         # initialise symbol caches
-        self.cache_dir = Path(self._solidlsp_settings.project_data_path) / self.CACHE_FOLDER_NAME / self.language_id
+        self.cache_dir = Path(self._solidlsp_settings.project_data_path) / self.CACHE_FOLDER_NAME / self.ls_id.get_key()
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         # * raw document symbols cache
         self._ls_specific_raw_document_symbols_cache_version = cache_version_raw_document_symbols
@@ -2986,10 +2984,8 @@ class SolidLanguageServer(ABC):
         high_level_fingerprint = self._document_symbols_cache_fingerprint()
         if high_level_fingerprint is not None:
             version.append(high_level_fingerprint)
-        raw_fingerprint = self._raw_document_symbols_cache_fingerprint()
-        if raw_fingerprint is not None:
-            version.append(raw_fingerprint)
-        return version[0] if len(version) == 1 else tuple(version)
+        version.append(self._raw_document_symbols_cache_version())
+        return tuple(version)
 
     def _save_raw_document_symbols_cache(self) -> None:
         cache_file = self.cache_dir / self.RAW_DOCUMENT_SYMBOL_CACHE_FILENAME

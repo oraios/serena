@@ -1,6 +1,7 @@
 """
 Provides QML specific instantiation of the LanguageServer class using Qt's qmlls.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import shutil
