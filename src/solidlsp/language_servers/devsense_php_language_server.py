@@ -4,6 +4,7 @@ Provides PHP-specific instantiation of the language server published by Devsense
 The standalone ``devsense-php-ls`` npm package contains the platform-specific
 language-server executable and communicates over LSP stdio.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os
