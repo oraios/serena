@@ -4,6 +4,7 @@ Provides an experimental Lua language server implementation using emmylua_ls.
 The backend is deliberately separate from the default Lua Language Server so projects can
 select it explicitly with ``language: lua_emmylua``.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import platform
