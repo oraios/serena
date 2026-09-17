@@ -34,9 +34,20 @@ Snapshot tests use syrupy.
 * Each piece of information appears exactly once, at the element that owns it: callers do not
   explain callees' internals, and callees do not describe their callers.
 
-# Pull requests
+# REPL & facades
 
-Read `mem:creating_pull_requests` when asked to participate in the creation of a pull request.
+Read `mem:repl` before working on `serena.repl` (the code-execution paradigm and its facade APIs) or on tools
+delegating to it: structure, exposure/naming principles, configuration of the API scope and the availability policy.
+
+# Commits & pull requests
+
+* Commit messages:
+  * The subject line must cover the *entire* change; make it suitably abstract if necessary
+  * Details are presented in concise bullet items, one point per item; no prose paragraphs.
+    Where the change spans several topics, group the items by topic, each group with a short heading.
+  * Wrap all lines at ~100 characters.
+  * Write the message to a file and commit with `-F`; do not pass long text via `-m`.
+* Read `mem:creating_pull_requests` when asked to participate in the creation of a pull request.
 
 # Memories
 

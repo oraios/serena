@@ -3,43 +3,55 @@ Language server-related tools
 """
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import copy
-import os
-from collections import Counter, defaultdict
-from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, cast
 
-from serena.symbol import LanguageServerSymbol, LanguageServerSymbolDictGrouper
+from serena.symbol import SymbolDictGrouper
 from serena.tools import (
-    SUCCESS_RESULT,
     EditingToolWithDiagnostics,
     Tool,
     ToolMarkerSymbolicEdit,
     ToolMarkerSymbolicRead,
 )
+from serena.tools.file_tools import EditApiMixin
 from serena.tools.tools_base import ToolMarkerOptional
-from serena.util.ls_diagnostics import GroupedDiagnostics
-from serena.util.text_utils import find_text_coordinates
-from solidlsp.ls_types import SymbolKind
+
+if TYPE_CHECKING:
+    from serena.repl.api.lsp_api import LspApi
 
 
-class RestartLanguageServerTool(Tool, ToolMarkerOptional):
+class LspApiMixin:
+    """
+    Mixin for tools which delegate to the language server API.
+    The API is imported locally, since the API module refers to the tools (as corresponding tools).
+    """
+
+    def _api(self) -> "LspApi":
+        from serena.repl.api.lsp_api import LspApi
+
+        tool = cast(Tool, cast(object, self))
+        return LspApi(tool.agent)
+
+
+class RestartLanguageServerTool(Tool, ToolMarkerOptional, LspApiMixin):
     """Restarts the language server(s)."""
 
     def apply(self) -> str:
         """Use this tool only on explicit user request or after confirmation.
         It may be necessary to restart the language server if it hangs.
         """
-        self.agent.reset_language_server_manager()
-        return SUCCESS_RESULT
+        return self._api().restart_language_server()
 
 
-class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
+class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, LspApiMixin):
     """
     Gets an overview of the top-level symbols defined in a given file.
     """
 
-    symbol_dict_grouper = LanguageServerSymbolDictGrouper(["kind"], ["kind"], collapse_singleton=True)
+    @property
+    def symbol_dict_grouper(self) -> SymbolDictGrouper:
+        from serena.repl.api.lsp_api import LspApi
+
+        return LspApi.overview_grouper_
 
     def apply(self, relative_path: str, depth: int = -1, max_answer_chars: int = -1) -> str:
         """
@@ -55,93 +67,20 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead):
             Don't adjust unless there is really no other way to get the content required for the task.
         :return: a JSON object containing symbols grouped by kind in a compact format.
         """
-        # Note: file system sync not required (relevant file is opened in the language server explicitly)
-
-        if depth == -1:
-            if relative_path.endswith((".java", ".kt")):
-                depth = 1
-            else:
-                depth = 0
-
-        result = self.get_symbol_overview(relative_path, depth=depth)
-
-        # capture kind names and depth-0 snapshots before grouping, which mutates the dicts
-        kind_names = [d.get("kind", "unknown") for d in result]
-        if depth > 0:
-            depth_0_result = [d.copy() for d in result]
-            for d in depth_0_result:
-                d.pop("children", None)
-
-        compact_result = self.symbol_dict_grouper.group(result)
-        result_json_str = self._to_json(compact_result)
-
-        # shortened result closures
-        def make_kind_counts() -> str:
-            return f"Symbol counts by kind:\n{self._to_json(Counter(kind_names))}"
-
-        if depth == 0:
-            shortened_results = [make_kind_counts]
-        else:
-
-            def make_depth_0_result() -> str:
-                compact_depth_0_result = self.symbol_dict_grouper.group(depth_0_result)
-                return "Depth 0 overview:\n" + self._to_json(compact_depth_0_result)
-
-            shortened_results = [make_depth_0_result, make_kind_counts]
-
-        return self._limit_length(result_json_str, max_answer_chars, shortened_result_factories=shortened_results)
-
-    def get_symbol_overview(self, relative_path: str, depth: int = 0) -> list[LanguageServerSymbol.OutputDict]:
-        """
-        :param relative_path: relative path to a source file
-        :param depth: the depth up to which descendants shall be retrieved
-        :return: a list of symbol dictionaries representing the symbol overview of the file
-        """
-        symbol_retriever = self.create_language_server_symbol_retriever()
-
-        # The symbol overview is capable of working with both files and directories,
-        # but we want to ensure that the user provides a file path.
-        file_path = os.path.join(self.project.project_root, relative_path)
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"File or directory {relative_path} does not exist in the project.")
-        if os.path.isdir(file_path):
-            raise ValueError(f"Expected a file path, but got a directory path: {relative_path}. ")
-        if not symbol_retriever.can_analyze_file(relative_path):
-            raise ValueError(
-                f"Cannot extract symbols from file {relative_path}. Active language servers: {[l.value for l in self.agent.get_active_language_server_ids()]}"
-            )
-
-        symbols = symbol_retriever.get_symbol_overview(relative_path)[relative_path]
-
-        def child_inclusion_predicate(s: LanguageServerSymbol) -> bool:
-            return not s.is_low_level()
-
-        symbol_dicts = []
-        for symbol in symbols:
-            symbol_dicts.append(
-                symbol.to_dict(
-                    name_path=False,
-                    name=True,
-                    depth=depth,
-                    kind=True,
-                    relative_path=False,
-                    location=False,
-                    child_inclusion_predicate=child_inclusion_predicate,
-                )
-            )
-        return symbol_dicts
+        return self._api().get_symbols_overview(relative_path, depth=depth, max_answer_chars=max_answer_chars).represent()
 
 
-class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
+class FindSymbolTool(Tool, ToolMarkerSymbolicRead, LspApiMixin):
     """
     Performs a global (or local) search using the language server backend.
     """
 
-    # group children by kind, keeping just the name (the parent's name_path makes it unambiguous);
-    # we don't group the top-level result list because many tests rely on it being a flat list of symbol dicts
-    symbol_dict_grouper = LanguageServerSymbolDictGrouper([], ["kind"], collapse_singleton=True)
+    @property
+    def symbol_dict_grouper(self) -> SymbolDictGrouper:
+        from serena.repl.api.lsp_api import LspApi
 
-    # noinspection PyDefaultArgument
+        return LspApi.find_symbol_dict_grouper_
+
     def apply(
         self,
         name_path_pattern: str,
@@ -179,85 +118,54 @@ class FindSymbolTool(Tool, ToolMarkerSymbolicRead):
         :param relative_path: (optional) restrict search to this file or directory. If None, searches entire codebase.
             If a directory is passed, the search will be restricted to the files in that directory.
             If a file is passed, the search will be restricted to that file.
-        :param include_body: whether to include the symbol's source code. Use judiciously.
+            If you have some knowledge about the codebase, you should use this parameter, as it will significantly
+            speed up the search as well as reduce the number of results.
+        :param include_body: If True, include the symbol's source code. Use judiciously.
         :param include_info: whether to include additional info (hover-like, typically including docstring and signature),
             about the symbol (ignored if include_body is True). Info is never included for child symbols.
             Note: Depending on the language, this can be slow (e.g., C/C++).
         :param include_kinds: (optional) limits results to the given LSP symbol kinds (integers)
         :param exclude_kinds: (optional) list of LSP symbol kinds (integers) to exclude.
-        :param substring_matching: If True, use substring matching for the last element of the pattern, such that
-            "Foo/get" would match "Foo/getValue" and "Foo/getData".
-        :param max_matches: maximum number of permitted matches. If exceeded, a shortened result is returned
-             which allows refining the search. -1 (default) means no limit. Set to 1 if you search for a single symbol.
+        :param substring_matching: If True, use substring matching for the last segment of `name_path_pattern`
+            (i.e. the name of the symbol, e.g. "foo" in "Class/foo" or "my_method" in "my_method").
+        :param max_matches: Maximum number of permitted matches. If exceeded, a shortened result is returned
+             which allows refining the search. -1 (default) means no limit. Set to 1 to search for a unique symbol.
         :param max_answer_chars: max result length; -1 for default
         :return: symbols (with locations) matching the name.
         """
-        # Note: file system sync not required; the symbol finder opens all relevant source files explicitly in the case of changes
-
-        if include_body:
-            depth = 0  # ignore user-specified depth if include_body is True
-        assert max_matches != 0, "max_matches must be > 0 or equal to -1."
-        parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
-        parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
-        symbol_retriever = self.create_language_server_symbol_retriever()
-        symbols = symbol_retriever.find(
-            name_path_pattern,
-            include_kinds=parsed_include_kinds,
-            exclude_kinds=parsed_exclude_kinds,
-            substring_matching=substring_matching,
-            within_relative_path=relative_path,
-        )
-        n_matches = len(symbols)
-
-        def create_short_result_relative_path_to_name_paths() -> str:
-            relative_path_to_name_paths: defaultdict[str, list[str]] = defaultdict(list)
-            for s in symbols:
-                relative_path_to_name_paths[s.location.relative_path or "unknown"].append(s.get_name_path())
-            return f"Shortened result:\n{self._to_json(relative_path_to_name_paths)}"
-
-        if 0 < max_matches < n_matches:
-            return f"Matched {n_matches}>{max_matches=} symbols.\n" + create_short_result_relative_path_to_name_paths()
-
-        symbol_dicts = [
-            s.to_dict(
-                kind=True,
-                name_path=True,
-                name=False,
-                relative_path=True,
-                body_location=True,
+        return (
+            self._api()
+            .find_symbol(
+                name_path_pattern,
                 depth=depth,
-                body=include_body,
-                children_name=True,
-                children_name_path=False,
+                relative_path=relative_path,
+                include_body=include_body,
+                include_info=include_info,
+                include_kinds=include_kinds,
+                exclude_kinds=exclude_kinds,
+                substring_matching=substring_matching,
+                max_matches=max_matches,
+                max_answer_chars=max_answer_chars,
             )
-            for s in symbols
-        ]
-        if not include_body and include_info:
-            info_by_symbol = symbol_retriever.request_info_for_symbol_batch(symbols)
-            for s, s_dict in zip(symbols, symbol_dicts, strict=True):
-                if symbol_info := info_by_symbol.get(s):
-                    # In python 3.15 we could specify extra_items=True in the TypedDict definition,
-                    # https://peps.python.org/pep-0728/
-                    # If we ever upgrade to 3.15, we can remove the type: ignore[typeddict-unknown-key]
-                    s_dict["info"] = symbol_info
-
-        grouped_symbol_dicts = self.symbol_dict_grouper.group(symbol_dicts)
-        result = self._to_json(grouped_symbol_dicts)
-        return self._limit_length(result, max_answer_chars, shortened_result_factories=[create_short_result_relative_path_to_name_paths])
+            .represent()
+        )
 
     @classmethod
     def get_param_aliases(cls) -> dict[str, str]:
         return {"name_path": "name_path_pattern"}
 
 
-class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
+class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead, LspApiMixin):
     """
-    Finds symbols that reference the given symbol using the language server backend
+    Finds symbols that reference the given symbol
     """
 
-    symbol_dict_grouper = LanguageServerSymbolDictGrouper(["relative_path", "kind"], ["kind"], collapse_singleton=True)
+    @property
+    def symbol_dict_grouper(self) -> SymbolDictGrouper:
+        from serena.repl.api.lsp_api import LspApi
 
-    # noinspection PyDefaultArgument
+        return LspApi.references_grouper_
+
     def apply(
         self,
         name_path: str,
@@ -277,75 +185,20 @@ class FindReferencingSymbolsTool(Tool, ToolMarkerSymbolicRead):
         :param max_answer_chars: max result length; -1 for default
         :return: a list of JSON objects with the symbols referencing the requested symbol
         """
-        # file system sync needed for case where symbol finder does not perform a global search, updating everything
-        if relative_path:
-            self.project.ls_sync_file_system_changes()
-
-        include_body = False  # It is probably never a good idea to include the body of the referencing symbols
-        parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
-        parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
-
-        symbol_retriever = self.create_language_server_symbol_retriever()
-        references_in_symbols = symbol_retriever.find_referencing_symbols(
-            name_path,
-            relative_file_path=relative_path,
-            include_body=include_body,
-            include_kinds=parsed_include_kinds,
-            exclude_kinds=parsed_exclude_kinds,
+        return (
+            self._api()
+            .find_referencing_symbols(
+                name_path, relative_path, include_kinds=include_kinds, exclude_kinds=exclude_kinds, max_answer_chars=max_answer_chars
+            )
+            .represent()
         )
 
-        reference_dicts = []
-        for ref in references_in_symbols:
-            ref_dict_orig = ref.symbol.to_dict(kind=True, relative_path=True, depth=0, body=include_body, body_location=True)
-            ref_dict = dict(ref_dict_orig)
-            if not include_body:
-                ref_relative_path = ref.symbol.location.relative_path
-                assert ref_relative_path is not None, f"Referencing symbol {ref.symbol.name} has no relative path, this is likely a bug."
-                content_around_ref = self.project.retrieve_content_around_line(
-                    relative_file_path=ref_relative_path, line=ref.line, context_lines_before=1, context_lines_after=1
-                )
-                ref_dict["content_around_reference"] = content_around_ref.to_display_string()
-            reference_dicts.append(ref_dict)
 
-        # capture lightweight reference data before grouping
-        ref_summaries = []
-        for ref, d in zip(references_in_symbols, reference_dicts, strict=True):
-            ref_summaries.append(
-                {
-                    "name_path": d.get("name_path"),
-                    "kind": d.get("kind"),
-                    "relative_path": d.get("relative_path"),
-                    "reference_line": ref.line,
-                }
-            )
-
-        result = self.symbol_dict_grouper.group(reference_dicts)
-
-        # shortened result closures, from least to most aggressive shortening
-        def make_refs_without_context() -> str:
-            """References with name_path and reference line, without surrounding code lines"""
-            grouped = self.symbol_dict_grouper.group(copy.deepcopy(ref_summaries))
-            return f"References without surrounding lines:\n{self._to_json(grouped)}"
-
-        def make_per_file_counts() -> str:
-            counts = Counter(str(r["relative_path"]) for r in ref_summaries)
-            return f"Reference counts per file:\n{self._to_json(counts)}"
-
-        def make_summary() -> str:
-            return f"Found {len(ref_summaries)} references."
-
-        shortened_results = [make_refs_without_context, make_per_file_counts, make_summary]
-
-        result_json = self._to_json(result)
-        return self._limit_length(result_json, max_answer_chars, shortened_result_factories=shortened_results)
-
-
-class FindImplementationsTool(Tool, ToolMarkerSymbolicRead):
+class FindImplementationsTool(Tool, ToolMarkerSymbolicRead, LspApiMixin):
     """
-    Finds symbols that implement the given symbol using the language server backend.
+    Finds the implementations of a symbol
     """
 
-    # noinspection PyDefaultArgument
     def apply(
         self,
         name_path: str,
@@ -368,36 +221,21 @@ class FindImplementationsTool(Tool, ToolMarkerSymbolicRead):
         :param max_answer_chars: max result length; -1 for default
         :return: a list of JSON objects with the symbols implementing the requested symbol
         """
-        self.project.ls_sync_file_system_changes()
-
-        include_body = False
-        parsed_include_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in include_kinds] if include_kinds else None
-        parsed_exclude_kinds: Sequence[SymbolKind] | None = [SymbolKind(k) for k in exclude_kinds] if exclude_kinds else None
-        symbol_retriever = self.create_language_server_symbol_retriever()
-
-        implementing_symbols = symbol_retriever.find_implementing_symbols(
-            name_path,
-            relative_file_path=relative_path,
-            include_body=include_body,
-            include_kinds=parsed_include_kinds,
-            exclude_kinds=parsed_exclude_kinds,
+        return (
+            self._api()
+            .find_implementations(
+                name_path,
+                relative_path,
+                include_info=include_info,
+                include_kinds=include_kinds,
+                exclude_kinds=exclude_kinds,
+                max_answer_chars=max_answer_chars,
+            )
+            .represent()
         )
 
-        symbol_dicts = [
-            dict(s.to_dict(kind=True, relative_path=True, depth=0, body=include_body, body_location=True)) for s in implementing_symbols
-        ]
-        if include_info:
-            info_by_symbol = symbol_retriever.request_info_for_symbol_batch(implementing_symbols)
-            for s, s_dict in zip(implementing_symbols, symbol_dicts, strict=True):
-                if symbol_info := info_by_symbol.get(s):
-                    s_dict["info"] = symbol_info
-                    s_dict.pop("name", None)  # name is included in the info
 
-        result = self._to_json(symbol_dicts)
-        return self._limit_length(result, max_answer_chars)
-
-
-class FindDeclarationTool(Tool, ToolMarkerSymbolicRead):
+class FindDeclarationTool(Tool, ToolMarkerSymbolicRead, LspApiMixin):
     """
     Finds the declaration/definition of a symbol
     """
@@ -423,69 +261,25 @@ class FindDeclarationTool(Tool, ToolMarkerSymbolicRead):
         :param include_body: whether to include the symbol's body in the result. Default False.
         :param include_info: whether to include additional info (hover-like). Default False.
         """
-        self.project.ls_sync_file_system_changes()
-
-        symbol_retriever = self.create_language_server_symbol_retriever()
         relative_path = self._sanitize_input_param(relative_path)
         regex = self._sanitize_input_param(regex)
-
-        # find relevant location for lookup
-        editor = self.create_code_editor()
-        if not containing_symbol_name_path:
-            content = editor.read_file(relative_path)
-            coords = find_text_coordinates(content, regex, require_unique=True)
-            assert coords is not None
-        else:
-            symbol = symbol_retriever.find_unique(name_path_pattern=containing_symbol_name_path, within_relative_path=relative_path)
-            body_line_numers = symbol.get_body_line_numbers_or_raise()
-            content = editor.read_file(relative_path, lines=body_line_numers)
-            coords = find_text_coordinates(content, regex, require_unique=True)
-            assert coords is not None
-            coords.line += body_line_numers[0]
-
-        # retrieve declaration
-        defining_symbol = symbol_retriever.find_declaration(
-            relative_file_path=relative_path,
-            line=coords.line,
-            column=coords.col,
-            include_body=include_body,
-        )
-        if defining_symbol is None:
-            raise ValueError(
-                f"No symbol declaration found at the location of the regex match. Location: {relative_path}:{coords.line}:{coords.col}."
+        return (
+            self._api()
+            .find_declaration(
+                relative_path,
+                regex,
+                containing_symbol_name_path=containing_symbol_name_path,
+                include_body=include_body,
+                include_info=include_info,
             )
-
-        # create output
-        symbol_dict = self._defining_symbol_to_result_dict(
-            symbol_retriever,
-            defining_symbol,
-            include_body,
-            include_info,
+            .represent()
         )
-        result = self._to_json(symbol_dict)
-        return result
-
-    @staticmethod
-    def _defining_symbol_to_result_dict(
-        symbol_retriever: Any,
-        defining_symbol: LanguageServerSymbol,
-        include_body: bool,
-        include_info: bool,
-    ) -> dict[str, Any]:
-        symbol_dict = dict(defining_symbol.to_dict(kind=True, relative_path=True, depth=0, body=include_body, body_location=True))
-        if not include_body and include_info:
-            if symbol_info := symbol_retriever.request_info_for_symbol(defining_symbol):
-                symbol_dict["info"] = symbol_info
-                symbol_dict.pop("name", None)
-        return symbol_dict
 
 
-class GetDiagnosticsForFileTool(Tool, ToolMarkerSymbolicRead):
+class GetDiagnosticsForFileTool(Tool, ToolMarkerSymbolicRead, LspApiMixin):
     """
-    Gets diagnostics for a file, optionally restricted to a line range, grouped by file, severity, and containing symbol.
+    Gets diagnostics for a file, grouped by symbol.
     """
-
-    FILE_LEVEL_DIAGNOSTIC_BUCKET = "<file>"
 
     def apply(
         self,
@@ -507,34 +301,16 @@ class GetDiagnosticsForFileTool(Tool, ToolMarkerSymbolicRead):
         :param max_answer_chars: max result length; -1 for default
         :return: grouped diagnostics for the requested file.
         """
-        self.project.ls_sync_file_system_changes()
-
-        symbol_retriever = self.create_language_server_symbol_retriever()
-        diagnostics = symbol_retriever.get_file_diagnostics(
-            relative_file_path=relative_path,
-            start_line=start_line,
-            end_line=end_line,
-            min_severity=min_severity,
+        return (
+            self._api()
+            .get_diagnostics_for_file(
+                relative_path, start_line=start_line, end_line=end_line, min_severity=min_severity, max_answer_chars=max_answer_chars
+            )
+            .represent()
         )
 
-        grouped_diagnostics = GroupedDiagnostics()
-        for diagnostic in diagnostics:
-            diag_range = diagnostic["range"]["start"]
-            name_path = self.FILE_LEVEL_DIAGNOSTIC_BUCKET
-            owner_symbol = symbol_retriever.find_diagnostic_owner_symbol(
-                relative_file_path=relative_path,
-                line=diag_range["line"],
-                column=diag_range["character"],
-            )
-            if owner_symbol is not None:
-                name_path = owner_symbol.get_name_path()
-            grouped_diagnostics.add(relative_path, name_path, diagnostic)
 
-        result = self._to_json(grouped_diagnostics.get_dict())
-        return self._limit_length(result, max_answer_chars)
-
-
-class GetDiagnosticsForSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional):
+class GetDiagnosticsForSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, LspApiMixin):
     """
     Gets diagnostics for a symbol and, optionally, for symbols that reference it.
     """
@@ -560,30 +336,20 @@ class GetDiagnosticsForSymbolTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOption
         :param max_answer_chars: max result length; -1 for default
         :return: grouped diagnostics for the requested symbol and, optionally, its referencing symbols.
         """
-        self.project.ls_sync_file_system_changes()
-
-        symbol_retriever = self.create_language_server_symbol_retriever()
-        diagnostics_by_symbol = symbol_retriever.get_symbol_diagnostics(
-            name_path=name_path,
-            reference_file=reference_file or None,
-            check_symbol_references=check_symbol_references,
-            min_severity=min_severity,
+        return (
+            self._api()
+            .get_diagnostics_for_symbol(
+                name_path,
+                reference_file=reference_file,
+                check_symbol_references=check_symbol_references,
+                min_severity=min_severity,
+                max_answer_chars=max_answer_chars,
+            )
+            .represent()
         )
 
-        grouped_diagnostics = GroupedDiagnostics()
-        for symbol, diagnostics in diagnostics_by_symbol.items():
-            relative_path = symbol.relative_path
-            if relative_path is None:
-                continue
-            symbol_name_path = symbol.get_name_path()
-            for diagnostic in diagnostics:
-                grouped_diagnostics.add(relative_path, symbol_name_path, diagnostic)
 
-        result = self._to_json(grouped_diagnostics.get_dict())
-        return self._limit_length(result, max_answer_chars)
-
-
-class ReplaceSymbolBodyTool(EditingToolWithDiagnostics):
+class ReplaceSymbolBodyTool(EditingToolWithDiagnostics, EditApiMixin):
     """
     Replaces the full definition of a symbol using the language server backend.
     """
@@ -606,17 +372,12 @@ class ReplaceSymbolBodyTool(EditingToolWithDiagnostics):
             in the programming language, including e.g. the signature line for functions.
             Depending on the language, it may or may not include a preceding docstring or other preceding annotations.
         """
-        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
-            code_editor = self.create_code_editor()
-            code_editor.replace_body(
-                name_path,
-                relative_file_path=relative_path,
-                body=body,
-            )
-            return diagnostics_context.format_result(SUCCESS_RESULT)
+        with self.diagnostics_context(relative_path) as diagnostics_context:
+            result = self._api().replace_symbol_body(name_path, relative_path, body)
+            return diagnostics_context.format_result(result)
 
 
-class InsertAfterSymbolTool(EditingToolWithDiagnostics):
+class InsertAfterSymbolTool(EditingToolWithDiagnostics, EditApiMixin):
     """
     Inserts content after the end of the definition of a given symbol.
     """
@@ -636,13 +397,12 @@ class InsertAfterSymbolTool(EditingToolWithDiagnostics):
         :param body: the body/content to be inserted. The inserted code shall begin with the next line after
             the symbol.
         """
-        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
-            code_editor = self.create_code_editor()
-            code_editor.insert_after_symbol(name_path, relative_file_path=relative_path, body=body)
-            return diagnostics_context.format_result(SUCCESS_RESULT)
+        with self.diagnostics_context(relative_path) as diagnostics_context:
+            result = self._api().insert_after_symbol(name_path, relative_path, body)
+            return diagnostics_context.format_result(result)
 
 
-class InsertBeforeSymbolTool(EditingToolWithDiagnostics):
+class InsertBeforeSymbolTool(EditingToolWithDiagnostics, EditApiMixin):
     """
     Inserts content before the beginning of the definition of a given symbol.
     """
@@ -662,13 +422,12 @@ class InsertBeforeSymbolTool(EditingToolWithDiagnostics):
         :param relative_path: the relative path to the file containing the symbol
         :param body: the body/content to be inserted before the line in which the referenced symbol is defined
         """
-        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
-            code_editor = self.create_code_editor()
-            code_editor.insert_before_symbol(name_path, relative_file_path=relative_path, body=body)
-            return diagnostics_context.format_result(SUCCESS_RESULT)
+        with self.diagnostics_context(relative_path) as diagnostics_context:
+            result = self._api().insert_before_symbol(name_path, relative_path, body)
+            return diagnostics_context.format_result(result)
 
 
-class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
+class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit, LspApiMixin):
     """
     Renames a symbol throughout the codebase using language server refactoring capabilities.
     For JB, we use a separate tool.
@@ -690,13 +449,10 @@ class RenameSymbolTool(Tool, ToolMarkerSymbolicEdit):
         :param new_name: the new name for the symbol
         :return: result summary indicating success or failure
         """
-        self.project.ls_sync_file_system_changes()
-        code_editor = self.create_ls_code_editor()
-        status_message = code_editor.rename_symbol(name_path, relative_path=relative_path, new_name=new_name)
-        return status_message
+        return self._api().rename_symbol(name_path, relative_path, new_name)
 
 
-class SafeDeleteSymbol(Tool, ToolMarkerSymbolicEdit):
+class SafeDeleteSymbol(Tool, ToolMarkerSymbolicEdit, LspApiMixin):
     def apply(
         self,
         name_path_pattern: str,
@@ -709,31 +465,4 @@ class SafeDeleteSymbol(Tool, ToolMarkerSymbolicEdit):
         :param name_path_pattern: name path of the symbol to delete
         :param relative_path: the relative path to the file containing the symbol to delete
         """
-        self.project.ls_sync_file_system_changes()
-
-        ls_symbol_retriever = self.create_language_server_symbol_retriever()
-        symbol = ls_symbol_retriever.find_unique(name_path_pattern, substring_matching=False, within_relative_path=relative_path)
-        symbol_rel_path = symbol.relative_path
-        assert symbol_rel_path is not None, f"Symbol {name_path_pattern} has no relative path, this is likely a bug."
-        assert symbol_rel_path == relative_path, f"Symbol {name_path_pattern} is not in the expected relative path {relative_path}."
-        symbol_name_path = symbol.get_name_path()
-
-        symbol_line = symbol.line
-        symbol_col = symbol.column
-        assert symbol_line is not None and symbol_col is not None, (
-            f"Symbol {name_path_pattern} has no identifier position, this is likely a bug."
-        )
-        lang_server = ls_symbol_retriever.get_language_server(symbol_rel_path)
-        references_locations = lang_server.request_references(symbol_rel_path, symbol_line, symbol_col)
-        file_to_lines: dict[str, list[int]] = defaultdict(list)
-        if references_locations:
-            for ref_loc in references_locations:
-                ref_relative_path = ref_loc.get("relativePath")
-                if ref_relative_path is None:
-                    continue
-                file_to_lines[ref_relative_path].append(ref_loc["range"]["start"]["line"])
-        if file_to_lines:
-            return f"Cannot delete, the symbol {symbol_name_path} is referenced in: {self._to_json(file_to_lines)}"
-        code_editor = self.create_ls_code_editor()
-        code_editor.delete_symbol(symbol_name_path, relative_file_path=symbol_rel_path)
-        return SUCCESS_RESULT
+        return self._api().safe_delete_symbol(name_path_pattern, relative_path)

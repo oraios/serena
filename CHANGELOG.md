@@ -12,6 +12,13 @@ Status of the `main` branch. Changes prior to the next official version change w
     see `CONTRIBUTING.md`
 
 * General:
+  - **Major**: Add the Serena REPL as a new agent interface, reducing the tool set to a minimum and providing
+    a general code execution environment for all Serena operations.
+    This has several significant advantages over regular tool executions.  
+    Please refer to our [documentation](https://oraios.github.io/serena/01-about/035_tools.html) for details.
+  - Add `auth_secret` to `serena_config.yml` for authenticating communication between Serena components
+    and services. When missing, null, or empty, a random UUID is generated and persisted; existing values
+    are preserved
   - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
   - Fix: importing Serena no longer loads the `anthropic` package unless the Anthropic token counter is
     actually used; the unconditional import added seconds to CLI/MCP startup on some machines (#2012)
@@ -64,12 +71,28 @@ Status of the `main` branch. Changes prior to the next official version change w
     successful Serena call. Add a `serena-hooks reset` command and a `PostToolUse` example matched to
     Serena's own tools to close the gap (#1852)
 
+* Dashboard:
+  - Fix: On macOS, the tray manager refreshed the tray menu straight from the Flask request handlers
+    for `/register`, `/update_project` and `/unregister` and from the alive-check thread. That reaches
+    `NSStatusItem.setMenu_()` off the main thread, which AppKit forbids and which recent macOS
+    versions punish with SIGTRAP, so the tray-manager process died within seconds of every agent
+    start and the tray icon never became usable. Menu refreshes are now marshalled onto the main
+    thread (#2038)
+
 * Language Servers:
   - Add MQL support (MetaTrader 4/5): `.mq4`, `.mq5`, and `.mqh` files are served by
     davalillo's mql-language-server, auto-downloaded and SHA-256-verified from GitHub
     releases; configure the version via `ls_specific_settings.mql.mql_version`
-  - Fix: High-level document symbol cache was not invalidated when the LS-specific low-level result 
+  - Fix: Godot's GDScript parser can report a symbol's end column one column past the
+    line-end convention every other language server follows (closing a node's range from
+    the next lookahead token instead of the last consumed one, when that lookahead is a
+    synthesized newline); `replace_symbol_body` on the last function in a file silently
+    consumed the separating blank line as a result. `GodotLanguageServer` now corrects this
+    specific, measured overshoot when building its high-level document symbols (#1974)
+  - Fix: High-level document symbol cache was not invalidated when the LS-specific low-level result
     version changed
+  - Fix: A language server's cache directory was determined by the language_id rather than 
+    the language server identifier's key. The two identifiers coincided in most cases.
   - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
     preserves explicit user settings across initialization and configuration requests (#1989)
     VTS initialization options now override defaults per top-level key rather than replacing the
