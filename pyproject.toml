@@ -92,7 +92,7 @@ dev = [
   "tornado==6.5.7",
   "wheel==0.46.3",
   "pyasn1==0.6.4",
-  "PyJWT==2.12.0",
+  "PyJWT==2.13.0",
 ]
 agno = ["agno==2.6.6", "sqlalchemy==2.0.41"]  # agno bumped for session state overwrite CVE
 google = ["google-genai==1.27.0"]

@@ -140,6 +140,7 @@ CLI:
 
 * Dependencies:
   - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
+  - Update `PyJWT` from 2.12.0 to 2.13.0
 
 # v1.7.0 (2026-08-09)
 
