@@ -48,7 +48,7 @@ def test_windows_full_pipe_errors_map_to_blocking_io_error(monkeypatch):
 def test_windows_live_full_pipe_does_not_hang():
     r, w = os.pipe()
     try:
-        writer = NonBlockingStderrHandler._WindowsPipeRecordWriter(w)
+        NonBlockingStderrHandler._WindowsPipeRecordWriter(w)
         for _ in range(10_000):
             try:
                 os.write(w, b"x" * 4096)
