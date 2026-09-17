@@ -1033,7 +1033,7 @@ class SerenaDashboardTrayManager:
     @staticmethod
     def _run_in_ui_thread(fn: Callable[[], None]) -> None:
         """
-        Runs a UI mutation in the thread in which the platform's UI toolkit requires it to run.
+        Runs a UI mutation in the thread in which the platform's UI toolkit requires it to run (where necessary).
 
         On macOS, AppKit demands that mutations of the status item happen on the main thread, and
         recent macOS versions terminate the process with SIGTRAP when they do not. The tray manager
@@ -1043,7 +1043,7 @@ class SerenaDashboardTrayManager:
         :param fn: the UI mutation to run
         """
         if sys.platform == "darwin":
-            from PyObjCTools import AppHelper
+            from PyObjCTools import AppHelper  # ty: ignore[unresolved-import]
 
             AppHelper.callAfter(fn)
         else:
