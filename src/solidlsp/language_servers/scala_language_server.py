@@ -484,6 +484,9 @@ class ScalaLanguageServer(SolidLanguageServer):
             indexing_start_grace: 15
             # How long Metals must report nothing for its work to count as finished
             indexing_quiet_period: 3
+            # Terminate Bloop daemons this session spawned when Metals stops (default: true).
+            # Set false if another Metals client on the machine is expected to keep using Bloop.
+            terminate_bloop_on_stop: true
 
     Indexing:
         Metals reports its import, indexing and compilation as LSP work-done progress, and
@@ -569,16 +572,24 @@ class ScalaLanguageServer(SolidLanguageServer):
     @override
     def stop(self, shutdown_timeout: float = 2.0) -> None:
         """
-        Stops Metals and terminates Bloop build-server daemons it spawned.
+        Stops Metals and terminates Bloop build-server daemons it spawned in this session.
 
         Bloop self-daemonizes (``bloop.BloopServer daemon:...``) and is re-parented to PID 1
         after Metals exits, so it is invisible to the process-tree cleanup that stops Metals
         itself and keeps consuming RAM (oraios/serena#1816). Snapshot those children before
         shutdown; any that are still alive afterwards are terminated.
+
+        Only processes that were descendants of *this* Serena process are considered, so a
+        Bloop daemon started by another client (e.g. VS Code Metals) is left alone. If Bloop
+        is shared by two Serena sessions that both started under this process tree, stopping
+        one session will stop the shared daemon — prefer one Bloop per machine or a single
+        long-lived Metals host in that setup.
         """
-        bloop_pids = self._discover_bloop_descendant_pids()
+        terminate_bloop = bool((self._custom_settings or {}).get("terminate_bloop_on_stop", True))
+        bloop_pids = self._discover_bloop_descendant_pids() if terminate_bloop else set()
         super().stop(shutdown_timeout=shutdown_timeout)
-        self._terminate_orphaned_bloop_processes(bloop_pids)
+        if bloop_pids:
+            self._terminate_orphaned_bloop_processes(bloop_pids)
 
     def _discover_bloop_descendant_pids(self) -> set[int]:
         """

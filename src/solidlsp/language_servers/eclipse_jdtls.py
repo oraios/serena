@@ -717,6 +717,10 @@ class EclipseJDTLS(SolidLanguageServer):
                 "use_system_java_home",
                 "maven_offline",
                 "runtimes",
+                "maven_import_enabled",
+                "gradle_import_enabled",
+                "update_build_configuration",
+                "autobuild_enabled",
             )
             workspace_settings = {key: custom_settings.settings[key] for key in workspace_setting_keys if key in custom_settings.settings}
             workspace_settings_json = json.dumps(workspace_settings, sort_keys=True, separators=(",", ":"))

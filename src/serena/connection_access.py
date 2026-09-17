@@ -5,12 +5,16 @@
 When ``connection_access_tokens`` is configured, HTTP transports require a Bearer token.
 A token maps to ``read`` (query tools only) or ``edit`` (all tools). Stdio is unaffected:
 a single local client already controls the process.
+
+Permissions are enforced **per tool call** from the request that carries the call. The
+MCP tool list itself is process-global (one ``FastMCP`` instance serves all connections),
+so it cannot safely differ per connection without SDK-level auth; read-only clients still
+see editing tools in ``tools/list`` but every editing call is rejected server-side.
 """
 
 from __future__ import annotations
 
 import logging
-from contextvars import ContextVar
 from enum import Enum
 from typing import Any
 
@@ -20,22 +24,6 @@ log = logging.getLogger(__name__)
 class ConnectionPermission(str, Enum):
     READ = "read"
     EDIT = "edit"
-
-
-# Default for stdio / unauthenticated paths: full tool access (previous behaviour).
-_CURRENT_PERMISSION: ContextVar[ConnectionPermission] = ContextVar("serena_connection_permission", default=ConnectionPermission.EDIT)
-
-
-def get_current_permission() -> ConnectionPermission:
-    return _CURRENT_PERMISSION.get()
-
-
-def set_current_permission(permission: ConnectionPermission):
-    return _CURRENT_PERMISSION.set(permission)
-
-
-def reset_current_permission(token) -> None:
-    _CURRENT_PERMISSION.reset(token)
 
 
 class ConnectionAccessControl:
@@ -86,28 +74,57 @@ class ConnectionAccessControl:
             return None
         return None
 
-    def resolve_permission(self, headers: Any) -> ConnectionPermission:
+    @staticmethod
+    def headers_from_mcp_context(mcp_ctx: Any) -> Any:
+        """
+        Best-effort extraction of HTTP headers from a FastMCP ``Context``.
+
+        Returns None when the transport is not HTTP or the SDK does not expose a request
+        (e.g. stdio, or an SDK version without ``request_context.request``).
+        """
+        if mcp_ctx is None:
+            return None
+        try:
+            request_ctx = getattr(mcp_ctx, "request_context", None)
+            if request_ctx is None:
+                return None
+            request = getattr(request_ctx, "request", None)
+            if request is None:
+                return None
+            return getattr(request, "headers", None)
+        except Exception:
+            return None
+
+    def resolve_permission(self, headers: Any) -> ConnectionPermission | None:
         """
         Resolve the permission for a request carrying `headers`.
 
-        Unknown or missing tokens get no elevated rights: a missing token is treated as
-        read-only when access control is enabled, and an unknown token is rejected as
-        read-only as well (edit tools will refuse to run). Callers that must hard-fail
-        authentication should check :meth:`permission_for_token` first.
+        :return: the permission for a valid token, or None when the token is missing or
+            unknown. Callers must treat None as *no access* (oraios/serena#1971: missing,
+            invalid or revoked tokens must not grant access).
         """
         if not self.enabled:
             return ConnectionPermission.EDIT
         token = self.extract_bearer_token(headers)
-        permission = self.permission_for_token(token)
-        if permission is None:
-            log.debug("No valid connection access token; treating connection as read-only")
-            return ConnectionPermission.READ
-        return permission
+        return self.permission_for_token(token)
 
-    def allows(self, permission: ConnectionPermission, *, can_edit: bool) -> bool:
+    def allows(self, permission: ConnectionPermission | None, *, can_edit: bool) -> bool:
         """
         Whether a connection with `permission` may invoke a tool with `can_edit` capability.
+
+        When access control is disabled, everything is allowed. When enabled, a None
+        permission (no/invalid token) allows nothing (oraios/serena#1971).
         """
+        if not self.enabled:
+            return True
+        if permission is None:
+            return False
         if not can_edit:
             return True
         return permission == ConnectionPermission.EDIT
+
+    def permission_for_mcp_context(self, mcp_ctx: Any) -> ConnectionPermission | None:
+        """
+        Resolve permission from an MCP tool-call context.
+        """
+        return self.resolve_permission(self.headers_from_mcp_context(mcp_ctx))

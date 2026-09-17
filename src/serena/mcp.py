@@ -27,7 +27,7 @@ from serena.agent import (
 )
 from serena.config.context_mode import SerenaAgentContext
 from serena.config.serena_config import LanguageBackend, ModeSelectionDefinition, SerenaConfig
-from serena.connection_access import ConnectionAccessControl, ConnectionPermission, get_current_permission, set_current_permission
+from serena.connection_access import ConnectionAccessControl
 from serena.constants import DEFAULT_CONTEXT, SERENA_LOG_FORMAT
 from serena.tools import Tool, ToolCallError
 from serena.util.exception import show_fatal_exception_safe
@@ -109,8 +109,17 @@ class SerenaFastMCPTool(FastMCPTool):
 
         def execute_fn(**kwargs) -> str:
             if access_control_for_tool is not None and access_control_for_tool.enabled:
-                permission = get_current_permission()
+                # Resolve from *this* call's HTTP request (not a process-global): concurrent
+                # streamable-http connections share one FastMCP instance, so permission must
+                # be read per invocation.
+                mcp_ctx = kwargs.get("mcp_ctx")
+                permission = access_control_for_tool.permission_for_mcp_context(mcp_ctx)
                 if not access_control_for_tool.allows(permission, can_edit=can_edit):
+                    if permission is None:
+                        raise ToolError(
+                            f"Tool '{func_name}' requires a valid connection access token "
+                            f"(Authorization: Bearer <token>). Missing or unknown tokens are rejected."
+                        )
                     raise ToolError(
                         f"Tool '{func_name}' requires edit permission; this connection is read-only. "
                         f"Use a token with edit access or a tool that does not modify the project."
@@ -327,22 +336,18 @@ class SerenaMCPFactory:
         mcp: FastMCP,
         openai_tool_compatible: bool,
         structured_output: bool | None,
-        allow_edit: bool = True,
     ) -> None:
         """
-        Update the tools in the MCP server
+        Update the tools in the MCP server.
 
-        :param mcp: The MCP server to update
-        :param openai_tool_compatible: whether to process the tool schema to be compatible with OpenAI tools
-        :param structured_output: whether to use structured output for the tools (None = auto)
-        :param allow_edit: when False, editing tools are omitted from the tool list (read-only connection)
+        The tool list is process-global. Connection permissions (see
+        :mod:`serena.connection_access`) are enforced per tool call, not by omitting tools
+        here: concurrent HTTP connections share this instance, so a per-connection list
+        would race.
         """
         if mcp is not None:
             mcp._tool_manager._tools = {}
-            count = 0
             for tool in self._iter_tools():
-                if not allow_edit and tool.can_edit():
-                    continue
                 mcp_tool = self.make_mcp_tool(
                     tool,
                     openai_tool_compatible=openai_tool_compatible,
@@ -350,8 +355,7 @@ class SerenaMCPFactory:
                     access_control=self.access_control,
                 )
                 mcp._tool_manager._tools[tool.get_name()] = mcp_tool
-                count += 1
-            log.info(f"Starting MCP server with {count} tools: {list(mcp._tool_manager._tools.keys())}")
+            log.info(f"Starting MCP server with {len(mcp._tool_manager._tools)} tools: {list(mcp._tool_manager._tools.keys())}")
 
     def _create_serena_agent(
         self, serena_config: SerenaConfig, modes: ModeSelectionDefinition | None = None, project_activation_error: str | None = None
@@ -468,35 +472,7 @@ class SerenaMCPFactory:
         openai_tool_compatible = self.context.name in ["chatgpt", "codex", "oaicompat-agent"]
         assert self.agent is not None
         context = self.agent.get_context()
-
-        # Resolve connection permission from the HTTP Authorization header when access
-        # control is enabled (streamable-http / sse). Stdio keeps full edit access.
-        allow_edit = True
-        if self.access_control is not None and self.access_control.enabled:
-            headers = None
-            try:
-                request_ctx = getattr(mcp_server, "request_context", None)
-                request = getattr(request_ctx, "request", None) if request_ctx is not None else None
-                headers = getattr(request, "headers", None)
-            except Exception:
-                headers = None
-            if headers is None:
-                try:
-                    # FastMCP may expose the active request via the session context
-                    from mcp.server.fastmcp.server import Context as _Ctx  # noqa: F401
-                except Exception:
-                    pass
-            permission = self.access_control.resolve_permission(headers)
-            set_current_permission(permission)
-            allow_edit = permission == ConnectionPermission.EDIT
-            log.info("Connection permission resolved as %s (edit tools %s)", permission.value, "available" if allow_edit else "hidden")
-
-        self._set_mcp_tools(
-            mcp_server,
-            openai_tool_compatible=openai_tool_compatible,
-            structured_output=context.structured_tool_output,
-            allow_edit=allow_edit,
-        )
+        self._set_mcp_tools(mcp_server, openai_tool_compatible=openai_tool_compatible, structured_output=context.structured_tool_output)
         log.info("MCP server lifetime setup complete")
         try:
             yield

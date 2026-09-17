@@ -207,11 +207,16 @@ connection_access_tokens:
   "writer-secret-token": edit
 ```
 
-- **read**: only non-editing tools are listed; an editing tool call is rejected.
-- **edit**: all tools (previous behaviour).
-- Clients must send `Authorization: Bearer <token>`. Missing or unknown tokens are treated as read-only.
+- Every tool call must send `Authorization: Bearer <token>`.
+- **Missing, invalid, or revoked tokens are rejected** (no tools run).
+- **read**: editing tools are rejected server-side; query tools work.
+- **edit**: all tools.
 - **stdio** ignores this setting (a single local client already controls the process).
 - Empty mapping (default) disables the check entirely.
+
+Limitation: the MCP `tools/list` response is process-global, so read-only clients still
+*see* editing tools in the list; every editing call is refused at execution time. Full
+per-connection tool lists need MCP SDK auth scopes.
 
 Serena only restricts its own MCP tools. It does not sandbox an agent's terminal or other
 file-editing paths outside Serena.
