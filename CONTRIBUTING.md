@@ -11,6 +11,8 @@ The following types of contributions can be submitted directly via pull requests
 
 For other changes, please open an issue first to discuss your ideas with the maintainers.
 
+Do not submit pull requests for beta features (unless they are trivial bug fixes); instead, provide feedback via issues or discussions.
+
 ## Licensing and Contributor License Agreement (CLA)
 
 Serena is multi-licensed by component (see [LICENSE](LICENSE)):
@@ -44,7 +46,8 @@ See the corresponding [memory](.serena/memories/adding_new_language_support_guid
 
 ## Submitting Pull Requests
 
-Before submitting a PR, be sure to document your relevant changes (i.e. new features, fixes) in `CHANGELOG.md`.
+Before submitting a PR, be sure to document your relevant changes (i.e. new features, fixes) in `CHANGELOG.md`;
+documentation changes should not be included.
 Use a concise style and add your change to the appropriate section
 ("Language Servers", "Tools", "JetBrains", "CLI", "Memories", "Dashboard", "Hooks", "General", "Security").
 
