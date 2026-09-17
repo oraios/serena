@@ -24,10 +24,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     which could leave grandchildren as zombies; cleanup now waits for the discovered descendants (#1464)
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
   - Add optional `connection_access_tokens` mapping for HTTP MCP transports: each bearer token maps to
-    `read` or `edit`. Every tool call is checked against the request's `Authorization` header;
-    missing/invalid tokens are rejected, and read connections cannot invoke editing tools.
-    The process-global tool list is unchanged (per-connection lists would race across shared
-    connections). Stdio is unaffected (#1971)
+    `read` or `edit`. Tokens are verified through the MCP SDK `TokenVerifier` protocol (the host
+    application supplies the checker; Serena does not issue tokens). Invalid/missing tokens are
+    rejected by the SDK auth middleware before any tool runs; read connections cannot invoke
+    editing tools (checked per call via the verified token's scopes). The process-global tool
+    list is unchanged. Stdio is unaffected (#1971)
   - Docs: `trusted_project_path_patterns` now documents how to trust a single project. Trust is decided by
     the project's root path, so a `<project root>/**` entry matches only paths below the root and therefore
     trusts no project at all; the template now shows the bare root form alongside the parent-directory

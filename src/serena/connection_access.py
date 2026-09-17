@@ -2,13 +2,16 @@
 
 """Optional per-connection tool permissions for the Serena MCP server (oraios/serena#1971).
 
-When ``connection_access_tokens`` is configured, HTTP transports require a Bearer token.
-A token maps to ``read`` (query tools only) or ``edit`` (all tools). Stdio is unaffected:
-a single local client already controls the process.
+When ``connection_access_tokens`` is configured, HTTP transports require a Bearer token
+verified by the MCP SDK's ``TokenVerifier`` protocol (the token checker the issue asks the
+host application to supply — not a Serena login system). A token maps to ``read`` (query
+tools only) or ``edit`` (all tools) and is carried as an OAuth scope on the verified
+``AccessToken``. Stdio is unaffected: a single local client already controls the process.
 
-Permissions are enforced **per tool call** from the request that carries the call. The
-MCP tool list itself is process-global (one ``FastMCP`` instance serves all connections),
-so it cannot safely differ per connection without SDK-level auth; read-only clients still
+Missing or invalid tokens are rejected by the SDK auth middleware before any tool runs.
+Editing tools additionally require the ``edit`` scope on every call. The MCP tool list
+itself is process-global (one ``FastMCP`` instance serves all connections), so it cannot
+safely differ per connection without per-session tool managers; read-only clients still
 see editing tools in ``tools/list`` but every editing call is rejected server-side.
 """
 
@@ -24,6 +27,39 @@ log = logging.getLogger(__name__)
 class ConnectionPermission(str, Enum):
     READ = "read"
     EDIT = "edit"
+
+    @property
+    def scope(self) -> str:
+        return self.value
+
+
+class SerenaTokenVerifier:
+    """
+    MCP SDK ``TokenVerifier`` over Serena's configured bearer tokens (oraios/serena#1971).
+
+    Implements only the verifier protocol; token issuance/revocation stays with the
+    application that writes ``connection_access_tokens`` (revoke by removing the entry and
+    restarting, or by reloading config in a host that supports it).
+    """
+
+    def __init__(self, tokens: dict[str, ConnectionPermission]):
+        self._tokens = dict(tokens)
+
+    async def verify_token(self, token: str):
+        """
+        :return: an ``AccessToken`` carrying the permission as a scope, or None if unknown
+        """
+        from mcp.server.auth.provider import AccessToken
+
+        permission = self._tokens.get(token)
+        if permission is None:
+            return None
+        return AccessToken(
+            token=token,
+            client_id="serena-connection",
+            scopes=[permission.scope],
+            subject=permission.value,
+        )
 
 
 class ConnectionAccessControl:
@@ -46,6 +82,11 @@ class ConnectionAccessControl:
                 log.warning("Ignoring connection_access_tokens entry with unknown permission %r (expected read|edit)", permission)
         self._tokens = resolved
         self.enabled = bool(self._tokens)
+
+    @property
+    def token_verifier(self) -> SerenaTokenVerifier:
+        """Verifier for the MCP SDK auth middleware."""
+        return SerenaTokenVerifier(self._tokens)
 
     def permission_for_token(self, token: str | None) -> ConnectionPermission | None:
         """
@@ -95,6 +136,27 @@ class ConnectionAccessControl:
         except Exception:
             return None
 
+    @staticmethod
+    def permission_from_access_token_scopes() -> ConnectionPermission | None:
+        """
+        Read the permission from the MCP SDK's per-request auth context (scopes set by
+        :class:`SerenaTokenVerifier`).
+        """
+        try:
+            from mcp.server.auth.middleware.auth_context import get_access_token
+
+            access_token = get_access_token()
+        except Exception:
+            return None
+        if access_token is None:
+            return None
+        scopes = list(getattr(access_token, "scopes", ()) or ())
+        if ConnectionPermission.EDIT.scope in scopes:
+            return ConnectionPermission.EDIT
+        if ConnectionPermission.READ.scope in scopes:
+            return ConnectionPermission.READ
+        return None
+
     def resolve_permission(self, headers: Any) -> ConnectionPermission | None:
         """
         Resolve the permission for a request carrying `headers`.
@@ -126,5 +188,14 @@ class ConnectionAccessControl:
     def permission_for_mcp_context(self, mcp_ctx: Any) -> ConnectionPermission | None:
         """
         Resolve permission from an MCP tool-call context.
+
+        Prefers the SDK auth context (TokenVerifier scopes). Falls back to parsing the
+        request ``Authorization`` header when middleware did not run (e.g. a transport
+        that did not go through ``RequireAuthMiddleware``).
         """
+        if not self.enabled:
+            return ConnectionPermission.EDIT
+        from_scopes = self.permission_from_access_token_scopes()
+        if from_scopes is not None:
+            return from_scopes
         return self.resolve_permission(self.headers_from_mcp_context(mcp_ctx))

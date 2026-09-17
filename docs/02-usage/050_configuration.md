@@ -207,19 +207,24 @@ connection_access_tokens:
   "writer-secret-token": edit
 ```
 
-- Every tool call must send `Authorization: Bearer <token>`.
-- **Missing, invalid, or revoked tokens are rejected** (no tools run).
-- **read**: editing tools are rejected server-side; query tools work.
-- **edit**: all tools.
-- **stdio** ignores this setting (a single local client already controls the process).
-- Empty mapping (default) disables the check entirely.
+How it works (MCP SDK auth, not a Serena login system):
+
+1. HTTP requests must send `Authorization: Bearer <token>`.
+2. The MCP SDK verifies the token through a `TokenVerifier` that looks it up in this map.
+   Missing or unknown tokens are rejected **before any tool runs**.
+3. Each verified token carries a scope: `read` or `edit` (`required_scopes` floor is `read`).
+4. **read**: editing tools are rejected on every call; query tools work.
+5. **edit**: all tools.
+6. **stdio** ignores this setting (a single local client already controls the process).
+7. Empty mapping (default) disables auth entirely.
 
 Limitation: the MCP `tools/list` response is process-global, so read-only clients still
 *see* editing tools in the list; every editing call is refused at execution time. Full
-per-connection tool lists need MCP SDK auth scopes.
+per-connection tool lists need per-session tool managers or client-side filtering.
 
 Serena only restricts its own MCP tools. It does not sandbox an agent's terminal or other
-file-editing paths outside Serena.
+file-editing paths outside Serena. Revoke a token by removing it from the map and
+restarting the server.
 
 ### Serena Data Directory
 

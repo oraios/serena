@@ -109,9 +109,9 @@ class SerenaFastMCPTool(FastMCPTool):
 
         def execute_fn(**kwargs) -> str:
             if access_control_for_tool is not None and access_control_for_tool.enabled:
-                # Resolve from *this* call's HTTP request (not a process-global): concurrent
-                # streamable-http connections share one FastMCP instance, so permission must
-                # be read per invocation.
+                # Prefer MCP SDK auth-context scopes (TokenVerifier); fall back to the
+                # request Authorization header. Concurrent streamable-http connections
+                # share one FastMCP instance, so permission is always per invocation.
                 mcp_ctx = kwargs.get("mcp_ctx")
                 permission = access_control_for_tool.permission_for_mcp_context(mcp_ctx)
                 if not access_control_for_tool.allows(permission, can_edit=can_edit):
@@ -447,6 +447,26 @@ class SerenaMCPFactory:
         Settings.model_config = SettingsConfigDict(env_prefix="FASTMCP_")
         instructions = self._get_initial_instructions()
         log.info("MCP server initial instructions:\n%s", instructions)
+
+        # Optional HTTP bearer-token auth via the MCP SDK (oraios/serena#1971). The
+        # application supplies the token checker (TokenVerifier); Serena does not issue
+        # tokens. required_scopes is the floor for any call; edit tools re-check for the
+        # "edit" scope on every invocation.
+        token_verifier = None
+        auth_settings = None
+        if self.access_control is not None and self.access_control.enabled:
+            from mcp.server.auth.settings import AuthSettings
+
+            token_verifier = self.access_control.token_verifier
+            # AuthSettings requires OAuth-shaped URLs for protected-resource metadata.
+            # Tokens here are application-supplied static secrets; the URLs are placeholders
+            # so clients that only send Authorization: Bearer keep working.
+            auth_settings = AuthSettings(
+                issuer_url="http://127.0.0.1/",
+                resource_server_url=f"http://{host}:{port}/mcp",
+                required_scopes=["read"],
+            )
+
         mcp = FastMCP(
             name="Serena",
             lifespan=self.server_lifespan,
@@ -454,6 +474,8 @@ class SerenaMCPFactory:
             host=host,
             port=port,
             instructions=instructions,
+            token_verifier=token_verifier,
+            auth=auth_settings,
         )
         # FastMCP currently falls back to the installed mcp SDK version when no version is set.
         # Set the low-level server value explicitly so MCP clients identify Serena correctly.

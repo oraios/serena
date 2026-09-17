@@ -51,6 +51,63 @@ def test_headers_from_mcp_context():
     assert ac.permission_for_mcp_context(SimpleNamespace(request_context=None)) is None
 
 
+def test_token_verifier_scopes_and_rejects_unknown():
+    import asyncio
+
+    from serena.connection_access import SerenaTokenVerifier
+
+    ac = ConnectionAccessControl({"r1": "read", "w1": "edit"})
+    verifier = ac.token_verifier
+    tok = asyncio.run(verifier.verify_token("r1"))
+    assert tok is not None
+    assert tok.scopes == ["read"]
+    tok = asyncio.run(verifier.verify_token("w1"))
+    assert tok.scopes == ["edit"]
+    assert asyncio.run(verifier.verify_token("nope")) is None
+
+
+def test_permission_from_access_token_scopes(monkeypatch):
+    from serena.connection_access import ConnectionAccessControl, ConnectionPermission
+
+    class FakeToken:
+        def __init__(self, scopes):
+            self.scopes = scopes
+
+    monkeypatch.setattr(
+        "mcp.server.auth.middleware.auth_context.get_access_token",
+        lambda: FakeToken(["edit"]),
+    )
+    assert ConnectionAccessControl.permission_from_access_token_scopes() == ConnectionPermission.EDIT
+
+    monkeypatch.setattr(
+        "mcp.server.auth.middleware.auth_context.get_access_token",
+        lambda: FakeToken(["read"]),
+    )
+    assert ConnectionAccessControl.permission_from_access_token_scopes() == ConnectionPermission.READ
+
+    monkeypatch.setattr(
+        "mcp.server.auth.middleware.auth_context.get_access_token",
+        lambda: None,
+    )
+    assert ConnectionAccessControl.permission_from_access_token_scopes() is None
+
+
+def test_permission_for_mcp_context_prefers_scopes(monkeypatch):
+    from serena.connection_access import ConnectionAccessControl, ConnectionPermission
+
+    class FakeToken:
+        scopes = ["edit"]
+
+    monkeypatch.setattr(
+        "mcp.server.auth.middleware.auth_context.get_access_token",
+        lambda: FakeToken(),
+    )
+    ac = ConnectionAccessControl({"r1": "read"})
+    # scopes win even if headers say read-only
+    ctx = SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(headers={"Authorization": "Bearer r1"})))
+    assert ac.permission_for_mcp_context(ctx) == ConnectionPermission.EDIT
+
+
 def test_headers_from_starlette_request_headers_case_insensitive():
     # Starlette Headers behave like a mapping with case-insensitive keys
     class FakeHeaders:
