@@ -288,6 +288,41 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
     #: shell-command tool calls whose ``cmd`` or ``command`` field starts with one of these.
     _READ_SHELL_COMMANDS: frozenset[str] = frozenset(("cat", "head", "tail", "sed", "less", "more", "bat", "get-content", "gc"))
 
+    #: Common search/read flags whose *next* token is a value (not a positional pattern or path).
+    #: Without this, ``rg --type py needle src`` would treat ``py`` as the search pattern.
+    _SHELL_FLAGS_WITH_VALUES: frozenset[str] = frozenset(
+        (
+            "-t",
+            "--type",
+            "--type-add",
+            "-g",
+            "--glob",
+            "-e",
+            "--regexp",
+            "-A",
+            "-B",
+            "-C",
+            "--after-context",
+            "--before-context",
+            "--context",
+            "-m",
+            "--max-count",
+            "-j",
+            "--threads",
+            "-f",
+            "--file",
+            "--max-depth",
+            "--max-filesize",
+            "--include",
+            "--exclude",
+            "-name",
+            "-iname",
+            "-path",
+            "-ipath",
+            "-type",
+        )
+    )
+
     #: file suffixes for source-like files where symbolic tools are usually more
     #: appropriate than repeated raw reads. Lowercase and extension-only.
     #: Note: ``search_for_pattern`` is always available regardless of extension and
@@ -435,9 +470,19 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         if self._command_args_str is None:
             return arguments
 
-        for raw_argument in self._command_args_str.split():
+        tokens = self._command_args_str.split()
+        index = 0
+        while index < len(tokens):
+            raw_argument = tokens[index]
             argument = raw_argument.strip().strip("'\"")
-            if not argument or argument.startswith("-"):
+            index += 1
+            if not argument:
+                continue
+            if argument.startswith("-"):
+                # flags may write their value as ``--type=py`` (attached) or ``--type py`` (next token)
+                flag = argument.split("=", 1)[0]
+                if flag in self._SHELL_FLAGS_WITH_VALUES and "=" not in argument and index < len(tokens):
+                    index += 1
                 continue
             arguments.append(argument)
 
