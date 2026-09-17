@@ -16,7 +16,6 @@ from sensai.util.helper import mark_used
 from sensai.util.string import dict_string
 
 from serena.code_editor import EditedFileContext
-from serena.config.serena_config import LanguageBackend
 from serena.lsp.lsp_diagnostics import DiagnosticsContext
 from serena.memories.memory_manager import MemoryManager
 from serena.project import Project
@@ -29,7 +28,7 @@ from solidlsp.ls_exceptions import SolidLSPException
 
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
-    from serena.code_editor import CodeEditor, LanguageServerCodeEditor
+    from serena.code_editor import CodeEditor
     from serena.symbol import LanguageServerSymbolRetriever
 
 
@@ -67,22 +66,7 @@ class Component(ABC):
         return self.agent.get_active_project_or_raise()
 
     def create_code_editor(self) -> "CodeEditor":
-        from ..code_editor import JetBrainsCodeEditor
-
-        match self.agent.get_language_backend():
-            case LanguageBackend.LSP:
-                return self.create_ls_code_editor()
-            case LanguageBackend.JETBRAINS:
-                return JetBrainsCodeEditor(project=self.project)
-            case _:
-                raise ValueError
-
-    def create_ls_code_editor(self) -> "LanguageServerCodeEditor":
-        from ..code_editor import LanguageServerCodeEditor
-
-        if not self.agent.is_using_language_server():
-            raise Exception("Cannot create LanguageServerCodeEditor; agent is not in language server mode.")
-        return LanguageServerCodeEditor(self.create_language_server_symbol_retriever())
+        return self.agent.get_language_backend().create_code_editor(self.project)
 
 
 class ToolMarker:

@@ -26,8 +26,9 @@ from serena.agent import (
     SerenaAgent,
 )
 from serena.config.context_mode import SerenaAgentContext
-from serena.config.serena_config import AgentInterface, LanguageBackend, ModeSelectionDefinition, SerenaConfig
+from serena.config.serena_config import AgentInterface, ModeSelectionDefinition, SerenaConfig
 from serena.constants import DEFAULT_CONTEXT, SERENA_LOG_FORMAT
+from serena.language_backend import LanguageBackend
 from serena.tools import Tool, ToolCallError
 from serena.util.exception import show_fatal_exception_safe
 from serena.util.logging import MemoryLogHandler

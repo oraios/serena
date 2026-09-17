@@ -41,15 +41,13 @@ from serena.util.yaml import YamlCommentNormalisation, load_yaml, normalise_yaml
 from solidlsp.ls_config import LanguageServerId, LanguageServerIdLike, LanguageServerRegistry
 
 from ..analytics import RegisteredTokenCountEstimator
+from ..language_backend import BuiltinLanguageBackend, LanguageBackend, LanguageBackendRegistry
 from ..util.class_decorators import singleton
 from ..util.cli_util import ask_yes_no
 from ..util.dataclass import get_dataclass_default
 
 if TYPE_CHECKING:
-    from ..agent import SerenaAgent
     from ..project import Project
-    from ..repl.facade import ApiScope, Facade
-    from ..tools.tools_base import Tool
 
 log = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -249,67 +247,6 @@ class AgentInterface(Enum):
 
     def is_repl(self) -> bool:
         return self == AgentInterface.REPL
-
-
-class LanguageBackend(Enum):
-    LSP = "LSP"
-    """
-    Use the language server protocol (LSP), spawning freely available language servers
-    via the SolidLSP library that is part of Serena
-    """
-    JETBRAINS = "JetBrains"
-    """
-    Use the Serena plugin in your JetBrains IDE.
-    (requires the plugin to be installed and the project being worked on to be open in your IDE)
-    """
-
-    @staticmethod
-    def from_str(backend_str: str) -> "LanguageBackend":
-        for backend in LanguageBackend:
-            if backend.value.lower() == backend_str.lower():
-                return backend
-        raise ValueError(f"Unknown language backend '{backend_str}': valid values are {[b.value for b in LanguageBackend]}")
-
-    def is_lsp(self) -> bool:
-        return self == LanguageBackend.LSP
-
-    def is_jetbrains(self) -> bool:
-        return self == LanguageBackend.JETBRAINS
-
-    def get_lsp_tool_class_replacements(self) -> "dict[type[Tool], type[Tool]]":
-        """
-        :return: mapping from LSP tool classes to replacement tool classes (functional replacements)
-        """
-        match self:
-            case LanguageBackend.LSP:
-                return {}
-            case LanguageBackend.JETBRAINS:
-                from ..tools import jetbrains_tools, symbol_tools
-
-                return {
-                    symbol_tools.FindSymbolTool: jetbrains_tools.JetBrainsFindSymbolTool,
-                    symbol_tools.GetSymbolsOverviewTool: jetbrains_tools.JetBrainsGetSymbolsOverviewTool,
-                    symbol_tools.FindReferencingSymbolsTool: jetbrains_tools.JetBrainsFindReferencingSymbolsTool,
-                    symbol_tools.FindImplementationsTool: jetbrains_tools.JetBrainsFindImplementationsTool,
-                    symbol_tools.FindDeclarationTool: jetbrains_tools.JetBrainsFindDeclarationTool,
-                    symbol_tools.RenameSymbolTool: jetbrains_tools.JetBrainsRenameTool,
-                    symbol_tools.SafeDeleteSymbol: jetbrains_tools.JetBrainsSafeDeleteTool,
-                }
-            case _:
-                raise NotImplementedError()
-
-    def create_facades(self, agent: "SerenaAgent", api_scope: "ApiScope") -> list["Facade"]:
-        from ..repl.facade import Facade
-
-        if self.is_lsp():
-            from ..repl.api.lsp_api import LspApi
-
-            return [Facade.from_api(LspApi(agent), api_scope)]
-        elif self.is_jetbrains():
-            from ..repl.api.jb_api import JetBrainsApi
-
-            return [Facade.from_api(JetBrainsApi(agent), api_scope)]
-        return []
 
 
 class LineEnding(Enum):
@@ -680,7 +617,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
                 raise ValueError(f"symbol_info_budget cannot be negative, got: {symbol_info_budget}")
 
         language_backend_value = data.get("language_backend")
-        language_backend = LanguageBackend.from_str(language_backend_value) if language_backend_value else None
+        language_backend = LanguageBackendRegistry.get_instance().resolve(language_backend_value) if language_backend_value else None
         agent_interface_value = data.get("agent_interface")
         agent_interface = AgentInterface.from_str(agent_interface_value) if agent_interface_value else None
 
@@ -742,7 +679,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
 
         # map fields using non-primitive types to a YAML-compatible representation
         d["language_servers"] = [lang.get_key() for lang in self.language_servers]
-        d["language_backend"] = self.language_backend.value if self.language_backend is not None else None
+        d["language_backend"] = self.language_backend.get_key() if self.language_backend is not None else None
         d["agent_interface"] = self.agent_interface.value if self.agent_interface is not None else None
         d["line_ending"] = self.line_ending.value if self.line_ending is not None else None
 
@@ -1020,7 +957,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
     Defaults to TOOLS for backward compatibility (as users without this settings will get this default).
     The default for new users is defined in the template file.
     """
-    language_backend: LanguageBackend = LanguageBackend.LSP
+    language_backend: LanguageBackend = field(default_factory=lambda: BuiltinLanguageBackend.LSP.get_instance())
     """
     the language backend to use for code understanding features
     """
@@ -1204,13 +1141,13 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         language_backend = get_dataclass_default(SerenaConfig, "language_backend")
         if "language_backend" in loaded_commented_yaml:
             backend_str = loaded_commented_yaml["language_backend"]
-            language_backend = LanguageBackend.from_str(backend_str)
+            language_backend = LanguageBackendRegistry.get_instance().resolve(backend_str)
         else:
             # backward compatibility (migrate Boolean field "jetbrains")
             if "jetbrains" in loaded_commented_yaml:
                 num_migrations += 1
                 if loaded_commented_yaml["jetbrains"]:
-                    language_backend = LanguageBackend.JETBRAINS
+                    language_backend = BuiltinLanguageBackend.JETBRAINS.get_instance()
                 del loaded_commented_yaml["jetbrains"]
         instance.language_backend = language_backend
 
@@ -1277,17 +1214,25 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
             log.error(f"Error migrating configuration file: {e}")
             return None
 
+    def set_builtin_language_backend(self, backend: BuiltinLanguageBackend) -> None:
+        """
+        Sets the built-in language backend to use for code understanding features.
+
+        :param backend: the language backend to set
+        """
+        self.language_backend = backend.get_instance()
+
     @classmethod
-    def init(cls, language_backend: LanguageBackend) -> "SerenaConfig":
+    def init(cls, builtin_language_backend: BuiltinLanguageBackend) -> "SerenaConfig":
         """
         Supports the config initialisation CLI command, allowing the user to configure fundamental settings before
         the first launch.
 
-        :param language_backend: the language backend to use
+        :param builtin_language_backend: the language backend to use
         :return: the created SerenaConfig instance
         """
         config = cls.from_config_file()
-        config.language_backend = language_backend
+        config.language_backend = builtin_language_backend.get_instance()
         config._save()
         return config
 
@@ -1479,7 +1424,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         commented_yaml["projects"] = sorted({str(project.project_root) for project in self.projects})
 
         # convert language backend to string
-        commented_yaml["language_backend"] = self.language_backend.value
+        commented_yaml["language_backend"] = self.language_backend.get_key()
 
         # convert agent interface to string (None if not configured)
         commented_yaml["agent_interface"] = self.agent_interface.value if self.agent_interface is not None else None
@@ -1609,7 +1554,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
             log.info(f"Using agent interface '{agent_interface.value}' ({source})")
         return agent_interface
 
-    def determine_language_backend(self, project_config: ProjectConfig | None = None, log_choice: bool = False):
+    def determine_language_backend(self, project_config: ProjectConfig | None = None, log_choice: bool = False) -> LanguageBackend:
         language_backend = self.language_backend
         if project_config and project_config.language_backend is not None:
             language_backend = project_config.language_backend

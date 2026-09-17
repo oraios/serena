@@ -12,11 +12,11 @@ from sensai.util.logging import LogTime
 from sensai.util.string import TextBuilder, ToStringMixin
 
 from serena.config.serena_config import (
-    LanguageBackend,
     ProjectConfig,
     ProjectConfigAutoGenerationMode,
     SerenaConfig,
 )
+from serena.language_backend import LanguageBackend
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from serena.memories.memory_manager import MemoryManager
 from serena.util.file_proxy import FileCollection, FileProxy
@@ -128,7 +128,7 @@ class Project(ToStringMixin):
     @property
     def language_backend(self) -> LanguageBackend:
         # The backend configuration is fundamentally owned by the agent, so it takes
-        # precedence. (Note: The agent does not necessary honour the project's choice,
+        # precedence. (Note: The agent does not necessarily honour the project's choice,
         # as it may be invalid.)
         if self._agent is not None:
             return self._agent.get_language_backend()
@@ -236,18 +236,10 @@ class Project(ToStringMixin):
 
         # check code file restriction (depending on backend)
         if ignore_non_source_files:
-            # apply restriction only for LSP backend, which enumerates known languages
-            # and therefore can determine whether a file is a source file or not
-            if self.language_backend.is_lsp():
-                if os.path.isfile(abs_path):
-                    is_file_in_supported_language = False
-                    for language in self.project_config.language_servers:
-                        fn_matcher = language.get_source_fn_matcher()
-                        if fn_matcher.is_relevant_filename(abs_path):
-                            is_file_in_supported_language = True
-                            break
-                    if not is_file_in_supported_language:
-                        return True
+            if os.path.isfile(abs_path):
+                # non-source files are ignored
+                if not self.language_backend.is_source_file(abs_path, self):
+                    return True
 
         # Create normalized path for consistent handling
         rel_path = Path(relative_path)
@@ -336,7 +328,7 @@ class Project(ToStringMixin):
         :param relative_path: the path to validate, relative to the project root
         :param require_not_ignored: if True, the path must not be ignored according to the project's ignore settings
         """
-        if FileProxy.is_external_path(relative_path):
+        if FileProxy.is_external_path(relative_path, self):
             return
 
         if not self.is_path_in_project(relative_path):
@@ -392,7 +384,7 @@ class Project(ToStringMixin):
         :param skip_ignored_files: whether to skip ignored files; has no effect if `code_files_only` is True
         :return:
         """
-        if FileProxy.is_external_path(relative_path):
+        if FileProxy.is_external_path(relative_path, self):
             # single external path: create appropriate proxy
             file_collection = FileCollection([FileProxy.from_project_relative_path(self, relative_path)])
         else:
@@ -621,6 +613,14 @@ class Project(ToStringMixin):
         return 0
 
     def shutdown(self, timeout: float = 2.0) -> None:
+        """
+        Shuts down the project, calling the language backend-specific shutdown of the active project.
+
+        :param timeout: the timeout, in seconds
+        """
+        # clean up internal resources
         if self.language_server_manager is not None:
             self.language_server_manager.stop_all(save_cache=True, timeout=timeout)
             self.language_server_manager = None
+        # trigger additional backend-specific shutdown
+        self.language_backend.shutdown_active_project(self, timeout=timeout)

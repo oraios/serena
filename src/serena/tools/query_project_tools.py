@@ -2,7 +2,6 @@
 
 import json
 
-from serena.config.serena_config import LanguageBackend
 from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClientManager
 from serena.project_server import ProjectServerClient
 from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional
@@ -67,13 +66,10 @@ class QueryProjectTool(Tool, ToolMarkerOptional, ToolMarkerDoesNotRequireActiveP
                 return tool.apply(**json.loads(tool_params_json))
 
     def _is_project_server_required(self, tool: Tool) -> bool:
-        match self.agent.get_language_backend():
-            case LanguageBackend.JETBRAINS:
-                return False
-            case LanguageBackend.LSP:
-                # Note: As long as only read-only tools are considered, only symbolic tools require the project server.
-                #   But if we were to allow non-read-only tools, then tools using a CodeEditor also indirectly require language servers.
-                assert tool.is_readonly()
-                return tool.is_symbolic()
-            case _:
-                raise NotImplementedError
+        # The project server is relevant to the LSP backend only
+        if not self.agent.get_language_backend().is_lsp():
+            return False
+        # Note: As long as only read-only tools are considered, only symbolic tools require the project server.
+        #   But if we were to allow non-read-only tools, then tools using a CodeEditor also indirectly require language servers.
+        assert tool.is_readonly()
+        return tool.is_symbolic()
