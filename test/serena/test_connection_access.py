@@ -181,4 +181,3 @@ def test_execute_fn_allows_read_tools_on_read_token():
 def test_execute_fn_skips_check_when_access_control_disabled():
     mcp_tool = _make_mcp_tool("replace_symbol_body", True, None)
     assert mcp_tool.fn(name_path="x", body="y", relative_path="z") == "ok"
-
