@@ -12,6 +12,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     see `CONTRIBUTING.md`
 
 * General:
+  - Add an `opencode` context that relies on OpenCode's native filesystem, text-search, editing, and shell tools
+    while retaining Serena's semantic code-navigation tools
   - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
   - Fix: importing Serena no longer loads the `anthropic` package unless the Anthropic token counter is
     actually used; the unconditional import added seconds to CLI/MCP startup on some machines (#2012)
