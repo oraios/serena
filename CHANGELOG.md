@@ -68,6 +68,12 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: a C# file created after the project was already indexed was analyzed by Roslyn as a
     standalone Miscellaneous Files document instead of being folded into the loaded project,
     causing phantom diagnostics on the new file and on files referencing its symbols (#1961)
+  - Fix: Godot's GDScript parser can report a symbol's end column one column past the
+    line-end convention every other language server follows (closing a node's range from
+    the next lookahead token instead of the last consumed one, when that lookahead is a
+    synthesized newline); `replace_symbol_body` on the last function in a file silently
+    consumed the separating blank line as a result. `GodotLanguageServer` now corrects this
+    specific, measured overshoot when building its high-level document symbols (#1974)
   - Fix: High-level document symbol cache was not invalidated when the LS-specific low-level result 
     version changed
   - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
