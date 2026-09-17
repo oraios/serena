@@ -20,8 +20,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     result, surfacing as a `tool_timeout` exactly `tool_timeout` seconds later. The stderr
     handler is now non-blocking (direct writes on a non-blocking fd for pipes/sockets, dropping
     records when the buffer is full and truncating records to the pipe's atomic write size so a
-    partially free buffer can never produce a partial write); on Windows, anonymous pipes can neither be detected as
-    FIFOs nor made non-blocking, so stderr writes there remain blocking (as before); the log
+    partially free buffer can never produce a partial write). On Windows, anonymous pipes are
+    switched to `PIPE_NOWAIT` via `SetNamedPipeHandleState` (follow-up to #2044, closes #2047);
+    if that call is unavailable the handler falls back to blocking writes as before. The log
     file and the dashboard's in-memory buffer remain the lossless, authoritative streams
   - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
   - Fix: importing Serena no longer loads the `anthropic` package unless the Anthropic token counter is

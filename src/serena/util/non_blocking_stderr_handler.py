@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+import ctypes
 import logging
 import os
 import stat
@@ -23,11 +24,14 @@ class NonBlockingStderrHandler(logging.Handler):
 
     The write strategy is determined once at construction time and is one of:
 
-    * non-blocking ``os.write`` on a pipe/socket file descriptor made non-blocking: when the
-      buffer is full (``BlockingIOError``), the record is dropped instead of blocking the
+    * non-blocking ``os.write`` on a POSIX pipe/socket file descriptor made non-blocking: when
+      the buffer is full (``BlockingIOError``), the record is dropped instead of blocking the
       logging lock. Records longer than the fd's atomic write size (``PIPE_BUF``) are
       truncated to it first, so that a partially free buffer can never elicit a partial
       write (POSIX guarantees all-or-nothing writes only up to ``PIPE_BUF``)
+    * on Windows, ``PIPE_NOWAIT`` via ``SetNamedPipeHandleState`` for anonymous/named pipes
+      (oraios/serena#2047, follow-up to #2044): a full pipe raises ``OSError`` with
+      ``ERROR_NO_DATA`` and the record is dropped, matching the POSIX contract
     * plain ``os.write`` on other file descriptors (tty, regular file): these have no bounded
       buffer that a non-draining consumer would let fill up
     * plain ``stream.write`` when the stream has no usable file descriptor (e.g. ``StringIO``)
@@ -37,14 +41,20 @@ class NonBlockingStderrHandler(logging.Handler):
     and lossless; only this best-effort console stream can lose records, and only while its
     consumer is not draining it.
 
-    Limitation: on Windows, anonymous pipes are neither reported as FIFOs by ``fstat`` nor
-    can they be made non-blocking (``os.set_blocking`` does not exist), so stderr writes there
-    remain blocking, exactly as with a plain ``StreamHandler``.
+    Residual Windows limitation: if ``SetNamedPipeHandleState(PIPE_NOWAIT)`` cannot be applied
+    (unsupported handle type, or the deprecated API is removed in a future Windows release),
+    the writer falls back to blocking ``os.write``, exactly as with a plain ``StreamHandler``.
+    ``PIPE_NOWAIT`` is documented as deprecated by Microsoft but remains the only in-process
+    way to make an anonymous pipe non-blocking without a helper thread.
 
     No background thread is used: a daemon thread stuck in a blocking ``write`` would
     deadlock CPython's interpreter shutdown (``PyThreadState_Clear`` waits for the thread's
     frame), trading one hang for another.
     """
+
+    _PIPE_NOWAIT = 0x00000001
+    _ERROR_NO_DATA = 232
+    _ERROR_INVALID_FUNCTION = 1
 
     class _RecordWriter:
         """
@@ -135,6 +145,44 @@ class NonBlockingStderrHandler(logging.Handler):
                 encoded = (payload + self._TRUNCATION_SUFFIX).encode(errors="replace")
             os.write(self._fd, encoded)
 
+    class _WindowsPipeRecordWriter(_FdRecordWriter):
+        """
+        Windows pipe writer that sets ``PIPE_NOWAIT`` so a full buffer fails the write
+        instead of blocking (oraios/serena#2047).
+
+        ``SetNamedPipeHandleState`` is the documented (if deprecated) way to make an
+        anonymous pipe non-blocking in-process. When the call fails, the writer keeps
+        blocking semantics rather than inventing a thread (see the handler docstring).
+        """
+
+        def __init__(self, fd: int) -> None:
+            super().__init__(fd)
+            self._nonblocking = self._enable_pipe_nowait(fd)
+
+        @staticmethod
+        def _enable_pipe_nowait(fd: int) -> bool:
+            try:
+                import msvcrt
+
+                handle = msvcrt.get_osfhandle(fd)
+            except (ImportError, OSError, ValueError):
+                return False
+            try:
+                mode = ctypes.c_ulong(NonBlockingStderrHandler._PIPE_NOWAIT)
+                ok = ctypes.windll.kernel32.SetNamedPipeHandleState(handle, ctypes.byref(mode), None, None)
+                return bool(ok)
+            except Exception:
+                return False
+
+        def write(self, msg: str) -> None:
+            try:
+                os.write(self._fd, msg.encode(errors="replace"))
+            except OSError as e:
+                # full non-blocking pipe (ERROR_NO_DATA) or closed handle: drop, never block
+                if getattr(e, "winerror", None) == NonBlockingStderrHandler._ERROR_NO_DATA:
+                    raise BlockingIOError(NonBlockingStderrHandler._ERROR_NO_DATA, "pipe full") from e
+                raise
+
     def __init__(self, stream=None, level: int = logging.NOTSET) -> None:
         """
         :param stream: the stream to write to; defaults to ``sys.stderr``
@@ -152,6 +200,19 @@ class NonBlockingStderrHandler(logging.Handler):
         """
         try:
             fd = stream.fileno()
+        except (AttributeError, OSError, ValueError):
+            # no usable fileno: write via the stream object instead
+            return self._StreamRecordWriter(stream)
+
+        if sys.platform == "win32":
+            # anonymous pipes are not S_ISFIFO on Windows; try PIPE_NOWAIT first
+            writer = self._WindowsPipeRecordWriter(fd)
+            if writer._nonblocking:
+                return writer
+            # not a pipe we can switch: tty / regular file / unsupported handle
+            return self._FdRecordWriter(fd)
+
+        try:
             mode = os.fstat(fd).st_mode
 
             # pipes (incl. socketpairs) and sockets have a bounded buffer: make the fd
@@ -161,9 +222,8 @@ class NonBlockingStderrHandler(logging.Handler):
 
             # other descriptors (tty, regular file) have no bounded buffer to guard against
             return self._FdRecordWriter(fd)
-        except (AttributeError, OSError, ValueError):
-            # no usable fileno: write via the stream object instead
-            return self._StreamRecordWriter(stream)
+        except (OSError, ValueError):
+            return self._FdRecordWriter(fd)
 
     def emit(self, record: logging.LogRecord) -> None:
         # stderr buffer full (or destination gone): drop the record rather than blocking the
