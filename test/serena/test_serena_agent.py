@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from copy import copy
 from dataclasses import dataclass
 from typing import Literal, cast
+from unittest.mock import patch
 
 import pytest
 from _pytest.mark import Mark, MarkDecorator, ParameterSet
@@ -25,6 +26,7 @@ from serena.tools import (
     FindReferencingSymbolsTool,
     FindSymbolTool,
     GetDiagnosticsForFileTool,
+    GetSymbolsOverviewTool,
     InitialInstructionsTool,
     ReplaceContentTool,
     ReplaceInFilesTool,
@@ -1359,6 +1361,96 @@ class TestSerenaAgent:
             assert case.name_path not in file_content, (
                 f"Expected symbol {case.name_path} to be removed from {case.relative_path}, but it still appears in the file content"
             )
+
+    @pytest.mark.parametrize(
+        "serena_agent",
+        [
+            pytest.param(LanguageServerId.PYTHON, marks=get_pytest_markers(LanguageServerId.PYTHON), id="python_directory_overview"),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_get_symbols_overview_directory_returns_per_file_symbols(self, serena_agent: SerenaAgent):
+        """
+        Tests that get_symbols_overview accepts a directory path and returns
+        symbols grouped by file (Issue #1412).
+        """
+        overview_tool = serena_agent.get_tool(GetSymbolsOverviewTool)
+        result = overview_tool.apply(relative_path="test_repo", depth=0)
+        result_dict = json.loads(result)
+        assert isinstance(result_dict, dict), f"Expected dict result for directory, got: {type(result_dict)}"
+        assert len(result_dict) > 0, "Expected at least one file in directory overview"
+        for file_path in result_dict:
+            assert file_path.endswith(".py"), f"Expected Python file path, got: {file_path}"
+
+    @pytest.mark.parametrize(
+        "serena_agent",
+        [
+            pytest.param(LanguageServerId.PYTHON, marks=get_pytest_markers(LanguageServerId.PYTHON), id="python_file_overview_unchanged"),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_get_symbols_overview_file_returns_same_format(self, serena_agent: SerenaAgent):
+        """
+        Regression test: get_symbols_overview with a file path should return
+        the same grouped format as before (list of symbol dicts by kind).
+        """
+        overview_tool = serena_agent.get_tool(GetSymbolsOverviewTool)
+        result = overview_tool.apply(relative_path="test_repo/services.py", depth=0)
+        result_dict = json.loads(result)
+        assert isinstance(result_dict, dict), f"Expected dict result, got: {type(result_dict)}"
+        assert "test_repo/services.py" not in result_dict, "Single file result should not be wrapped in per-file mapping"
+
+    @pytest.mark.parametrize(
+        "serena_agent",
+        [
+            pytest.param(
+                LanguageServerId.PYTHON, marks=get_pytest_markers(LanguageServerId.PYTHON), id="python_directory_exceeds_max_files"
+            ),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_get_symbols_overview_directory_raises_when_exceeds_max_files(self, serena_agent: SerenaAgent):
+        """
+        Tests that giving a directory with more analyzable files than max_files
+        raises ValueError with guidance to narrow the path, and that the guard fires
+        before any document-symbol request is issued (Issue #1412 maintainer feedback).
+        """
+        overview_tool = serena_agent.get_tool(GetSymbolsOverviewTool)
+        lang_server = next(serena_agent.get_language_server_manager_or_raise().iter_language_servers())
+
+        call_count = 0
+        original_request = lang_server.request_document_symbols
+
+        def counting_request_document_symbols(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            return original_request(*args, **kwargs)
+
+        with (
+            patch.object(lang_server, "request_document_symbols", counting_request_document_symbols),
+            pytest.raises(ValueError, match="max_files=1"),
+        ):
+            overview_tool.apply(relative_path="test_repo", depth=0, max_files=1)
+
+        assert call_count == 0, f"Expected the max_files guard to fire before any LSP request, got {call_count} document-symbol requests"
+
+    @pytest.mark.parametrize(
+        "serena_agent",
+        [
+            pytest.param(LanguageServerId.PYTHON, marks=get_pytest_markers(LanguageServerId.PYTHON), id="python_nonexistent_path"),
+        ],
+        indirect=["serena_agent"],
+    )
+    def test_get_symbols_overview_nonexistent_path_raises(self, serena_agent: SerenaAgent):
+        """
+        Tests that a path that does not exist in the project raises FileNotFoundError
+        for files and directories alike, before any language-server query is attempted.
+        """
+        overview_tool = serena_agent.get_tool(GetSymbolsOverviewTool)
+        with pytest.raises(FileNotFoundError, match="does not exist"):
+            overview_tool.apply(relative_path="test_repo/does_not_exist.py")
+        with pytest.raises(FileNotFoundError, match="does not exist"):
+            overview_tool.apply(relative_path="test_repo/does_not_exist")
 
 
 class TestPromptProvision:
