@@ -3,6 +3,7 @@
 """Behaviour tests for Java LS settings wiring (oraios/serena#1976)."""
 
 import os
+from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -13,7 +14,10 @@ from solidlsp.language_servers.eclipse_jdtls import EclipseJDTLS
 def _make_ls(custom_settings: dict, jre_home: str) -> EclipseJDTLS:
     ls = object.__new__(EclipseJDTLS)
     ls._custom_settings = custom_settings
-    ls.repository_root_path = "/tmp/fake-java-project"
+    # must be an existing absolute path: JDTLS initialize builds a file URI from it
+    # (Windows CI: "relative path can't be expressed as a file URI")
+    ls.repository_root_path = str(Path(jre_home) / "project")
+    Path(ls.repository_root_path).mkdir(parents=True, exist_ok=True)
     ls.runtime_dependency_paths = SimpleNamespace(
         jre_home_path=jre_home,
         jdtls_launcher_jar_path=os.path.join(jre_home, "launcher.jar"),
