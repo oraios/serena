@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import ctypes
+import errno
 import logging
 import os
 import stat
@@ -180,10 +181,16 @@ class NonBlockingStderrHandler(logging.Handler):
             try:
                 os.write(self._fd, msg.encode(errors="replace"))
             except OSError as e:
-                # full non-blocking pipe or peer gone: drop, never block
+                # Full non-blocking pipe or peer gone. Windows surfaces this as
+                # ERROR_NO_DATA / ERROR_BROKEN_PIPE / ERROR_PIPE_NOT_CONNECTED, or as
+                # errno.ENOSPC / ENOBUFS with winerror unset (observed on CI runners).
                 winerror = getattr(e, "winerror", None)
-                if winerror in NonBlockingStderrHandler._WINDOWS_FULL_PIPE_ERRORS:
-                    raise BlockingIOError(winerror, "pipe full or disconnected") from e
+                if winerror in NonBlockingStderrHandler._WINDOWS_FULL_PIPE_ERRORS or e.errno in (
+                    errno.ENOSPC,
+                    errno.ENOBUFS,
+                    errno.EPIPE,
+                ):
+                    raise BlockingIOError(winerror or e.errno or 0, "pipe full or disconnected") from e
                 raise
 
     def __init__(self, stream=None, level: int = logging.NOTSET) -> None:
