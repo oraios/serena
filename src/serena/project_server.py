@@ -3,11 +3,12 @@
 import json
 import logging
 import pickle
+import secrets
 import threading
 from typing import TYPE_CHECKING, Any
 
 import requests as requests_lib
-from flask import Flask, Response, request
+from flask import Flask, Response, abort, request
 from pydantic import BaseModel
 from sensai.util.logging import LogTime
 
@@ -90,7 +91,22 @@ class ProjectServer:
 
         self._setup_routes()
 
+    def get_serena_config(self) -> SerenaConfig:
+        return self._agent.serena_config
+
+    def get_auth_secret(self) -> str:
+        """Returns the authentication secret used by the server."""
+        return self._agent.serena_config.auth_secret
+
     def _setup_routes(self) -> None:
+        @self._app.before_request
+        def authenticate() -> None:
+            # authenticate every request before parsing input or accessing projects
+            secret = self.get_auth_secret()
+            provided = request.headers.get("Authorization", "")
+            if not secret or not secrets.compare_digest(provided.encode("utf-8"), f"Bearer {secret}".encode()):
+                abort(401)
+
         @self._app.route("/heartbeat", methods=["GET"])
         def heartbeat() -> dict[str, str]:
             return {"status": "alive"}
@@ -195,20 +211,23 @@ class ProjectServerClient:
     :class:`ConnectionError` is raised.
     """
 
-    def __init__(self, host: str = "127.0.0.1", port: int | None = None, timeout: int = 300) -> None:
+    def __init__(self, serena_config: SerenaConfig, host: str = "127.0.0.1", port: int | None = None) -> None:
         """
         :param host: the host address of the project server.
-        :param port: the port of the project server; None for the default port.
+        :param port: the port of the project server; if None, use default.
+        :param auth_secret: the shared authentication secret; defaults to the secret in Serena's configuration.
         :raises ConnectionError: if the project server is not reachable.
         """
         if port is None:
             port = ProjectServer.PORT
         self._base_url = f"http://{host}:{port}"
-        self._timeout = timeout
+        self._timeout = serena_config.tool_timeout - 1
+        auth_secret = serena_config.auth_secret
+        self._headers = {"Authorization": f"Bearer {auth_secret}"}
 
         # verify that the server is running
         try:
-            response = requests_lib.get(f"{self._base_url}/heartbeat", timeout=5)
+            response = requests_lib.get(f"{self._base_url}/heartbeat", headers=self._headers, timeout=5)
             response.raise_for_status()
         except requests_lib.ConnectionError:
             raise ConnectionError(f"ProjectServer is not reachable at {self._base_url}. Make sure the server is running.")
@@ -233,7 +252,7 @@ class ProjectServerClient:
             tool_params_json=tool_params_json,
         ).model_dump()
 
-        response = requests_lib.post(f"{self._base_url}/query_project", json=payload, timeout=self._timeout)
+        response = requests_lib.post(f"{self._base_url}/query_project", json=payload, headers=self._headers, timeout=self._timeout)
         response.raise_for_status()
         return response.text
 
@@ -251,7 +270,7 @@ class ProjectServerClient:
         payload = CallFacadeMethodRequest(
             project_name=project_name, facade_name=facade_name, method_name=method_name, args=args, kwargs=kwargs
         ).model_dump()
-        response = requests_lib.post(f"{self._base_url}/call_facade_method", json=payload, timeout=self._timeout)
+        response = requests_lib.post(f"{self._base_url}/call_facade_method", json=payload, headers=self._headers, timeout=self._timeout)
         if not response.ok:
             raise ValueError(f"Project server error ({response.status_code}): {response.text[:2000]}")
         return pickle.loads(response.content)

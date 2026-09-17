@@ -57,7 +57,7 @@ class QueryProjectTool(Tool, ToolMarkerOptional, ToolMarkerDoesNotRequireActiveP
         tool = self.agent.get_tool_by_name(tool_name)
         assert tool.is_readonly(), f"Tool {tool_name} is not read-only and cannot be executed in another project."
         if self._is_project_server_required(tool):
-            client = ProjectServerClient()
+            client = ProjectServerClient(self.agent.serena_config)
             return client.query_project(project_name, tool_name, tool_params_json)
         else:
             registered_project = self.agent.serena_config.get_registered_project(project_name)

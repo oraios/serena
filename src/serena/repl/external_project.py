@@ -63,5 +63,5 @@ class ExternalProjectExecution:
         if self._client is None:
             from serena.project_server import ProjectServerClient
 
-            self._client = ProjectServerClient()
+            self._client = ProjectServerClient(self._agent.serena_config)
         return self._client.call_facade_method(self.project_name, facade_name, method_name, list(args), kwargs)

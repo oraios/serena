@@ -61,8 +61,8 @@ def project_server(serena_config: SerenaConfig) -> Iterator[tuple[ProjectServer,
 @pytest.mark.python
 @pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.PYTHON), reason="python tests are disabled in this environment")
 def test_facade_method_results_are_transferred_from_the_project_server(project_server: tuple[ProjectServer, int]) -> None:
-    _, port = project_server
-    client = ProjectServerClient(port=port)
+    server, port = project_server
+    client = ProjectServerClient(server.get_serena_config(), port=port)
     result = client.call_facade_method("test_repo_python", "lsp", "find_symbol", ["create_user"], {"include_body": True})
 
     # the result is a self-contained object which can be processed and rendered locally
@@ -86,6 +86,7 @@ def test_external_project_context_in_repl(
     serena_config.included_apis = ["ext"]
 
     # the querying agent has another project active and queries the python test project
+    serena_config.auth_secret = server.get_auth_secret()
     agent = SerenaAgent(project="test_repo_typescript", serena_config=serena_config)
     agent.execute_task(lambda: None)
     try:
