@@ -66,6 +66,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     command and Serena waits for the plugin server to become reachable before proceeding (#1864)
 
 * Hooks:
+  - Fix: Claude Code and CodeBuddy Bash payloads now classify common shell searches and source-file
+    reads, including compound commands, so native shell traffic reaches the symbolic-tool reminder (#1845)
   - Fix: Codex's documented hook wiring only routes `remind` through `PreToolUse` on `Bash`, so its
     reset-on-Serena-tool-use branch was unreachable there and reminder counters never cleared after a
     successful Serena call. Add a `serena-hooks reset` command and a `PostToolUse` example matched to
@@ -142,7 +144,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     symbols (e.g. Go, Nix, Fortran, F#, Vue) was therefore repeated on every request or, if it mutated
     symbols in place, re-applied to already processed cached results
 
-CLI:
+* CLI:
   - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)
 
 * Dependencies:
