@@ -54,7 +54,6 @@ class NonBlockingStderrHandler(logging.Handler):
 
     _PIPE_NOWAIT = 0x00000001
     _ERROR_NO_DATA = 232
-    _ERROR_INVALID_FUNCTION = 1
 
     class _RecordWriter:
         """
