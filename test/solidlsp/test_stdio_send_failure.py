@@ -37,10 +37,12 @@ def _server() -> StdioLanguageServer:
     )
 
 
-def _server_with_failing_stdin(exc: Exception) -> StdioLanguageServer:
+def _server_with_failing_stdin(exc: Exception | None) -> StdioLanguageServer:
+    """A server whose stdin write raises ``exc``, or succeeds when ``exc`` is None."""
     server = _server()
     process = MagicMock()
-    process.stdin.writelines.side_effect = exc
+    if exc is not None:
+        process.stdin.writelines.side_effect = exc
     server._process = process
     return server
 
@@ -86,8 +88,12 @@ def test_closed_stdin_fails_pending_request_with_terminated(server_with_live_pro
     nulls ``_process``, so a request sent from another thread lands in that window.
     """
     server = server_with_live_process
-    server._safely_close_pipe(server._process.stdin)
-    assert server._process.stdin.closed
+    process = server._process
+    assert process is not None
+    stdin = process.stdin
+    assert stdin is not None
+    server._safely_close_pipe(stdin)
+    assert stdin.closed
     request = Request(request_id=4, method="textDocument/hover")
     server._pending_requests[4] = request
 
@@ -115,8 +121,7 @@ def test_failed_write_does_not_raise_from_send_payload() -> None:
 
 def test_healthy_write_leaves_request_pending() -> None:
     """The normal path is untouched: no error is synthesized on success."""
-    server = _server_with_failing_stdin(BrokenPipeError(32, "Broken pipe"))
-    server._process.stdin.writelines.side_effect = None
+    server = _server_with_failing_stdin(None)
     request = Request(request_id=3, method="textDocument/hover")
     server._pending_requests[3] = request
 
