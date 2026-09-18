@@ -2,7 +2,7 @@
 Time-bounded matching for regular expressions that originate from the agent.
 
 Several tools accept a regular expression written by the agent (`search_for_pattern`,
-`replace_content`, `replace_in_files`, `find_declaration`, `find_implementations`), and such an
+`replace_content`, `replace_in_files`, `find_declaration`), and such an
 expression can backtrack catastrophically. The standard library's `re` module offers no way out of
 it: it neither releases the GIL nor runs signal handlers while matching. A single pathological
 expression therefore freezes the entire Serena process rather than just the tool application that
