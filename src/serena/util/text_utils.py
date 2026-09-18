@@ -434,11 +434,15 @@ class ContentReplacer:
                     "e.g. by matching specific context after the match, or try using the literal mode."
                 )
 
-            # Handle backreferences: replace $!1, $!2, etc. with actual matched groups
+            # Handle backreferences: replace $!1, $!2, etc. with actual matched groups; groups that
+            # exist but did not participate in the match expand to the empty string
             def expand_backreference(m: re.Match) -> str:
                 group_num = int(m.group(1))
-                group_value = match.group(group_num)
-                return group_value if group_value is not None else m.group(0)
+                try:
+                    group_value = match.group(group_num)
+                except IndexError as e:
+                    raise ValueError(f"Backreference $!{group_num} refers to a group that does not exist in the search expression") from e
+                return group_value if group_value is not None else ""
 
             result = re.sub(r"\$!(\d+)", expand_backreference, repl_template)
             return result
@@ -548,8 +552,12 @@ class MultiFileContentReplacer:
         """Expands $!1, $!2, ... in the replacement template (same syntax as :class:`ContentReplacer`)."""
 
         def expand(m: re.Match) -> str:
-            group_value = match.group(int(m.group(1)))
-            return group_value if group_value is not None else m.group(0)
+            group_num = int(m.group(1))
+            try:
+                group_value = match.group(group_num)
+            except IndexError as e:
+                raise ValueError(f"Backreference $!{group_num} refers to a group that does not exist in the search expression") from e
+            return group_value if group_value is not None else ""
 
         return re.sub(r"\$!(\d+)", expand, repl_template)
 
