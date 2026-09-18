@@ -32,7 +32,6 @@ from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import (
     AgentInterface,
-    LanguageBackend,
     ModeSelectionDefinition,
     ModeSelectionDefinitionWithAddedModes,
     ModeSelectionDefinitionWithBaseModes,
@@ -44,7 +43,7 @@ from serena.config.serena_config import (
     ToolInclusionDefinition,
 )
 from serena.dashboard import SerenaDashboardAPI, SerenaDashboardTrayManager, SerenaDashboardViewer, open_url_in_browser
-from serena.jetbrains import launch_coordinator as jetbrains_launch_coordinator
+from serena.language_backend import BuiltinLanguageBackend, LanguageBackend
 from serena.ls_manager import LanguageServerManager
 from serena.memories.memory_manager import MemoryManager
 from serena.project import Project
@@ -756,7 +755,7 @@ class SerenaAgent:
             "os": platform.system(),
             "dashboard": int(self.serena_config.web_dashboard),
             "version": self.version,
-            "backend": self._language_backend.value,
+            "backend": self._language_backend.get_key(),
             "context": self._context.name,
         }
         try:
@@ -1226,9 +1225,7 @@ class SerenaAgent:
             msg = f"Created and activated a new project with name '{proj.project_name}' at {proj.project_root}.\n"
         else:
             msg = f"The project with name '{proj.project_name}' at {proj.project_root} is activated.\n"
-        if self._language_backend == LanguageBackend.LSP:
-            language_servers_str = ", ".join([ls.get_key() for ls in proj.project_config.language_servers])
-            msg += f"Active language servers: {language_servers_str}.\n"
+        msg += self._language_backend.get_project_activation_statement(proj)
         msg += f"File encoding: {proj.project_config.encoding}.\n"
 
         # add list of memories (if memories are enabled)
@@ -1405,7 +1402,7 @@ class SerenaAgent:
         """
         :return: whether this agent uses language server-based code analysis
         """
-        return self._language_backend == LanguageBackend.LSP
+        return self._language_backend == BuiltinLanguageBackend.LSP
 
     def _activate_project(self, project: Project, update_active_modes: bool = True, update_active_tools: bool = True) -> bool:
         """
@@ -1428,14 +1425,12 @@ class SerenaAgent:
         if project_backend is not None and project_backend != self._language_backend:
             if self._agent_interface.is_tools():
                 raise ValueError(
-                    f"Cannot activate project '{project.project_name}': it requires the {project_backend.value} backend, "
-                    f"but this session was initialized with {self._language_backend.value}. "
+                    f"Cannot activate project '{project.project_name}': it requires the {project_backend} backend, "
+                    f"but this session was initialized with {self._language_backend}. "
                     f"Workarounds: (1) Use project activation at startup via the --project flag, "
                     f"(2) Configure one MCP server per backend in your client, (3) use the REPL interface."
                 )
-            log.info(
-                f"Switching language backend from {self._language_backend.value} to {project_backend.value} for project '{project.project_name}'"
-            )
+            log.info(f"Switching language backend from {self._language_backend} to {project_backend} for project '{project.project_name}'")
             self._language_backend = project_backend
 
         # shut down the previously active project to release its language server processes
@@ -1460,7 +1455,7 @@ class SerenaAgent:
 
         def init_project_services() -> None:
             self._run_project_activation_command(project)
-            self._init_active_project_language_backend()
+            self._language_backend.init_active_project(self)
 
         # initialise the project's language backend in the background
         self.issue_task(init_project_services)
@@ -1515,28 +1510,6 @@ class SerenaAgent:
                     terminate_process_tree_with_kill_fallback(p, terminate_timeout=5.0, process_name="activation_command")
         except Exception:
             log.exception(f"Unexpected error running activation_command for project '{project.project_name}'")
-
-    def _init_active_project_language_backend(self) -> None:
-        """
-        Initialises the active project's language backend
-        """
-        project = self._active_project
-        assert project is not None
-
-        # for LSP mode, start the language server manager
-        if self.get_language_backend().is_lsp():
-            with LogTime("Language server initialization", logger=log):
-                self.reset_language_server_manager()
-
-        # for JetBrains mode, search for plugin server and spawn IDE (if not found and launch command provided)
-        elif self.get_language_backend().is_jetbrains():
-            client = jetbrains_launch_coordinator.find_plugin_server(project)
-            if client is not None:
-                log.info("Found Serena JetBrains Plugin server: %s", client)
-            else:
-                log.info("Serena JetBrains Plugin server not found for project %s", project.project_name)
-                if self.serena_config.jetbrains_launch_command:
-                    jetbrains_launch_coordinator.launch_and_wait_for_plugin_server(project, self.serena_config.jetbrains_launch_command)
 
     def activate_project_from_path_or_name(
         self, project_root_or_name: str, update_active_modes: bool = True, update_active_tools: bool = True
@@ -1604,12 +1577,12 @@ class SerenaAgent:
         else:
             result_str += "No active project\n"
         result_str += f"Agent interface: {self._agent_interface.value}\n"
-        result_str += f"Language backend: {self._language_backend.value}"
+        result_str += f"Language backend: {self._language_backend.get_key()}"
         if self._active_project and self._active_project.project_config.language_backend is not None:
             result_str += " (project override)"
-        result_str += f" (global default: {self.serena_config.language_backend.value})\n"
-        if self._language_backend.is_lsp() and self._active_project:
-            result_str += f"Language server status: {self._active_project.get_language_server_manager_status()}\n"
+        result_str += f" (global default: {self.serena_config.language_backend.get_key()})\n"
+        if self._active_project:
+            result_str += self._language_backend.get_config_overview_statement(self._active_project)
         result_str += "Available projects:\n" + "\n".join(list(self.serena_config.project_names)) + "\n"
         result_str += f"Active context: {self._context.name}\n"
 

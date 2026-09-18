@@ -12,13 +12,13 @@ from serena.agent import SerenaAgent
 from serena.config.serena_config import (
     DEFAULT_PROJECT_SERENA_FOLDER_LOCATION,
     AgentInterface,
-    LanguageBackend,
     ProjectConfig,
     RegisteredProject,
     SerenaConfig,
     SerenaConfigError,
 )
 from serena.constants import PROJECT_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
+from serena.language_backend import BuiltinLanguageBackend
 from serena.project import MemoryManager, Project
 from solidlsp.ls_config import LanguageServerId
 from test.conftest import create_default_serena_config
@@ -178,15 +178,16 @@ class TestProjectConfigLanguageBackend:
         config = ProjectConfig(
             project_name="test",
             language_servers=[LanguageServerId.PYTHON],
-            language_backend=LanguageBackend.JETBRAINS,
+            language_backend=BuiltinLanguageBackend.JETBRAINS.get_instance(),
         )
-        assert config.language_backend == LanguageBackend.JETBRAINS
+        assert config.language_backend is not None
+        assert config.language_backend.is_jetbrains()
 
     def test_language_backend_roundtrips_through_yaml(self):
         config = ProjectConfig(
             project_name="test",
             language_servers=[LanguageServerId.PYTHON],
-            language_backend=LanguageBackend.JETBRAINS,
+            language_backend=BuiltinLanguageBackend.JETBRAINS.get_instance(),
         )
         d = config._to_yaml_dict()
         assert d["language_backend"] == "JetBrains"
@@ -207,7 +208,8 @@ class TestProjectConfigLanguageBackend:
         data["languages"] = ["python"]
         data["language_backend"] = "JetBrains"
         config = ProjectConfig._from_dict(data, local_override_keys=[])
-        assert config.language_backend == LanguageBackend.JETBRAINS
+        assert config.language_backend is not None
+        assert config.language_backend.is_jetbrains()
 
     def test_language_backend_none_when_missing_from_dict(self):
         """Test that _from_dict handles missing language_backend gracefully."""
@@ -284,20 +286,20 @@ class TestAgentInterface:
 
 def _make_config_with_project(
     project_name: str,
-    language_backend: LanguageBackend | None = None,
-    global_backend: LanguageBackend = LanguageBackend.LSP,
+    language_backend: BuiltinLanguageBackend | None = None,
+    global_backend: BuiltinLanguageBackend = BuiltinLanguageBackend.LSP,
 ) -> tuple[SerenaConfig, str]:
     """Create a SerenaConfig with a single registered project and return (config, project_name)."""
     config = SerenaConfig(
         log_level=logging.ERROR,
-        language_backend=global_backend,
+        language_backend=global_backend.get_instance(),
     ).with_headless_mode_overrides()
     project = Project(
         project_root=str(Path(__file__).parent.parent / "resources" / "repos" / "python" / "test_repo"),
         project_config=ProjectConfig(
             project_name=project_name,
             language_servers=[LanguageServerId.PYTHON],
-            language_backend=language_backend,
+            language_backend=language_backend.get_instance() if language_backend is not None else None,
         ),
         serena_config=config,
     )
@@ -310,7 +312,7 @@ class TestEffectiveLanguageBackend:
 
     def test_default_backend_is_global(self):
         """When no project override, effective backend matches global config."""
-        config, name = _make_config_with_project("test_proj", language_backend=None, global_backend=LanguageBackend.LSP)
+        config, name = _make_config_with_project("test_proj", language_backend=None, global_backend=BuiltinLanguageBackend.LSP)
         agent = SerenaAgent(project=name, serena_config=config)
         try:
             assert agent.get_language_backend().is_lsp()
@@ -320,7 +322,7 @@ class TestEffectiveLanguageBackend:
     def test_project_overrides_global_backend(self):
         """When startup project has language_backend set, it overrides the global."""
         config, name = _make_config_with_project(
-            "test_jetbrains", language_backend=LanguageBackend.JETBRAINS, global_backend=LanguageBackend.LSP
+            "test_jetbrains", language_backend=BuiltinLanguageBackend.JETBRAINS, global_backend=BuiltinLanguageBackend.LSP
         )
         agent = SerenaAgent(project=name, serena_config=config)
         try:
@@ -332,18 +334,18 @@ class TestEffectiveLanguageBackend:
         """When no startup project is provided, effective backend is the global one."""
         config = SerenaConfig(
             log_level=logging.ERROR,
-            language_backend=LanguageBackend.LSP,
+            language_backend=BuiltinLanguageBackend.LSP.get_instance(),
         ).with_headless_mode_overrides()
         agent = SerenaAgent(project=None, serena_config=config)
         try:
-            assert agent.get_language_backend() == LanguageBackend.LSP
+            assert agent.get_language_backend().is_lsp()
         finally:
             agent.on_shutdown(timeout=5)
 
     def test_activate_project_rejects_backend_mismatch(self):
         """Post-init activation of a project with mismatched backend raises ValueError."""
         # Start with LSP backend
-        config, name = _make_config_with_project("lsp_proj", language_backend=None, global_backend=LanguageBackend.LSP)
+        config, name = _make_config_with_project("lsp_proj", language_backend=None, global_backend=BuiltinLanguageBackend.LSP)
 
         # Add a second project that requires JetBrains
         jb_project = Project(
@@ -351,7 +353,7 @@ class TestEffectiveLanguageBackend:
             project_config=ProjectConfig(
                 project_name="jb_proj",
                 language_servers=[LanguageServerId.JAVA],
-                language_backend=LanguageBackend.JETBRAINS,
+                language_backend=BuiltinLanguageBackend.JETBRAINS.get_instance(),
             ),
             serena_config=config,
         )
@@ -366,14 +368,14 @@ class TestEffectiveLanguageBackend:
 
     def test_activate_project_switches_backend_with_repl_interface(self):
         """With the REPL interface, post-init activation of a project with a different backend switches the backend."""
-        config, name = _make_config_with_project("lsp_proj", language_backend=None, global_backend=LanguageBackend.LSP)
+        config, name = _make_config_with_project("lsp_proj", language_backend=None, global_backend=BuiltinLanguageBackend.LSP)
         config.agent_interface = AgentInterface.REPL
         jb_project = Project(
             project_root=str(Path(__file__).parent.parent / "resources" / "repos" / "java" / "test_repo"),
             project_config=ProjectConfig(
                 project_name="jb_proj",
                 language_servers=[LanguageServerId.JAVA],
-                language_backend=LanguageBackend.JETBRAINS,
+                language_backend=BuiltinLanguageBackend.JETBRAINS.get_instance(),
             ),
             serena_config=config,
         )
@@ -381,12 +383,12 @@ class TestEffectiveLanguageBackend:
 
         agent = SerenaAgent(project=name, serena_config=config)
         try:
-            assert agent.get_language_backend() == LanguageBackend.LSP
+            assert agent.get_language_backend().is_lsp()
             assert "s.lsp" in agent.get_repl().entrypoint.overview()
 
             # the backend and everything depending on it follow the activated project
             agent.activate_project_from_path_or_name("jb_proj")
-            assert agent.get_language_backend() == LanguageBackend.JETBRAINS
+            assert agent.get_language_backend().is_jetbrains()
             overview = agent.get_repl().entrypoint.overview()
             assert "s.jb" in overview and "s.lsp" not in overview
             assert "jetbrains" in [m.name for m in agent.get_active_modes().get_modes(include_background_base_modes=True)]
@@ -395,7 +397,7 @@ class TestEffectiveLanguageBackend:
 
     def test_activate_project_allows_matching_backend(self):
         """Post-init activation of a project with matching backend succeeds."""
-        config, name = _make_config_with_project("lsp_proj", language_backend=None, global_backend=LanguageBackend.LSP)
+        config, name = _make_config_with_project("lsp_proj", language_backend=None, global_backend=BuiltinLanguageBackend.LSP)
 
         # Add a second project that also uses LSP
         lsp_project2 = Project(
@@ -403,7 +405,7 @@ class TestEffectiveLanguageBackend:
             project_config=ProjectConfig(
                 project_name="lsp_proj2",
                 language_servers=[LanguageServerId.PYTHON],
-                language_backend=LanguageBackend.LSP,
+                language_backend=BuiltinLanguageBackend.LSP.get_instance(),
             ),
             serena_config=config,
         )
@@ -418,7 +420,7 @@ class TestEffectiveLanguageBackend:
 
     def test_activate_project_allows_none_backend(self):
         """Post-init activation of a project with no backend override succeeds."""
-        config, name = _make_config_with_project("lsp_proj", language_backend=None, global_backend=LanguageBackend.LSP)
+        config, name = _make_config_with_project("lsp_proj", language_backend=None, global_backend=BuiltinLanguageBackend.LSP)
 
         # Add a second project with no backend override
         proj2 = Project(

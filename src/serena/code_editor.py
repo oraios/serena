@@ -25,6 +25,7 @@ TSymbol = TypeVar("TSymbol", bound=Symbol)
 
 class CodeEditor(Generic[TSymbol], ABC):
     def __init__(self, project: Project) -> None:
+        self.project = project
         self.project_root = project.project_root
         self.encoding = project.project_config.encoding
         self.newline = project.line_ending.newline_str
@@ -83,7 +84,7 @@ class CodeEditor(Generic[TSymbol], ABC):
         """
         Context manager for editing a file.
         """
-        if FileProxy.is_external_path(relative_path):
+        if FileProxy.is_external_path(relative_path, self.project):
             raise ValueError(f"Cannot edit external file: {relative_path}")
         with self._open_file_context(relative_path) as edited_file:
             yield edited_file

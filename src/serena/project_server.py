@@ -12,8 +12,9 @@ from flask import Flask, Response, abort, request
 from pydantic import BaseModel
 from sensai.util.logging import LogTime
 
-from serena.config.serena_config import LanguageBackend, SerenaConfig
+from serena.config.serena_config import SerenaConfig
 from serena.constants import SerenaPorts
+from serena.language_backend import BuiltinLanguageBackend
 
 if TYPE_CHECKING:
     from serena.project import Project
@@ -73,7 +74,7 @@ class ProjectServer:
             port = self.PORT
 
         serena_config = SerenaConfig.from_config_file().with_headless_mode_overrides()
-        serena_config.language_backend = LanguageBackend.LSP
+        serena_config.set_builtin_language_backend(BuiltinLanguageBackend.LSP)
 
         self._agent = SerenaAgent(serena_config=serena_config)
         self._loaded_projects_by_root: dict[str, "Project"] = {}
