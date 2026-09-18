@@ -118,6 +118,10 @@ class SvelteTypeScriptServer(TypeScriptLanguageServer):
         ext = os.path.splitext(relative_file_path)[1].lower()
         if ext in SVELTE_EXT:
             return "svelte"
+        if ext == ".tsx":
+            return "typescriptreact"
+        if ext == ".jsx":
+            return "javascriptreact"
         if ext in JS_EXT:
             return "javascript"
         return "typescript"
@@ -716,6 +720,11 @@ class SvelteLanguageServer(SolidLanguageServer):
     @override
     def _get_language_id_for_file(self, relative_file_path: str) -> str:
         ext = os.path.splitext(relative_file_path)[1].lower()
+        # JSX must use *react language IDs (same as typescript_language_server / #1436)
+        if ext == ".tsx":
+            return "typescriptreact"
+        if ext == ".jsx":
+            return "javascriptreact"
         if ext in TS_EXT:
             return "typescript"
         if ext in JS_EXT:
