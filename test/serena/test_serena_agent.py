@@ -17,6 +17,7 @@ from serena.config.context_mode import SerenaAgentContext
 from serena.config.serena_config import AgentInterface, ProjectConfig, RegisteredProject, SerenaConfig
 from serena.lsp.lsp_diagnostics import DiagnosticsContext
 from serena.project import Project
+from serena.session import SessionRegistry
 from serena.tools import (
     SUCCESS_RESULT,
     ActivateProjectTool,
@@ -1400,13 +1401,17 @@ class TestSerenaAgent:
 
 
 class TestPromptProvision:
-    class MockContext:
-        def __init__(self, session_id: str):
-            self.session = session_id
-
     @classmethod
     def _call_tool(cls, agent: SerenaAgent, tool_class: type[Tool], session_id: str = "global", **kwargs) -> str:
-        result = agent.get_tool(tool_class).apply_ex(mcp_ctx=cls.MockContext(session_id), catch_exceptions=False, **kwargs)
+        old_method = SessionRegistry._next_session_id
+        if tool_class == InitialInstructionsTool:
+            SessionRegistry._next_session_id = lambda x: session_id  # type: ignore
+        else:
+            kwargs["session_id"] = session_id
+        try:
+            result = agent.get_tool(tool_class).apply_ex(catch_exceptions=False, **kwargs)
+        finally:
+            SessionRegistry._next_session_id = old_method
         return result
 
     @staticmethod

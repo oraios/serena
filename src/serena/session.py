@@ -48,11 +48,15 @@ class SessionRegistry:
         self._idle_ttl_seconds = idle_ttl_seconds
         self._sessions: OrderedDict[str, SerenaSession] = OrderedDict()
 
+    @staticmethod
+    def _next_session_id() -> str:
+        return secrets.token_hex(4)
+
     def create_session(self) -> SerenaSession:
         """
         :return: a new session with a random id
         """
-        return self.get_session(secrets.token_hex(4))
+        return self.get_session(self._next_session_id())
 
     def get_session(self, session_id: str) -> SerenaSession:
         """
