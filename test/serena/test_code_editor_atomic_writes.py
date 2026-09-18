@@ -214,8 +214,9 @@ class TestSourceFileSaveIsAtomic:
         with editor.edited_file_context("module.py") as edited:
             edited.set_contents("a\nb\nnew\n")
 
-        expected = b"a\nb\nnew\n" if sys.platform != "win32" else b"a\r\nb\r\nnew\r\n"
-        assert source.read_bytes() == expected
+        # the file is LF-dominant, so the dominant ending is preserved regardless of the
+        # platform: open(newline="\n") disables the platform translation even on Windows
+        assert source.read_bytes() == b"a\nb\nnew\n"
 
     def test_save_translates_embedded_crlf_without_corruption(self, tmp_path):
         """Content lines that already end in CRLF (e.g. returned untranslated by a language
