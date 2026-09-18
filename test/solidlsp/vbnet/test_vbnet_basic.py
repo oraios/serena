@@ -204,3 +204,19 @@ class TestVBNetSolutionProjectOpening:
             mock_settings.project_data_path = str(temp_path / "project_data")
 
             VBNetLanguageServer(mock_config, str(temp_path), mock_settings)
+
+
+@pytest.mark.vbnet
+class TestVBNetSymbolNameNormalization:
+    @pytest.mark.parametrize(
+        ("roslyn_name", "expected"),
+        [
+            ("Name : String", ("Name", ": String")),
+            ("Add(x As Integer, y As Integer) : Integer", ("Add", "(x As Integer, y As Integer) : Integer")),
+            ("Position : (Integer, String)", ("Position", ": (Integer, String)")),
+            ("GetPair() : (Integer, String)", ("GetPair", "() : (Integer, String)")),
+            ("Calculator", ("Calculator", "")),
+        ],
+    )
+    def test_extract_base_name_and_type(self, roslyn_name: str, expected: tuple[str, str]) -> None:
+        assert VBNetLanguageServer._extract_base_name_and_type(roslyn_name) == expected
