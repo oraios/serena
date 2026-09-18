@@ -1312,6 +1312,10 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
     def project_names(self) -> list[str]:
         return sorted(project.project_config.project_name for project in self.projects)
 
+    def _invalidate_project_list_caches(self) -> None:
+        self.__dict__.pop("project_names", None)
+        self.__dict__.pop("project_paths", None)
+
     def get_registered_project(self, project_root_or_name: str, autoregister: bool = False) -> Optional[RegisteredProject]:
         """
         :param project_root_or_name: path to the project root or the name of the project
@@ -1358,6 +1362,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         Adds a registered project, persisting the updated project list
         """
         self.projects.append(registered_project)
+        self._invalidate_project_list_caches()
         self._persist_projects()
 
     def remove_registered_project(self, registered_project: RegisteredProject) -> None:
@@ -1373,6 +1378,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         :param registered_project: the project to remove, which must be an element of :attr:`projects`
         """
         self.projects.remove(registered_project)
+        self._invalidate_project_list_caches()
         self._persist_projects()
 
     def add_project_from_path(self, project_root: Path | str, asynchronous_autogen: bool = False) -> "Project":
@@ -1420,6 +1426,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
                 break
         else:
             raise ValueError(f"Project '{project_name}' not found in Serena configuration; valid project names: {self.project_names}")
+        self._invalidate_project_list_caches()
         self._persist_projects()
 
     def _persist_projects(self) -> None:
