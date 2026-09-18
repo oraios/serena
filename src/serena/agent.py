@@ -1157,15 +1157,18 @@ class SerenaAgent:
         """
         return self._session_registry.get_session(session_id)
 
-    def create_system_prompt(self, session_id: str = "global") -> str:
+    def create_system_prompt(self) -> str:
         """
         Returns the 'Serena Instructions Manual', i.e. Serena's system prompt.
         The prompt also establishes a new Serena session (see `SerenaSession`), stating its id for use with tools
-        which require it (e.g. the REPL tool).
+        which require it (e.g. the REPL tool and project activation tool).
 
-        :param session_id: the client session ID for the case where this is run from a tool; "global" for the connection time case
         :return: the prompt
         """
+        # establish a Serena session
+        serena_session = self.create_session()
+        session_id = serena_session.session_id
+
         global_memories = self._create_global_memory_manager().list_global_memories()
         global_memories_str = dict_string(global_memories.to_dict()) if len(global_memories) > 0 else ""
 
@@ -1194,10 +1197,9 @@ class SerenaAgent:
         elif self._project_activation_error:
             system_prompt += f"\n\nNo project is active ({self._project_activation_error})."
 
-        # establish a Serena session and state its id, which the LLM must pass to tools which require it
-        serena_session = self.create_session()
+        # inform about the session id
         system_prompt += "\n\n" + self._format_prompt_tag(
-            f"Your Serena session id is `{serena_session.session_id}`. Pass it as the `session` parameter to tools which require it.",
+            f"Your Serena session id is `{session_id}`. Pass it as the `session_id` parameter to tools which require it.",
             tag="session",
         )
 

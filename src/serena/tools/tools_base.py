@@ -5,7 +5,6 @@ import json
 from abc import ABC
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from functools import cached_property
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
 from mcp import Implementation
@@ -156,31 +155,11 @@ class Tool(Component):
     # (which is use by the LLM, so a good description is important)
     # and to validate the tool call arguments.
 
-    SESSION_ID_PARAM_NAME = "session_id"
-    """
-    parameter name to use in apply method for the client session ID.
-    This parameter will be ignored by the MCP interface but will be populated with the session ID of the current client session 
-    when the tool is called, allowing tools to be session-aware if needed.
-    """
-
     _last_tool_call_client_str: str | None = None
     """We can only get the client info from within a tool call. Each tool call will update this variable."""
 
     def __init__(self, agent: "SerenaAgent"):
         super().__init__(agent)
-
-    @cached_property
-    def _is_session_aware(self) -> bool:
-        """
-        :return: whether the tool is session-aware, i.e. whether the apply method expects a session_id (str) parameter.
-        """
-        # check apply method for session_id arg
-        apply_fn = self.get_apply_fn()
-        sig = inspect.signature(apply_fn)
-        for param in sig.parameters.values():
-            if param.name == self.SESSION_ID_PARAM_NAME:
-                return True
-        return False
 
     @staticmethod
     def _sanitize_input_param(raw_param: str) -> str:
@@ -270,9 +249,9 @@ class Tool(Component):
             if apply_fn is None:
                 raise AttributeError(f"apply method not defined in {cls}. Did you forget to implement it?")
 
-        return func_metadata(apply_fn, skip_names=["self", "cls", cls.SESSION_ID_PARAM_NAME], structured_output=structured_output)
+        return func_metadata(apply_fn, skip_names=["self", "cls"], structured_output=structured_output)
 
-    def _log_tool_application(self, frame: Any, session_id: str) -> None:
+    def _log_tool_application(self, frame: Any) -> None:
         params = {}
         ignored_params = {"self", "log_call", "catch_exceptions", "args", "apply_fn"}
         for param, value in frame.f_locals.items():
@@ -282,7 +261,7 @@ class Tool(Component):
                 params.update(value)
             else:
                 params[param] = value
-        log.info(f"{self.get_name_from_cls()}: {dict_string(params)}; session_id: {session_id}")
+        log.info(f"{self.get_name_from_cls()}: {dict_string(params)}")
 
     def _resolve_max_answer_chars(self, max_answer_chars: int) -> int:
         """
@@ -337,10 +316,8 @@ class Tool(Component):
         :param catch_exceptions: whether to catch exceptions and return their messages as strings, instead of raising a ToolCallError
         """
         # obtain session ID and client info
-        session_id = "global"
         if mcp_ctx is not None:
             try:
-                session_id = "%x" % id(mcp_ctx.session)
                 client_params = mcp_ctx.session.client_params
                 if client_params is not None:
                     client_info = cast(Implementation, client_params.clientInfo)
@@ -361,7 +338,7 @@ class Tool(Component):
                     )
 
                 if log_call:
-                    self._log_tool_application(inspect.currentframe(), session_id)
+                    self._log_tool_application(inspect.currentframe())
 
                 # check whether the tool requires an active project and language server
                 if not isinstance(self, ToolMarkerDoesNotRequireActiveProject):
@@ -373,8 +350,6 @@ class Tool(Component):
 
                 # construct apply kwargs, adding session_id if the tool is session-aware
                 apply_kwargs = dict(kwargs)
-                if self._is_session_aware:
-                    apply_kwargs["session_id"] = session_id
 
                 # apply the actual tool
                 try:
