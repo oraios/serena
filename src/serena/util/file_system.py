@@ -440,7 +440,7 @@ class GitignoreParser:
         self._load_gitignore_files()
 
 
-def match_path(relative_path: str, path_spec: PathSpec, root_path: str = "") -> bool:
+def match_path(relative_path: str, path_spec: PathSpec, root_path: str = "", is_dir: bool | None = None) -> bool:
     """
     Match a relative path against a given pathspec. Just pathspec.match_file() is not enough,
     we need to do some massaging to fix issues with pathspec matching.
@@ -448,6 +448,8 @@ def match_path(relative_path: str, path_spec: PathSpec, root_path: str = "") -> 
     :param relative_path: relative path to match against the pathspec
     :param path_spec: the pathspec to match against
     :param root_path: the root path from which the relative path is derived
+    :param is_dir: whether the path is a directory, where the caller already knows; passing it avoids
+        an `os.path.isdir` call. `None` determines it from the filesystem.
     :return:
     """
     if str(relative_path) in {"", "."}:
@@ -465,7 +467,9 @@ def match_path(relative_path: str, path_spec: PathSpec, root_path: str = "") -> 
 
     # pathspec can't handle the matching of directories if they don't end with a slash!
     # see https://github.com/cpburnz/python-pathspec/issues/89
-    abs_path = os.path.abspath(os.path.join(root_path, relative_path))
-    if os.path.isdir(abs_path) and not normalized_path.endswith("/"):
+    if is_dir is None:
+        abs_path = os.path.abspath(os.path.join(root_path, relative_path))
+        is_dir = os.path.isdir(abs_path)
+    if is_dir and not normalized_path.endswith("/"):
         normalized_path = normalized_path + "/"
     return path_spec.match_file(normalized_path)
