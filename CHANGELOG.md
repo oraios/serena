@@ -62,6 +62,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     the write could destroy the previous, valid content instead of just losing the update. Both now
     write through a temp-file-plus-`os.replace` helper, matching the approach `save_yaml()` already
     uses for settings files (#1958)
+  - Fix: renaming a memory through the `rename_memory` tool raised `PermissionError` when another memory
+    marked read-only by `read_only_memory_patterns` referenced it, after the rename had already been
+    applied, leaving the memory graph half-updated; reference propagation in tool contexts now covers
+    only writable memories, as documented, while the CLI still propagates into read-only ones
 
 * JetBrains:
   - Fix: Concurrent Serena sessions activating different projects at the same time with
