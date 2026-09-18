@@ -3,7 +3,7 @@
   "name": "io.github.oraios/serena",
   "title": "Serena MCP: the IDE for your agent",
   "description": "A powerful toolkit for coding, providing semantic retrieval and editing capabilities.",
-  "version": "1.5.3",
+  "version": "1.7.0",
   "repository": {
     "source": "github",
     "url": "https://github.com/oraios/serena"
@@ -12,7 +12,7 @@
     {
       "registryType": "pypi",
       "identifier": "serena-agent",
-      "version": "1.5.3",
+      "version": "1.7.0",
       "transport": {
         "type": "stdio"
       },
@@ -38,7 +38,7 @@
           "name": "--context",
           "isRequired": false,
           "default": "desktop-app",
-          "description": "The name of a markdown file representing Serena's execution context, typically related to the executing client.  Allowed values are: agent, antigravity, chatgpt, claude-code, codex, context.template, copilot-cli, desktop-app, ide, jb-ai-assistant, jb-copilot-plugin, junie, oaicompat-agent, vscode "
+          "description": "The name of a YAML file representing Serena's execution context, typically related to the executing client.  Allowed values are: agent, antigravity, chatgpt, claude-code, codebuddy, codex, copilot-cli, desktop-app, grok, ide, jb-ai-assistant, jb-copilot-plugin, junie, oaicompat-agent, vscode "
         }
       ]
     }
