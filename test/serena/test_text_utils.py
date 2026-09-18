@@ -737,11 +737,12 @@ class TestRegexTimeout:
         assert get_timeout_seconds() == expected
 
     def test_alternation_in_quantified_group_is_aborted(self):
-        """A single alternative after a lazily line-consuming quantifier can be optimized into
+        r"""A single alternative after a lazily line-consuming quantifier can be optimized into
         a fast non-match by the engine, which masks the problem: the alternation is what actually
         triggers the exponential behaviour. Observed in practice with an MQL source file of
-        ~1550 CRLF lines, where `(?:.*\\n)*?(?:A|B)` with neither alternative present blocked
-        plain `re` for over two minutes."""
-        content = "\\r\\n".join(f"// line {i} input handling code" for i in range(1551)) + "\\r\\n"
-        pattern = compile_pattern(r"(?:.*\\n)*?(?:EA_INPUTX|NO_EXISTE)", re.MULTILINE | re.DOTALL, timeout_seconds=0.3)
+        ~1550 CRLF lines, where `(?:.*\n)*?(?:A|B)` with neither alternative present blocked
+        plain `re` for over two minutes.
+        """
+        content = "\r\n".join(f"// line {i} input handling code" for i in range(1551)) + "\r\n"
+        pattern = compile_pattern(r"(?:.*\n)*?(?:EA_INPUTX|NO_EXISTE)", re.MULTILINE | re.DOTALL, timeout_seconds=0.3)
         self._assert_aborted(lambda: pattern.finditer(content))
