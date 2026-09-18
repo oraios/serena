@@ -38,6 +38,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     MCP session, since the MCP SDK v2 no longer provides session identifiers and client session usage
     was inconsistent anyway. Tools that need a session id (e.g. `activate_project`, the REPL tool) now
     take it as an explicit parameter, obtained from `initial_instructions`
+  - Performance: `Project.gather_source_files` transitively re-derived from the filesystem, for every path, 
+    whether that path was a file or a directory; related methods/functions now receive the information
+    as a parameter where it is already known (#2077)
 
 * CLI:
   - Fix: `project health-check` reported `Health check passed - All tools working correctly` and
