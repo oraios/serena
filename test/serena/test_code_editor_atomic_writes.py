@@ -19,6 +19,7 @@ import pytest
 
 from serena.code_editor import CodeEditor
 from serena.util import file_system
+from serena.util.file_system import write_file_atomic
 
 
 class _InMemoryEditedFile(CodeEditor.EditedFile):
@@ -189,3 +190,57 @@ class TestSourceFileSaveIsAtomic:
             edited.set_contents("café\n")
 
         assert source.read_bytes() == "café\n".encode("latin-1")
+
+    def test_save_with_native_newline_preserves_crlf_file(self, tmp_path):
+        """Native line endings (newline=None) must not silently rewrite a CRLF file to the
+        platform default: the file's dominant line ending is preserved. Without this, editing
+        a CRLF source file on Linux converted its line endings (in full or in mixed form) to
+        LF, which in practice forced a manual post-edit line-ending repair on Windows sources.
+        """
+        source = tmp_path / "module.mqh"
+        source.write_bytes(b"a\r\nb\r\n")
+
+        editor = self._editor(tmp_path, newline=None)
+        with editor.edited_file_context("module.mqh") as edited:
+            edited.set_contents("a\r\nb\r\nnew\r\n")
+
+        assert source.read_bytes() == b"a\r\nb\r\nnew\r\n"
+
+    def test_save_with_native_newline_preserves_lf_file(self, tmp_path):
+        source = tmp_path / "module.py"
+        source.write_bytes(b"a\nb\n")
+
+        editor = self._editor(tmp_path, newline=None)
+        with editor.edited_file_context("module.py") as edited:
+            edited.set_contents("a\nb\nnew\n")
+
+        expected = b"a\nb\nnew\n" if sys.platform != "win32" else b"a\r\nb\r\nnew\r\n"
+        assert source.read_bytes() == expected
+
+    def test_save_translates_embedded_crlf_without_corruption(self, tmp_path):
+        """Content lines that already end in CRLF (e.g. returned untranslated by a language
+        server or the JetBrains plugin) must not be doubled to CRCRLF by the translation.
+        """
+        source = tmp_path / "module.mqh"
+        source.write_bytes(b"a\r\nb\r\n")
+
+        editor = self._editor(tmp_path, newline="\r\n")
+        with editor.edited_file_context("module.mqh") as edited:
+            edited.set_contents("a\r\nb\r\nnew\r\n")
+
+        assert source.read_bytes() == b"a\r\nb\r\nnew\r\n"
+
+
+class TestWriteFileAtomicNativeLineEnding:
+    """``write_file_atomic`` is also called for files that do not exist yet (e.g. through
+    ``create_text_file``); without a dominant ending to preserve, it must keep deferring to
+    the platform default, exactly as a plain ``open(path, "w")`` did.
+    """
+
+    def test_new_file_gets_the_platform_default(self, tmp_path):
+        target = tmp_path / "new.mqh"
+
+        write_file_atomic(str(target), "a\nb\n", encoding="utf-8", newline=None)
+
+        expected = b"a\nb\n" if sys.platform != "win32" else b"a\r\nb\r\n"
+        assert target.read_bytes() == expected
