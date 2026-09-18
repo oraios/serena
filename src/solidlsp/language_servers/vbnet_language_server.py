@@ -217,9 +217,11 @@ class VBNetLanguageServer(SolidLanguageServer):
 
     @staticmethod
     def _extract_base_name_and_type(roslyn_name: str) -> tuple[str, str]:
-        if " : " in roslyn_name and "(" not in roslyn_name:
+        if " : " in roslyn_name:
             base_name, type_part = roslyn_name.split(" : ", 1)
-            return base_name.strip(), f": {type_part.strip()}"
+            # only a parenthesis in the name itself marks a method; the type may contain them (e.g. VB.NET tuples)
+            if "(" not in base_name:
+                return base_name.strip(), f": {type_part.strip()}"
 
         if "(" in roslyn_name:
             paren_idx = roslyn_name.index("(")
