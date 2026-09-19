@@ -40,6 +40,9 @@ Some languages require additional installations or setup steps, as noted.
   (experimental; requires Node.js + npm, plus `npm install` having been run in the project root so that `@angular/core`
   is resolvable — without it, template-aware features silently return empty;
   subsumes `typescript` and `html` for `.ts`/`.html` files, so do not also list those)
+* **MQL (MetaTrader 4/5)**  
+  (uses davalillo's [mql-language-server](https://github.com/davalillo/mql-language-server),
+  automatically downloaded; supports `.mq4`, `.mq5`, and `.mqh` files)
 * **Ansible**  
   (experimental; requires Node.js and npm; automatically installs `@ansible/ansible-language-server`;
   must be explicitly specified in the `languages` entry in the `project.yml`; requires `ansible` in PATH for full functionality)
