@@ -87,6 +87,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     thread (#2038)
 
 * Language Servers:
+  - Fix: a C# file created after the project was already indexed was analyzed by Roslyn as a
+    standalone Miscellaneous Files document instead of being folded into the loaded project,
+    causing phantom diagnostics on the new file and on files referencing its symbols (#1961)
   - Fix: Godot's GDScript parser can report a symbol's end column one column past the
     line-end convention every other language server follows (closing a node's range from
     the next lookahead token instead of the last consumed one, when that lookahead is a
