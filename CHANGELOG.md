@@ -65,6 +65,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     Serena's own tools to close the gap (#1852)
 
 * Dashboard:
+  - Fix: On Windows, the dashboard viewer subprocess spawned Edge WebView2 processes that were
+    orphaned upon shutdown because `multiprocessing.Process.terminate()` signaled only the direct Python
+    process without cleaning up descendant processes or waiting for exit. This caused MCP clients to hang or
+    fail with exit status 1 during reload or shutdown. `DashboardManager.shutdown()` and `WebViewWithTray`
+    now terminate descendant process trees and reap children cleanly.
   - Fix: On macOS, the tray manager refreshed the tray menu straight from the Flask request handlers
     for `/register`, `/update_project` and `/unregister` and from the alive-check thread. That reaches
     `NSStatusItem.setMenu_()` off the main thread, which AppKit forbids and which recent macOS
