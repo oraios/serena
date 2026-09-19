@@ -19,7 +19,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add `auth_secret` to `serena_config.yml` for authenticating communication between Serena components
     and services. When missing, null, or empty, a random UUID is generated and persisted; existing values
     are preserved
-  - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
+  - Fix: MCP server now reports Serena's version instead of the installed MCP SDK version (#1889)
   - Fix: importing Serena no longer loads the `anthropic` package unless the Anthropic token counter is
     actually used; the unconditional import added seconds to CLI/MCP startup on some machines (#2012)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
@@ -151,6 +151,7 @@ CLI:
 
 * Dependencies:
   - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
+  - Upgrade the `mcp` SDK from 1.28.1 to 2.2.0
 
 # v1.7.0 (2026-08-09)
 
@@ -302,7 +303,6 @@ CLI:
   - PreToolUse remind hook: coerce non-string shell command values instead of failing, and recognize
     `target_file`/`targetFile` file-path keys (shared payload parsing, applies to all hook clients).
   - Fix hook input parsing for clients that emit raw control characters in JSON string values #1743.
-
 
 # v1.6.1 (2026-07-21)
 
