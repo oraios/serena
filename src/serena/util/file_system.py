@@ -1,6 +1,11 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import logging
 import os
 import re
+import stat
+import tempfile
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -11,6 +16,75 @@ from pathspec import PathSpec
 from sensai.util.logging import LogTime
 
 log = logging.getLogger(__name__)
+
+
+def write_file_atomic(path: str, content: str, *, encoding: str, newline: str | None = None) -> None:
+    """
+    Write ``content`` to ``path`` atomically: the content is written to a temporary file in the
+    same directory first, then swapped into place with ``os.replace``. A plain
+    ``open(path, "w")`` is not atomic: it truncates the file before the new content is complete,
+    so a crash, an out-of-memory kill, or a disk-full error partway through the write leaves
+    ``path`` holding neither the old content nor the new one.
+
+    :param path: the path to write to
+    :param content: the text content to write
+    :param encoding: the encoding to use for the write
+    :param newline: passed through to the underlying ``open()`` call to control newline translation
+    """
+    # ``open(path, "w")`` follows symlinks and writes through to the target, whereas replacing the
+    # link path itself would swap the link out for a regular file and leave its target holding the
+    # old content. Resolving first keeps this a drop-in replacement, and puts the temporary file in
+    # the destination's real directory, which is where it has to be for the rename to be atomic.
+    path = os.path.realpath(path)
+    target_dir = os.path.dirname(path) or "."
+    try:
+        existing_mode: int | None = stat.S_IMODE(os.stat(path).st_mode)
+    except FileNotFoundError:
+        existing_mode = None
+    fd, tmp_path = tempfile.mkstemp(dir=target_dir, prefix=os.path.basename(path) + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding=encoding, newline=newline) as f:
+            f.write(content)
+        # mkstemp creates the temp file with mode 0600 regardless of umask, which would silently
+        # tighten an existing file's permissions (e.g. 0644 -> 0600) on replace. Restore the
+        # original mode, or fall back to what a plain open(path, "w") would have produced for a
+        # new file (0666 masked by the process umask).
+        os.chmod(tmp_path, existing_mode if existing_mode is not None else _new_file_mode())
+        _replace_with_retry(tmp_path, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _new_file_mode() -> int:
+    """The mode a plain ``open(path, "w")`` would give a brand-new file: 0o666 masked by the
+    process umask. Reading the umask requires setting it, so the previous value is restored
+    immediately after.
+    """
+    current_umask = os.umask(0o022)
+    os.umask(current_umask)
+    return 0o666 & ~current_umask
+
+
+def _replace_with_retry(src: str, dst: str, *, attempts: int = 10, delay_s: float = 0.05) -> None:
+    """``os.replace(src, dst)`` with a short retry on a Windows sharing violation: on Windows the
+    atomic rename fails with ``PermissionError`` if another process momentarily holds ``dst`` open
+    (e.g. a second Serena process reading the same memory or source file). A brief bounded retry
+    rides out that contention; the temp file is still complete, so this never falls back to a
+    non-atomic write.
+    """
+    for attempt in range(attempts):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(delay_s)
+
 
 # Characters meaningful to pathspec's gitignore grammar: glob wildcards, bracket expressions,
 # the escape character itself, and '!'/'#' which change a whole pattern's meaning when they
@@ -366,7 +440,7 @@ class GitignoreParser:
         self._load_gitignore_files()
 
 
-def match_path(relative_path: str, path_spec: PathSpec, root_path: str = "") -> bool:
+def match_path(relative_path: str, path_spec: PathSpec, root_path: str = "", is_dir: bool | None = None) -> bool:
     """
     Match a relative path against a given pathspec. Just pathspec.match_file() is not enough,
     we need to do some massaging to fix issues with pathspec matching.
@@ -374,6 +448,8 @@ def match_path(relative_path: str, path_spec: PathSpec, root_path: str = "") -> 
     :param relative_path: relative path to match against the pathspec
     :param path_spec: the pathspec to match against
     :param root_path: the root path from which the relative path is derived
+    :param is_dir: whether the path is a directory, where the caller already knows; passing it avoids
+        an `os.path.isdir` call. `None` determines it from the filesystem.
     :return:
     """
     if str(relative_path) in {"", "."}:
@@ -391,7 +467,9 @@ def match_path(relative_path: str, path_spec: PathSpec, root_path: str = "") -> 
 
     # pathspec can't handle the matching of directories if they don't end with a slash!
     # see https://github.com/cpburnz/python-pathspec/issues/89
-    abs_path = os.path.abspath(os.path.join(root_path, relative_path))
-    if os.path.isdir(abs_path) and not normalized_path.endswith("/"):
+    if is_dir is None:
+        abs_path = os.path.abspath(os.path.join(root_path, relative_path))
+        is_dir = os.path.isdir(abs_path)
+    if is_dir and not normalized_path.endswith("/"):
         normalized_path = normalized_path + "/"
     return path_spec.match_file(normalized_path)

@@ -4,19 +4,21 @@ import shutil
 import tempfile
 from copy import deepcopy
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 
 from serena.agent import SerenaAgent
 from serena.config.serena_config import (
     DEFAULT_PROJECT_SERENA_FOLDER_LOCATION,
-    LanguageBackend,
+    AgentInterface,
     ProjectConfig,
     RegisteredProject,
     SerenaConfig,
     SerenaConfigError,
 )
 from serena.constants import PROJECT_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
+from serena.language_backend import BuiltinLanguageBackend
 from serena.project import MemoryManager, Project
 from solidlsp.ls_config import LanguageServerId
 from test.conftest import create_default_serena_config
@@ -176,15 +178,16 @@ class TestProjectConfigLanguageBackend:
         config = ProjectConfig(
             project_name="test",
             language_servers=[LanguageServerId.PYTHON],
-            language_backend=LanguageBackend.JETBRAINS,
+            language_backend=BuiltinLanguageBackend.JETBRAINS.get_instance(),
         )
-        assert config.language_backend == LanguageBackend.JETBRAINS
+        assert config.language_backend is not None
+        assert config.language_backend.is_jetbrains()
 
     def test_language_backend_roundtrips_through_yaml(self):
         config = ProjectConfig(
             project_name="test",
             language_servers=[LanguageServerId.PYTHON],
-            language_backend=LanguageBackend.JETBRAINS,
+            language_backend=BuiltinLanguageBackend.JETBRAINS.get_instance(),
         )
         d = config._to_yaml_dict()
         assert d["language_backend"] == "JetBrains"
@@ -205,7 +208,8 @@ class TestProjectConfigLanguageBackend:
         data["languages"] = ["python"]
         data["language_backend"] = "JetBrains"
         config = ProjectConfig._from_dict(data, local_override_keys=[])
-        assert config.language_backend == LanguageBackend.JETBRAINS
+        assert config.language_backend is not None
+        assert config.language_backend.is_jetbrains()
 
     def test_language_backend_none_when_missing_from_dict(self):
         """Test that _from_dict handles missing language_backend gracefully."""
@@ -218,22 +222,84 @@ class TestProjectConfigLanguageBackend:
         assert config.language_backend is None
 
 
+class TestAgentInterface:
+    """Tests for the agent_interface setting (global and per project)."""
+
+    @staticmethod
+    def _project_config(agent_interface: AgentInterface | None) -> ProjectConfig:
+        return ProjectConfig(project_name="test", language_servers=[LanguageServerId.PYTHON], agent_interface=agent_interface)
+
+    def test_agent_interface_roundtrips_through_project_yaml(self):
+        assert self._project_config(AgentInterface.REPL)._to_yaml_dict()["agent_interface"] == "REPL"
+        assert self._project_config(None)._to_yaml_dict()["agent_interface"] is None
+
+    def test_agent_interface_parsed_from_project_dict(self):
+        data, _ = ProjectConfig._load_yaml_dict(PROJECT_TEMPLATE_FILE)
+        data["project_name"] = "test"
+        data["languages"] = ["python"]
+        data["agent_interface"] = "repl"  # case-insensitive
+        assert ProjectConfig._from_dict(data, local_override_keys=[]).agent_interface == AgentInterface.REPL
+        data.pop("agent_interface")
+        assert ProjectConfig._from_dict(data, local_override_keys=[]).agent_interface is None
+
+    def test_determine_agent_interface_precedence(self):
+        # default
+        assert SerenaConfig().determine_agent_interface() == AgentInterface.TOOLS
+        assert SerenaConfig().determine_agent_interface(self._project_config(None)) == AgentInterface.TOOLS
+        # global configuration
+        assert SerenaConfig(agent_interface=AgentInterface.REPL).determine_agent_interface() == AgentInterface.REPL
+        # project configuration takes precedence
+        config = SerenaConfig(agent_interface=AgentInterface.REPL)
+        assert config.determine_agent_interface(self._project_config(AgentInterface.TOOLS)) == AgentInterface.TOOLS
+        assert config.determine_agent_interface(self._project_config(None)) == AgentInterface.REPL
+
+    def test_repl_toolset_is_fixed_and_repl_follows_project_activation(self):
+        """
+        In REPL mode, neither the exposed nor the active toolset is affected by tool inclusion/exclusion definitions
+        (here: the project's exclusions and read-only setting), whereas the REPL's API scope follows the active project.
+        """
+        config, name = _make_config_with_project("test_proj")
+        config.agent_interface = AgentInterface.REPL
+        project_config = config.projects[0].project_config
+        project_config.excluded_tools = ["initial_instructions", "serena_repl"]
+        project_config.excluded_apis = ["mem"]
+        project_config.read_only = True
+
+        agent = SerenaAgent(project=None, serena_config=config)
+        try:
+            # before activation: the fixed toolset and the full set of facades
+            fixed_toolset = {"serena_repl", "initial_instructions", "activate_project"}
+            assert {t.get_name() for t in agent.get_exposed_tool_instances()} == fixed_toolset
+            assert set(agent.get_active_tool_names()) == fixed_toolset
+            overview = agent.get_repl().entrypoint.overview()
+            assert "s.mem" in overview
+            # the dashboard is disabled in the test configuration, so opening it is not offered
+            assert "s.cfg" in overview and "open_dashboard" not in overview
+
+            # after activation: the toolset is unchanged, the REPL reflects the project's API exclusions
+            agent.activate_project_from_path_or_name(name)
+            assert set(agent.get_active_tool_names()) == fixed_toolset
+            assert "s.mem" not in agent.get_repl().entrypoint.overview()
+        finally:
+            agent.on_shutdown(timeout=5)
+
+
 def _make_config_with_project(
     project_name: str,
-    language_backend: LanguageBackend | None = None,
-    global_backend: LanguageBackend = LanguageBackend.LSP,
+    language_backend: BuiltinLanguageBackend | None = None,
+    global_backend: BuiltinLanguageBackend = BuiltinLanguageBackend.LSP,
 ) -> tuple[SerenaConfig, str]:
     """Create a SerenaConfig with a single registered project and return (config, project_name)."""
     config = SerenaConfig(
         log_level=logging.ERROR,
-        language_backend=global_backend,
+        language_backend=global_backend.get_instance(),
     ).with_headless_mode_overrides()
     project = Project(
         project_root=str(Path(__file__).parent.parent / "resources" / "repos" / "python" / "test_repo"),
         project_config=ProjectConfig(
             project_name=project_name,
             language_servers=[LanguageServerId.PYTHON],
-            language_backend=language_backend,
+            language_backend=language_backend.get_instance() if language_backend is not None else None,
         ),
         serena_config=config,
     )
@@ -246,7 +312,7 @@ class TestEffectiveLanguageBackend:
 
     def test_default_backend_is_global(self):
         """When no project override, effective backend matches global config."""
-        config, name = _make_config_with_project("test_proj", language_backend=None, global_backend=LanguageBackend.LSP)
+        config, name = _make_config_with_project("test_proj", language_backend=None, global_backend=BuiltinLanguageBackend.LSP)
         agent = SerenaAgent(project=name, serena_config=config)
         try:
             assert agent.get_language_backend().is_lsp()
@@ -256,7 +322,7 @@ class TestEffectiveLanguageBackend:
     def test_project_overrides_global_backend(self):
         """When startup project has language_backend set, it overrides the global."""
         config, name = _make_config_with_project(
-            "test_jetbrains", language_backend=LanguageBackend.JETBRAINS, global_backend=LanguageBackend.LSP
+            "test_jetbrains", language_backend=BuiltinLanguageBackend.JETBRAINS, global_backend=BuiltinLanguageBackend.LSP
         )
         agent = SerenaAgent(project=name, serena_config=config)
         try:
@@ -268,18 +334,18 @@ class TestEffectiveLanguageBackend:
         """When no startup project is provided, effective backend is the global one."""
         config = SerenaConfig(
             log_level=logging.ERROR,
-            language_backend=LanguageBackend.LSP,
+            language_backend=BuiltinLanguageBackend.LSP.get_instance(),
         ).with_headless_mode_overrides()
         agent = SerenaAgent(project=None, serena_config=config)
         try:
-            assert agent.get_language_backend() == LanguageBackend.LSP
+            assert agent.get_language_backend().is_lsp()
         finally:
             agent.on_shutdown(timeout=5)
 
     def test_activate_project_rejects_backend_mismatch(self):
         """Post-init activation of a project with mismatched backend raises ValueError."""
         # Start with LSP backend
-        config, name = _make_config_with_project("lsp_proj", language_backend=None, global_backend=LanguageBackend.LSP)
+        config, name = _make_config_with_project("lsp_proj", language_backend=None, global_backend=BuiltinLanguageBackend.LSP)
 
         # Add a second project that requires JetBrains
         jb_project = Project(
@@ -287,7 +353,7 @@ class TestEffectiveLanguageBackend:
             project_config=ProjectConfig(
                 project_name="jb_proj",
                 language_servers=[LanguageServerId.JAVA],
-                language_backend=LanguageBackend.JETBRAINS,
+                language_backend=BuiltinLanguageBackend.JETBRAINS.get_instance(),
             ),
             serena_config=config,
         )
@@ -300,9 +366,38 @@ class TestEffectiveLanguageBackend:
         finally:
             agent.on_shutdown(timeout=5)
 
+    def test_activate_project_switches_backend_with_repl_interface(self):
+        """With the REPL interface, post-init activation of a project with a different backend switches the backend."""
+        config, name = _make_config_with_project("lsp_proj", language_backend=None, global_backend=BuiltinLanguageBackend.LSP)
+        config.agent_interface = AgentInterface.REPL
+        jb_project = Project(
+            project_root=str(Path(__file__).parent.parent / "resources" / "repos" / "java" / "test_repo"),
+            project_config=ProjectConfig(
+                project_name="jb_proj",
+                language_servers=[LanguageServerId.JAVA],
+                language_backend=BuiltinLanguageBackend.JETBRAINS.get_instance(),
+            ),
+            serena_config=config,
+        )
+        config.projects.append(RegisteredProject.from_project_instance(jb_project))
+
+        agent = SerenaAgent(project=name, serena_config=config)
+        try:
+            assert agent.get_language_backend().is_lsp()
+            assert "s.lsp" in agent.get_repl().entrypoint.overview()
+
+            # the backend and everything depending on it follow the activated project
+            agent.activate_project_from_path_or_name("jb_proj")
+            assert agent.get_language_backend().is_jetbrains()
+            overview = agent.get_repl().entrypoint.overview()
+            assert "s.jb" in overview and "s.lsp" not in overview
+            assert "jetbrains" in [m.name for m in agent.get_active_modes().get_modes(include_background_base_modes=True)]
+        finally:
+            agent.on_shutdown(timeout=5)
+
     def test_activate_project_allows_matching_backend(self):
         """Post-init activation of a project with matching backend succeeds."""
-        config, name = _make_config_with_project("lsp_proj", language_backend=None, global_backend=LanguageBackend.LSP)
+        config, name = _make_config_with_project("lsp_proj", language_backend=None, global_backend=BuiltinLanguageBackend.LSP)
 
         # Add a second project that also uses LSP
         lsp_project2 = Project(
@@ -310,7 +405,7 @@ class TestEffectiveLanguageBackend:
             project_config=ProjectConfig(
                 project_name="lsp_proj2",
                 language_servers=[LanguageServerId.PYTHON],
-                language_backend=LanguageBackend.LSP,
+                language_backend=BuiltinLanguageBackend.LSP.get_instance(),
             ),
             serena_config=config,
         )
@@ -325,7 +420,7 @@ class TestEffectiveLanguageBackend:
 
     def test_activate_project_allows_none_backend(self):
         """Post-init activation of a project with no backend override succeeds."""
-        config, name = _make_config_with_project("lsp_proj", language_backend=None, global_backend=LanguageBackend.LSP)
+        config, name = _make_config_with_project("lsp_proj", language_backend=None, global_backend=BuiltinLanguageBackend.LSP)
 
         # Add a second project with no backend override
         proj2 = Project(
@@ -543,6 +638,36 @@ class TestSerenaConfigLoadSave:
         config = SerenaConfig.from_config_file(generate_if_missing=False)
         assert config.projects == []
 
+    @pytest.mark.parametrize("setting", ["", "auth_secret: null\n", 'auth_secret: ""\n'])
+    def test_unset_auth_secret_is_generated_and_persisted(self, setting: str) -> None:
+        # load an existing configuration without a usable secret
+        self.master_config_path.write_text("projects: []\n" + setting)
+        config = SerenaConfig.from_config_file(generate_if_missing=False)
+
+        # subsequent loads retain the generated random UUID
+        assert UUID(config.auth_secret).version == 4
+        assert SerenaConfig.from_config_file(generate_if_missing=False).auth_secret == config.auth_secret
+
+    def test_configured_auth_secret_is_preserved(self) -> None:
+        # retain a user-provided secret across loading and migration
+        self.master_config_path.write_text("projects: []\nauth_secret: custom-secret\n")
+        assert SerenaConfig.from_config_file(generate_if_missing=False).auth_secret == "custom-secret"
+        assert SerenaConfig.from_config_file(generate_if_missing=False).auth_secret == "custom-secret"
+
+    def test_new_config_has_persistent_auth_secret(self) -> None:
+        # generate the configuration from the template and retain its secret
+        config = SerenaConfig.from_config_file()
+        assert UUID(config.auth_secret).version == 4
+        assert SerenaConfig.from_config_file().auth_secret == config.auth_secret
+
+    def test_direct_config_instances_have_distinct_auth_secrets(self) -> None:
+        # directly constructed configurations receive independent secrets
+        first = SerenaConfig()
+        second = SerenaConfig()
+        assert UUID(first.auth_secret).version == 4
+        assert UUID(second.auth_secret).version == 4
+        assert first.auth_secret != second.auth_secret
+
     def test_malformed_project_is_skipped_with_warning(self, caplog):
         """A malformed project.yml must not abort loading of the others."""
         good_project = self._make_project_dir(
@@ -603,6 +728,48 @@ class TestSerenaConfigLoadSave:
         resulting_config = SerenaConfig.from_config_file(generate_if_missing=False)
 
         assert len(resulting_config.projects) == 4
+
+    def test_remove_project_persists_across_reload(self):
+        """Removing a project must update the on-disk project registry."""
+        p1 = self._make_project_dir("project1", 'project_name: "project1"\nlanguages: ["python"]\n')
+        p2 = self._make_project_dir("project2", 'project_name: "project2"\nlanguages: ["python"]\n')
+        self._write_master_config([p1, p2])
+
+        config = SerenaConfig.from_config_file(generate_if_missing=False)
+        config.remove_project("project2")
+
+        reloaded = SerenaConfig.from_config_file(generate_if_missing=False)
+        assert [project.project_config.project_name for project in reloaded.projects] == ["project1"]
+
+    def test_remove_project_preserves_concurrent_addition(self):
+        """A removal must not discard a project added by another config instance."""
+        p1 = self._make_project_dir("project1", 'project_name: "project1"\nlanguages: ["python"]\n')
+        p2 = self._make_project_dir("project2", 'project_name: "project2"\nlanguages: ["python"]\n')
+        p3 = self._make_project_dir("project3", 'project_name: "project3"\nlanguages: ["python"]\n')
+        self._write_master_config([p1, p2])
+
+        removing_config = SerenaConfig.from_config_file(generate_if_missing=False)
+        adding_config = SerenaConfig.from_config_file(generate_if_missing=False)
+        adding_config.add_project_from_path(p3)
+        removing_config.remove_project("project2")
+
+        reloaded = SerenaConfig.from_config_file(generate_if_missing=False)
+        assert {project.project_config.project_name for project in reloaded.projects} == {"project1", "project3"}
+
+    def test_add_project_preserves_concurrent_removal(self):
+        """An addition must not resurrect a project removed by another config instance."""
+        p1 = self._make_project_dir("project1", 'project_name: "project1"\nlanguages: ["python"]\n')
+        p2 = self._make_project_dir("project2", 'project_name: "project2"\nlanguages: ["python"]\n')
+        p3 = self._make_project_dir("project3", 'project_name: "project3"\nlanguages: ["python"]\n')
+        self._write_master_config([p1, p2])
+
+        removing_config = SerenaConfig.from_config_file(generate_if_missing=False)
+        adding_config = SerenaConfig.from_config_file(generate_if_missing=False)
+        removing_config.remove_project("project2")
+        adding_config.add_project_from_path(p3)
+
+        reloaded = SerenaConfig.from_config_file(generate_if_missing=False)
+        assert {project.project_config.project_name for project in reloaded.projects} == {"project1", "project3"}
 
 
 class TestGetRegisteredProjectWithDanglingProject:
@@ -723,3 +890,37 @@ class TestProjectConfigActivationCommand:
         data["activation_command_timeout"] = -10
         with pytest.raises(ValueError, match="activation_command_timeout must be positive"):
             ProjectConfig._from_dict(data, local_override_keys=[])
+
+
+class TestTrustedProjectPathPatterns:
+    """Pins the trust semantics that `serena_config.template.yml` documents by example."""
+
+    @staticmethod
+    def _config(*patterns: str) -> SerenaConfig:
+        return SerenaConfig(
+            gui_log_window=False,
+            web_dashboard=False,
+            trusted_project_path_patterns=list(patterns),
+        )
+
+    def test_bare_project_root_trusts_that_project(self):
+        """The documented way to trust a single project: its root path, without a trailing glob."""
+        root = "/opt/dev/projects/my_trusted_project"
+        assert self._config(root).is_trusted_project_path(root)
+
+    def test_project_root_with_trailing_glob_trusts_nothing(self):
+        """`<root>/**` matches only paths below the root, and trust is decided by the root itself.
+
+        This is why the template documents the bare form; the difference is invisible otherwise.
+        """
+        root = "/opt/dev/projects/my_trusted_project"
+        assert not self._config(root + "/**").is_trusted_project_path(root)
+
+    def test_parent_directory_glob_trusts_projects_below_it(self):
+        parent = self._config("/home/user/projects/**")
+        assert parent.is_trusted_project_path("/home/user/projects/some_project")
+        assert not parent.is_trusted_project_path("/home/user/projects")
+
+    def test_unrelated_path_is_not_trusted(self):
+        """Control: the patterns above are not vacuously true."""
+        assert not self._config("/opt/dev/projects/my_trusted_project", "/home/user/projects/**").is_trusted_project_path("/somewhere/else")

@@ -4,7 +4,7 @@ prompt: |
 
   **Refactoring tools**
   For operations on existing symbols, prefer the dedicated refactoring tools over hand-edits:
-  `{{ tool_names['rename_symbol'] }}` and `{{ tool_names['safe_delete_symbol'] }}`{% if 'jet_brains_move' in available_tools %}, plus `jet_brains_move` and `jet_brains_inline_symbol`{% endif %} —
+  `{{ tool_names['rename_symbol'] }}` and `{{ tool_names['safe_delete_symbol'] }}`{% if 'jet_brains_move' in available_tools %}, plus `{{ tool_names['jet_brains_move'] }}` and `{{ tool_names['jet_brains_inline_symbol'] }}`{% endif %} —
   they are reference-aware and update or check all usages atomically. When such a tool returns success, the
   refactoring is already complete and consistent across all declarations, references, overrides and imports —
   trust it: do not re-read the changed files or re-run the build / test suite just to confirm the refactor
@@ -16,9 +16,9 @@ prompt: |
 
   **Symbolic editing**
   Use symbolic retrieval tools to identify the symbols you need to edit.
-  If you need to replace the definition of a symbol, use the `replace_symbol_body` tool.
-  If you want to add some new code at the end of the file, use the `insert_after_symbol` tool with the last top-level symbol in the file. 
-  Similarly, you can use `insert_before_symbol` with the first top-level symbol in the file to insert code at the beginning of a file.
+  If you need to replace the definition of a symbol, use the `{{ tool_names['replace_symbol_body'] }}` tool.
+  If you want to add some new code at the end of the file, use the `{{ tool_names['insert_after_symbol'] }}` tool with the last top-level symbol in the file. 
+  Similarly, you can use `{{ tool_names['insert_before_symbol'] }}` with the first top-level symbol in the file to insert code at the beginning of a file.
   You can understand relationships between symbols by using the `{{ tool_names['find_referencing_symbols'] }}` tool. If not explicitly requested otherwise by the user,
   you make sure that when you edit a symbol, the change is either backward-compatible or you find and update all references as needed.
   The `{{ tool_names['find_referencing_symbols'] }}` tool will give you code snippets around the references as well as symbolic information.
@@ -26,14 +26,14 @@ prompt: |
 
   {% if 'replace_content' in available_tools %}
   **File-based editing**
-  The `replace_content` tool allows you to perform regex-based replacements within files (as well as simple string replacements).
+  The `{{ tool_names['replace_content'] }}` tool allows you to perform regex-based replacements within files (as well as simple string replacements).
   This is your primary tool for editing code whenever replacing or deleting a whole symbol would be a more expensive operation,
   e.g. if you need to adjust just a few lines of code within a method.
   In `regex` mode, wildcards like `start.*?end` let you match a span without quoting its full text; an ambiguous match
   returns an error you can refine, so a tight wildcard pattern is both cheaper and safe.
-  For several small edits within one file, prefer a batch of targeted `replace_content` calls over rewriting the whole
+  For several small edits within one file, prefer a batch of targeted `{{ tool_names['replace_content'] }}` calls over rewriting the whole
   file: rewriting has to re-emit the file's entire contents, whereas each targeted edit emits only the changed text.
-  {% if 'replace_in_files' in available_tools %}For the SAME edit across many files, use `replace_in_files`, which applies
+  {% if 'replace_in_files' in available_tools %}For the SAME edit across many files, use `{{ tool_names['replace_in_files'] }}`, which applies
   it everywhere in one call — equally safe and transparent: its `dry_run` mode first previews every change as a diff with a
   per-occurrence id, so you can then apply all of them or just a chosen subset.{% endif %}
   {% endif %}

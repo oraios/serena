@@ -1,35 +1,39 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import inspect
 import json
 from abc import ABC
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from functools import cached_property
-from types import TracebackType
-from typing import TYPE_CHECKING, Any, Optional, Protocol, Self, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
 from mcp import Implementation
-from mcp.server.fastmcp import Context
-from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metadata
+from mcp.server.mcpserver import Context
+from mcp.server.mcpserver.utilities.func_metadata import FuncMetadata, func_metadata
 from sensai.util import logging
+from sensai.util.helper import mark_used
 from sensai.util.string import dict_string
 
-from serena.config.serena_config import LanguageBackend
+from serena.code_editor import EditedFileContext
+from serena.lsp.lsp_diagnostics import DiagnosticsContext
 from serena.memories.memory_manager import MemoryManager
 from serena.project import Project
 from serena.prompt_factory import PromptFactory
+from serena.repl.facade import SUCCESS_RESULT
 from serena.util.class_decorators import singleton
 from serena.util.inspection import iter_subclasses
-from serena.util.ls_diagnostics import DiagnosticsDiff, EditedFilePath, PublishedDiagnosticsSnapshot
+from serena.util.text_utils import TextOutputUtils
 from solidlsp.ls_exceptions import SolidLSPException
 
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
-    from serena.code_editor import CodeEditor, LanguageServerCodeEditor
+    from serena.code_editor import CodeEditor
     from serena.symbol import LanguageServerSymbolRetriever
 
+
+mark_used(SUCCESS_RESULT, EditedFileContext)  # backward compatibility
 log = logging.getLogger(__name__)
 T = TypeVar("T")
-SUCCESS_RESULT = "OK"
 
 
 class Component(ABC):
@@ -61,22 +65,7 @@ class Component(ABC):
         return self.agent.get_active_project_or_raise()
 
     def create_code_editor(self) -> "CodeEditor":
-        from ..code_editor import JetBrainsCodeEditor
-
-        match self.agent.get_language_backend():
-            case LanguageBackend.LSP:
-                return self.create_ls_code_editor()
-            case LanguageBackend.JETBRAINS:
-                return JetBrainsCodeEditor(project=self.project)
-            case _:
-                raise ValueError
-
-    def create_ls_code_editor(self) -> "LanguageServerCodeEditor":
-        from ..code_editor import LanguageServerCodeEditor
-
-        if not self.agent.is_using_language_server():
-            raise Exception("Cannot create LanguageServerCodeEditor; agent is not in language server mode.")
-        return LanguageServerCodeEditor(self.create_language_server_symbol_retriever())
+        return self.agent.get_language_backend().create_code_editor(self.project)
 
 
 class ToolMarker:
@@ -150,31 +139,11 @@ class Tool(Component):
     # (which is use by the LLM, so a good description is important)
     # and to validate the tool call arguments.
 
-    SESSION_ID_PARAM_NAME = "session_id"
-    """
-    parameter name to use in apply method for the client session ID.
-    This parameter will be ignored by the MCP interface but will be populated with the session ID of the current client session 
-    when the tool is called, allowing tools to be session-aware if needed.
-    """
-
     _last_tool_call_client_str: str | None = None
     """We can only get the client info from within a tool call. Each tool call will update this variable."""
 
     def __init__(self, agent: "SerenaAgent"):
         super().__init__(agent)
-
-    @cached_property
-    def _is_session_aware(self) -> bool:
-        """
-        :return: whether the tool is session-aware, i.e. whether the apply method expects a session_id (str) parameter.
-        """
-        # check apply method for session_id arg
-        apply_fn = self.get_apply_fn()
-        sig = inspect.signature(apply_fn)
-        for param in sig.parameters.values():
-            if param.name == self.SESSION_ID_PARAM_NAME:
-                return True
-        return False
 
     @staticmethod
     def _sanitize_input_param(raw_param: str) -> str:
@@ -264,9 +233,9 @@ class Tool(Component):
             if apply_fn is None:
                 raise AttributeError(f"apply method not defined in {cls}. Did you forget to implement it?")
 
-        return func_metadata(apply_fn, skip_names=["self", "cls", cls.SESSION_ID_PARAM_NAME], structured_output=structured_output)
+        return func_metadata(apply_fn, skip_names=["self", "cls"], structured_output=structured_output)
 
-    def _log_tool_application(self, frame: Any, session_id: str) -> None:
+    def _log_tool_application(self, frame: Any) -> None:
         params = {}
         ignored_params = {"self", "log_call", "catch_exceptions", "args", "apply_fn"}
         for param, value in frame.f_locals.items():
@@ -276,7 +245,14 @@ class Tool(Component):
                 params.update(value)
             else:
                 params[param] = value
-        log.info(f"{self.get_name_from_cls()}: {dict_string(params)}; session_id: {session_id}")
+        log.info(f"{self.get_name_from_cls()}: {dict_string(params)}")
+
+    def _resolve_max_answer_chars(self, max_answer_chars: int) -> int:
+        """
+        :param max_answer_chars: the maximum number of answer characters as passed to the tool; -1 for the configured default
+        :return: the effective maximum
+        """
+        return self.agent.serena_config.default_max_tool_answer_chars if max_answer_chars == -1 else max_answer_chars
 
     def _limit_length(
         self,
@@ -292,26 +268,13 @@ class Tool(Component):
             version of the result. They are tried in order until one fits within ``max_answer_chars``.
         :return: the result string, potentially replaced by a shortened version
         """
-        if max_answer_chars == -1:
-            max_answer_chars = self.agent.serena_config.default_max_tool_answer_chars
-        if max_answer_chars <= 0:
-            raise ValueError(f"Must be positive or the default (-1), got: {max_answer_chars=}")
-        if (n_chars := len(result)) > max_answer_chars:
-            too_long_msg = (
-                f"The answer is too long ({n_chars} characters). " + "You can adjust your query or raise the max_answer_chars parameter."
-            )
-            if shortened_result_factories is not None:
-                # try each shortening closure in order;
-                for make_shorter in shortened_result_factories:
-                    shortened = make_shorter()
-                    candidate = f"{too_long_msg}\n{shortened}"
-                    if len(candidate) <= max_answer_chars:
-                        return candidate
-            result = too_long_msg
-        return result
+        max_answer_chars = self._resolve_max_answer_chars(max_answer_chars)
+        return TextOutputUtils.limit_length(
+            result=result, max_answer_chars=max_answer_chars, shortened_result_factories=shortened_result_factories
+        )
 
     def is_active(self) -> bool:
-        return self.agent.tool_is_active(self.get_name())
+        return self.agent.get_active_tools().contains_tool_name(self.get_name())
 
     def is_readonly(self) -> bool:
         return not self.can_edit()
@@ -337,10 +300,8 @@ class Tool(Component):
         :param catch_exceptions: whether to catch exceptions and return their messages as strings, instead of raising a ToolCallError
         """
         # obtain session ID and client info
-        session_id = "global"
         if mcp_ctx is not None:
             try:
-                session_id = "%x" % id(mcp_ctx.session)
                 client_params = mcp_ctx.session.client_params
                 if client_params is not None:
                     client_info = cast(Implementation, client_params.clientInfo)
@@ -361,7 +322,7 @@ class Tool(Component):
                     )
 
                 if log_call:
-                    self._log_tool_application(inspect.currentframe(), session_id)
+                    self._log_tool_application(inspect.currentframe())
 
                 # check whether the tool requires an active project and language server
                 if not isinstance(self, ToolMarkerDoesNotRequireActiveProject):
@@ -373,8 +334,6 @@ class Tool(Component):
 
                 # construct apply kwargs, adding session_id if the tool is session-aware
                 apply_kwargs = dict(kwargs)
-                if self._is_session_aware:
-                    apply_kwargs["session_id"] = session_id
 
                 # apply the actual tool
                 try:
@@ -442,7 +401,7 @@ class Tool(Component):
 
     @staticmethod
     def _to_json(x: Any) -> str:
-        return json.dumps(x, ensure_ascii=False)
+        return TextOutputUtils.to_json(x)
 
     def _wrapped_tool_response(self, response: Any, message: str) -> str:
         """
@@ -476,89 +435,16 @@ class EditingToolWithDiagnostics(Tool, ToolMarkerCanEdit):
     are then resolved in subsequent edits.
     """
 
-    DIAGNOSTICS_KEY = "diagnostics[warning-or-higher]"
-
-    class DiagnosticsContext:
-        def __init__(self, tool: "EditingToolWithDiagnostics", *edited_relative_paths: str) -> None:
-            self._tool = tool
-            self._is_diagnostics_enabled = tool.ENABLE_DIAGNOSTICS and tool.agent.is_using_language_server()
-            self._edited_files = [EditedFilePath(path, path) for path in edited_relative_paths]
-            self._before_edit_diagnostics_snapshot: PublishedDiagnosticsSnapshot | None = None
-            self._symbol_retriever: Optional["LanguageServerSymbolRetriever"] | None = None
-            if self._is_diagnostics_enabled:
-                self._symbol_retriever = tool.create_language_server_symbol_retriever()
-                self._before_edit_diagnostics_snapshot = PublishedDiagnosticsSnapshot(self._edited_files, self._symbol_retriever)
-
-        def __enter__(self) -> Self:
-            return self
-
-        def __exit__(self, exc_type, exc_val, exc_tb):
-            pass
-
-        def format_result(
-            self,
-            base_result: str,
-        ) -> str:
-            if not self._is_diagnostics_enabled:
-                return base_result
-
-            if self._before_edit_diagnostics_snapshot is None:
-                return base_result
-
-            assert self._symbol_retriever is not None
-            diagnostics_diff = DiagnosticsDiff(self._before_edit_diagnostics_snapshot, self._edited_files, self._symbol_retriever)
-            grouped_diagnostics = diagnostics_diff.get_grouped_diagnostics().get_dict()
-
-            if not grouped_diagnostics:
-                return base_result
-            else:
-                result_dict = {
-                    "result": base_result,
-                    EditingToolWithDiagnostics.DIAGNOSTICS_KEY: grouped_diagnostics,
-                }
-                return self._tool._to_json(result_dict)
-
-
-class EditedFileContext:
-    """
-    Context manager for file editing.
-
-    Create the context, then use `set_updated_content` to set the new content, the original content
-    being provided in `original_content`.
-    When exiting the context without an exception, the updated content will be written back to the file.
-    """
-
-    def __init__(self, relative_path: str, code_editor: "CodeEditor"):
-        self._relative_path = relative_path
-        self._code_editor = code_editor
-        self._edited_file: CodeEditor.EditedFile | None = None
-        self._edited_file_context: Any = None
-
-    def __enter__(self) -> Self:
-        self._edited_file_context = self._code_editor.edited_file_context(self._relative_path)
-        self._edited_file = self._edited_file_context.__enter__()
-        return self
-
-    def get_original_content(self) -> str:
+    def diagnostics_context(self, *edited_relative_paths: str) -> DiagnosticsContext:
         """
-        :return: the original content of the file before any modifications.
-        """
-        assert self._edited_file is not None
-        return self._edited_file.get_contents()
+        Creates a context for use with the `with` statement, which captures the diagnostics before the edit,
+        such that changes can be reported
 
-    def set_updated_content(self, content: str) -> None:
+        :param edited_relative_paths: the relative paths of the files that are to be edited within the context
+        :return: a context which captures the diagnostics before the edit, such that changes can be reported
+            via `format_result`
         """
-        Sets the updated content of the file, which will be written back to the file
-        when the context is exited without an exception.
-
-        :param content: the updated content of the file
-        """
-        assert self._edited_file is not None
-        self._edited_file.set_contents(content)
-
-    def __exit__(self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: TracebackType | None) -> None:
-        assert self._edited_file_context is not None
-        self._edited_file_context.__exit__(exc_type, exc_value, traceback)
+        return DiagnosticsContext(self.agent, *edited_relative_paths, enable=self.ENABLE_DIAGNOSTICS)
 
 
 @dataclass(kw_only=True)
