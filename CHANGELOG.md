@@ -87,6 +87,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     thread (#2038)
 
 * Language Servers:
+  - Add the experimental Rust-based EmmyLua Analyzer backend as `lua_emmylua`, with managed
+    cross-platform downloads and SHA-256 verification; the default `lua` backend remains unchanged
   - Fix: Godot's GDScript parser can report a symbol's end column one column past the
     line-end convention every other language server follows (closing a node's range from
     the next lookahead token instead of the last consumed one, when that lookahead is a
