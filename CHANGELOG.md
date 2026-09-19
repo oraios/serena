@@ -23,7 +23,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     partially free buffer can never produce a partial write). On Windows, anonymous pipes are
     switched to `PIPE_NOWAIT` via `SetNamedPipeHandleState` (follow-up to #2044, closes #2047);
     if that call is unavailable the handler falls back to blocking writes as before. The log
-    file and the dashboard's in-memory buffer remain the lossless, authoritative streams
+    file and the dashboard's in-memory buffer remain the lossless, authoritative streams.
+    Because `O_NONBLOCK` applies to the open file description, bystander writes to the same
+    `sys.stderr` (notably `show_fatal_exception_safe`'s last-resort print) can raise
+    `BlockingIOError` when the pipe is full; that print now swallows `BlockingIOError`/`OSError`
+    after logging, so a full non-blocking pipe cannot replace the fatal message with an
+    unrelated error
   - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
   - Fix: importing Serena no longer loads the `anthropic` package unless the Anthropic token counter is
     actually used; the unconditional import added seconds to CLI/MCP startup on some machines (#2012)
