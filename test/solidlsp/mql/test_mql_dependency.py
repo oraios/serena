@@ -74,13 +74,13 @@ def _write_fake_binary(executable_path: str) -> None:
 class TestMqlVersionConstants:
     """Verifies the pinned version/SHA literal scheme (spec R3, design D3)."""
 
-    def test_introduction_pins_v2_2_0_for_both(self) -> None:
+    def test_introduction_pins_v2_3_0_for_both(self) -> None:
         """INITIAL is frozen at the introduction version and DEFAULT starts
-        identical to it (v2.2.0 at the time of the PR); the two diverge on the
+        identical to it (v2.3.0 at the time of the PR); the two diverge on the
         first real DEFAULT bump.
         """
-        assert INITIAL_MQL_VERSION == "v2.2.0"
-        assert DEFAULT_MQL_VERSION == "v2.2.0"
+        assert INITIAL_MQL_VERSION == "v2.3.0"
+        assert DEFAULT_MQL_VERSION == "v2.3.0"
 
     def test_initial_shas_match_default_shas_at_introduction(self) -> None:
         """INITIAL digests are frozen forever at their introduction values and
@@ -103,7 +103,7 @@ class TestMqlVersionConstants:
 
     def test_asset_basenames_match_published_release_assets(self) -> None:
         """The basenames must match the published release asset names exactly
-        (verified against the GitHub release API; stable across v2.0.x and v2.2.0).
+        (verified against the GitHub release API; stable across v2.0.x, v2.2.0 and v2.3.0).
         """
         assert _ASSET_BASENAME_BY_PLATFORM == {
             "linux-x64": "mql-lsp-server-linux-x64",
@@ -141,10 +141,10 @@ class TestMqlShaResolution:
         """After a DEFAULT bump, the formerly-pinned version keeps hash verification
         via the historical digest registry, never falling into the unverified path.
 
-        Simulates the first real bump (DEFAULT → v2.2.1) with v2.2.0 moved into the
+        Simulates the first real bump (DEFAULT → v2.3.1) with v2.3.0 moved into the
         historical registry, exactly as the corresponding literal edit would do.
         """
-        bumped_default = "v2.2.1"
+        bumped_default = "v2.3.1"
         with (
             patch(
                 "solidlsp.language_servers.mql_language_server.DEFAULT_MQL_VERSION",
@@ -156,10 +156,10 @@ class TestMqlShaResolution:
             ),
             patch.dict(
                 "solidlsp.language_servers.mql_language_server.HISTORICAL_MQL_SHA256_BY_VERSION",
-                {"v2.2.0": dict(INITIAL_MQL_SHA256_BY_PLATFORM)},
+                {"v2.3.0": dict(INITIAL_MQL_SHA256_BY_PLATFORM)},
             ),
         ):
-            deps = MqlLanguageServer._runtime_dependencies("v2.2.0")
+            deps = MqlLanguageServer._runtime_dependencies("v2.3.0")
             dep = deps.get_dependencies_for_platform("linux-x64")[0]
             assert dep.sha256 == INITIAL_MQL_SHA256_BY_PLATFORM["linux-x64"]
 
@@ -207,16 +207,16 @@ class TestMqlRuntimeDependencies:
         """URLs follow the GitHub release-asset scheme for the requested version."""
         deps = MqlLanguageServer._runtime_dependencies(DEFAULT_MQL_VERSION)
         dep = deps.get_dependencies_for_platform("linux-x64")[0]
-        assert dep.url == "https://github.com/davalillo/mql-language-server/releases/download/v2.2.0/mql-lsp-server-linux-x64"
+        assert dep.url == "https://github.com/davalillo/mql-language-server/releases/download/v2.3.0/mql-lsp-server-linux-x64"
 
     def test_former_default_resolves_from_historical_dict_after_simulated_bump(self, tmp_path: Path) -> None:
         """After a DEFAULT bump, the formerly-pinned version keeps hash verification
         via the historical digest registry, never falling into the unverified path.
 
-        Simulates the first real bump (DEFAULT → v2.2.1) with v2.2.0 moved into the
+        Simulates the first real bump (DEFAULT → v2.3.1) with v2.3.0 moved into the
         historical registry, exactly as the corresponding literal edit would do.
         """
-        bumped_default = "v2.2.1"
+        bumped_default = "v2.3.1"
         with (
             patch(
                 "solidlsp.language_servers.mql_language_server.DEFAULT_MQL_VERSION",
@@ -228,10 +228,10 @@ class TestMqlRuntimeDependencies:
             ),
             patch.dict(
                 "solidlsp.language_servers.mql_language_server.HISTORICAL_MQL_SHA256_BY_VERSION",
-                {"v2.2.0": dict(INITIAL_MQL_SHA256_BY_PLATFORM)},
+                {"v2.3.0": dict(INITIAL_MQL_SHA256_BY_PLATFORM)},
             ),
         ):
-            deps = MqlLanguageServer._runtime_dependencies("v2.2.0")
+            deps = MqlLanguageServer._runtime_dependencies("v2.3.0")
             dep = deps.get_dependencies_for_platform("linux-x64")[0]
             assert dep.sha256 == INITIAL_MQL_SHA256_BY_PLATFORM["linux-x64"]
 
@@ -274,7 +274,7 @@ class TestMqlVersionResolution:
         """Once INITIAL and DEFAULT diverge (a future real bump), the DEFAULT install
         resolves into ``mql-lsp-{version}`` so bumps never reuse stale dirs.
         """
-        bumped_default = "v2.2.1"
+        bumped_default = "v2.3.1"
         with (
             patch(
                 "solidlsp.language_servers.mql_language_server.DEFAULT_MQL_VERSION",
@@ -354,7 +354,7 @@ class TestMqlVersionResolution:
         assert not os.path.exists(os.path.join(str(tmp_path), "mql-lsp-v2.0.2"))
 
     def test_stale_default_dir_is_not_reused_after_bump_simulation(self, tmp_path: Path) -> None:
-        """Version-bump simulation: a stale ``mql-lsp-v2.2.0`` dir must not satisfy a
+        """Version-bump simulation: a stale ``mql-lsp-v2.3.0`` dir must not satisfy a
         bumped DEFAULT; the provider installs into ``mql-lsp-vX``.
 
         DEFAULT is patched to a newer tag with an empty SHA dict, mirroring a real
@@ -363,10 +363,10 @@ class TestMqlVersionResolution:
         provider must fall through to ``install`` (proving no stale reuse) and then
         the install is mocked to place the binary in the new dir.
         """
-        stale_dir = os.path.join(str(tmp_path), "mql-lsp-v2.2.0")
+        stale_dir = os.path.join(str(tmp_path), "mql-lsp-v2.3.0")
         _write_fake_binary(os.path.join(stale_dir, _expected_binary_name()))
 
-        bumped_default = "v2.2.1"
+        bumped_default = "v2.3.1"
         bumped_sha = "0" * 64
         with (
             patch(
@@ -561,7 +561,7 @@ class TestMqlRealBinaryInstall:
     """
 
     def test_first_install_downloads_and_verifies_real_binary(self, tmp_path: Path) -> None:
-        """Real DEFAULT (v2.2.0) asset: downloaded from the pinned release URL, sha256-verified
+        """Real DEFAULT (v2.3.0) asset: downloaded from the pinned release URL, sha256-verified
         against DEFAULT_MQL_SHA256_BY_PLATFORM, installed into the legacy
         ``mql-lsp`` dir (DEFAULT == INITIAL at introduction), chmod +x.
 
