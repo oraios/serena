@@ -124,7 +124,7 @@ When using Serena, we highly recommend that you start CC as
 claude --system-prompt="$(serena prompts print-cc-system-prompt-override)"
 ```
 
-You can also consider adding the content of `serena cc-system-prompt-override` to your `CLAUDE.md` files,
+You can also consider adding the content of `serena prompts print-cc-system-prompt-override` to your `CLAUDE.md` files,
 but the effect be insufficient for counteracting Claude Code's bias towards internal tools.
 :::
 
