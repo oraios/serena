@@ -1,6 +1,7 @@
 """
 The Serena Model Context Protocol (MCP) Server
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import sys
 from collections.abc import AsyncIterator, Iterator
@@ -19,12 +20,14 @@ from mcp.server.mcpserver.tools.base import Tool as FastMCPTool
 from mcp.types import ToolAnnotations
 from sensai.util import logging
 
+from serena import __version__ as serena_version_str
 from serena.agent import (
     SerenaAgent,
 )
 from serena.config.context_mode import SerenaAgentContext
-from serena.config.serena_config import LanguageBackend, ModeSelectionDefinition, SerenaConfig
+from serena.config.serena_config import AgentInterface, ModeSelectionDefinition, SerenaConfig
 from serena.constants import DEFAULT_CONTEXT, SERENA_LOG_FORMAT
+from serena.language_backend import LanguageBackend
 from serena.tools import Tool, ToolCallError
 from serena.util.exception import show_fatal_exception_safe
 from serena.util.logging import MemoryLogHandler
@@ -321,6 +324,7 @@ class SerenaMCPFactory:
         self,
         mode_selection_def: ModeSelectionDefinition | None = None,
         language_backend: LanguageBackend | None = None,
+        agent_interface: AgentInterface | None = None,
         enable_web_dashboard: bool | None = None,
         enable_gui_log_window: bool | None = None,
         open_web_dashboard: bool | None = None,
@@ -337,6 +341,7 @@ class SerenaMCPFactory:
 
         :param mode_selection_def: the mode selection definition to apply
         :param language_backend: the language backend to use, overriding the configuration setting.
+        :param agent_interface: the agent interface to use, overriding the configuration setting.
         :param enable_web_dashboard: Whether to enable the web dashboard. If not specified, will take the value from the serena configuration.
         :param enable_gui_log_window: Whether to enable the GUI log window. It currently does not work on macOS, and setting this to True will be ignored then.
             If not specified, will take the value from the serena configuration.
@@ -367,6 +372,8 @@ class SerenaMCPFactory:
                 config.tool_timeout = tool_timeout
             if language_backend is not None:
                 config.language_backend = language_backend
+            if agent_interface is not None:
+                config.agent_interface = agent_interface
 
             self.agent = self._create_serena_agent(config, modes=mode_selection_def, project_activation_error=project_activation_error)
 
@@ -384,6 +391,7 @@ class SerenaMCPFactory:
         log.info("MCP server initial instructions:\n%s", instructions)
         mcp = FastMCP(
             name="Serena",
+            version=serena_version_str,
             lifespan=self.server_lifespan,
             website_url="https://oraios.github.io/serena",
             instructions=instructions,

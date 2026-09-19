@@ -2,6 +2,7 @@
 Shader language server using shader-language-server (antaalt/shader-sense).
 Supports HLSL, GLSL, and WGSL shader file formats.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

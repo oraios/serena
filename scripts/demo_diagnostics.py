@@ -5,6 +5,7 @@ The script creates a temporary Python file inside this repository, introduces on
 shows file and symbol diagnostics, then introduces another warning and verifies that the
 second edit reports only the newly introduced warning.
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import json
 import shutil
@@ -13,8 +14,9 @@ from pathlib import Path
 from pprint import pprint
 
 from serena.agent import SerenaAgent
-from serena.config.serena_config import LanguageBackend, ProjectConfig, RegisteredProject, SerenaConfig
+from serena.config.serena_config import ProjectConfig, RegisteredProject, SerenaConfig
 from serena.constants import REPO_ROOT
+from serena.language_backend import BuiltinLanguageBackend
 from serena.project import Project
 from serena.tools import (
     CreateTextFileTool,
@@ -34,7 +36,7 @@ def make_agent() -> SerenaAgent:
     """Create an LSP-backed Serena agent for the Serena repository."""
     serena_config = SerenaConfig.from_config_file()
     serena_config.web_dashboard = False
-    serena_config.language_backend = LanguageBackend.LSP
+    serena_config.set_builtin_language_backend(BuiltinLanguageBackend.LSP)
 
     project = Project(
         project_root=str(REPO_PATH),

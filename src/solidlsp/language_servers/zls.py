@@ -1,6 +1,7 @@
 """
 Provides Zig specific instantiation of the LanguageServer class using ZLS (Zig Language Server).
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

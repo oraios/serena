@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import logging
 import os
 import threading
@@ -10,18 +12,18 @@ from sensai.util.logging import LogTime
 from sensai.util.string import TextBuilder, ToStringMixin
 
 from serena.config.serena_config import (
-    LanguageBackend,
     ProjectConfig,
     ProjectConfigAutoGenerationMode,
     SerenaConfig,
 )
+from serena.language_backend import LanguageBackend
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from serena.memories.memory_manager import MemoryManager
 from serena.util.file_proxy import FileCollection, FileProxy
 from serena.util.file_system import GitignoreParser, match_path, scan_directory
 from serena.util.text_utils import MatchedConsecutiveLines, search_files
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerId
+from solidlsp.ls_config import LanguageServerIdLike
 
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
@@ -126,7 +128,7 @@ class Project(ToStringMixin):
     @property
     def language_backend(self) -> LanguageBackend:
         # The backend configuration is fundamentally owned by the agent, so it takes
-        # precedence. (Note: The agent does not necessary honour the project's choice,
+        # precedence. (Note: The agent does not necessarily honour the project's choice,
         # as it may be invalid.)
         if self._agent is not None:
             return self._agent.get_language_backend()
@@ -234,18 +236,10 @@ class Project(ToStringMixin):
 
         # check code file restriction (depending on backend)
         if ignore_non_source_files:
-            # apply restriction only for LSP backend, which enumerates known languages
-            # and therefore can determine whether a file is a source file or not
-            if self.language_backend.is_lsp():
-                if os.path.isfile(abs_path):
-                    is_file_in_supported_language = False
-                    for language in self.project_config.language_servers:
-                        fn_matcher = language.get_source_fn_matcher()
-                        if fn_matcher.is_relevant_filename(abs_path):
-                            is_file_in_supported_language = True
-                            break
-                    if not is_file_in_supported_language:
-                        return True
+            if os.path.isfile(abs_path):
+                # non-source files are ignored
+                if not self.language_backend.is_source_file(abs_path, self):
+                    return True
 
         # Create normalized path for consistent handling
         rel_path = Path(relative_path)
@@ -334,7 +328,7 @@ class Project(ToStringMixin):
         :param relative_path: the path to validate, relative to the project root
         :param require_not_ignored: if True, the path must not be ignored according to the project's ignore settings
         """
-        if FileProxy.is_external_path(relative_path):
+        if FileProxy.is_external_path(relative_path, self):
             return
 
         if not self.is_path_in_project(relative_path):
@@ -381,7 +375,7 @@ class Project(ToStringMixin):
                         )
             return rel_file_paths
 
-    def _create_file_collection(self, relative_path: str, *, code_files_only: bool, skip_ignored_files: bool) -> FileCollection:
+    def create_file_collection(self, relative_path: str, *, code_files_only: bool, skip_ignored_files: bool) -> FileCollection:
         """
         Creates the file collection for the given relative path.
 
@@ -390,7 +384,7 @@ class Project(ToStringMixin):
         :param skip_ignored_files: whether to skip ignored files; has no effect if `code_files_only` is True
         :return:
         """
-        if FileProxy.is_external_path(relative_path):
+        if FileProxy.is_external_path(relative_path, self):
             # single external path: create appropriate proxy
             file_collection = FileCollection([FileProxy.from_project_relative_path(self, relative_path)])
         else:
@@ -444,9 +438,7 @@ class Project(ToStringMixin):
         :param skip_ignored_files: whether to skip ignored files; has no effect if `code_files_only` is True
         :return: list of matches
         """
-        file_collection = self._create_file_collection(
-            relative_path, code_files_only=code_files_only, skip_ignored_files=skip_ignored_files
-        )
+        file_collection = self.create_file_collection(relative_path, code_files_only=code_files_only, skip_ignored_files=skip_ignored_files)
         return search_files(
             file_collection,
             pattern,
@@ -567,7 +559,7 @@ class Project(ToStringMixin):
             raise Exception(msg.build())
         return self.language_server_manager
 
-    def add_language_server(self, ls_id: LanguageServerId) -> None:
+    def add_language_server(self, ls_id: LanguageServerIdLike) -> None:
         """
         Adds a new language server to the project configuration, starting the corresponding
         server instance if the LS manager is active.
@@ -576,21 +568,21 @@ class Project(ToStringMixin):
         :param ls_id: the language server to add
         """
         if ls_id in self.project_config.language_servers:
-            log.info(f"Language server {ls_id.value} is already present in the project configuration.")
+            log.info(f"Language server {ls_id.get_key()} is already present in the project configuration.")
             return
 
         # start the language server (if the LS manager is active)
         if self.language_server_manager is None:
             log.info("Language server manager is not active; skipping language server startup for the new language.")
         else:
-            log.info("Adding and starting the language server '%s' ...", ls_id.value)
+            log.info("Adding and starting the language server '%s' ...", ls_id.get_key())
             self.language_server_manager.add_language_server(ls_id)
 
         # update the project configuration
         self.project_config.language_servers.append(ls_id)
         self.save_config()
 
-    def remove_language_server(self, ls_id: LanguageServerId) -> None:
+    def remove_language_server(self, ls_id: LanguageServerIdLike) -> None:
         """
         Removes a language server from the project configuration, stopping the corresponding
         server instance if the LS manager is active.
@@ -599,7 +591,7 @@ class Project(ToStringMixin):
         :param ls_id: the language server to remove
         """
         if ls_id not in self.project_config.language_servers:
-            log.info(f"Language {ls_id.value} is not present in the project configuration.")
+            log.info(f"Language {ls_id.get_key()} is not present in the project configuration.")
             return
         # update the project configuration
         self.project_config.language_servers.remove(ls_id)
@@ -609,7 +601,7 @@ class Project(ToStringMixin):
         if self.language_server_manager is None:
             log.info("Language server manager is not active; skipping language server shutdown for the removed language.")
         else:
-            log.info("Removing and stopping the language server for language %s ...", ls_id.value)
+            log.info("Removing and stopping the language server for language %s ...", ls_id.get_key())
             self.language_server_manager.remove_language_server(ls_id)
 
     def ls_sync_file_system_changes(self) -> int:
@@ -621,6 +613,14 @@ class Project(ToStringMixin):
         return 0
 
     def shutdown(self, timeout: float = 2.0) -> None:
+        """
+        Shuts down the project, calling the language backend-specific shutdown of the active project.
+
+        :param timeout: the timeout, in seconds
+        """
+        # clean up internal resources
         if self.language_server_manager is not None:
             self.language_server_manager.stop_all(save_cache=True, timeout=timeout)
             self.language_server_manager = None
+        # trigger additional backend-specific shutdown
+        self.language_backend.shutdown_active_project(self, timeout=timeout)

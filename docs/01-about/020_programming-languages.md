@@ -98,7 +98,10 @@ Some languages require additional installations or setup steps, as noted.
 * **Java**  
 * **JavaScript**  
   (supported via the TypeScript language server, i.e. use language `typescript` for both JavaScript and TypeScript)
-* **Julia**
+* **Julia**  
+  (by default, uses LanguageServer.jl (language `julia`); the
+  [Fatou](https://github.com/jolars/fatou) alternative (language `julia_fatou`) is installed
+  automatically and requires `uv`/`uvx` in PATH)
 * **Kotlin**  
   (uses the pre-alpha [official kotlin LS](https://github.com/Kotlin/kotlin-lsp), some issues may appear)
 * **LaTeX**  
@@ -187,8 +190,9 @@ Some languages require additional installations or setup steps, as noted.
 * **Zig**  
   (requires installation of ZLS - Zig Language Server)
 
-Support for further languages can easily be added by providing a shallow adapter for a new language server implementation,
-see Serena's [memory on that](https://github.com/oraios/serena/blob/main/.serena/memories/adding_new_language_support_guide.md).
+Additional language servers can easily be supported by providing an adapter implementation;
+see our [contribution guide](https://github.com/oraios/serena/blob/main/CONTRIBUTING.md).
+If you need to support a custom language server which is not yet publicly available, you have the option to [register an external language server](external-ls-registration).
 
 ## The Serena JetBrains Plugin
 

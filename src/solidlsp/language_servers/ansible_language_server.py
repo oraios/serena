@@ -2,6 +2,7 @@
 Provides Ansible specific instantiation of the LanguageServer class using ansible-language-server.
 Contains various configurations and settings specific to Ansible YAML files (playbooks, roles, etc.).
 """
+# SPDX-License-Identifier: MIT
 
 import fnmatch
 import logging
@@ -127,7 +128,7 @@ class AnsibleLanguageServer(SolidLanguageServer):
         return False
 
     @override
-    def _request_document_symbols(
+    def _request_raw_document_symbols(
         self, relative_file_path: str, file_data: LSPFileBuffer | None
     ) -> list[SymbolInformation] | list[DocumentSymbol] | None:
         # ansible-language-server does not implement textDocument/documentSymbol and the

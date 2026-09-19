@@ -1,4 +1,5 @@
 """Wolfram Language server integration using the official WolframResearch LSPServer paclet."""
+# SPDX-License-Identifier: MIT
 
 import glob
 import logging

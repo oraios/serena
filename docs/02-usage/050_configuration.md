@@ -26,7 +26,7 @@ Some of the configurable settings include:
   * the language backend to use by default (i.e., the JetBrains plugin or language servers);
     this can also be [overridden per project](per-project-language-backend)
   * UI settings affecting the [Serena Dashboard and GUI tool](060_dashboard.md)
-  * the set of tools to enable/disable by default
+  * the set of tools or REPL API functions to enable/disable by default
   * the set of [modes](modes) to use by default
   * tool execution parameters (timeout, max. answer length)
   * global ignore rules
@@ -55,6 +55,37 @@ You can access it
     ```shell
     serena config edit
     ```
+    
+(agent-interfaces)=
+### Agent Interfaces
+
+Serena provides its functionality to the agent (LLM) through one of two interfaces
+(see [Tools and APIs](../01-about/035_tools) for the operations they offer):
+
+* **tools**: every operation is a separate tool of the MCP server.
+* **REPL** (new in Serena v2): a single tool executes Python code, through which the agent accesses the operations
+  programmatically, being able to combine several of them in one call.
+
+The interface is selected via the `agent_interface` setting in the global configuration.
+It can be overridden in the project configuration or via the `--agent-interface` command-line option,
+and it is fixed for the duration of a session.
+
+The two interfaces are configured differently:
+
+* With the **tool interface**, the set of tools results from the tool inclusion/exclusion settings
+  (`excluded_tools`, `included_optional_tools`, `fixed_tools`) of the global configuration, the context,
+  the modes and the project configuration.
+* With the **REPL interface**, the set of tools is fixed (the REPL tool and the tools which have no
+  counterpart within the REPL, e.g. for project activation); the tool settings above consequently do not apply.
+  The operations available *within* the REPL are configured via `included_apis`/`excluded_apis` instead,
+  which are supported in the same configuration layers and reference either a group of operations
+  (e.g. `lsp`) or an individual operation (e.g. `lsp.find_symbol`).
+
+```{note}
+Restricting the operations available in the REPL is a means of steering the agent, not a security mechanism:
+the Python code that is executed can, in principle, do anything the Serena process can do.
+See [Security](070_security) for isolation options.
+```
 
 ## Modes and Contexts
 
@@ -1164,7 +1195,18 @@ Supported settings:
 |---|---|---|
 | `ls_path` | managed install | Override the Solidity language server executable path. |
 | `solidity_language_server_version` | `0.8.4` | Override the npm package version Serena installs when `ls_path` is not set. |
+| `solidity_state_dir` | `<ls_resources_dir>/solidity-state` on macOS | Writable state root for the managed Solidity language server on macOS. Serena uses a child-process-only home-directory override so Hardhat does not write to `~/Library`; `HOME` in the Serena process is unchanged. |
 | `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
+
+On macOS, if the default Solid-LSP resources directory is not writable, configure an alternative path:
+
+```yaml
+ls_specific_settings:
+  solidity:
+    solidity_state_dir: /path/to/writable/solidity-state
+```
+
+This setting is ignored on Linux and Windows, where the existing launch environment is unchanged.
 
 #### SystemVerilog
 

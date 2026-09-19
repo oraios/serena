@@ -7,7 +7,97 @@ from pathlib import Path
 import pytest
 from pathspec import PathSpec
 
-from serena.util.file_system import GitignoreParser, GitignoreSpec, _escape_gitignore_path_component, match_path
+from serena.util import file_system
+from serena.util.file_system import GitignoreParser, GitignoreSpec, _escape_gitignore_path_component, match_path, write_file_atomic
+
+
+class TestWriteFileAtomic:
+    """Regression tests for issue #1958: a plain ``open(path, "w")`` truncates the file before
+    the new content is complete, so a crash, OOM kill, or disk-full error partway through the
+    write loses the previous content. ``write_file_atomic`` must never expose that intermediate
+    state.
+    """
+
+    def test_writes_new_file(self, tmp_path):
+        target = tmp_path / "notes.md"
+        write_file_atomic(str(target), "hello", encoding="utf-8")
+        assert target.read_text(encoding="utf-8") == "hello"
+
+    def test_overwrites_existing_file(self, tmp_path):
+        target = tmp_path / "notes.md"
+        target.write_text("old", encoding="utf-8")
+        write_file_atomic(str(target), "new", encoding="utf-8")
+        assert target.read_text(encoding="utf-8") == "new"
+
+    def test_no_leftover_temp_file_after_success(self, tmp_path):
+        target = tmp_path / "notes.md"
+        write_file_atomic(str(target), "hello", encoding="utf-8")
+        assert list(tmp_path.iterdir()) == [target]
+
+    def test_respects_newline_argument(self, tmp_path):
+        target = tmp_path / "notes.md"
+        write_file_atomic(str(target), "a\nb\n", encoding="utf-8", newline="\r\n")
+        assert target.read_bytes() == b"a\r\nb\r\n"
+
+    def test_preserves_original_content_when_write_is_interrupted(self, tmp_path, monkeypatch):
+        """The core invariant: an interrupted write (process killed / OOM / disk full while the
+        temp file is being written) must leave the target file exactly as it was, never
+        truncated or half-overwritten.
+        """
+        target = tmp_path / "notes.md"
+        original = "original content that must survive" * 20
+        target.write_text(original, encoding="utf-8")
+
+        real_fdopen = os.fdopen
+
+        def crashing_fdopen(fd, *args, **kwargs):
+            f = real_fdopen(fd, *args, **kwargs)
+            real_write = f.write
+
+            def crashing_write(data):
+                # write a truncated prefix to the temp file, flush it to disk, then blow up,
+                # simulating a crash after the OS has seen some but not all of the new content.
+                real_write(data[: len(data) // 4])
+                f.flush()
+                raise RuntimeError("simulated crash mid-write")
+
+            f.write = crashing_write
+            return f
+
+        monkeypatch.setattr(file_system.os, "fdopen", crashing_fdopen)
+
+        with pytest.raises(RuntimeError, match="simulated crash mid-write"):
+            write_file_atomic(str(target), "brand new content that never fully arrives" * 20, encoding="utf-8")
+
+        assert target.read_text(encoding="utf-8") == original
+        # the partially-written temp file must be cleaned up, not left behind
+        assert list(tmp_path.iterdir()) == [target]
+
+    def test_replace_with_retry_survives_transient_permission_error(self, tmp_path, monkeypatch):
+        """Mirrors ``util/yaml.py``'s ``_replace_with_retry``: on Windows, ``os.replace`` can
+        fail with a transient ``PermissionError`` while another process momentarily holds the
+        destination open. The write must not be treated as failed while the temp file is still
+        complete and a retry can still succeed.
+        """
+        target = tmp_path / "notes.md"
+        target.write_text("old", encoding="utf-8")
+
+        real_replace = os.replace
+        calls = {"n": 0}
+
+        def flaky_replace(src, dst):
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise PermissionError("simulated transient sharing violation")
+            return real_replace(src, dst)
+
+        monkeypatch.setattr(file_system.os, "replace", flaky_replace)
+        monkeypatch.setattr(file_system.time, "sleep", lambda _seconds: None)
+
+        write_file_atomic(str(target), "new", encoding="utf-8")
+
+        assert calls["n"] == 3
+        assert target.read_text(encoding="utf-8") == "new"
 
 
 class TestGitignoreParser:
@@ -830,3 +920,101 @@ class TestGitignoreParserPermissionError:
         finally:
             # Restore permissions so teardown can clean up
             os.chmod(unreadable, old_mode)
+
+
+class TestWriteFileAtomicSymlinks:
+    """``write_file_atomic`` replaces ``open(path, "w")`` at its call sites, so it has to agree
+    with it about symlinks: a plain write follows the link and updates its target, whereas a bare
+    ``os.replace`` onto the link path would swap the link itself out for a regular file and leave
+    the target holding stale content (issue #1958 asks for symlink behaviour to be preserved
+    before source files use this).
+    """
+
+    @staticmethod
+    def _symlink_or_skip(link: Path, target: Path) -> None:
+        """Windows needs developer mode or admin rights to create a symlink; skip there rather
+        than fail, matching how ``test_memories_manager.py`` handles the same limitation.
+        """
+        try:
+            link.symlink_to(target)
+        except OSError as e:
+            pytest.skip(f"cannot create symlinks on this platform/permissions: {e}")
+
+    def test_writes_through_a_symlink_instead_of_replacing_it(self, tmp_path):
+        target = tmp_path / "real.txt"
+        target.write_text("old", encoding="utf-8")
+        link = tmp_path / "link.txt"
+        self._symlink_or_skip(link, target)
+
+        write_file_atomic(str(link), "new", encoding="utf-8")
+
+        assert link.is_symlink(), "the symlink must survive the write, not be replaced by a regular file"
+        assert target.read_text(encoding="utf-8") == "new", "the content must reach the link's target"
+
+    def test_writes_through_a_symlink_pointing_outside_its_directory(self, tmp_path):
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        target = outside / "real.txt"
+        target.write_text("old", encoding="utf-8")
+        inside = tmp_path / "inside"
+        inside.mkdir()
+        link = inside / "link.txt"
+        self._symlink_or_skip(link, target)
+
+        write_file_atomic(str(link), "new", encoding="utf-8")
+
+        assert link.is_symlink()
+        assert target.read_text(encoding="utf-8") == "new"
+        assert list(inside.iterdir()) == [link], "no temp file may be left beside the link"
+
+    def test_broken_symlink_creates_its_target(self, tmp_path):
+        """``open(path, "w")`` on a dangling link creates the target; this must do the same."""
+        target = tmp_path / "missing.txt"
+        link = tmp_path / "link.txt"
+        self._symlink_or_skip(link, target)
+
+        write_file_atomic(str(link), "new", encoding="utf-8")
+
+        assert link.is_symlink()
+        assert target.read_text(encoding="utf-8") == "new"
+
+    def test_writes_through_a_symlinked_parent_directory(self, tmp_path):
+        """The path is resolved in full, so a symlinked *directory* on the way to the file is
+        followed too, and the temporary file is created in the destination's real directory (it has
+        to be on the same filesystem as the destination for the rename to be atomic).
+        """
+        real_dir = tmp_path / "real_dir"
+        real_dir.mkdir()
+        target = real_dir / "file.txt"
+        target.write_text("old", encoding="utf-8")
+        link_dir = tmp_path / "link_dir"
+        self._symlink_or_skip(link_dir, real_dir)
+
+        write_file_atomic(str(link_dir / "file.txt"), "new", encoding="utf-8")
+
+        assert link_dir.is_symlink(), "the directory symlink must survive"
+        assert target.read_text(encoding="utf-8") == "new"
+        assert list(real_dir.iterdir()) == [target], "no temp file may be left in the real directory"
+
+    def test_non_ascii_filename_round_trips(self, tmp_path):
+        target = tmp_path / "測試檔案.txt"
+        try:
+            target.write_text("old", encoding="utf-8")
+        except (OSError, UnicodeError) as e:
+            pytest.skip(f"cannot create non-ASCII filenames on this filesystem: {e}")
+
+        write_file_atomic(str(target), "new", encoding="utf-8")
+
+        assert target.read_text(encoding="utf-8") == "new"
+        assert list(tmp_path.iterdir()) == [target]
+
+    def test_regular_file_is_written_in_place(self, tmp_path):
+        """Control: the symlink handling must not change the ordinary case."""
+        target = tmp_path / "plain.txt"
+        target.write_text("old", encoding="utf-8")
+
+        write_file_atomic(str(target), "new", encoding="utf-8")
+
+        assert not target.is_symlink()
+        assert target.read_text(encoding="utf-8") == "new"
+        assert list(tmp_path.iterdir()) == [target]
