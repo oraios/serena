@@ -126,9 +126,15 @@ class AngularTypeScriptServer(TypeScriptLanguageServer):
     @override
     def _get_language_id_for_file(self, relative_file_path: str) -> str:
         ext = os.path.splitext(relative_file_path)[1].lower()
-        if ext in (".ts", ".tsx", ".mts", ".cts"):
+        # JSX must use *react language IDs; plain typescript/javascript parse JSX as TS
+        # and silently truncate symbol ranges at multi-line JSX expressions (#1436).
+        if ext == ".tsx":
+            return "typescriptreact"
+        if ext == ".jsx":
+            return "javascriptreact"
+        if ext in (".ts", ".mts", ".cts"):
             return "typescript"
-        if ext in (".js", ".jsx", ".mjs", ".cjs"):
+        if ext in (".js", ".mjs", ".cjs"):
             return "javascript"
         if ext in (".html", ".htm"):
             return "html"
@@ -261,9 +267,15 @@ class AngularLanguageServer(SolidLanguageServer):
     @override
     def _get_language_id_for_file(self, relative_file_path: str) -> str:
         ext = os.path.splitext(relative_file_path)[1].lower()
-        if ext in (".ts", ".tsx", ".mts", ".cts"):
+        # JSX must use *react language IDs; plain typescript/javascript parse JSX as TS
+        # and silently truncate symbol ranges at multi-line JSX expressions (#1436).
+        if ext == ".tsx":
+            return "typescriptreact"
+        if ext == ".jsx":
+            return "javascriptreact"
+        if ext in (".ts", ".mts", ".cts"):
             return "typescript"
-        if ext in (".js", ".jsx", ".mjs", ".cjs"):
+        if ext in (".js", ".mjs", ".cjs"):
             return "javascript"
         if ext in (".html", ".htm"):
             return "html"
