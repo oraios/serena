@@ -24,6 +24,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     actually used; the unconditional import added seconds to CLI/MCP startup on some machines (#2012)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
+  - Fix: `ignored_paths` did not prune the search for `.gitignore` files, so activating a project
+    walked every directory the user had asked to ignore; the search now skips them (#1991)
   - Fix: `TextUtils.insert_text_at_position` returned a wrong position when the inserted text merged
     with an adjacent character into a single newline sequence (e.g. a `\n` inserted directly after an
     existing `\r`); the position is now determined from the resulting text
