@@ -201,6 +201,7 @@ class TestMqlRuntimeDependencies:
                     deps.get_single_dep_for_current_platform()
             else:
                 dep = deps.get_single_dep_for_current_platform()
+                assert dep.url is not None
                 assert dep.url.endswith(_ASSET_BASENAME_BY_PLATFORM[platform_id.value])
 
     def test_urls_target_pinned_release_tag(self) -> None:

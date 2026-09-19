@@ -6,6 +6,7 @@ import pytest
 
 from serena.util.inspection import compute_language_server_support_composition
 from solidlsp import SolidLanguageServer
+from solidlsp.language_servers.mql_language_server import MqlLanguageServer
 from solidlsp.ls_config import LanguageServerId
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
@@ -217,6 +218,7 @@ class TestMqlLanguageServer:
         is set and the Serena-relevant providers were dynamically registered
         (msl-style registerCapability, asserted in _start_server).
         """
+        assert isinstance(language_server, MqlLanguageServer)
         assert language_server.server_ready.is_set(), "server_ready must be set after the initialize handshake"
         assert language_server.is_running()
 
