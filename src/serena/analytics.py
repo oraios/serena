@@ -47,7 +47,7 @@ class TiktokenCountEstimator(TokenCountEstimator):
         self._encoding = tiktoken.encoding_for_model(model_name)
 
     def estimate_token_count(self, text: str) -> int:
-        return len(self._encoding.encode(text))
+        return len(self._encoding.encode_ordinary(text))
 
 
 class AnthropicTokenCount(TokenCountEstimator):
