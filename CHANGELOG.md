@@ -30,6 +30,11 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: process-tree cleanup signaled descendant language-server processes without waiting for them,
     which could leave grandchildren as zombies; cleanup now waits for the discovered descendants (#1464)
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
+  - Fix: `MultiFileContentReplacer` accounted for the exclusivity of the match end in neither
+    `ReplacementOccurrence.end_line` nor the region rendered by `render_occurrence_diff`, so a
+    replacement whose pattern consumed a line break reported the match as ending on the following
+    line and displayed that line as both removed and added; this now applies the same rule
+    `search_text` has used since #1708 (#2080)
   - Docs: `trusted_project_path_patterns` now documents how to trust a single project. Trust is decided by
     the project's root path, so a `<project root>/**` entry matches only paths below the root and therefore
     trusts no project at all; the template now shows the bare root form alongside the parent-directory

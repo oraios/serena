@@ -656,3 +656,32 @@ class TestMultiFileContentReplacer:
         occ = replacer.find_occurrences([(path, content)], "old_pkg", "new_pkg")[0]
         with pytest.raises(AssertionError):
             replacer.apply_to_content("completely different content", [occ])
+
+    def test_match_consuming_a_line_break_ends_on_the_matched_line(self):
+        replacer = MultiFileContentReplacer(mode="literal")
+        occ = replacer.find_occurrences([("f.txt", "alpha\nbeta\ngamma\n")], "beta\n", "BETA\n")[0]
+        assert (occ.start_line, occ.end_line) == (1, 1)
+
+    def test_render_occurrence_diff_omits_the_line_after_a_line_break_match(self):
+        replacer = MultiFileContentReplacer(mode="literal")
+        content = "alpha\nbeta\ngamma\n"
+        occ = replacer.find_occurrences([("f.txt", content)], "beta\n", "BETA\n")[0]
+        diff = replacer.render_occurrence_diff(occ, content)
+        assert f"[{occ.occurrence_id}] line 1" in diff
+        assert diff.endswith("    - beta\n    + BETA")
+
+    def test_render_occurrence_diff_shows_lines_added_by_the_replacement(self):
+        replacer = MultiFileContentReplacer(mode="literal")
+        content = "alpha\nbeta\ngamma\n"
+        occ = replacer.find_occurrences([("f.txt", content)], "beta\n", "one\ntwo\n")[0]
+        diff = replacer.render_occurrence_diff(occ, content)
+        assert diff.endswith("    - beta\n    + one\n    + two")
+        assert "gamma" not in diff
+
+    def test_render_occurrence_diff_shows_lines_merged_by_a_removed_line_break(self):
+        replacer = MultiFileContentReplacer(mode="literal")
+        content = "alpha\nbeta\ngamma\n"
+        occ = replacer.find_occurrences([("f.txt", content)], "beta\n", "BETA")[0]
+        diff = replacer.render_occurrence_diff(occ, content)
+        assert f"[{occ.occurrence_id}] line 1" in diff
+        assert diff.endswith("    - beta\n    - gamma\n    + BETAgamma")
