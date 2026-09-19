@@ -24,6 +24,13 @@ Status of the `main` branch. Changes prior to the next official version change w
     actually used; the unconditional import added seconds to CLI/MCP startup on some machines (#2012)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
+  - Fix: a regular expression supplied by the agent that backtracks catastrophically (easily written
+    by accident, since DOTALL is enabled by default and thus makes `.*` span newlines) froze the
+    whole process rather than just the tool application that issued it: `re` neither releases the GIL
+    nor runs signal handlers while matching, so the tool timeout could report a failure but not stop
+    the match, and every subsequent tool application queued behind the runaway one. Such expressions
+    are now matched with the `regex` module under a time limit (10 seconds by default, configurable
+    via `SERENA_REGEX_TIMEOUT_SECONDS`), which aborts them with an error explaining the likely cause
   - Fix: `TextUtils.insert_text_at_position` returned a wrong position when the inserted text merged
     with an adjacent character into a single newline sequence (e.g. a `\n` inserted directly after an
     existing `\r`); the position is now determined from the resulting text
