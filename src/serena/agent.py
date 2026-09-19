@@ -19,6 +19,7 @@ from enum import Enum
 from logging import Logger
 from typing import TYPE_CHECKING, Optional, TypeVar, cast
 
+import psutil
 import requests
 import webview
 from sensai.util import logging
@@ -529,8 +530,40 @@ class DashboardManager:
         """
         if self._dashboard_viewer_process is not None:
             log.info("Stopping the dashboard viewer process ...")
-            self._dashboard_viewer_process.terminate()
-            self._dashboard_viewer_process = None
+            try:
+                if self._dashboard_viewer_process.is_alive():
+                    try:
+                        proc = psutil.Process(self._dashboard_viewer_process.pid)
+                        descendants = proc.children(recursive=True)
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        descendants = []
+
+                    self._dashboard_viewer_process.terminate()
+
+                    for child in descendants:
+                        try:
+                            child.terminate()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            pass
+
+                    self._dashboard_viewer_process.join(timeout=2.0)
+                    if self._dashboard_viewer_process.is_alive():
+                        self._dashboard_viewer_process.kill()
+                        self._dashboard_viewer_process.join(timeout=1.0)
+
+                    if descendants:
+                        _, alive = psutil.wait_procs(descendants, timeout=1.0)
+                        for child in alive:
+                            try:
+                                child.kill()
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                pass
+                else:
+                    self._dashboard_viewer_process.join(timeout=0.5)
+            except Exception as e:
+                log.warning(f"Error while stopping dashboard viewer process: {e}")
+            finally:
+                self._dashboard_viewer_process = None
 
         if self._mode == self.Mode.TRAY_MANAGER:
             with self._tray_manager_lock:

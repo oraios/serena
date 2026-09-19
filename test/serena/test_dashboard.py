@@ -51,3 +51,91 @@ def test_available_languages_exclude_project_languages():
     assert LanguageServerId.MARKDOWN.value not in available
     # ensure experimental languages remain available for selection
     assert LanguageServerId.ANSIBLE.value in available
+
+
+def test_dashboard_manager_shutdown_cleans_up_process_tree():
+    from unittest.mock import MagicMock, patch
+
+    from serena.agent import DashboardManager
+
+    manager = DashboardManager(
+        port=12345,
+        host_listen_address="127.0.0.1",
+        open_dashboard_on_launch=False,
+        mode_str="browser",
+    )
+    mock_process = MagicMock()
+    mock_process.is_alive.side_effect = [True, False]
+    mock_process.pid = 99999
+    manager._dashboard_viewer_process = mock_process
+
+    mock_child = MagicMock()
+    mock_psutil_proc = MagicMock()
+    mock_psutil_proc.children.return_value = [mock_child]
+
+    with (
+        patch("serena.agent.psutil.Process", return_value=mock_psutil_proc) as mock_psutil,
+        patch("serena.agent.psutil.wait_procs", return_value=([], [])) as mock_wait,
+    ):
+        manager.shutdown()
+
+        mock_psutil.assert_called_once_with(99999)
+        mock_psutil_proc.children.assert_called_once_with(recursive=True)
+        mock_process.terminate.assert_called_once()
+        mock_child.terminate.assert_called_once()
+        mock_process.join.assert_called_once_with(timeout=2.0)
+        mock_wait.assert_called_once_with([mock_child], timeout=1.0)
+        assert manager._dashboard_viewer_process is None
+
+
+def test_dashboard_manager_shutdown_falls_back_to_kill_on_timeout():
+    from unittest.mock import MagicMock, patch
+
+    from serena.agent import DashboardManager
+
+    manager = DashboardManager(
+        port=12345,
+        host_listen_address="127.0.0.1",
+        open_dashboard_on_launch=False,
+        mode_str="browser",
+    )
+    mock_process = MagicMock()
+    mock_process.is_alive.side_effect = [True, True]
+    mock_process.pid = 99999
+    manager._dashboard_viewer_process = mock_process
+
+    mock_child = MagicMock()
+    mock_psutil_proc = MagicMock()
+    mock_psutil_proc.children.return_value = [mock_child]
+
+    with (
+        patch("serena.agent.psutil.Process", return_value=mock_psutil_proc),
+        patch("serena.agent.psutil.wait_procs", return_value=([], [mock_child])),
+    ):
+        manager.shutdown()
+
+        mock_process.terminate.assert_called_once()
+        mock_process.kill.assert_called_once()
+        mock_child.kill.assert_called_once()
+        assert manager._dashboard_viewer_process is None
+
+
+def test_dashboard_manager_shutdown_when_process_already_exited():
+    from unittest.mock import MagicMock
+
+    from serena.agent import DashboardManager
+
+    manager = DashboardManager(
+        port=12345,
+        host_listen_address="127.0.0.1",
+        open_dashboard_on_launch=False,
+        mode_str="browser",
+    )
+    mock_process = MagicMock()
+    mock_process.is_alive.return_value = False
+    manager._dashboard_viewer_process = mock_process
+
+    manager.shutdown()
+
+    mock_process.join.assert_called_once_with(timeout=0.5)
+    assert manager._dashboard_viewer_process is None

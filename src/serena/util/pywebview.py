@@ -95,7 +95,33 @@ class WebViewWithTray:
         if self._parent_process_id is not None:
             threading.Thread(target=self._monitor_parent_process, daemon=True).start()
 
-        webview.start(_start_callback, icon=self._app_icon_path)
+        try:
+            webview.start(_start_callback, icon=self._app_icon_path)
+        finally:
+            self._cleanup_child_processes()
+
+    @staticmethod
+    def _cleanup_child_processes() -> None:
+        """
+        Terminates and reaps any descendant processes (e.g. WebView2 subprocesses on Windows).
+        """
+        try:
+            current_proc = psutil.Process()
+            children = current_proc.children(recursive=True)
+            for child in children:
+                try:
+                    child.terminate()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            if children:
+                _, alive = psutil.wait_procs(children, timeout=1.0)
+                for child in alive:
+                    try:
+                        child.kill()
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+        except Exception as e:
+            log.warning(f"Error cleaning up child processes in dashboard viewer: {e}")
 
     def _monitor_parent_process(self) -> None:
         """
@@ -111,6 +137,9 @@ class WebViewWithTray:
             pass  # Parent process already exited
         log.info("Parent process (pid=%d) has exited, shutting down dashboard viewer", pid)
         self._terminate()
+        time.sleep(0.5)
+        self._cleanup_child_processes()
+        os._exit(0)
 
     def _show_window(self) -> None:
         if not self.window:
