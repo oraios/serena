@@ -24,6 +24,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     actually used; the unconditional import added seconds to CLI/MCP startup on some machines (#2012)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
+  - Perf: `search_for_pattern` resolved each match's line number by rescanning the file from the
+    beginning (O(n) per match, O(n*m) total for m matches); coordinates are now resolved via the new
+    `TextCoordinates` abstraction (cached line starts + binary search)
   - Fix: `TextUtils.insert_text_at_position` returned a wrong position when the inserted text merged
     with an adjacent character into a single newline sequence (e.g. a `\n` inserted directly after an
     existing `\r`); the position is now determined from the resulting text
