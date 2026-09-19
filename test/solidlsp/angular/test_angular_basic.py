@@ -38,7 +38,6 @@ class TestAngularLanguageServerBasics:
             assert expected in names, f"Expected '{expected}' in component symbols: {names}"
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.ANGULAR], indirect=True)
-    @pytest.mark.parametrize("repo_path", [LanguageServerId.ANGULAR], indirect=True)
     def test_tsx_symbol_range_not_truncated_by_jsx(self, language_server: SolidLanguageServer) -> None:
         """Regression: .tsx opened as typescript truncates ranges at multi-line JSX (#1436 class)."""
         file_path = os.path.join("src", "app", "jsx_component.tsx")
