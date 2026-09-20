@@ -116,6 +116,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     already started (#1949)
   - Add: Installed Python packages can provide generic external language-server adapters through the
     `serena.language_servers` entry-point group for explicit use in `project.yml`
+  - Fix: Nixd hover requests could return an empty first response while initial analysis was completing;
+    retry the request within a bounded interval and keep the Nix hover regression coverage non-blocking while
+    the current nixd fixture position remains unsupported (#1040)
+  - Fix: Nixd could return a transient empty hover response while initial analysis was completing;
+    retry the request within a bounded interval and exercise Nix hover coverage against a supported
+    nixpkgs-backed selector (#1040)
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: `DartLanguageServer._start_server` discarded both `$/analyzerStatus` and
     `experimental/serverStatus`, the two notifications the Dart analysis server sends to report
