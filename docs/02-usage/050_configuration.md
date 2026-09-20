@@ -26,7 +26,7 @@ Some of the configurable settings include:
   * the language backend to use by default (i.e., the JetBrains plugin or language servers);
     this can also be [overridden per project](per-project-language-backend)
   * UI settings affecting the [Serena Dashboard and GUI tool](060_dashboard.md)
-  * the set of tools or REPL API functions to enable/disable by default
+  * the set of tools to enable/disable by default
   * the set of [modes](modes) to use by default
   * tool execution parameters (timeout, max. answer length)
   * global ignore rules
@@ -55,37 +55,6 @@ You can access it
     ```shell
     serena config edit
     ```
-    
-(agent-interfaces)=
-### Agent Interfaces
-
-Serena provides its functionality to the agent (LLM) through one of two interfaces
-(see [Tools and APIs](../01-about/035_tools) for the operations they offer):
-
-* **tools**: every operation is a separate tool of the MCP server.
-* **REPL** (new in Serena v2): a single tool executes Python code, through which the agent accesses the operations
-  programmatically, being able to combine several of them in one call.
-
-The interface is selected via the `agent_interface` setting in the global configuration.
-It can be overridden in the project configuration or via the `--agent-interface` command-line option,
-and it is fixed for the duration of a session.
-
-The two interfaces are configured differently:
-
-* With the **tool interface**, the set of tools results from the tool inclusion/exclusion settings
-  (`excluded_tools`, `included_optional_tools`, `fixed_tools`) of the global configuration, the context,
-  the modes and the project configuration.
-* With the **REPL interface**, the set of tools is fixed (the REPL tool and the tools which have no
-  counterpart within the REPL, e.g. for project activation); the tool settings above consequently do not apply.
-  The operations available *within* the REPL are configured via `included_apis`/`excluded_apis` instead,
-  which are supported in the same configuration layers and reference either a group of operations
-  (e.g. `lsp`) or an individual operation (e.g. `lsp.find_symbol`).
-
-```{note}
-Restricting the operations available in the REPL is a means of steering the agent, not a security mechanism:
-the Python code that is executed can, in principle, do anything the Serena process can do.
-See [Security](070_security) for isolation options.
-```
 
 ## Modes and Contexts
 
@@ -763,6 +732,10 @@ The following settings are supported for the Java language server:
 | `maven_user_settings` | `~/.m2/settings.xml` | Path to Maven `settings.xml` |
 | `gradle_user_home` | `~/.gradle` | Path to Gradle user home directory |
 | `gradle_wrapper_enabled` | `false` | Use the project's Gradle wrapper (`gradlew`) instead of the bundled Gradle distribution. Enable this for projects with custom plugins or repositories. |
+| `maven_import_enabled` | `true` | Whether JDTLS imports Maven projects. Disable on Gradle-only repositories to skip `pom.xml` detection work. |
+| `gradle_import_enabled` | `true` | Whether JDTLS imports Gradle projects. Disable on Maven-only repositories to skip Gradle detection work. |
+| `update_build_configuration` | `interactive` | What JDTLS does after `pom.xml` / `build.gradle` changes: `disabled`, `interactive`, or `automatic`. Prefer `automatic` for headless agents that cannot answer a prompt. |
+| `autobuild_enabled` | `true` | Whether JDTLS rebuilds after edits. Disable on very large repositories to reduce background CPU. |
 | `gradle_java_home` | `null` | Path to the JDK used by Gradle. When unset, Gradle uses `JAVA_HOME` if `use_system_java_home` is enabled and `JAVA_HOME` is set; otherwise it falls back to Serena's bundled JRE. |
 | `use_system_java_home` | `false` | Use the system's `JAVA_HOME` environment variable for JDTLS itself and, when `gradle_java_home` is unset, Gradle import. Enable this if your project requires a specific JDK vendor or version for Gradle's JDK checks. |
 | `runtimes` | `[]` | Extra JRE/JDK entries registered with JDT-LS via `java.configuration.runtimes`. Use this when a project's source/target level exceeds the JDK JDT-LS itself runs on (currently JDK 21 in default vscode-java VSIX mode). Each entry is a mapping with required `name` (e.g. `JavaSE-25`, matching the `JavaSE-NN` container the build tool requests) and `path` (JDK/JRE home directory; must exist), plus optional `default`, `sources`, and `javadoc` (passed through to JDT-LS). Entries extend rather than replace the bundled `JavaSE-21` runtime; an entry that reuses the `JavaSE-21` name overrides the bundled one. Changing this setting invalidates the JDTLS workspace hash so a fresh import is performed. |
