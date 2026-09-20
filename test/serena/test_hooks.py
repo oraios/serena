@@ -394,6 +394,85 @@ class TestPreToolUseRemindAboutSerenaHook:
                 PreToolUseRemindAboutSymbolicToolsHook(HookClient.CLAUDE_CODE).execute()
         assert capsys.readouterr().out == ""
 
+    @pytest.mark.parametrize(
+        ("command", "expected_grep", "expected_read", "expected_code_read"),
+        [
+            ("rg -n foo src/main.py", True, False, False),
+            ("cd project && rg -n foo src/main.py", True, False, False),
+            ("env FOO=bar cat 'src/file with spaces.py'", False, True, True),
+            ("awk '{print $0}' src/main.py", False, True, True),
+            ("fd -e py foo src", True, False, False),
+            ("cat README.md", False, True, False),
+            ("sed -i 's/foo/bar/' src/main.py", False, True, True),
+        ],
+        ids=["rg", "compound-rg", "env-cat-quoted-path", "awk", "fd", "markdown-cat", "sed"],
+    )
+    def test_claude_code_bash_classifies_shell_commands(
+        self,
+        command: str,
+        expected_grep: bool,
+        expected_read: bool,
+        expected_code_read: bool,
+        tmp_path: Path,
+    ):
+        """Native Claude Code Bash payloads are classified from their command line."""
+        payload = _base_input("Bash", tool_input={"command": command})
+        with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.CLAUDE_CODE)
+
+        assert hook.is_grep_call() is expected_grep
+        assert hook.is_read_file_call() is expected_read
+        assert hook.is_read_code_file_call() is expected_code_read
+
+    @pytest.mark.parametrize("client", [HookClient.CLAUDE_CODE, HookClient.CODEBUDDY])
+    def test_bash_shell_read_reaches_code_file_counter_for_supported_clients(self, client: HookClient, tmp_path: Path):
+        payload = _base_input("Bash", tool_input={"command": "cat src/main.py"})
+        with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            hook = PreToolUseRemindAboutSymbolicToolsHook(client)
+
+        assert hook.is_read_call() is True
+        assert hook.is_read_code_file_call() is True
+
+    @pytest.mark.parametrize("client", [HookClient.CLAUDE_CODE, HookClient.CODEBUDDY])
+    @pytest.mark.parametrize(
+        "command",
+        ["cat config/deploy.yaml", "rg -n foo src/main.py"],
+        ids=["read-like", "grep-like"],
+    )
+    def test_non_shell_mcp_tool_with_command_parameter_is_not_classified(self, client: HookClient, command: str, tmp_path: Path):
+        """An MCP tool that merely names a parameter ``command`` must not count as a shell read/grep.
+
+        Only the client's native shell tool (``Bash``) carries a real command line; any other tool
+        whose payload happens to have a ``command`` field would otherwise feed the read/grep
+        counters and, past the threshold, get denied although it never touched a shell.
+        """
+        payload = _base_input("mcp__deploy__run_task", tool_input={"command": command, "task_name": "deploy"})
+        with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            hook = PreToolUseRemindAboutSymbolicToolsHook(client)
+
+        assert hook.is_grep_call() is False
+        assert hook.is_read_call() is False
+        assert hook.is_read_file_call() is False
+
+    def test_malformed_shell_command_does_not_raise(self, tmp_path: Path):
+        payload = _base_input("Bash", tool_input={"command": "rg 'unterminated"})
+        with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.CLAUDE_CODE)
+
+        assert hook.is_grep_call() is True
+
+    def test_deny_output_after_threshold_bash_search_claude_code(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """Native Claude Code Bash searches reach the same reminder threshold as Grep."""
+        payload = _base_input("Bash", tool_input={"command": "cd project && rg -n foo src/main.py"})
+        for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
+            with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+                PreToolUseRemindAboutSymbolicToolsHook(HookClient.CLAUDE_CODE).execute()
+
+        result = json.loads(capsys.readouterr().out.strip())
+        hook_output = result["hookSpecificOutput"]
+        assert hook_output["permissionDecision"] == "deny"
+        assert "grep" in hook_output["additionalContext"].lower()
+
     def test_deny_output_after_threshold_greps_claude_code(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
         """After reaching the grep threshold, the hook should output a deny."""
         for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
