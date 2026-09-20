@@ -73,6 +73,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     command and Serena waits for the plugin server to become reachable before proceeding (#1864)
 
 * Hooks:
+  - Add opt-in `serena-hooks enforce` hard-block mode with directive Serena replacement calls for direct
+    code searches and reads, plus configurable code-file extensions (#1470)
   - Fix: Codex's documented hook wiring only routes `remind` through `PreToolUse` on `Bash`, so its
     reset-on-Serena-tool-use branch was unreachable there and reminder counters never cleared after a
     successful Serena call. Add a `serena-hooks reset` command and a `PostToolUse` example matched to
@@ -86,6 +88,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     start and the tray icon never became usable. Menu refreshes are now marshalled onto the main
     thread (#2038)
 
+* Hooks:
+  - Add opt-in `serena-hooks enforce` hard-block mode with directive Serena replacement calls for direct
+    code searches and reads, plus configurable code-file extensions (#1470)
 * Language Servers:
   - Fix: Godot's GDScript parser can report a symbol's end column one column past the
     line-end convention every other language server follows (closing a node's range from
