@@ -325,8 +325,13 @@ Serena's hooks for Codex, add this feature flag to `~/.codex/config.toml`:
 
 ```toml
 [features]
-codex_hooks = true
+hooks = true
 ```
+
+The flag is `hooks`; `codex_hooks` is a deprecated alias which Codex reports on startup
+(`[features].codex_hooks is deprecated. Use [features].hooks instead.`). Hooks are enabled by
+default in current Codex releases (verified on 0.155.1), so this block is only needed if hooks
+were disabled previously.
 
 Then create `~/.codex/hooks.json` with the following content:
 
