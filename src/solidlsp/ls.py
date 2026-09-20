@@ -621,6 +621,16 @@ class SolidLanguageServer(ABC):
             self._dependency_provider = self._create_dependency_provider()
         return self._dependency_provider
 
+    def install_dependencies(self) -> None:
+        """
+        Installs the runtime dependencies whose installation is deferred until the language server is launched.
+
+        The remaining dependencies are installed upon instantiation of the language server.
+        Language servers created with a fixed launch command have no dependency provider and thus nothing to install here.
+        """
+        if self._dependency_provider is not None:
+            self._dependency_provider.install_dependencies()
+
     def _create_process_launch_info(self) -> ProcessLaunchInfo:
         dependency_provider = self._get_dependency_provider()
         cmd = dependency_provider.create_launch_command()

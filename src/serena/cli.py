@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Iterator, Sequence
 from logging import Logger
@@ -126,6 +127,24 @@ def _open_in_editor(path: str) -> None:
         print(f"Failed to open {path}: {e}")
 
 
+def _download_ls_dependencies(ls_id: LanguageServerIdLike, ls_specific_settings: dict, repository_root_path: str) -> None:
+    """Download dependencies for one language server without starting it."""
+    from solidlsp import SolidLanguageServer
+    from solidlsp.ls_config import LanguageServerConfig
+    from solidlsp.settings import SolidLSPSettings
+
+    language_server = SolidLanguageServer.create(
+        LanguageServerConfig(ls_id=ls_id),
+        repository_root_path,
+        solidlsp_settings=SolidLSPSettings(
+            solidlsp_dir=SerenaPaths().serena_user_home_dir,
+            project_data_path=os.path.join(repository_root_path, ".solidlsp"),
+            ls_specific_settings=ls_specific_settings,
+        ),
+    )
+    language_server.install_dependencies()
+
+
 class ProjectType(click.ParamType):
     """ParamType allowing either a project name or a path to a project directory."""
 
@@ -231,6 +250,52 @@ class TopLevelCommands(AutoRegisteringGroup):
         else:
             click.echo(f"\nFailed to set up Serena for {client}.\n")
             raise SystemExit(1)
+
+    @staticmethod
+    @click.command(
+        "download-ls-dependencies",
+        help="Download language-server dependencies ahead of time for environments with restricted network access.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument("language_servers", type=str, nargs=-1, required=True)
+    def download_ls_dependencies(language_servers: tuple[str, ...]) -> None:
+        """Download dependencies without starting any language server."""
+        logging.configure(level=logging.INFO)
+
+        # resolve the language server names
+        registry = LanguageServerRegistry.get_instance()
+        ls_ids: list[LanguageServerIdLike] = []
+        for name in language_servers:
+            try:
+                ls_ids.append(registry.resolve(name.lower()))
+            except ValueError as exc:
+                raise click.UsageError(f"Unknown language server '{name}'. Supported: {', '.join(registry.get_keys())}") from exc
+
+        # load the user's language server settings, if a configuration exists
+        try:
+            ls_specific_settings = dict(SerenaConfig.from_config_file(generate_if_missing=False).ls_specific_settings)
+        except FileNotFoundError:
+            ls_specific_settings = {}
+
+        # download the dependencies, continuing with the remaining language servers upon failure
+        failures: list[tuple[LanguageServerIdLike, Exception]] = []
+        with tempfile.TemporaryDirectory() as temp_dir:
+            for index, ls_id in enumerate(ls_ids, start=1):
+                click.echo(f"[{index}/{len(ls_ids)}] Downloading dependencies for '{ls_id.get_key()}' ...")
+                try:
+                    _download_ls_dependencies(ls_id, ls_specific_settings, temp_dir)
+                except Exception as exc:
+                    log.exception("Failed to download dependencies for '%s'", ls_id.get_key())
+                    failures.append((ls_id, exc))
+
+        # report the outcome
+        if failures:
+            click.echo(f"Failed to download dependencies for {len(failures)} of {len(ls_ids)} language server(s):", err=True)
+            for ls_id, exc in failures:
+                click.echo(f"  {ls_id.get_key()}: {exc}", err=True)
+            raise click.exceptions.Exit(1)
+
+        click.echo(f"Successfully downloaded dependencies for {len(ls_ids)} language server(s).")
 
     @staticmethod
     @click.command("start-mcp-server", help="Starts the Serena MCP server.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
