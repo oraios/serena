@@ -642,6 +642,14 @@ class MultiFileContentReplacer:
         old_block = content[line_start:line_end]
         new_block = content[line_start : occ.start] + occ.replacement + content[occ.end : line_end]
 
+        # the file's final line break terminates the last line rather than starting a further one, so
+        # splitting an end-of-file window would materialize the empty remainder behind it as a phantom
+        # line; for a window ending before the file end, an empty remainder instead denotes a real
+        # blank line behind the match, which is merged away by it and therefore has to be shown
+        if line_end == len(content):
+            old_block = old_block.removesuffix("\n")
+            new_block = new_block.removesuffix("\n")
+
         # the window runs to the next line break after the exclusive match end, so when the match
         # itself consumed a line break the following line is included on both sides; drop such
         # trailing lines, as a line the replacement leaves unchanged is not part of the change
