@@ -46,6 +46,12 @@ class TestAstroLanguageServerBasics:
     @pytest.mark.parametrize("language_server", [LanguageServerId.ASTRO], indirect=True)
     def test_full_symbol_tree(self, language_server: SolidLanguageServer) -> None:
         all_symbols = request_all_symbols(language_server)
-        relative_paths = {s.get("location", {}).get("relativePath", "").replace("\\", "/") for s in all_symbols}
+        relative_paths: set[str] = set()
+        for s in all_symbols:
+            loc = s.get("location")
+            if isinstance(loc, dict):
+                rel = loc.get("relativePath")
+                if isinstance(rel, str):
+                    relative_paths.add(rel.replace("\\", "/"))
         assert any("Card.astro" in p for p in relative_paths)
         assert any("index.astro" in p for p in relative_paths)
