@@ -906,6 +906,13 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
     """
     timeout for tool calls in seconds; if a tool takes longer than this, it is aborted and an error is returned.
     """
+    connection_access_tokens: dict[str, str] = field(default_factory=dict)
+    """
+    Optional mapping of HTTP bearer tokens to connection permissions for MCP HTTP transports
+    (``sse`` / ``streamable-http``). Each value must be ``read`` (query tools only) or ``edit``
+    (all tools). When empty (default), no token check is performed and every connection may use
+    all tools (previous behaviour). Stdio transport is not affected (oraios/serena#1971).
+    """
 
     token_count_estimator: str = RegisteredTokenCountEstimator.CHAR_COUNT.name
     """Only relevant if `record_tool_usage` is True; the name of the token count estimator to use for tool usage statistics.

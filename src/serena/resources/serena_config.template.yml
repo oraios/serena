@@ -153,6 +153,15 @@ ignored_memory_patterns: []
 # timeout, in seconds, after which tool executions are terminated
 tool_timeout: 240
 
+# Optional per-connection tool permissions for HTTP MCP transports (sse / streamable-http).
+# Map each bearer token to "read" (query tools only) or "edit" (all tools).
+# Leave empty (default) for no token check. Stdio transport ignores this setting.
+# Example:
+#   connection_access_tokens:
+#     "reader-secret-token": read
+#     "writer-secret-token": edit
+connection_access_tokens: {}
+
 # list of tools to be globally excluded
 excluded_tools: []
 
