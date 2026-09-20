@@ -30,6 +30,13 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: process-tree cleanup signaled descendant language-server processes without waiting for them,
     which could leave grandchildren as zombies; cleanup now waits for the discovered descendants (#1464)
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
+  - Fix: `SerenaConfig.project_names` / `project_paths` were `cached_property` values that were never
+    invalidated after projects were added or removed mid-session, so user-facing project lists and
+    error messages stayed stale
+  - Fix: DashboardManager's unsupported-mode fallback warning logged the literal text
+    `{fallback_mode.value}` because only the first string fragment was an f-string
+  - Fix: declare `click` as a direct dependency; all three console scripts (`serena`, `serena-agent`,
+    `serena-hooks`) import it but it was only available transitively
   - Docs: `trusted_project_path_patterns` now documents how to trust a single project. Trust is decided by
     the project's root path, so a `<project root>/**` entry matches only paths below the root and therefore
     trusts no project at all; the template now shows the bare root form alongside the parent-directory
@@ -52,6 +59,18 @@ Status of the `main` branch. Changes prior to the next official version change w
     including its project configuration, are left untouched (#2029)
 
 * Tools:
+  - Fix: `find_file` documented a `skip_ignored_files` parameter that did not exist; the parameter is now
+    implemented and defaults to `False` (previous hardcoded behaviour)
+  - Fix: `jetbrains_rename` tool docstring claimed `rename_in_comments` / `rename_in_text_occurrences`
+    default to `True`; the code defaults are `False`
+  - Fix: the Claude Code system-prompt override mapped tasks to tool names that do not exist
+    (`rename`, `_safe_delete`, `inline_symbol`, `type_hierarchy`); the mapping now uses the actual
+    tool names (`rename_symbol`, `safe_delete_symbol`, and JetBrains-only names where applicable)
+  - Fix: `QueryProjectTool` enforced read-only tools and registered-project existence via `assert`,
+    which is stripped under `python -O`; these checks now raise `ValueError`
+  - Fix: `create_text_file` enforced project path containment for new files via `assert`, which is
+    removed under `python -O`; validation now always goes through `Project.validate_relative_path`
+    plus an explicit `ValueError`
   - Fix: the file-editing tools saved the edited file with `open(path, "w")`, which truncates it
     before the new content is complete, so a crash, an OOM kill or a full disk partway through the
     write could leave a source file empty or half-written. Saves now go through the same atomic
@@ -60,6 +79,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     replaced by a regular file (#1958)
 
 * Memories:
+  - Fix: `move_memory` / rename only checked write access on the destination name, so a tool-context
+    rename could relocate a read-only memory; both source and destination are now checked
   - Fix: `save_memory`/`edit_memory` wrote directly to the memory file with `open(path, "w")`, which
     truncates it before the new content is written; a crash, OOM kill, or full disk partway through
     the write could destroy the previous, valid content instead of just losing the update. Both now
