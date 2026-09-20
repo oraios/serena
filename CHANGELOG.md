@@ -102,6 +102,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     VTS initialization options now override defaults per top-level key rather than replacing the
     entire configuration; a user-provided `typescript` block replaces the ATA default too.
     `initializationOptions` takes precedence over the legacy `initialization_options` alias.
+  - Add experimental Devsense PHP Language Server support through the `php_devsense` language key and
+    pinned npm-managed `devsense-php-ls` installation (#710)
   - Add FreeBSD mapping to platform detection
   - Remove unnecessary platform checks from the following language servers, expanding the set of
     supported platforms accordingly: Elixir Tools, Intelephense, Perl, TypeScript, VTS
@@ -116,6 +118,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     already started (#1949)
   - Add: Installed Python packages can provide generic external language-server adapters through the
     `serena.language_servers` entry-point group for explicit use in `project.yml`
+  - Add experimental Devsense PHP Language Server support through the `php_devsense` language key and
+    pinned npm-managed `devsense-php-ls` installation (#710)
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: `DartLanguageServer._start_server` discarded both `$/analyzerStatus` and
     `experimental/serverStatus`, the two notifications the Dart analysis server sends to report
