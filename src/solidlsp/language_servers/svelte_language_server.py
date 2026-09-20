@@ -476,7 +476,8 @@ class SvelteLanguageServer(SolidLanguageServer):
             if not uri:
                 return
             fb = self.open_file_buffers.get(uri)
-            if fb is None or fb.language_id not in ("typescript", "javascript"):
+            # Extension, not languageId: .tsx/.jsx open as typescriptreact/javascriptreact (#2066/#1436); `_is_ts_file` is this class's TS/JS source of truth.
+            if fb is None or not _is_ts_file(uri):
                 return
             changes = params.get("contentChanges")
             if changes is None:

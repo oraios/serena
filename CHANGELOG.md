@@ -84,7 +84,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     language IDs, so JSX symbol ranges truncated at multi-line expressions (same class of bug as the
     typescript-language-server fix; `typescriptreact`/`javascriptreact` are now used). Regression tests
     cover the languageId mapping for both the primary and companion servers, plus fixture `.tsx` files
-    that assert symbol ranges are not truncated (mirroring #1436).
+    that assert symbol ranges are not truncated (mirroring #1436). Svelte's `$/onDidChangeTsOrJsFile`
+    mirror now keys off TS/JS extensions (`_is_ts_file`) so `.tsx`/`.jsx` edits stay in sync with the
+    companion TypeScript snapshot after the languageId change.
 
   - Fix: Godot's GDScript parser can report a symbol's end column one column past the
     line-end convention every other language server follows (closing a node's range from
