@@ -670,8 +670,9 @@ class TestBackreferenceExpansion:
     exists but did not participate in the match (e.g. inside an optional construct that was
     skipped) must expand to the empty string; a reference to a group that the search
     expression does not define at all must fail with an error naming the problem instead of
-    a raw IndexError (observed in practice when an agent reused a replacement template that
-    contained a $!N for a pattern without that group).
+    a raw IndexError. Literal mode has no backreference expansion at all: the replacement is
+    used verbatim (observed in practice when an agent tried to document the $!N convention
+    itself and the literal-mode replacement crashed instead of writing the text).
     """
 
     def test_unmatched_group_expands_to_empty_string(self):
@@ -692,13 +693,12 @@ class TestBackreferenceExpansion:
         with pytest.raises(ValueError, match="does not exist"):
             replacer.replace("id=alpha", r"id=(\w+)", r"[$!2]")
 
-    def test_nonexistent_group_reference_in_literal_mode_raises_clear_error(self):
-        """Literal mode has no groups at all, so any $!N must fail with a clear error instead
-        of a raw IndexError.
+    def test_literal_mode_repl_is_verbatim(self):
+        """Literal mode has no groups at all and no backreference expansion: a replacement
+        containing $!N sequences is written as-is instead of failing with a backreference error.
         """
         replacer = ContentReplacer(mode="literal", allow_multiple_occurrences=False)
-        with pytest.raises(ValueError, match="does not exist"):
-            replacer.replace("literal needle", "literal needle", "$!1 stuff")
+        assert replacer.replace("literal needle", "literal needle", "$!1 stuff $!2") == "$!1 stuff $!2"
 
     def test_multi_file_replacer_expands_unmatched_group_to_empty_string(self):
         replacer = MultiFileContentReplacer(mode="regex")
