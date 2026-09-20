@@ -521,6 +521,13 @@ FIND_SYMBOL_REFERENCES_CASES = [
     FindSymbolCase(
         ls_id=LanguageServerId.LATEX, id="latex_methods_section", symbol_name="Methods", expected_kind="Module", expected_file="main.tex"
     ).to_pytest_param(),
+    FindSymbolCase(
+        ls_id=LanguageServerId.ASTRO,
+        id="astro_props_interface",
+        symbol_name="Props",
+        expected_kind="Interface",
+        expected_file=os.path.join("src", "components", "Card.astro"),
+    ).to_pytest_param(),
 ]
 
 FIND_REFERENCE_CASES = [
@@ -791,6 +798,7 @@ def serena_config():
         LanguageServerId.LEAN4,
         LanguageServerId.MSL,
         LanguageServerId.LATEX,
+        LanguageServerId.ASTRO,
     ]:
         repo_path = get_repo_path(language)
         if repo_path.exists():
