@@ -49,7 +49,13 @@ def show_fatal_exception_safe(e: Exception) -> None:
     """
     # Log the error and print it to stderr
     log.error(f"Fatal exception: {e}", exc_info=e)
-    print(f"Fatal exception: {e}", file=sys.stderr)
+    # stderr may be non-blocking (NonBlockingStderrHandler sets O_NONBLOCK on the shared
+    # open file description); a full pipe then raises instead of blocking. The message is
+    # already in the log above, so swallow the write failure on this last-resort path.
+    try:
+        print(f"Fatal exception: {e}", file=sys.stderr)
+    except (BlockingIOError, OSError):
+        log.debug("Could not print fatal exception to stderr (pipe full or non-blocking)", exc_info=True)
 
     # Don't attempt GUI in headless environments
     if is_headless_environment():

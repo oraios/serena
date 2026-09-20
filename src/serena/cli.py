@@ -43,6 +43,7 @@ from serena.prompt_factory import SerenaPromptFactory
 from serena.tools import ActivateProjectTool
 from serena.util.cli_util import AutoRegisteringGroup
 from serena.util.logging import MemoryLogHandler
+from serena.util.non_blocking_stderr_handler import NonBlockingStderrHandler
 from solidlsp.ls_config import LanguageServerId, LanguageServerIdLike
 from solidlsp.ls_types import SymbolKind
 from solidlsp.util.subprocess_util import subprocess_kwargs
@@ -348,15 +349,15 @@ class TopLevelCommands(AutoRegisteringGroup):
 
         # initialize logging, using INFO level initially (will later be adjusted by SerenaAgent according to the config)
         #   * memory log handler (for use by GUI/Dashboard)
-        #   * stream handler for stderr (for direct console output, which will also be captured by clients like Claude Desktop)
+        #   * non-blocking stderr handler (for direct console output, which will also be captured by clients like
+        #     Claude Desktop; see the handler's docstring for why it must be non-blocking)
         #   * file handler
         # (Note that stdout must never be used for logging, as it is used by the MCP server to communicate with the client.)
         Logger.root.setLevel(logging.INFO)
         formatter = logging.Formatter(SERENA_LOG_FORMAT)
         memory_log_handler = MemoryLogHandler()
         Logger.root.addHandler(memory_log_handler)
-        stderr_handler = logging.StreamHandler(stream=sys.stderr)
-        stderr_handler.formatter = formatter
+        stderr_handler = NonBlockingStderrHandler()
         Logger.root.addHandler(stderr_handler)
         log_path = SerenaPaths().get_next_log_file_path("mcp")
         file_handler = logging.FileHandler(log_path, mode="w")
@@ -486,11 +487,10 @@ class TopLevelCommands(AutoRegisteringGroup):
     ) -> None:
         from serena.project_server import ProjectServer
 
-        # initialize logging
+        # initialize logging (non-blocking stderr handler: see the handler's docstring)
         Logger.root.setLevel(logging.INFO)
         formatter = logging.Formatter(SERENA_LOG_FORMAT)
-        stderr_handler = logging.StreamHandler(stream=sys.stderr)
-        stderr_handler.formatter = formatter
+        stderr_handler = NonBlockingStderrHandler()
         Logger.root.addHandler(stderr_handler)
         log_path = SerenaPaths().get_next_log_file_path("project-server")
         file_handler = logging.FileHandler(log_path, mode="w")
