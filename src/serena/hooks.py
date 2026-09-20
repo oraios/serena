@@ -28,6 +28,7 @@ class HookClient(Enum):
     VSCODE = "vscode"
     CODEX = "codex"
     GROK = "grok"
+    DSH = "dsh"
 
 
 class Hook(ABC):
@@ -388,6 +389,15 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             self._file_path = str(file_path).strip() or None
 
     def is_grep_call(self) -> bool:
+        # DSH is Claude Code-compatible and routes shell work through the native Bash tool.
+        # Gate shell classification on that tool name so an unrelated MCP tool with a
+        # ``command`` parameter is not counted (same concern as #1928 for Claude/CodeBuddy).
+        if self._client is HookClient.DSH:
+            return (
+                self._tool_name == "grep"
+                or "search_for_pattern" in self._tool_name
+                or (self._tool_name == "bash" and self._is_shell_command_call() and self._command_name in self._GREP_SHELL_COMMANDS)
+            )
         if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
             return self._tool_name == "grep" or "search_for_pattern" in self._tool_name
         if self._client == HookClient.GROK:
@@ -398,6 +408,12 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         return "grep" in self._tool_name
 
     def is_read_call(self) -> bool:
+        if self._client is HookClient.DSH:
+            return (
+                self._tool_name == "read"
+                or "read_file" in self._tool_name
+                or (self._tool_name == "bash" and self._is_shell_command_call() and self._command_name in self._READ_SHELL_COMMANDS)
+            )
         if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
             return self._tool_name == "read" or "read_file" in self._tool_name
         if self._client == HookClient.GROK:
@@ -426,7 +442,11 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         if self._file_path is not None:
             return self._is_code_file_path(self._file_path)
 
-        if self._client in (HookClient.CODEX, HookClient.GROK) and self._command_args_str is not None:
+        # Codex/Grok always carry a shell command; DSH only when the call came from native Bash.
+        inspect_shell_paths = self._client in (HookClient.CODEX, HookClient.GROK) or (
+            self._client is HookClient.DSH and self._tool_name == "bash"
+        )
+        if inspect_shell_paths and self._command_args_str is not None:
             return any(self._is_code_file_path(argument) for argument in self._iter_shell_path_arguments())
 
         return True
@@ -594,15 +614,17 @@ class SessionEndCleanupHook(Hook):
 
 
 class PreToolUseAutoApproveSerenaHook(PreToolUseHook):
-    """Pre-tool-use hook that auto-approves Serena tool calls while the client is in a permissive permission mode.
+    """Pre-tool-use hook that auto-approves Serena tool calls for supported clients.
 
     Claude Code's permissive permission modes (``acceptEdits`` for blanket edit approval and
     ``auto`` for hands-off autonomous execution) only apply to its built-in editing tools or
     its auto-mode classifier; Serena's destructive tools (e.g. ``replace_symbol_body`` or
     ``rename_symbol``) would still prompt the user on every call. This hook emits an ``allow``
-    decision for any Serena MCP tool call whenever the client reports one of these modes as
-    the active permission mode, so blanket approvals also cover Serena's tools. In all other
-    situations it stays silent, preserving the default approval flow.
+    decision for any Serena MCP tool call whenever the client reports one of these modes as the
+    active permission mode, so blanket approvals also cover Serena's tools. The DSH bridge does
+    not use Claude's ``allow`` decision for pre-approval, so this hook intentionally stays silent
+    for DSH. In all other situations it stays silent, preserving the default approval flow.
+
 
     ``bypassPermissions`` and ``dontAsk`` are deliberately excluded. ``bypassPermissions``
     already approves everything before the hook would matter, so silence here is harmless.
@@ -620,6 +642,9 @@ class PreToolUseAutoApproveSerenaHook(PreToolUseHook):
         return self._permission_mode in self._AUTO_APPROVE_MODES
 
     def execute(self) -> None:
+        # DSH's Claude-compatible bridge does not implement allow as pre-approval.
+        if self._client == HookClient.DSH:
+            return
         # only emit a decision when both the tool and the mode match; stay silent otherwise
         if not self.is_serena_symbolic_tool() or not self.is_auto_approve_mode():
             return
@@ -673,8 +698,8 @@ class HookCommands(AutoRegisteringGroup):
     @staticmethod
     @click.command(
         "auto-approve",
-        help="Set this as hook at PreToolUse to auto-approve Serena tool calls while the client is in a "
-        "permissive permission mode (acceptEdits or auto, Claude Code).",
+        help="Set this as a Claude Code hook at PreToolUse to auto-approve Serena tool calls while the client is in a "
+        "permissive permission mode (acceptEdits or auto). DSH does not support this decision.",
     )
     @_client_option
     def auto_approve(client: str) -> None:
