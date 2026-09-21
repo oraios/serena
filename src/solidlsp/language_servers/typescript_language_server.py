@@ -516,20 +516,25 @@ class TypeScriptLanguageServer(SolidLanguageServer):
     def _find_representative_source_file(self, directory: str) -> str | None:
         """Find a TypeScript file suitable for triggering project loading.
 
-        Prefers a file adjacent to tsconfig.json (indicating the project root),
-        then falls back to the first .ts/.tsx file found.
+        Prefers a file under a `src` subdirectory adjacent to tsconfig.json (the
+        conventional source root), so a root-level tool config that tsconfig excludes
+        (vitest.config.ts, jest.config.ts, etc.) is not picked over the project's real
+        source tree. Falls back to a file directly adjacent to tsconfig.json, then to
+        the first .ts/.tsx file found anywhere in the directory.
         """
         for root, dirs, files in os.walk(directory):
             dirs[:] = [d for d in dirs if not self.is_ignored_dirname(d)]
             if "tsconfig.json" in files:
+                src_dir = os.path.join(root, "src")
+                if os.path.isdir(src_dir):
+                    for src_root, src_dirs, src_files in os.walk(src_dir):
+                        src_dirs[:] = [d for d in src_dirs if not self.is_ignored_dirname(d)]
+                        for f in src_files:
+                            if f.endswith((".ts", ".tsx")) and not f.endswith(".d.ts"):
+                                return os.path.join(src_root, f)
                 for f in files:
                     if f.endswith((".ts", ".tsx")) and not f.endswith(".d.ts"):
                         return os.path.join(root, f)
-                src_dir = os.path.join(root, "src")
-                if os.path.isdir(src_dir):
-                    for f in os.listdir(src_dir):
-                        if f.endswith((".ts", ".tsx")) and not f.endswith(".d.ts"):
-                            return os.path.join(src_dir, f)
 
         for root, dirs, files in os.walk(directory):
             dirs[:] = [d for d in dirs if not self.is_ignored_dirname(d)]
