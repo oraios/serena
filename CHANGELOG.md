@@ -104,6 +104,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     thread (#2038)
 
 * Language Servers:
+  - Fix: Dart analysis server no longer receives rootUri/rootPath, which added the monorepo root as an extra analysis root and could pin a CPU core at idle (#2045)
   - Fix: The C# language server opened every `.csproj` found anywhere under the repository root,
     without consulting the project's ignore settings. On repositories that vendor third-party or
     sample C# projects, this loads projects the server cannot restore on every start, and their
