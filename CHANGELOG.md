@@ -55,6 +55,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     including its project configuration, are left untouched (#2029)
 
 * Tools:
+  - Fix: `$!N` backreferences in regex-mode replacements expanded to the literal template text
+    (e.g. `EA_INPUT$!1(...)`) when the referenced group existed but did not participate in the
+    match (e.g. a group inside an optional construct that was skipped); unmatched groups now expand
+    to the empty string, and a reference to a group that the search expression does not define
+    raises a clear error instead of a raw `IndexError`. In literal mode, the replacement is now
+    used verbatim (`$!N` sequences need no escaping) instead of failing with a backreference error
   - Fix: the file-editing tools saved the edited file with `open(path, "w")`, which truncates it
     before the new content is complete, so a crash, an OOM kill or a full disk partway through the
     write could leave a source file empty or half-written. Saves now go through the same atomic
