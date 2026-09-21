@@ -84,13 +84,13 @@ prompts:
     Read a specific symbol's body           find_symbol (include_body=true)
     Find a symbol by name across the repo   find_symbol
     Find references / callers               find_referencing_symbols
-    Find declarations / implementations     find_declaration / _find_implementations
+    Find declarations / implementations     find_declaration / find_implementations
     Edit a symbol's body                    replace_symbol_body
-    Insert near a symbol                    insert_before_symbol / _insert_after_symbol
+    Insert near a symbol                    insert_before_symbol / insert_after_symbol
     Pattern replace inside a file           replace_content
-    Rename / move / delete a symbol         rename / _move / _safe_delete
-    Inline a symbol                         inline_symbol
-    Type hierarchy                          type_hierarchy
+    Rename / move / delete a symbol         rename_symbol / jet_brains_move / safe_delete_symbol
+    Inline a symbol (JetBrains backend)     jet_brains_inline_symbol
+    Type hierarchy (JetBrains backend)      jet_brains_type_hierarchy
 
     Built-in Read/Edit/Glob/Grep are permitted on code files ONLY when:
     - Serena has been tried on the target and failed, OR
