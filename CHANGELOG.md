@@ -87,7 +87,6 @@ Status of the `main` branch. Changes prior to the next official version change w
     versions punish with SIGTRAP, so the tray-manager process died within seconds of every agent
     start and the tray icon never became usable. Menu refreshes are now marshalled onto the main
     thread (#2038)
-
 * Language Servers:
   - Fix: The C# language server opened every `.csproj` found anywhere under the repository root,
     without consulting the project's ignore settings. On repositories that vendor third-party or
@@ -106,6 +105,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     version changed
   - Fix: A language server's cache directory was determined by the language_id rather than 
     the language server identifier's key. The two identifiers coincided in most cases.
+  - Add DSH (DeepSeek Harness) as a Claude-compatible `serena-hooks` client, including activate, remind,
+    cleanup and auto-approve commands (#1869)
   - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
     preserves explicit user settings across initialization and configuration requests (#1989)
     VTS initialization options now override defaults per top-level key rather than replacing the
@@ -129,6 +130,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     already started (#1949)
   - Add: Installed Python packages can provide generic external language-server adapters through the
     `serena.language_servers` entry-point group for explicit use in `project.yml`
+  - Add DSH (DeepSeek Harness) as a Claude-compatible `serena-hooks` client, including activate, remind,
+    cleanup and auto-approve commands (#1869)
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: `DartLanguageServer._start_server` discarded both `$/analyzerStatus` and
     `experimental/serverStatus`, the two notifications the Dart analysis server sends to report
