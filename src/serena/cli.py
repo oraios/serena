@@ -43,7 +43,7 @@ from serena.prompt_factory import SerenaPromptFactory
 from serena.tools import ActivateProjectTool
 from serena.util.cli_util import AutoRegisteringGroup
 from serena.util.logging import MemoryLogHandler
-from solidlsp.ls_config import LanguageServerId, LanguageServerIdLike
+from solidlsp.ls_config import LanguageServerId, LanguageServerIdLike, LanguageServerRegistry
 from solidlsp.ls_types import SymbolKind
 from solidlsp.util.subprocess_util import subprocess_kwargs
 
@@ -720,14 +720,20 @@ class ProjectCommands(AutoRegisteringGroup):
         if os.path.exists(yml_path):
             raise FileExistsError(f"Project file {yml_path} already exists.")
 
-        languages: list[LanguageServerId] = []
+        languages: list[LanguageServerIdLike] = []
         if language:
+            registry = LanguageServerRegistry.get_instance()
             for lang in language:
+                ls_key = lang.lower()
                 try:
-                    languages.append(LanguageServerId(lang.lower()))
+                    languages.append(LanguageServerId(ls_key))
                 except ValueError:
-                    all_langs = [l.value for l in LanguageServerId]
-                    raise ValueError(f"Unknown language '{lang}'. Supported: {all_langs}")
+                    # fall back to the registry for externally-registered adapters
+                    if ls_key in registry.get_keys():
+                        languages.append(registry.resolve(ls_key))
+                    else:
+                        all_langs = [l.value for l in LanguageServerId]
+                        raise ValueError(f"Unknown language '{lang}'. Supported: {all_langs}")
 
         generated_conf = ProjectConfig.autogenerate(
             project_root=project_path,

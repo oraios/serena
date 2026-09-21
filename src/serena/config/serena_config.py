@@ -369,11 +369,24 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         log.info("Determining suitable language servers for the project")
 
         # determine language servers to be considered and their priorities
-        ls_priorities = {}
+        # built-in language servers — priorities are user-configurable via serena_config.ls_priorities
+        ls_priorities: dict[LanguageServerIdLike, int] = {}
         for language in LanguageServerId:
             priority = serena_config.get_ls_priority(language)
             if priority > 0:
                 ls_priorities[language] = priority
+        # externally-registered language servers (via solidlsp.language_server_registration entry points)
+        # — always include so auto-detection picks them up for matching projects; priority is fixed
+        # (no per-user override mechanism exists for external LSes).
+        registry = LanguageServerRegistry.get_instance()
+        builtin_keys = {l.value for l in LanguageServerId}
+        for ls_key in registry.get_keys():
+            if ls_key in builtin_keys:
+                continue
+            ls = registry.resolve(ls_key)
+            priority = ls.get_priority()
+            if priority > 0:
+                ls_priorities[ls] = priority
 
         log.debug("Language server priorities: %s", ls_priorities)
         ls_composition = compute_language_server_support_composition(project_root, list(ls_priorities.keys()))
