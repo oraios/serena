@@ -43,7 +43,7 @@ from serena.prompt_factory import SerenaPromptFactory
 from serena.tools import ActivateProjectTool
 from serena.util.cli_util import AutoRegisteringGroup
 from serena.util.logging import MemoryLogHandler
-from solidlsp.ls_config import LanguageServerId, LanguageServerIdLike, LanguageServerRegistry
+from solidlsp.ls_config import LanguageServerIdLike, LanguageServerRegistry
 from solidlsp.ls_types import SymbolKind
 from solidlsp.util.subprocess_util import subprocess_kwargs
 
@@ -726,14 +726,9 @@ class ProjectCommands(AutoRegisteringGroup):
             for lang in language:
                 ls_key = lang.lower()
                 try:
-                    languages.append(LanguageServerId(ls_key))
+                    languages.append(registry.resolve(ls_key))
                 except ValueError:
-                    # fall back to the registry for externally-registered adapters
-                    if ls_key in registry.get_keys():
-                        languages.append(registry.resolve(ls_key))
-                    else:
-                        all_langs = [l.value for l in LanguageServerId]
-                        raise ValueError(f"Unknown language '{lang}'. Supported: {all_langs}")
+                    raise ValueError(f"Unknown language '{lang}'. Supported: {registry.get_keys()}")
 
         generated_conf = ProjectConfig.autogenerate(
             project_root=project_path,

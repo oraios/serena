@@ -10,7 +10,7 @@ import logging
 import os
 import re
 import threading
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cache
@@ -1065,6 +1065,14 @@ class LanguageServerRegistry:
         if key in self._registered_language_servers:
             return self._registered_language_servers[key]
         raise ValueError(f"Unknown language server key: '{key}'; Valid keys: {self.get_keys()}")
+
+    def iter_registered_ls_ids(self) -> Iterator[LanguageServerIdLike]:
+        """
+        Iterate over all registered language servers (built-in + externally-registered via
+        entry points). Order follows ``get_keys()`` (alphabetical).
+        """
+        for key in self.get_keys():
+            yield self._registered_language_servers[key]
 
     def register(self, ls_id: LanguageServerIdLike, allow_override: bool = False) -> None:
         """

@@ -369,24 +369,15 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         log.info("Determining suitable language servers for the project")
 
         # determine language servers to be considered and their priorities
-        # built-in language servers — priorities are user-configurable via serena_config.ls_priorities
+        # the registry is the single source of truth — it includes both built-in enum members
+        # and externally-registered adapters (via solidlsp.language_server_registration entry points).
+        # priorities are user-configurable per-key via serena_config.ls_priorities (works for both kinds).
         ls_priorities: dict[LanguageServerIdLike, int] = {}
-        for language in LanguageServerId:
-            priority = serena_config.get_ls_priority(language)
-            if priority > 0:
-                ls_priorities[language] = priority
-        # externally-registered language servers (via solidlsp.language_server_registration entry points)
-        # — always include so auto-detection picks them up for matching projects; priority is fixed
-        # (no per-user override mechanism exists for external LSes).
         registry = LanguageServerRegistry.get_instance()
-        builtin_keys = {l.value for l in LanguageServerId}
-        for ls_key in registry.get_keys():
-            if ls_key in builtin_keys:
-                continue
-            ls = registry.resolve(ls_key)
-            priority = ls.get_priority()
+        for ls_id in registry.iter_registered_ls_ids():
+            priority = serena_config.get_ls_priority(ls_id)
             if priority > 0:
-                ls_priorities[ls] = priority
+                ls_priorities[ls_id] = priority
 
         log.debug("Language server priorities: %s", ls_priorities)
         ls_composition = compute_language_server_support_composition(project_root, list(ls_priorities.keys()))
@@ -1578,7 +1569,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
                 log.info(f"Using language backend from global configuration: {language_backend.name}")
         return language_backend
 
-    def get_ls_priority(self, ls_id: LanguageServerId) -> int:
+    def get_ls_priority(self, ls_id: LanguageServerIdLike) -> int:
         """
         Gets the priority value associated with a language server
 
@@ -1587,9 +1578,9 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         """
         if self.ls_priorities is not None:
             try:
-                configured_value = self.ls_priorities.get(ls_id.value)
+                configured_value = self.ls_priorities.get(ls_id.get_key())
                 if configured_value is not None:
                     return int(configured_value)
             except Exception as e:
-                log.error("Error reading language priority for %s: %s. Using default priority.", ls_id.value, e)
+                log.error("Error reading language priority for %s: %s. Using default priority.", ls_id.get_key(), e)
         return ls_id.get_priority()
