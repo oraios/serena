@@ -23,6 +23,7 @@ from solidlsp.ls import (
     SolidLanguageServer,
 )
 from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
+from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
@@ -47,8 +48,10 @@ class AstroLanguageServer(SolidLanguageServer):
             self._ts_settings = ts_settings
 
         def _get_or_install_core_dependency(self) -> str:
-            assert shutil.which("node") is not None, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-            assert shutil.which("npm") is not None, "npm is not installed or isn't in PATH. Please install npm and try again."
+            if shutil.which("node") is None:
+                raise SolidLSPException("node is not installed or isn't in PATH. Please install NodeJS and try again.")
+            if shutil.which("npm") is None:
+                raise SolidLSPException("npm is not installed or isn't in PATH. Please install npm and try again.")
 
             package_version = self._custom_settings.get("astro_language_server_version", "2.17.0")
             typescript_version = self._custom_settings.get("typescript_version", self._ts_settings.get("typescript_version", "5.8.2"))
@@ -127,9 +130,10 @@ class AstroLanguageServer(SolidLanguageServer):
             return workspace_tsdk
         install_dir = self._get_install_dir()
         tsdk_candidate = os.path.join(install_dir, "node_modules", "typescript", "lib")
-        assert os.path.isdir(tsdk_candidate), (
-            f"TypeScript SDK not found at expected path: {tsdk_candidate}. Installation via DependencyProvider failed."
-        )
+        if not os.path.isdir(tsdk_candidate):
+            raise FileNotFoundError(
+                f"TypeScript SDK not found at expected path: {tsdk_candidate}. Installation via DependencyProvider failed."
+            )
         return tsdk_candidate
 
     @override
@@ -252,8 +256,11 @@ class AstroLanguageServer(SolidLanguageServer):
         init_params = self._create_initialize_params()
         init_response = self.server.send.initialize(init_params)
 
-        assert "documentSymbolProvider" in init_response["capabilities"], "Astro LSP did not advertise documentSymbolProvider"
-        assert "definitionProvider" in init_response["capabilities"], "Astro LSP did not advertise definitionProvider"
+        capabilities = init_response.get("capabilities", {})
+        if "documentSymbolProvider" not in capabilities:
+            raise SolidLSPException("Astro LSP did not advertise documentSymbolProvider")
+        if "definitionProvider" not in capabilities:
+            raise SolidLSPException("Astro LSP did not advertise definitionProvider")
 
         self.server.notify.initialized({})
 
