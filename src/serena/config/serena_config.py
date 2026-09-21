@@ -413,7 +413,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
             if len(other_language_pairs) > 0 and interactive:
                 print(
                     "Detected and enabled main language server '%s' (%.2f%% of source files)."
-                    % (top_language_pair[0].value, top_language_pair[1])
+                    % (top_language_pair[0].get_key(), top_language_pair[1])
                 )
                 print(f"Additionally detected {len(other_language_pairs)} other applicable language servers.\n")
                 print("Note: Enable only servers for languages you need symbolic retrieval/editing capabilities for.")
@@ -421,7 +421,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
                 print("      system-level installations/configuration (see Serena documentation).")
                 print("\nWhich additional language servers do you want to enable?")
                 for ls_id, perc in other_language_pairs:
-                    enable = ask_yes_no("Enable %s (%.2f%% of source files)?" % (ls_id.value, perc), default=False)
+                    enable = ask_yes_no("Enable %s (%.2f%% of source files)?" % (ls_id.get_key(), perc), default=False)
                     if enable:
                         language_servers_to_use.append(ls_id)
                 print()
@@ -435,7 +435,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         project_root: str | Path,
         serena_config: "SerenaConfig",
         project_name: str | None = None,
-        languages: list[LanguageServerId] | None = None,
+        languages: list[LanguageServerIdLike] | None = None,
         save_to_disk: bool = True,
         interactive: bool = False,
         asynchronous: bool = False,
@@ -474,7 +474,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
                     )
                     languages_to_use = [l.get_key() for l in determined_languages]
             else:
-                languages_to_use = [lang.value for lang in languages]
+                languages_to_use = [lang.get_key() for lang in languages]
             config_with_comments, _ = cls._load_yaml_dict(PROJECT_TEMPLATE_FILE)
             config_with_comments["project_name"] = project_name
             config_with_comments["language_servers"] = languages_to_use
