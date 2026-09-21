@@ -18,6 +18,7 @@ from mcp.server.mcpserver.server import Context
 from mcp.server.mcpserver.server import MCPServer as FastMCP
 from mcp.server.mcpserver.tools.base import Tool as FastMCPTool
 from mcp.types import ToolAnnotations
+from pydantic import AnyHttpUrl
 from sensai.util import logging
 
 from serena import __version__ as serena_version_str
@@ -458,9 +459,9 @@ class SerenaMCPFactory:
             # Tokens here are application-supplied static secrets; the URLs are placeholders
             # so clients that only send Authorization: Bearer keep working.
             auth_settings = AuthSettings(
-                issuer_url="http://127.0.0.1/",
+                issuer_url=AnyHttpUrl("http://127.0.0.1/"),
                 # Placeholder resource URL: tokens are static app secrets, not OAuth issues.
-                resource_server_url="http://127.0.0.1/mcp",
+                resource_server_url=AnyHttpUrl("http://127.0.0.1/mcp"),
                 required_scopes=["read"],
                 # TokenVerifier validates the token itself; there is no resource audience.
                 validate_token_resource=False,
