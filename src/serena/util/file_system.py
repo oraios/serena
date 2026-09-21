@@ -30,22 +30,21 @@ def write_file_atomic(path: str, content: str, *, encoding: str, newline: str | 
     :param content: the text content to write
     :param encoding: the encoding to use for the write
     :param newline: passed through to the underlying ``open()`` call to control newline translation.
-        If ``None`` (native line endings) and the file exists, the file's dominant line ending is
-        preserved instead of the platform default: without this, editing a CRLF file on Linux would
-        silently rewrite its entire line endings to LF. Content lines that already contain ``\r\n``
-        are first normalized to ``\n`` in memory, so the translation cannot turn them into ``\r\r\n``.
+        If ``None`` (native line endings), any ``\n`` in ``content`` is translated to ``os.linesep``.
+        When the target translation would turn content lines already ending in ``\r\n`` (e.g. returned
+        untranslated by a language server or a plugin) into ``\r\r\n``, they are first normalized to
+        ``\n`` in memory, so the translation produces the intended line ending.
     """
     # ``open(path, "w")`` follows symlinks and writes through to the target, whereas replacing the
     # link path itself would swap the link out for a regular file and leave its target holding the
     # old content. Resolving first keeps this a drop-in replacement, and puts the temporary file in
     # the destination's real directory, which is where it has to be for the rename to be atomic.
     path = os.path.realpath(path)
-    if newline is None:
-        newline = _existing_file_dominant_newline(path)
-    # normalize embedded CRLF before newline translation; without this, a caller passing content
-    # lines that already end in "\r\n" (e.g. retrieved from a language server or a plugin without
-    # translation) together with newline="\r\n" would produce "\r\r\n" on disk
-    content = content.replace("\r\n", "\n")
+    # normalize content lines that already end in CRLF before newline translation; without this, the
+    # translation turns them into "\r\r\n" on disk. In all other modes the translation either does not
+    # run or leaves the "\r" untouched, so the content is passed through verbatim, as before.
+    if newline == "\r\n" or (newline is None and os.linesep == "\r\n"):
+        content = content.replace("\r\n", "\n")
     target_dir = os.path.dirname(path) or "."
     try:
         existing_mode: int | None = stat.S_IMODE(os.stat(path).st_mode)
@@ -67,29 +66,6 @@ def write_file_atomic(path: str, content: str, *, encoding: str, newline: str | 
         except OSError:
             pass
         raise
-
-
-def _existing_file_dominant_newline(path: str) -> str | None:
-    r"""
-    Determines the dominant line ending of the existing file at ``path``, so that a native-mode
-    rewrite preserves it instead of applying the platform default.
-
-    :param path: the (real) path of the file to inspect; the file is assumed to exist
-    :return: ``"\r\n"`` if the file is CRLF-dominant, ``"\n"`` if it is LF-dominant, and ``None``
-        for files without a dominant line ending (deferring to the platform default)
-    """
-    try:
-        with open(path, "rb") as f:
-            data = f.read()
-    except OSError:
-        return None
-    crlf = data.count(b"\r\n")
-    lf_only = data.count(b"\n") - crlf
-    if crlf > lf_only:
-        return "\r\n"
-    if lf_only > 0:
-        return "\n"
-    return None
 
 
 def _new_file_mode() -> int:
