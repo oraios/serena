@@ -269,7 +269,7 @@ This ensures backward compatibility: existing projects that already have a `.ser
 Most users will not need to adjust these settings.
 :::
 
-Under the key `ls_specific_settings` in `serena_config.yml`, you can you pass global per-language, 
+Under the key `ls_specific_settings` in `serena_config.yml`, you can pass global per-language, 
 language server-specific configuration. 
 
 You can use the same key in the project configuration files (`project.yml`
