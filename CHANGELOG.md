@@ -45,12 +45,14 @@ Status of the `main` branch. Changes prior to the next official version change w
     including its project configuration, are left untouched (#2029)
 
 * Tools:
-  - Fix: native line endings (`line_ending: native`) no longer rewrite the line endings of an
-    edited file to the platform default: the file's dominant line ending is preserved, so editing
-    a CRLF source file on Linux no longer converts it (in full or in mixed form) to LF. Content
-    lines that already end in CRLF are normalized before translation, so a write with
-    `line_ending: crlf` can no longer produce `CRCRLF` line breaks. `create_text_file` now writes
-    through the same atomic temp-file helper the editing tools use (#1958)
+  - Fix: `create_text_file` wrote with a plain `Path.write_text`, which truncates the file before
+    the new content is complete, so a crash, an OOM kill or a full disk partway through the write
+    could leave the target file empty or half-written (the editing tools were already fixed to
+    write atomically). It now goes through the same atomic temp-file helper (#1958)
+  - Fix: a write with `line_ending: crlf` could produce `CRCRLF` line breaks when the content
+    lines already ended in CRLF (e.g. retrieved untranslated from a language server or a plugin):
+    the translation turned the `\r\n` into `\r\r\n`. Such content lines are now normalized before
+    the translation, which then produces the intended line ending (#1958)
   - Fix: the file-editing tools saved the edited file with `open(path, "w")`, which truncates it
     before the new content is complete, so a crash, an OOM kill or a full disk partway through the
     write could leave a source file empty or half-written. Saves now go through the same atomic
