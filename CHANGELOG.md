@@ -79,6 +79,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     Serena's own tools to close the gap (#1852)
 
 * Dashboard:
+  - Fix: DashboardManager's unsupported-mode fallback warning logged the literal text
+    `{fallback_mode.value}` because only the first string fragment was an f-string
   - Fix: On macOS, the tray manager refreshed the tray menu straight from the Flask request handlers
     for `/register`, `/update_project` and `/unregister` and from the alive-check thread. That reaches
     `NSStatusItem.setMenu_()` off the main thread, which AppKit forbids and which recent macOS
