@@ -52,6 +52,18 @@ Status of the `main` branch. Changes prior to the next official version change w
     including its project configuration, are left untouched (#2029)
 
 * Tools:
+  - Fix: `find_file` documented a `skip_ignored_files` parameter that did not exist; the parameter is now
+    implemented and defaults to `False` (previous hardcoded behaviour)
+  - Fix: `jetbrains_rename` tool docstring claimed `rename_in_comments` / `rename_in_text_occurrences`
+    default to `True`; the code defaults are `False`
+  - Fix: the Claude Code system-prompt override mapped tasks to tool names that do not exist
+    (`rename`, `_safe_delete`, `inline_symbol`, `type_hierarchy`); the mapping now uses the actual
+    tool names (`rename_symbol`, `safe_delete_symbol`, and JetBrains-only names where applicable)
+  - Fix: `QueryProjectTool` enforced read-only tools and registered-project existence via `assert`,
+    which is stripped under `python -O`; these checks now raise `ValueError`
+  - Fix: `create_text_file` enforced project path containment for new files via `assert`, which is
+    removed under `python -O`; validation now always goes through `Project.validate_relative_path`
+    plus an explicit `ValueError`
   - Fix: the file-editing tools saved the edited file with `open(path, "w")`, which truncates it
     before the new content is complete, so a crash, an OOM kill or a full disk partway through the
     write could leave a source file empty or half-written. Saves now go through the same atomic
