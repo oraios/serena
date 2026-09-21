@@ -60,6 +60,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     replaced by a regular file (#1958)
 
 * Memories:
+  - Fix: `move_memory` / rename only checked write access on the destination name, so a tool-context
+    rename could relocate a read-only memory; both source and destination are now checked
   - Fix: `save_memory`/`edit_memory` wrote directly to the memory file with `open(path, "w")`, which
     truncates it before the new content is written; a crash, OOM kill, or full disk partway through
     the write could destroy the previous, valid content instead of just losing the update. Both now

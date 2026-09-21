@@ -330,6 +330,7 @@ class MemoryManager:
         new_name = self._sanitize_name(new_name)
         self._check_not_ignored(old_name)
         self._check_not_ignored(new_name)
+        self._check_write_access(old_name, is_tool_context)
         self._check_write_access(new_name, is_tool_context)
 
         old_path = self.get_memory_file_path(old_name)
