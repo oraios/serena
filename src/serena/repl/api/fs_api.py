@@ -211,11 +211,10 @@ class FsApi(FacadeApi):
         abs_path = (project_root / relative_path).resolve()
         will_overwrite_existing = abs_path.exists()
 
-        # validate the destination path
-        if will_overwrite_existing:
-            project.validate_relative_path(relative_path)
-        else:
-            assert abs_path.is_relative_to(project_root), f"Cannot create file outside of the project directory, got {relative_path=}"
+        # validate the destination path (always; never rely on assert for sandboxing — stripped under python -O)
+        project.validate_relative_path(relative_path)
+        if not abs_path.is_relative_to(project_root.resolve()):
+            raise ValueError(f"Cannot create file outside of the project directory, got {relative_path=}")
 
         # write the file
         abs_path.parent.mkdir(parents=True, exist_ok=True)
@@ -253,18 +252,19 @@ class FsApi(FacadeApi):
         return DirectoryListing(dirs, files, DirectoryListingRenderer(self._agent, max_answer_chars))
 
     @facade_method(corresponding_tool=FindFileTool)
-    def find_file(self, file_mask: str, relative_path: str) -> list[str]:
+    def find_file(self, file_mask: str, relative_path: str, skip_ignored_files: bool = False) -> list[str]:
         """
         Finds files matching the given file mask within the given relative path.
 
         :param file_mask: the filename or file mask (using the wildcards * or ?) to search for
         :param relative_path: the relative path to the directory to search in; pass "." to scan the project root
+        :param skip_ignored_files: whether to skip ignored files/directories
         :return: the relative paths of the matching files
         """
         project = self._get_project()
         project.validate_relative_path(relative_path)
 
-        is_ignored_path_fn = project.get_is_ignored_path_fn(relative_path, skip_ignored_paths=False)
+        is_ignored_path_fn = project.get_is_ignored_path_fn(relative_path, skip_ignored_paths=skip_ignored_files)
 
         # find the files by ignoring everything that doesn't match
         def is_ignored_file(abs_path: str) -> bool:
