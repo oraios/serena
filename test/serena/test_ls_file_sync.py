@@ -212,7 +212,7 @@ def test_new_csharp_file_is_folded_into_compilation(tmp_path):
 
     with agent_for_project_context(LanguageServerId.CSHARP, str(repo_root)) as agent:
         project = agent.get_active_project_or_raise()
-        ls = next(iter(project.language_server_manager.iter_language_servers()))
+        ls = next(iter(agent.get_language_server_manager_or_raise().iter_language_servers()))
 
         new_file_abs.write_text(
             "using TestProject.Models;\n\n"
