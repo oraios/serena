@@ -212,7 +212,9 @@ class Project(ToStringMixin):
             )
         return self.__ignored_patterns
 
-    def _is_ignored_relative_path(self, relative_path: str | Path, ignore_non_source_files: bool = True) -> bool:
+    def _is_ignored_relative_path(
+        self, relative_path: str | Path, ignore_non_source_files: bool = True, is_file: bool | None = None
+    ) -> bool:
         """
         Determine whether a path should be ignored based on file type and ignore patterns.
         Returns False for non-existent paths since they cannot be matched by ignore patterns.
@@ -220,6 +222,7 @@ class Project(ToStringMixin):
         :param relative_path: Relative path to check
         :param ignore_non_source_files: whether files that are not source files (according to the file masks
             determined by the project's programming language) shall be ignored
+        :param is_file: whether the path exists and is a file, for callers that already know
 
         :return: whether the path should be ignored
         """
@@ -230,13 +233,16 @@ class Project(ToStringMixin):
             return False
 
         abs_path = os.path.join(self.project_root, relative_path)
-        if not os.path.exists(abs_path):
-            log.debug(f"Path {abs_path} does not exist, skipping ignore check")
-            return False
+        if is_file is None:
+            if not os.path.exists(abs_path):
+                log.debug(f"Path {abs_path} does not exist, skipping ignore check")
+                return False
 
         # check code file restriction (depending on backend)
         if ignore_non_source_files:
-            if os.path.isfile(abs_path):
+            if is_file is None:
+                is_file = os.path.isfile(abs_path)
+            if is_file:
                 # non-source files are ignored
                 if not self.language_backend.is_source_file(abs_path, self):
                     return True
@@ -248,15 +254,18 @@ class Project(ToStringMixin):
         if len(rel_path.parts) > 0 and ".git" in rel_path.parts:
             return True
 
-        return match_path(str(relative_path), self._ignore_spec, root_path=self.project_root)
+        is_dir = None if is_file is None else not is_file
+        return match_path(str(relative_path), self._ignore_spec, root_path=self.project_root, is_dir=is_dir)
 
-    def is_ignored_path(self, path: str | Path, ignore_non_source_files: bool = False) -> bool:
+    def is_ignored_path(self, path: str | Path, ignore_non_source_files: bool = False, is_file: bool | None = None) -> bool:
         """
         Checks whether the given path is ignored
 
         :param path: the path to check, can be absolute or relative
         :param ignore_non_source_files: whether to ignore files that are not source files
             (according to the file masks determined by the project's programming language)
+        :param is_file: whether the path exists and is a file, for callers that already know;
+            see :meth:`_is_ignored_relative_path`. `None` determines it from the filesystem.
         """
         path = Path(path)
         if path.is_absolute():
@@ -270,7 +279,7 @@ class Project(ToStringMixin):
         else:
             relative_path = path
 
-        return self._is_ignored_relative_path(str(relative_path), ignore_non_source_files=ignore_non_source_files)
+        return self._is_ignored_relative_path(str(relative_path), ignore_non_source_files=ignore_non_source_files, is_file=is_file)
 
     def get_is_ignored_path_fn(self, base_path: str, skip_ignored_paths: bool) -> Callable[[str], bool]:
         """
@@ -350,15 +359,17 @@ class Project(ToStringMixin):
         if os.path.isfile(start_path):
             return [relative_path]
         else:
+            # os.walk hands back directories and files separately, so `is_file` is already known here and
+            # does not have to be re-derived from the filesystem for every one of them.
             for root, dirs, files in os.walk(start_path, followlinks=True):
                 # prevent recursion into ignored directories
-                dirs[:] = [d for d in dirs if not self.is_ignored_path(os.path.join(root, d))]
+                dirs[:] = [d for d in dirs if not self.is_ignored_path(os.path.join(root, d), is_file=False)]
 
                 # collect non-ignored files
                 for file in files:
                     abs_file_path = os.path.join(root, file)
                     try:
-                        if not self.is_ignored_path(abs_file_path, ignore_non_source_files=True):
+                        if not self.is_ignored_path(abs_file_path, ignore_non_source_files=True, is_file=True):
                             try:
                                 rel_file_path = os.path.relpath(abs_file_path, start=self.project_root)
                             except Exception:

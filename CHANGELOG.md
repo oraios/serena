@@ -19,7 +19,7 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add `auth_secret` to `serena_config.yml` for authenticating communication between Serena components
     and services. When missing, null, or empty, a random UUID is generated and persisted; existing values
     are preserved
-  - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
+  - Fix: MCP server now reports Serena's version instead of the installed MCP SDK version (#1889)
   - Fix: importing Serena no longer loads the `anthropic` package unless the Anthropic token counter is
     actually used; the unconditional import added seconds to CLI/MCP startup on some machines (#2012)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
@@ -34,6 +34,13 @@ Status of the `main` branch. Changes prior to the next official version change w
     the project's root path, so a `<project root>/**` entry matches only paths below the root and therefore
     trusts no project at all; the template now shows the bare root form alongside the parent-directory
     glob (#2001)
+  - Session IDs are now created and tracked internally by Serena instead of being derived from the
+    MCP session, since the MCP SDK v2 no longer provides session identifiers and client session usage
+    was inconsistent anyway. Tools that need a session id (e.g. `activate_project`, the REPL tool) now
+    take it as an explicit parameter, obtained from `initial_instructions`
+  - Performance: `Project.gather_source_files` transitively re-derived from the filesystem, for every path, 
+    whether that path was a file or a directory; related methods/functions now receive the information
+    as a parameter where it is already known (#2077)
 
 * CLI:
   - Fix: `project health-check` reported `Health check passed - All tools working correctly` and
@@ -53,6 +60,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     replaced by a regular file (#1958)
 
 * Memories:
+  - Fix: `move_memory` / rename only checked write access on the destination name, so a tool-context
+    rename could relocate a read-only memory; both source and destination are now checked
   - Fix: `save_memory`/`edit_memory` wrote directly to the memory file with `open(path, "w")`, which
     truncates it before the new content is written; a crash, OOM kill, or full disk partway through
     the write could destroy the previous, valid content instead of just losing the update. Both now
@@ -85,6 +94,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     sample C# projects, this loads projects the server cannot restore on every start, and their
     restore failures bury the diagnostics of the projects the user actually works on. Project
     discovery now skips `.csproj` files matched by the project's ignore patterns
+  - Kotlin: update the managed Kotlin LSP from `262.9593.0` to `263.4702.0`; the `262.9593.0` build
+    has expired and fails on startup with "This build of intellij-server has expired" (#2008)
   - Fix: Godot's GDScript parser can report a symbol's end column one column past the
     line-end convention every other language server follows (closing a node's range from
     the next lookahead token instead of the last consumed one, when that lookahead is a
@@ -107,6 +118,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     its global state under ``~/Library``; Serena now gives the child process an isolated home-directory view
     via ``solidity_state_dir`` without changing the parent process's ``HOME`` (#1817)
   - Add Fatou support as an alternative Julia language server (`julia_fatou`)
+  - Fix: C# properties/fields whose type contains a literal `(`, e.g. a tuple type like
+    `(int X, string Y)`, had their name corrupted to include a trailing `:` because the
+    parenthesis in the type was mistaken for a method's parameter list; `find_symbol` on
+    the real name then returned nothing
   - Fix: Nextflow's `_flush_deferred_workspace_scan` marked the workspace scan flushed even when both
     of its `completion` probes failed, permanently skipping the flush (and silencing retries) for the
     rest of the session (#1871)
@@ -152,6 +167,7 @@ CLI:
 
 * Dependencies:
   - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
+  - Upgrade the `mcp` SDK from 1.28.1 to 2.2.0
 
 # v1.7.0 (2026-08-09)
 
@@ -303,7 +319,6 @@ CLI:
   - PreToolUse remind hook: coerce non-string shell command values instead of failing, and recognize
     `target_file`/`targetFile` file-path keys (shared payload parsing, applies to all hook clients).
   - Fix hook input parsing for clients that emit raw control characters in JSON string values #1743.
-
 
 # v1.6.1 (2026-07-21)
 

@@ -20,7 +20,7 @@ class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
             docs += "\n\nAvailable facades are provided at project activation"
         return docs
 
-    def apply(self, session: str, code: str) -> str:
+    def apply(self, session_id: str, code: str) -> str:
         """
         Executes the given Python code, which has access to Serena's functionality through the object `s`.
         The functionality is organised in facades, which are attributes of `s` (e.g. `s.myfacade`).
@@ -47,8 +47,8 @@ class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
         `s.vars()` lists the persisted items, `s.clear()` removes them. Do not store facades (`s.<facade>`) in
         variables; access them via `s` at call time. Do not keep large results longer than needed.
 
-        :param session: your Serena session id, as provided in Serena's instructions (call `initial_instructions` if you do not have one)
+        :param session_id: your Serena session id, as provided in Serena's instructions (call `initial_instructions` if you do not have one)
         :param code: the Python code to execute
         :return: the representation of the returned value, or the error if execution failed
         """
-        return self.agent.get_repl().execute(code, self.agent.get_session(session))
+        return self.agent.get_repl().execute(code, self.agent.get_session(session_id))
