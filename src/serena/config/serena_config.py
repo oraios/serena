@@ -14,7 +14,6 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Self, TypeVar
 from uuid import uuid4
@@ -1249,11 +1248,11 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         self.jetbrains_launch_command = None
         return self
 
-    @cached_property
+    @property
     def project_paths(self) -> list[str]:
         return sorted(str(project.project_root) for project in self.projects)
 
-    @cached_property
+    @property
     def project_names(self) -> list[str]:
         return sorted(project.project_config.project_name for project in self.projects)
 
