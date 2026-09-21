@@ -748,11 +748,24 @@ class CSharpLanguageServer(SolidLanguageServer):
             self.server.notify.send_notification("solution/open", {"solution": solution_uri})
             log.debug(f"Opened solution file: {solution_file}")
 
-        # Find and open project files
+        # Find and open project files, skipping any that the project's ignore settings exclude.
+        # Vendored, third-party and sample trees routinely contain .csproj files that the language
+        # server cannot restore or build. Each one costs a project load on every server start, and
+        # the resulting restore failures bury the diagnostics of the projects the user cares about.
         project_files = []
+        skipped = 0
         for filename in breadth_first_file_scan(self.repository_root_path):
-            if filename.endswith(".csproj"):
-                project_files.append(filename)
+            if not filename.endswith(".csproj"):
+                continue
+            relative_path = os.path.relpath(filename, self.repository_root_path)
+            # ignore_unsupported_files=False, because a .csproj is not itself a C# source file and
+            # would otherwise be excluded on file type rather than by the ignore patterns.
+            if self.is_ignored_path(relative_path, ignore_unsupported_files=False):
+                skipped += 1
+                continue
+            project_files.append(filename)
+        if skipped:
+            log.debug(f"Skipped {skipped} .csproj file(s) matched by the project's ignore settings")
 
         # Send project/open notifications for each project file
         if project_files:
