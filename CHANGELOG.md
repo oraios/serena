@@ -60,6 +60,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     replaced by a regular file (#1958)
 
 * Memories:
+  - Fix: `move_memory` / rename only checked write access on the destination name, so a tool-context
+    rename could relocate a read-only memory; both source and destination are now checked
   - Fix: `save_memory`/`edit_memory` wrote directly to the memory file with `open(path, "w")`, which
     truncates it before the new content is written; a crash, OOM kill, or full disk partway through
     the write could destroy the previous, valid content instead of just losing the update. Both now
@@ -88,6 +90,13 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Language Servers:
   - Fix: Dart analysis server no longer receives rootUri/rootPath, which added the monorepo root as an extra analysis root and could pin a CPU core at idle (#2045)
+  - Fix: The C# language server opened every `.csproj` found anywhere under the repository root,
+    without consulting the project's ignore settings. On repositories that vendor third-party or
+    sample C# projects, this loads projects the server cannot restore on every start, and their
+    restore failures bury the diagnostics of the projects the user actually works on. Project
+    discovery now skips `.csproj` files matched by the project's ignore patterns
+  - Kotlin: update the managed Kotlin LSP from `262.9593.0` to `263.4702.0`; the `262.9593.0` build
+    has expired and fails on startup with "This build of intellij-server has expired" (#2008)
   - Fix: Godot's GDScript parser can report a symbol's end column one column past the
     line-end convention every other language server follows (closing a node's range from
     the next lookahead token instead of the last consumed one, when that lookahead is a
@@ -110,6 +119,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     its global state under ``~/Library``; Serena now gives the child process an isolated home-directory view
     via ``solidity_state_dir`` without changing the parent process's ``HOME`` (#1817)
   - Add Fatou support as an alternative Julia language server (`julia_fatou`)
+  - Fix: C# properties/fields whose type contains a literal `(`, e.g. a tuple type like
+    `(int X, string Y)`, had their name corrupted to include a trailing `:` because the
+    parenthesis in the type was mistaken for a method's parameter list; `find_symbol` on
+    the real name then returned nothing
   - Fix: Nextflow's `_flush_deferred_workspace_scan` marked the workspace scan flushed even when both
     of its `completion` probes failed, permanently skipping the flush (and silencing retries) for the
     rest of the session (#1871)
