@@ -2823,6 +2823,7 @@ source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
     { name = "beautifulsoup4" },
+    { name = "click" },
     { name = "cryptography" },
     { name = "docstring-parser" },
     { name = "filelock" },
@@ -2892,6 +2893,7 @@ requires-dist = [
     { name = "agno", marker = "extra == 'agno'", specifier = "==2.6.6" },
     { name = "anthropic", specifier = "==0.117.0" },
     { name = "beautifulsoup4", specifier = "==4.14.2" },
+    { name = "click", specifier = "==8.3.1" },
     { name = "cryptography", specifier = "==50.0.0" },
     { name = "docstring-parser", specifier = "==0.17.0" },
     { name = "filelock", specifier = "==3.25.2" },

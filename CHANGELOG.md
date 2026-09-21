@@ -153,6 +153,8 @@ CLI:
   - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)
 
 * Dependencies:
+  - Fix: declare `click` as a direct dependency; all three console scripts (`serena`, `serena-agent`,
+    `serena-hooks`) import it but it was only available transitively
   - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
   - Upgrade the `mcp` SDK from 1.28.1 to 2.2.0
 
