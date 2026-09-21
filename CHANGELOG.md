@@ -22,6 +22,24 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: MCP server now reports Serena's version instead of the installed MCP SDK version (#1889)
   - Fix: importing Serena no longer loads the `anthropic` package unless the Anthropic token counter is
     actually used; the unconditional import added seconds to CLI/MCP startup on some machines (#2012)
+  - Fix: `start-mcp-server`/`project-server` could deadlock the entire process when the MCP
+    client host does not read the spawned server's stderr. The blocking stderr `StreamHandler`
+    eventually blocked inside `write()` once the stderr buffer (64 KiB socketpair) filled up,
+    holding the logging module's global lock and freezing every other thread that logs —
+    observed in practice as a tool whose work completed in milliseconds but never returned its
+    result, surfacing as a `tool_timeout` exactly `tool_timeout` seconds later. The stderr
+    handler is now non-blocking (direct writes on a non-blocking fd for pipes/sockets, dropping
+    records when the buffer is full and truncating records to the pipe's atomic write size so a
+    partially free buffer can never produce a partial write). On Windows, anonymous pipes are
+    switched to `PIPE_NOWAIT` via `SetNamedPipeHandleState` (follow-up to #2044, closes #2047);
+    if that call is unavailable the handler falls back to blocking writes as before. The log
+    file and the dashboard's in-memory buffer remain the lossless, authoritative streams.
+    Because `O_NONBLOCK` applies to the open file description, bystander writes to the same
+    `sys.stderr` (notably `show_fatal_exception_safe`'s last-resort print) can raise
+    `BlockingIOError` when the pipe is full; that print now swallows `BlockingIOError`/`OSError`
+    after logging, so a full non-blocking pipe cannot replace the fatal message with an
+    unrelated error
+  - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
   - Fix: `TextUtils.insert_text_at_position` returned a wrong position when the inserted text merged
