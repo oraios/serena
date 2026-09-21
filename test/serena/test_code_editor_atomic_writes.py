@@ -20,6 +20,7 @@ import pytest
 from serena.code_editor import CodeEditor
 from serena.language_backend import BuiltinLanguageBackend
 from serena.util import file_system
+from serena.util.file_system import write_file_atomic
 
 
 class _InMemoryEditedFile(CodeEditor.EditedFile):
@@ -197,3 +198,57 @@ class TestSourceFileSaveIsAtomic:
             edited.set_contents("café\n")
 
         assert source.read_bytes() == "café\n".encode("latin-1")
+
+    def test_save_translates_embedded_crlf_without_corruption(self, tmp_path):
+        """Content lines that already end in CRLF (e.g. returned untranslated by a language
+        server or the JetBrains plugin) must not be doubled to CRCRLF by the translation.
+        """
+        source = tmp_path / "module.mqh"
+        source.write_bytes(b"a\r\nb\r\n")
+
+        editor = self._editor(tmp_path, newline="\r\n")
+        with editor.edited_file_context("module.mqh") as edited:
+            edited.set_contents("a\r\nb\r\nnew\r\n")
+
+        assert source.read_bytes() == b"a\r\nb\r\nnew\r\n"
+
+    def test_save_passes_embedded_crlf_through_in_lf_mode(self, tmp_path):
+        r"""With ``newline="\n"`` no translation runs, so content lines that already end in
+        CRLF (e.g. returned untranslated by a language server) must reach the file verbatim.
+        """
+        source = tmp_path / "module.mqh"
+        source.write_bytes(b"a\nb\n")
+
+        editor = self._editor(tmp_path, newline="\n")
+        with editor.edited_file_context("module.mqh") as edited:
+            edited.set_contents("a\r\nb\r\nnew\r\n")
+
+        assert source.read_bytes() == b"a\r\nb\r\nnew\r\n"
+
+
+class TestWriteFileAtomicNativeLineEnding:
+    """``write_file_atomic`` is also called for files that do not exist yet (e.g. through
+    ``create_text_file``); ``newline=None`` must keep using the platform default for them,
+    exactly as a plain ``open(path, "w")`` did.
+    """
+
+    def test_new_file_gets_the_platform_default(self, tmp_path):
+        target = tmp_path / "new.mqh"
+
+        write_file_atomic(str(target), "a\nb\n", encoding="utf-8", newline=None)
+
+        expected = b"a\nb\n" if sys.platform != "win32" else b"a\r\nb\r\n"
+        assert target.read_bytes() == expected
+
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="asserts the Linux/macOS native behavior: an embedded CR in the content is written verbatim"
+    )
+    def test_new_file_native_writes_embedded_crlf_verbatim_on_posix(self, tmp_path):
+        r"""On POSIX, ``newline=None`` translates ``"\n"`` to ``os.linesep`` and passes ``"\r"``
+        through, so CRLF content survives byte-exact.
+        """
+        target = tmp_path / "embedded.mqh"
+
+        write_file_atomic(str(target), "a\r\nb\r\nnew\r\n", encoding="utf-8", newline=None)
+
+        assert target.read_bytes() == b"a\r\nb\r\nnew\r\n"

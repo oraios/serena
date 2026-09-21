@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 
 def write_file_atomic(path: str, content: str, *, encoding: str, newline: str | None = None) -> None:
-    """
+    r"""
     Write ``content`` to ``path`` atomically: the content is written to a temporary file in the
     same directory first, then swapped into place with ``os.replace``. A plain
     ``open(path, "w")`` is not atomic: it truncates the file before the new content is complete,
@@ -29,13 +29,22 @@ def write_file_atomic(path: str, content: str, *, encoding: str, newline: str | 
     :param path: the path to write to
     :param content: the text content to write
     :param encoding: the encoding to use for the write
-    :param newline: passed through to the underlying ``open()`` call to control newline translation
+    :param newline: passed through to the underlying ``open()`` call to control newline translation.
+        If ``None`` (native line endings), any ``\n`` in ``content`` is translated to ``os.linesep``.
+        When the target translation would turn content lines already ending in ``\r\n`` (e.g. returned
+        untranslated by a language server or a plugin) into ``\r\r\n``, they are first normalized to
+        ``\n`` in memory, so the translation produces the intended line ending.
     """
     # ``open(path, "w")`` follows symlinks and writes through to the target, whereas replacing the
     # link path itself would swap the link out for a regular file and leave its target holding the
     # old content. Resolving first keeps this a drop-in replacement, and puts the temporary file in
     # the destination's real directory, which is where it has to be for the rename to be atomic.
     path = os.path.realpath(path)
+    # normalize content lines that already end in CRLF before newline translation; without this, the
+    # translation turns them into "\r\r\n" on disk. In all other modes the translation either does not
+    # run or leaves the "\r" untouched, so the content is passed through verbatim, as before.
+    if newline == "\r\n" or (newline is None and os.linesep == "\r\n"):
+        content = content.replace("\r\n", "\n")
     target_dir = os.path.dirname(path) or "."
     try:
         existing_mode: int | None = stat.S_IMODE(os.stat(path).st_mode)
