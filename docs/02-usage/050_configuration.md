@@ -1365,8 +1365,6 @@ It is advisable to use the default prompt as a starting point and modify it to s
 
 ### Usage Reporting
 
-On startup, Serena reports anonymous usage data to help us understand Serena usage.
-Specifically, we collect the Serena version, the operating system & language backend being used as well as the dashboard enabled status.
-No personally identifiable information or project-specific information is collected.
+On startup, Serena reports anonymous usage data to help us understand Serena usage, as explained in our [privacy policy](privacy).
 
-If you want to opt out of usage reporting, set the environment variable `SERENA_USAGE_REPORTING` to `false`.
+If you want to opt out of usage data reporting, set the environment variable `SERENA_USAGE_REPORTING` to `false`.
