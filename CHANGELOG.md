@@ -2,6 +2,9 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Language Servers:
+  - Add Astro language server support (via `@astrojs/language-server`)
+
 # v1.7.0 (2026-08-09)
 
 * General:
