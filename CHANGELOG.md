@@ -104,7 +104,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     thread (#2038)
 
 * Language Servers:
-  - Add Astro language server support (via `@astrojs/language-server`)
+  - Add Astro language server support via `@astrojs/language-server` with a companion TypeScript language server (`@astrojs/ts-plugin`) for cross-file code intelligence (#2085)
   - Fix: Dart analysis server no longer receives rootUri/rootPath, which added the monorepo root as an extra analysis root and could pin a CPU core at idle (#2045)
   - Fix: The C# language server opened every `.csproj` found anywhere under the repository root,
     without consulting the project's ignore settings. On repositories that vendor third-party or
@@ -187,7 +187,6 @@ CLI:
     `serena-hooks`) import it but it was only available transitively
   - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
   - Upgrade the `mcp` SDK from 1.28.1 to 2.2.0
->>>>>>> upstream/main
 
 # v1.7.0 (2026-08-09)
 

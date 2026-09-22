@@ -47,7 +47,7 @@ Some languages require additional installations or setup steps, as noted.
   semantic tokens, and validation; document symbols, workspace symbols, references, and rename
   are not supported by this version)
 * **Astro**  
-  (requires Node.js and npm; uses [`@astrojs/language-server`](https://github.com/withastro/language-tools) which is automatically installed; supports `.astro` files; configure optional `ls_path` or `astro_language_server_version` under `ls_specific_settings.astro`)
+  (requires Node.js v18+ and npm; supports `.astro` files plus TypeScript/JavaScript files via `@astrojs/language-server`; a companion `typescript-language-server` + `@astrojs/ts-plugin` is spawned automatically for cross-file rename, go-to-definition, and references across `.ts`/`.js` and `.astro` files; use language `astro` for Astro projects instead of also enabling `typescript`)
 * **Bash**
 * **BSL** (1C:Enterprise / OneScript)  
   (requires Java 21+ on PATH; uses [bsl-language-server](https://github.com/1c-syntax/bsl-language-server) by 1c-syntax; the JAR is auto-downloaded and SHA-256-verified for the bundled default version; supports `.bsl` and `.os` files; configure optional `ls_path` or `bsl_ls_version` under `ls_specific_settings.bsl`)

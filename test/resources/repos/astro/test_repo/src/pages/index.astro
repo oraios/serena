@@ -1,9 +1,18 @@
 ---
 import Card from '../components/Card.astro';
+import Layout from '../layouts/Layout.astro';
+import Header from '../components/Header.astro';
+import { createCounter } from '../stores/counter';
+import { formatNumber } from '../utils/format';
 const pageTitle = "Welcome to Astro";
+const counter = createCounter();
 ---
 
-<main>
-	<h1>{pageTitle}</h1>
-	<Card href="https://astro.build" title="Docs" body="Documentation" />
-</main>
+<Layout title={pageTitle}>
+  <Header siteName="Test Site" />
+  <main>
+    <h1>{pageTitle}</h1>
+    <p>Count: {formatNumber(counter.count)}</p>
+    <Card href="https://astro.build" title="Docs" body="Documentation" />
+  </main>
+</Layout>
