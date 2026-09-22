@@ -25,18 +25,39 @@ Snapshot tests use syrupy.
 
 # Docstrings & Comments
 
+Documentation style:
+
 * You consistently use reStructuredText.
 * You structure function implementations into functional blocks that are separated by blank lines.
   Atop each functional block, you write an elliptical phrase (starting with lower-case letter) that describes the purpose of the
   block in a concise manner.
 * When describing parameters, methods/functions and classes, you use a precise style, where the initial (elliptical) phrase
   clearly defines *what* it is. Any details then follow in subsequent sentences.
+
+General documentation principles:
+
 * Each piece of information appears exactly once, at the element that owns it: callers do not
   explain callees' internals, and callees do not describe their callers.
+* Code changes are documented exclusively in commit messages, not in comments.
+* Things you consequently avoid:
+    - For a function/class, you do not describe who calls/uses it. A call/usage site may explain why a usage occurs, but only if it is non-obvious.
+    - When a function is called, you do not describe what it does. That belongs in the function's docstring.
+    - You do not describe in comments how an implementation differs from a previous state of the code or why a change was made. That belongs in the commit message.
 
-# Pull requests
+# REPL & facades
 
-Read `mem:creating_pull_requests` when asked to participate in the creation of a pull request.
+Read `mem:repl` before working on `serena.repl` (the code-execution paradigm and its facade APIs) or on tools
+delegating to it: structure, exposure/naming principles, configuration of the API scope and the availability policy.
+
+# Commits & pull requests
+
+* Commit messages:
+  * The subject line must cover the *entire* change; make it suitably abstract if necessary
+  * Details are presented in concise bullet items, one point per item; no prose paragraphs.
+    Where the change spans several topics, group the items by topic, each group with a short heading.
+  * Wrap all lines at ~100 characters.
+  * Write the message to a file and commit with `-F`; do not pass long text via `-m`.
+* Read `mem:creating_pull_requests` when asked to participate in the creation of a pull request.
 
 # Memories
 

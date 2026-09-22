@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import hashlib
+import json
 import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any, Literal, Self
+from typing import TYPE_CHECKING, Any, Literal, Self
 
 from bs4 import BeautifulSoup
 from joblib import Parallel, delayed
@@ -14,6 +15,10 @@ from sensai.util.string import ToStringMixin
 
 from serena.util.file_proxy import FileCollection, FileProxy
 from solidlsp.ls_utils import TextUtils
+
+if TYPE_CHECKING:
+    from serena.code_editor import CodeEditor
+    from serena.project import Project
 
 log = logging.getLogger(__name__)
 
@@ -401,13 +406,18 @@ class ContentReplacer:
         self.regex_multiline = regex_multiline
 
     @staticmethod
-    def _create_replacement_function(regex_pattern: str, repl_template: str, regex_flags: int) -> Callable[[re.Match], str]:
+    def _create_replacement_function(
+        regex_pattern: str, repl_template: str, regex_flags: int, expand_backrefs: bool
+    ) -> Callable[[re.Match], str]:
         """
         Creates a replacement function that validates for ambiguity and handles backreferences.
 
         :param regex_pattern: The regex pattern being used for matching
-        :param repl_template: The replacement template with $!1, $!2, etc. for backreferences
+        :param repl_template: The replacement template; in regex mode, it may contain $!1, $!2, etc. for
+            backreferences; in literal mode, it is used verbatim
         :param regex_flags: The flags to use when searching (e.g., re.DOTALL | re.MULTILINE)
+        :param expand_backrefs: Whether $!N backreferences are expanded in the template; false in literal mode,
+            mirroring the mode gate in MultiFileContentReplacer.find_occurrences
         :return: A function suitable for use with re.sub() or re.subn()
         """
 
@@ -429,11 +439,19 @@ class ContentReplacer:
                     "e.g. by matching specific context after the match, or try using the literal mode."
                 )
 
-            # Handle backreferences: replace $!1, $!2, etc. with actual matched groups
+            # in literal mode, the template is the final replacement; $!N sequences need no escaping
+            if not expand_backrefs:
+                return repl_template
+
+            # Handle backreferences: replace $!1, $!2, etc. with actual matched groups; groups that
+            # exist but did not participate in the match expand to the empty string
             def expand_backreference(m: re.Match) -> str:
                 group_num = int(m.group(1))
-                group_value = match.group(group_num)
-                return group_value if group_value is not None else m.group(0)
+                try:
+                    group_value = match.group(group_num)
+                except IndexError as e:
+                    raise ValueError(f"Backreference $!{group_num} refers to a group that does not exist in the search expression") from e
+                return group_value if group_value is not None else ""
 
             result = re.sub(r"\$!(\d+)", expand_backreference, repl_template)
             return result
@@ -453,8 +471,8 @@ class ContentReplacer:
 
         :param content: the content in which to perform the replacement
         :param needle: the search expression, which is either a literal string or a regular expression, depending on the mode
-        :param repl: the replacement string, which, in regex mode, may contain backreferences in the form of $!1, $!2, etc. to
-            refer to matched groups in the search expression
+        :param repl: the replacement string; in regex mode, it may contain backreferences in the form of $!1, $!2, etc.
+            to refer to matched groups in the search expression; in literal mode, it is used verbatim
         :return: the updated content after performing the replacement
         """
         if self.mode == "literal":
@@ -466,8 +484,8 @@ class ContentReplacer:
 
         regex_flags = (re.MULTILINE | re.DOTALL) if self.regex_multiline else 0
 
-        # create replacement function with validation and backreference handling
-        repl_fn = self._create_replacement_function(regex, repl, regex_flags=regex_flags)
+        # create replacement function with ambiguity validation and, in regex mode, backreference handling
+        repl_fn = self._create_replacement_function(regex, repl, regex_flags=regex_flags, expand_backrefs=self.mode == "regex")
 
         # perform replacement
         updated_content, n = re.subn(regex, repl_fn, content, flags=regex_flags)
@@ -543,8 +561,12 @@ class MultiFileContentReplacer:
         """Expands $!1, $!2, ... in the replacement template (same syntax as :class:`ContentReplacer`)."""
 
         def expand(m: re.Match) -> str:
-            group_value = match.group(int(m.group(1)))
-            return group_value if group_value is not None else m.group(0)
+            group_num = int(m.group(1))
+            try:
+                group_value = match.group(group_num)
+            except IndexError as e:
+                raise ValueError(f"Backreference $!{group_num} refers to a group that does not exist in the search expression") from e
+            return group_value if group_value is not None else ""
 
         return re.sub(r"\$!(\d+)", expand, repl_template)
 
@@ -638,6 +660,253 @@ class MultiFileContentReplacer:
         return "\n".join(diff_lines)
 
 
+class ReplacementRejectedError(ValueError):
+    """
+    Raised when a replacement is not applied because a safety check failed; no changes have been made.
+    """
+
+    def __init__(self, message: str, show_prospective_changes: bool) -> None:
+        """
+        :param message: the reason for the rejection
+        :param show_prospective_changes: whether the listing of the prospective changes should be presented along
+            with the message (the message refers to it)
+        """
+        super().__init__(message)
+        self.show_prospective_changes = show_prospective_changes
+
+
+@dataclass
+class MultiFileReplacementResult:
+    """
+    The result of an applied replacement.
+    """
+
+    num_occurrences_by_file: dict[str, int]
+    """the number of replaced occurrences per file (relative path), in application order"""
+
+    @property
+    def num_occurrences(self) -> int:
+        return sum(self.num_occurrences_by_file.values())
+
+    def to_display_string(self) -> str:
+        per_file = "\n".join(f"  {path}: {n}" for path, n in self.num_occurrences_by_file.items())
+        return f"Replaced {self.num_occurrences} occurrence(s) in {len(self.num_occurrences_by_file)} file(s):\n{per_file}"
+
+
+class MultiFileReplacement:
+    """
+    A prospective replacement of a pattern across the files of a project within a given scope: holds the
+    occurrences found, supports selecting occurrences by their ids, guards blind application against
+    unintended replacements, renders a preview listing and applies the replacement via a code editor.
+    """
+
+    def __init__(
+        self,
+        project: "Project",
+        needle: str,
+        repl: str,
+        mode: Literal["literal", "regex"],
+        relative_path: str = "",
+        paths_include_glob: str = "",
+        paths_exclude_glob: str = "",
+    ) -> None:
+        """
+        :param project: the project whose files are to be searched
+        :param needle: the string (mode "literal") or regular expression (mode "regex") to search for
+        :param repl: the replacement string (may contain $!N backreferences in regex mode)
+        :param mode: how `needle` is to be interpreted
+        :param relative_path: only consider this file or directory (default: the whole project)
+        :param paths_include_glob: optional glob restricting which files are considered
+        :param paths_exclude_glob: optional glob of files to exclude; takes precedence over the include glob
+        """
+        self._replacer = MultiFileContentReplacer(mode=mode)
+        self._needle = needle
+        self._repl = repl
+        files = self._collect_files(project, relative_path.strip(), paths_include_glob.strip(), paths_exclude_glob.strip())
+        self._contents = dict(files)
+        self.occurrences: list[ReplacementOccurrence] = self._replacer.find_occurrences(files, needle, repl)
+
+    @staticmethod
+    def _collect_files(project: "Project", relative_path: str, paths_include_glob: str, paths_exclude_glob: str) -> list[tuple[str, str]]:
+        """
+        :return: the (relative_path, content) pairs of the readable, non-ignored files in scope, in sorted path order
+        """
+        if relative_path:
+            project.validate_relative_path(relative_path, require_not_ignored=True)
+        file_collection = project.create_file_collection(relative_path, code_files_only=False, skip_ignored_files=True).filter_glob(
+            paths_include_glob or None, paths_exclude_glob or None
+        )
+        files: list[tuple[str, str]] = []
+        for file_proxy in sorted(file_collection, key=lambda f: f.get_relative_path()):
+            try:
+                files.append((file_proxy.get_relative_path(), file_proxy.get_contents()))
+            except Exception:
+                continue  # skip unreadable (e.g. binary) files
+        return files
+
+    @property
+    def affected_files(self) -> list[str]:
+        """
+        :return: the relative paths of the files containing occurrences, sorted
+        """
+        return sorted({o.relative_path for o in self.occurrences})
+
+    def select(self, occurrence_ids: list[str]) -> list[ReplacementOccurrence]:
+        """
+        Resolves the given occurrence ids (as obtained from a previous listing).
+
+        :param occurrence_ids: the ids of the occurrences to select
+        :return: the selected occurrences
+        :raises ReplacementRejectedError: if the selection is empty or any id cannot be resolved
+        """
+        occurrences_by_id = {o.occurrence_id: o for o in self.occurrences}
+        indices_by_path: dict[str, set[int]] = {}
+        for o in self.occurrences:
+            indices_by_path.setdefault(o.relative_path, set()).add(o.index_in_file)
+
+        # resolve each id, diagnosing failures
+        selected: dict[str, ReplacementOccurrence] = {}
+        problems: list[str] = []
+        for oid in occurrence_ids:
+            occurrence = occurrences_by_id.get(oid)
+            if occurrence is not None:
+                selected[oid] = occurrence
+                continue
+            id_match = MultiFileContentReplacer.OCCURRENCE_ID_REGEX.match(oid)
+            if id_match is None:
+                problems.append(f"{oid}: malformed id (expected '<path>:<index>@<digest>' as returned by a dry run)")
+            elif id_match.group("path") not in indices_by_path:
+                problems.append(f"{oid}: the pattern currently has no matches in this file")
+            elif int(id_match.group("index")) not in indices_by_path[id_match.group("path")]:
+                problems.append(f"{oid}: the file now has fewer matches than at dry-run time (content changed)")
+            else:
+                problems.append(f"{oid}: the matched text changed since the dry run (content changed)")
+
+        if problems:
+            problem_lines = "\n".join(f"  {p}" for p in problems)
+            raise ReplacementRejectedError(
+                f"{len(problems)} of the given occurrence_ids could not be resolved - NO changes were applied:\n"
+                f"{problem_lines}\n"
+                "Re-run with dry_run=True to obtain current occurrence ids.",
+                show_prospective_changes=False,
+            )
+        if not selected:
+            raise ReplacementRejectedError(
+                "occurrence_ids is empty - pass at least one id from a dry run, or omit the parameter to replace all.",
+                show_prospective_changes=False,
+            )
+        return list(selected.values())
+
+    def select_all_guarded(self, expected_count: int = -1) -> list[ReplacementOccurrence]:
+        """
+        Selects all occurrences for a blind application (without explicit selection), applying safety checks.
+
+        :param expected_count: the number of occurrences expected; -1 disables the check
+        :return: all occurrences
+        :raises ReplacementRejectedError: if there are no occurrences, the count differs from the expectation
+            or any occurrence is ambiguous
+        """
+        if not self.occurrences:
+            raise ReplacementRejectedError(
+                "No occurrences of the pattern were found - NO changes were applied. "
+                "Check the mode (a literal needle containing regex metacharacters must use mode 'literal'; "
+                "wildcards require mode 'regex') and the path/glob restrictions, "
+                "or locate the content with search_for_pattern first.",
+                show_prospective_changes=False,
+            )
+        if expected_count >= 0 and len(self.occurrences) != expected_count:
+            raise ReplacementRejectedError(
+                f"expected_count={expected_count}, but the pattern matches {len(self.occurrences)} occurrence(s) - "
+                "NO changes were applied. Review the prospective changes below; re-issue with the corrected "
+                "expectation, a refined pattern, or occurrence_ids selecting the intended subset.",
+                show_prospective_changes=True,
+            )
+        num_ambiguous = sum(1 for o in self.occurrences if o.is_ambiguous)
+        if num_ambiguous:
+            raise ReplacementRejectedError(
+                f"{num_ambiguous} occurrence(s) are ambiguous (the pattern matches again inside the matched text, "
+                "indicating possible over-matching) - NO changes were applied. Review the prospective changes below "
+                "and either refine the pattern or explicitly select occurrences via occurrence_ids.",
+                show_prospective_changes=True,
+            )
+        return list(self.occurrences)
+
+    def render_listing(self, max_answer_chars: int, dry_run: bool) -> str:
+        """
+        Renders the prospective changes as a list of minimal line diffs with occurrence ids, subject to the given length limit
+        (falling back to locations only, per-file counts and finally a summary).
+
+        :param max_answer_chars: the maximum number of characters (must be positive)
+        :param dry_run: whether the listing is the result of a dry run (adding instructions on how to proceed)
+        :return: the listing
+        """
+        affected_files = self.affected_files
+        header = f"Found {len(self.occurrences)} occurrence(s) in {len(affected_files)} file(s)."
+        if dry_run:
+            header += (
+                " DRY RUN - no changes were applied.\n"
+                "Re-issue with dry_run=False to replace all of them, or additionally pass occurrence_ids "
+                "with the ids of the occurrences to replace."
+            )
+        parts = [header]
+        for path in affected_files:
+            file_occurrences = [o for o in self.occurrences if o.relative_path == path]
+            parts.append(f"\n{path} ({len(file_occurrences)} occurrence(s)):")
+            for occ in file_occurrences:
+                parts.append(self._replacer.render_occurrence_diff(occ, self._contents[path]))
+        result = "\n".join(parts)
+
+        # shortened result closures, from least to most aggressive shortening
+        def make_locations_only() -> str:
+            return "\n".join([header] + [f"  [{o.occurrence_id}] line {o.start_line}" for o in self.occurrences])
+
+        def make_per_file_counts() -> str:
+            counts = {path: sum(1 for o in self.occurrences if o.relative_path == path) for path in affected_files}
+            return f"{header}\nOccurrence counts per file:\n{TextOutputUtils.to_json(counts)}"
+
+        def make_summary() -> str:
+            return header
+
+        shortened_result_factories: list[Callable[[], str]] = [make_locations_only, make_per_file_counts, make_summary]
+        return TextOutputUtils.limit_length(result, max_answer_chars, shortened_result_factories)
+
+    def apply(self, code_editor: "CodeEditor", occurrences: list[ReplacementOccurrence]) -> MultiFileReplacementResult:
+        """
+        Applies the given (selected) occurrences.
+
+        :param code_editor: the code editor through which to modify the files
+        :param occurrences: the occurrences to replace (obtained from `select` or `select_all_guarded`)
+        :return: the result
+        :raises ValueError: if a file's content changed such that a selected occurrence no longer resolves
+            (the file is then not modified)
+        """
+        from serena.code_editor import EditedFileContext
+
+        occurrences_by_file: dict[str, list[ReplacementOccurrence]] = {}
+        for occ in occurrences:
+            occurrences_by_file.setdefault(occ.relative_path, []).append(occ)
+
+        for path, file_occurrences in occurrences_by_file.items():
+            with EditedFileContext(path, code_editor) as context:
+                original_content = context.get_original_content()
+                if original_content != self._contents[path]:
+                    # the editor's view differs from what was scanned (e.g. line-ending normalization);
+                    # re-derive the occurrences from the authoritative content and re-validate by id
+                    fresh_by_id = {
+                        o.occurrence_id: o for o in self._replacer.find_occurrences([(path, original_content)], self._needle, self._repl)
+                    }
+                    try:
+                        file_occurrences = [fresh_by_id[o.occurrence_id] for o in file_occurrences]
+                    except KeyError as e:
+                        raise ValueError(
+                            f"The content of {path} changed while replacing (occurrence {e} no longer resolves); "
+                            f"the file was NOT modified. Re-run with dry_run=True for current ids."
+                        ) from e
+                context.set_updated_content(self._replacer.apply_to_content(original_content, file_occurrences))
+
+        return MultiFileReplacementResult({path: len(occs) for path, occs in occurrences_by_file.items()})
+
+
 @dataclass
 class TextCoords:
     line: int
@@ -676,3 +945,39 @@ def find_text_coordinates(content: str, regex: str, require_unique: bool = False
         index_in_content = match.start(1)
         line, col = TextUtils.get_line_col_from_index(content, index_in_content)
         return TextCoords(line, col)
+
+
+class TextOutputUtils:
+    @staticmethod
+    def to_json(x: Any) -> str:
+        return json.dumps(x, ensure_ascii=False)
+
+    @staticmethod
+    def limit_length(
+        result: str,
+        max_answer_chars: int,
+        shortened_result_factories: list[Callable[[], str]] | None = None,
+    ) -> str:
+        """Limit the length of the result string, optionally trying progressively shorter versions.
+
+        :param result: the full result string
+        :param max_answer_chars: maximum allowed characters; if exceeded, attempt to use shortened versions
+        :param shortened_result_factories: optional list of closures, each producing a progressively shorter
+            version of the result. They are tried in order until one fits within ``max_answer_chars``.
+        :return: the result string, potentially replaced by a shortened version
+        """
+        if max_answer_chars <= 0:
+            raise ValueError(f"max_answer_chars must be positive; got: {max_answer_chars=}")
+        if (n_chars := len(result)) > max_answer_chars:
+            too_long_msg = (
+                f"The answer is too long ({n_chars} characters). " + "You can adjust your query or raise the max_answer_chars parameter."
+            )
+            if shortened_result_factories is not None:
+                # try each shortening closure in order;
+                for make_shorter in shortened_result_factories:
+                    shortened = make_shorter()
+                    candidate = f"{too_long_msg}\n{shortened}"
+                    if len(candidate) <= max_answer_chars:
+                        return candidate
+            result = too_long_msg
+        return result
