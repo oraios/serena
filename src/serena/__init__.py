@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-__version__ = "1.7.1.dev0"
+__version__ = "2.0.0.dev0"
 
 import logging
 
