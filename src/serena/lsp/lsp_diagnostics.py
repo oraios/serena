@@ -163,7 +163,7 @@ class DiagnosticsDiff:
                 language_server = symbol_retriever.get_language_server(edited_file_path.after_relative_path)
             except:
                 continue
-            language_server_ids[edited_file_path.after_relative_path] = language_server.ls_id.value
+            language_server_ids[edited_file_path.after_relative_path] = language_server.ls_id.get_key()
 
             published_diagnostics = language_server.request_published_text_document_diagnostics(
                 relative_file_path=edited_file_path.after_relative_path,
