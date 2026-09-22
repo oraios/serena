@@ -88,6 +88,26 @@ ls_specific_settings:
 ```
 
 ---
+## Waiting for Metals to be ready
+
+Metals needs its build imported, its index built and the project compiled before it can answer a
+cross-file question completely — references in particular come from SemanticDB, which the build
+server writes only as it compiles. Serena waits for all of that, tracking the work-done progress
+Metals reports, before the first such query of a session; a query made earlier would return a
+fraction of the true result and look no different from a complete one.
+
+The first `find_referencing_symbols` of a session therefore takes as long as the project takes to
+compile. Subsequent queries do not wait. Where the default bound is wrong for a large build:
+
+```yaml
+ls_specific_settings:
+  scala:
+    indexing_timeout: 180        # seconds to wait before giving up and answering anyway
+    indexing_start_grace: 15     # seconds to wait for Metals to report anything at all
+    indexing_quiet_period: 3     # seconds of silence that count as "finished"
+```
+
+---
 ## Running Multiple Metals Instances
 
 Serena can run alongside other Metals instances (e.g., VS Code with Metals extension) on the same project. This is **fully supported** by Metals via H2 AUTO_SERVER mode.

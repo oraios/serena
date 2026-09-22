@@ -38,42 +38,42 @@ class TestKotlinDependencyProvider:
                 ".win.zip",
                 "zip",
                 ("bin", "intellij-server.exe"),
-                "f2daaa476f26d99301b406f76de6d87c437d04dc72f06845154619d8f991c51f",
+                "a9b471b16025b1bfb3b0a097862580abb40e3c35406c44242c18b1d70f5d0e44",
             ),
             (
                 PlatformId.WIN_arm64,
                 "-aarch64.win.zip",
                 "zip",
                 ("bin", "intellij-server.exe"),
-                "73a552a6a420158622e5ad8d96b53da8aa8ced3f88a24fded01575927a2fd8e7",
+                "3bf008d8c94fa70eb13fc998eaa42f29b9d13f368984d4cec46277808f94e1de",
             ),
             (
                 PlatformId.LINUX_x64,
                 ".tar.gz",
                 "gztar",
                 (f"kotlin-server-{DEFAULT_KOTLIN_LSP_VERSION}", "bin", "intellij-server"),
-                "2d99d8e198fbe4aa8f4481e37799724ce94803b4ea12a60b416040e3fcd7cc5e",
+                "1e11d2e5fefbf9ea215ad8dd6be95f2222897cd086e8cb7a661a52084a590405",
             ),
             (
                 PlatformId.LINUX_arm64,
                 "-aarch64.tar.gz",
                 "gztar",
                 (f"kotlin-server-{DEFAULT_KOTLIN_LSP_VERSION}", "bin", "intellij-server"),
-                "2317831c6e5607d05b7ebc1da655330125ce0e3d66fbf24517dfce442debc14e",
+                "ec7cb254a6662a07fff9f10e4365226afab6c40008f8a974c10ac5e785d6510f",
             ),
             (
                 PlatformId.OSX_x64,
                 ".sit",
                 "zip",
                 (f"kotlin-server-{DEFAULT_KOTLIN_LSP_VERSION}", "bin", "intellij-server"),
-                "17369fda97c85418ac24ab38a9df56b21522a3468dfe193832fe455c13920745",
+                "62ab735947b1c855b505f64f5db8fbd7ff0b52a35ab1897938c6dbfc7b24c8a3",
             ),
             (
                 PlatformId.OSX_arm64,
                 "-aarch64.sit",
                 "zip",
                 (f"kotlin-server-{DEFAULT_KOTLIN_LSP_VERSION}", "bin", "intellij-server"),
-                "6ba6021a706b21e64cef33f7e2b79f187c0910320722bb2d3ed05ad1115ec43f",
+                "95da3fc6d3b9092c7616345044a05edb85e5408dc648d081e4e433595c892bec",
             ),
         ],
     )
@@ -176,12 +176,12 @@ class TestKotlinDependencyProvider:
             "kotlin-lsp-261.13587.0-linux-aarch64.zip",
             "kotlin-lsp-261.13587.0-mac-x64.zip",
             "kotlin-lsp-261.13587.0-mac-aarch64.zip",
-            "kotlin-server-262.9593.0.win.zip",
-            "kotlin-server-262.9593.0-aarch64.win.zip",
-            "kotlin-server-262.9593.0.tar.gz",
-            "kotlin-server-262.9593.0-aarch64.tar.gz",
-            "kotlin-server-262.9593.0.sit",
-            "kotlin-server-262.9593.0-aarch64.sit",
+            "kotlin-server-263.4702.0.win.zip",
+            "kotlin-server-263.4702.0-aarch64.win.zip",
+            "kotlin-server-263.4702.0.tar.gz",
+            "kotlin-server-263.4702.0-aarch64.tar.gz",
+            "kotlin-server-263.4702.0.sit",
+            "kotlin-server-263.4702.0-aarch64.sit",
         }
 
     @pytest.mark.parametrize(
@@ -265,6 +265,59 @@ class TestKotlinDependencyProvider:
                 str(tmp_path / "project-cache" / "kotlin-lsp-system"),
             ]
             assert other_os_provider.create_launch_command() == [other_os_launcher, "--stdio"]
+
+    def test_single_instance_keeps_the_deterministic_cache_dir(self, tmp_path: Path) -> None:
+        """The common case (one Serena instance, possibly restarted) must keep reusing the
+        same on-disk directory, or the Kotlin LSP loses its index cache on every restart.
+        """
+        provider = _make_provider(tmp_path)
+
+        assert provider.storage_dir == str(tmp_path / "project-cache")
+
+    def test_second_concurrent_instance_gets_its_own_storage_dir(self, tmp_path: Path) -> None:
+        """Two Serena instances activating the same project concurrently (oraios/serena#1966)
+        must not be handed the same Kotlin LSP storage directory: the second one falls back to
+        a directory of its own instead of contending with the first for the same index.
+        """
+        first = _make_provider(tmp_path)
+        second = _make_provider(tmp_path)
+        try:
+            assert first.storage_dir == str(tmp_path / "project-cache")
+            assert second.storage_dir != first.storage_dir
+            assert second.storage_dir.startswith(str(tmp_path / "project-cache") + "-instance-")
+        finally:
+            first.release_storage_lock()
+            second.release_storage_lock()
+
+    def test_storage_dir_is_reclaimed_once_the_first_instance_releases_it(self, tmp_path: Path) -> None:
+        first = _make_provider(tmp_path)
+        first.release_storage_lock()
+
+        second = _make_provider(tmp_path)
+        try:
+            assert second.storage_dir == str(tmp_path / "project-cache")
+        finally:
+            second.release_storage_lock()
+
+    def test_concurrent_instances_get_different_system_path_arguments(self, tmp_path: Path) -> None:
+        launcher = "/path/to/intellij-server"
+        first = _make_provider(tmp_path, {"ls_path": launcher})
+        second = _make_provider(tmp_path, {"ls_path": launcher})
+        try:
+            with patch(
+                "solidlsp.language_servers.kotlin_language_server.PlatformUtils.get_platform_id",
+                return_value=PlatformId.LINUX_x64,
+            ):
+                first_cmd = first.create_launch_command()
+                second_cmd = second.create_launch_command()
+
+            assert first_cmd == [launcher, "--stdio", "--system-path", str(tmp_path / "project-cache" / "kotlin-lsp-system")]
+            assert second_cmd[:2] == [launcher, "--stdio"]
+            assert second_cmd[2] == "--system-path"
+            assert second_cmd[3] != first_cmd[3]
+        finally:
+            first.release_storage_lock()
+            second.release_storage_lock()
 
     def test_invalid_version_is_rejected_before_download(self) -> None:
         with pytest.raises(ValueError, match="dot-separated integers"):

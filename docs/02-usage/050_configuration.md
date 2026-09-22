@@ -26,7 +26,7 @@ Some of the configurable settings include:
   * the language backend to use by default (i.e., the JetBrains plugin or language servers);
     this can also be [overridden per project](per-project-language-backend)
   * UI settings affecting the [Serena Dashboard and GUI tool](060_dashboard.md)
-  * the set of tools to enable/disable by default
+  * the set of tools or REPL API functions to enable/disable by default
   * the set of [modes](modes) to use by default
   * tool execution parameters (timeout, max. answer length)
   * global ignore rules
@@ -55,6 +55,37 @@ You can access it
     ```shell
     serena config edit
     ```
+    
+(agent-interfaces)=
+### Agent Interfaces
+
+Serena provides its functionality to the agent (LLM) through one of two interfaces
+(see [Tools and APIs](../01-about/035_tools) for the operations they offer):
+
+* **tools**: every operation is a separate tool of the MCP server.
+* **REPL** (new in Serena v2): a single tool executes Python code, through which the agent accesses the operations
+  programmatically, being able to combine several of them in one call.
+
+The interface is selected via the `agent_interface` setting in the global configuration.
+It can be overridden in the project configuration or via the `--agent-interface` command-line option,
+and it is fixed for the duration of a session.
+
+The two interfaces are configured differently:
+
+* With the **tool interface**, the set of tools results from the tool inclusion/exclusion settings
+  (`excluded_tools`, `included_optional_tools`, `fixed_tools`) of the global configuration, the context,
+  the modes and the project configuration.
+* With the **REPL interface**, the set of tools is fixed (the REPL tool and the tools which have no
+  counterpart within the REPL, e.g. for project activation); the tool settings above consequently do not apply.
+  The operations available *within* the REPL are configured via `included_apis`/`excluded_apis` instead,
+  which are supported in the same configuration layers and reference either a group of operations
+  (e.g. `lsp`) or an individual operation (e.g. `lsp.find_symbol`).
+
+```{note}
+Restricting the operations available in the REPL is a means of steering the agent, not a security mechanism:
+the Python code that is executed can, in principle, do anything the Serena process can do.
+See [Security](070_security) for isolation options.
+```
 
 ## Modes and Contexts
 
@@ -238,7 +269,7 @@ This ensures backward compatibility: existing projects that already have a `.ser
 Most users will not need to adjust these settings.
 :::
 
-Under the key `ls_specific_settings` in `serena_config.yml`, you can you pass global per-language, 
+Under the key `ls_specific_settings` in `serena_config.yml`, you can pass global per-language, 
 language server-specific configuration. 
 
 You can use the same key in the project configuration files (`project.yml`
@@ -796,10 +827,10 @@ Supported settings:
 | Setting | Default | Description |
 |---|---|---|
 | `ls_path` | managed download | Override the Kotlin Language Server executable path. |
-| `kotlin_lsp_version` | `262.9593.0` | Override the Kotlin Language Server version Serena downloads when `ls_path` is not set. |
+| `kotlin_lsp_version` | `263.4702.0` | Override the Kotlin Language Server version Serena downloads when `ls_path` is not set. |
 | `jvm_options` | `-Xmx2G` | Value assigned to `JAVA_TOOL_OPTIONS` for the Kotlin LS process. Set to `""` to disable JVM options entirely. |
 
-The managed `262.9593.0` packages include a bundled JBR. For a custom `ls_path`, point directly to
+The managed `263.4702.0` packages include a bundled JBR. For a custom `ls_path`, point directly to
 `bin/intellij-server` (`bin/intellij-server.exe` on Windows). Serena also retains the legacy download
 layout for custom Kotlin LSP versions older than `262.4739.0`. The pinned current and frozen initial
 releases are checksum-verified; arbitrary custom versions are downloaded without checksum verification.
@@ -809,7 +840,7 @@ Example:
 ```yaml
 ls_specific_settings:
   kotlin:
-    kotlin_lsp_version: "262.9593.0"
+    kotlin_lsp_version: "263.4702.0"
     jvm_options: "-Xmx4G -XX:+UseG1GC"
 ```
 
@@ -1107,6 +1138,18 @@ Supported settings:
 
 Serena uses Metals for Scala support.
 
+Metals serves one build per workspace folder, so in a repository holding several builds — or a single
+build below the repository root — it is the build roots, not the repository root, that Metals must be
+given. Serena detects them automatically; `project_roots` overrides that detection where it guesses
+wrong, and `project_root_scan_depth` bounds how far it looks.
+
+Metals reports its build import, indexing and compilation as LSP work-done progress, and Serena waits
+for all of it before the first cross-file query of a session. This matters most for references, which
+Metals serves from SemanticDB — a file the build server only writes once it has compiled the sources,
+well after indexing ends — so a query made too early returns a fraction of the true result with
+nothing to say it is partial. The wait is bounded by `indexing_timeout`, after which the query
+proceeds against whatever Metals has so far and a warning is logged.
+
 Supported settings:
 
 | Setting | Default | Description |
@@ -1115,6 +1158,12 @@ Supported settings:
 | `client_name` | `Serena` | Client identifier sent to Metals. |
 | `on_stale_lock` | `auto-clean` | How Serena handles stale Metals H2 database locks. Supported values: `auto-clean`, `warn`, `fail`. |
 | `log_multi_instance_notice` | `true` | Log a notice when another Metals instance is detected. |
+| `auto_import_build` | `true` | Answer Metals' build-import prompts affirmatively, which lets it run the project's build tool (e.g. `sbt bloopInstall`). Set to `false` to leave the build un-imported; Metals then has no build server, and every cross-file query is served by the fallback presentation compiler. |
+| `project_roots` | auto-detected | The build roots to serve, as paths relative to the repository root. A path that does not exist is skipped with a warning; if none of them exists, the build roots are detected instead. |
+| `project_root_scan_depth` | `3` | How many directory levels below the repository root the detection searches. Applies whenever the roots are detected — that is, when `project_roots` is unset, or when it names nothing that exists. |
+| `indexing_timeout` | `180` | How long to wait, in seconds, for Metals to finish importing, indexing and compiling before the first cross-file query. On expiry the query proceeds and a warning names what was still outstanding. |
+| `indexing_start_grace` | `15` | How long to wait, in seconds, for Metals to report any work at all. A server that reports none within this window is taken to have nothing to do. |
+| `indexing_quiet_period` | `3` | How long, in seconds, Metals must report nothing for its work to count as finished. Metals hands off between its phases rather than overlapping them, so it reports nothing for a moment in between; a shorter period risks mistaking that gap for completion. |
 
 #### SCSS / Sass / CSS
 
@@ -1146,7 +1195,18 @@ Supported settings:
 |---|---|---|
 | `ls_path` | managed install | Override the Solidity language server executable path. |
 | `solidity_language_server_version` | `0.8.4` | Override the npm package version Serena installs when `ls_path` is not set. |
+| `solidity_state_dir` | `<ls_resources_dir>/solidity-state` on macOS | Writable state root for the managed Solidity language server on macOS. Serena uses a child-process-only home-directory override so Hardhat does not write to `~/Library`; `HOME` in the Serena process is unchanged. |
 | `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
+
+On macOS, if the default Solid-LSP resources directory is not writable, configure an alternative path:
+
+```yaml
+ls_specific_settings:
+  solidity:
+    solidity_state_dir: /path/to/writable/solidity-state
+```
+
+This setting is ignored on Linux and Windows, where the existing launch environment is unchanged.
 
 #### SystemVerilog
 
@@ -1195,6 +1255,19 @@ Supported settings:
 | `indexing_timeout` | `30.0` | Timeout in seconds for waiting on tsserver's `$/progress` project-indexing signal to *drain* once it has started (both at startup and before the first cross-file reference query). If indexing does not complete within this window, Serena logs a warning and proceeds anyway. Increase it for very large projects. |
 | `server_ready_timeout` | `10.0` | Timeout in seconds for waiting on the server-ready signal after initialization. If the signal does not arrive within this window, Serena logs a message and proceeds anyway. |
 | `indexing_start_grace` | `5.0` | Timeout in seconds to wait for tsserver to *start* reporting `$/progress` before the first cross-file reference query. tsserver must resolve the project graph before it can emit the first progress token, and that can take longer than the default on a very large project; if it takes longer than this window, Serena assumes no indexing was needed and may return incomplete cross-file references. Raising `indexing_timeout` alone does not help here, since this grace elapses first. Increase this for very large projects if `find_referencing_symbols`/`request_references` returns incomplete results shortly after project load. |
+
+##### TypeScript monorepos and cross-package references
+
+In a monorepo, `find_referencing_symbols` / `find_references` only include consumers in other packages when tsserver can walk from a package's declaration file back to its sources. That walk requires [TypeScript project references](https://www.typescriptlang.org/docs/handbook/project-references.html) (`composite` + `references`), not merely a solution-style root `tsconfig.json` or `package.json` `exports`.
+
+Without those edges, results are **silently partial**: a symbol may show only same-package references (or none) even though other packages import it. This is tsserver behaviour Serena inherits, not a Serena bug ([microsoft/TypeScript#30823](https://github.com/microsoft/TypeScript/issues/30823); oraios/serena#1939).
+
+What to do in a TypeScript monorepo:
+
+- Declare `composite: true` in each library package's `tsconfig.json` and list dependent projects under `references` in the consumer (or a solution-style root).
+- Prefer source imports (or generate declaration maps) so tsserver can map `dist/*.d.ts` back to sources.
+- After changing the project graph, restart Serena (or the TypeScript language server) so tsserver rebuilds the program.
+- If cross-package references still look short, verify with grep before treating the LSP answer as complete; same-package results being complete does not imply the package boundary was crossed.
 
 #### Svelte
 
@@ -1305,8 +1378,6 @@ It is advisable to use the default prompt as a starting point and modify it to s
 
 ### Usage Reporting
 
-On startup, Serena reports anonymous usage data to help us understand Serena usage.
-Specifically, we collect the Serena version, the operating system & language backend being used as well as the dashboard enabled status.
-No personally identifiable information or project-specific information is collected.
+On startup, Serena reports anonymous usage data to help us understand Serena usage, as explained in our [privacy policy](privacy).
 
-If you want to opt out of usage reporting, set the environment variable `SERENA_USAGE_REPORTING` to `false`.
+If you want to opt out of usage data reporting, set the environment variable `SERENA_USAGE_REPORTING` to `false`.
