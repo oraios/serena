@@ -6,7 +6,7 @@ You can configure the following options in ls_specific_settings (in serena_confi
     ls_specific_settings:
       kotlin:
         ls_path: '/path/to/bin/intellij-server'  # Custom path to Kotlin Language Server executable
-        kotlin_lsp_version: '262.9593.0'  # Kotlin Language Server version (default: current bundled version)
+        kotlin_lsp_version: '263.4702.0'  # Kotlin Language Server version (default: current bundled version)
         jvm_options: '-Xmx2G'  # JVM options for Kotlin Language Server (default: -Xmx2G)
 
 Example configuration for large projects:
@@ -50,7 +50,7 @@ KOTLIN_LSP_ALLOWED_HOSTS = ("download-cdn.jetbrains.com",)
 #   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
 # NOTE: After changing either pinned version, run scripts/update_downloaded_dependency_hashes.py.
 INITIAL_KOTLIN_LSP_VERSION = "261.13587.0"
-DEFAULT_KOTLIN_LSP_VERSION = "262.9593.0"
+DEFAULT_KOTLIN_LSP_VERSION = "263.4702.0"
 
 # Versions before this one use kotlin-lsp-{version}-{platform}.zip and a kotlin-lsp script.
 # Starting with 262.4739.0, JetBrains publishes kotlin-server archives with platform-specific

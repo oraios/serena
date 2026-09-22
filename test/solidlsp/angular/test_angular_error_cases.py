@@ -21,6 +21,7 @@ import time
 import pytest
 
 from solidlsp import SolidLanguageServer
+from solidlsp.language_servers.angular_language_server import AngularLanguageServer
 from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_exceptions import SolidLSPException
 from test.conftest import _create_ls
@@ -344,6 +345,7 @@ class TestAngularStartupCleanup:
             with pytest.raises(RuntimeError, match="simulated ngserver init"):
                 ls.start()
 
+            assert isinstance(ls, AngularLanguageServer)
             assert ls._ts_server is None, "TS companion was not cleared after startup failure"
             assert ls._html_server is None, "HTML companion was not cleared after startup failure"
 
