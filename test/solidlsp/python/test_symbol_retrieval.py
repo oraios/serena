@@ -46,6 +46,7 @@ class TestLanguageServerSymbols:
         with language_server.open_file(file_path, open_in_ls=False) as f:
             file_content = f.contents
         coords = find_text_coordinates(file_content, r"(status): str")
+        assert coords is not None
         ref_symbols = [ref.symbol for ref in language_server.request_referencing_symbols(file_path, coords.line, coords.col)]
 
         assert len(ref_symbols) > 0

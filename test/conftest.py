@@ -65,8 +65,8 @@ PYTHON_LANGUAGE_BACKENDS = [LanguageServerId.PYTHON, LanguageServerId.PYTHON_TY,
 
 
 def get_repo_path(language: LanguageServerId) -> Path:
-    repo_language = _LANGUAGE_REPO_ALIASES.get(language, language)
-    return Path(__file__).parent / "resources" / "repos" / repo_language / "test_repo"
+    ls_id = _LANGUAGE_REPO_ALIASES.get(language, language)
+    return Path(__file__).parent / "resources" / "repos" / ls_id.get_key() / "test_repo"
 
 
 def _create_ls(
@@ -325,7 +325,7 @@ def get_pytest_markers(ls_id: LanguageServerId) -> list[MarkDecorator | Mark]:
     """
     return [
         *_LANGUAGE_PYTEST_MARKERS[ls_id],
-        pytest.mark.skipif(not language_server_tests_enabled(ls_id), reason=f"{ls_id.value} tests are disabled in this environment"),
+        pytest.mark.skipif(not language_server_tests_enabled(ls_id), reason=f"{ls_id.get_key()} tests are disabled in this environment"),
     ]
 
 

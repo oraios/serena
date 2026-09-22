@@ -2,6 +2,7 @@
 Provides Markdown specific instantiation of the LanguageServer class using marksman.
 Contains various configurations and settings specific to Markdown.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

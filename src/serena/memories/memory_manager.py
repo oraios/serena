@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import logging
 import os
 import re
@@ -328,6 +330,7 @@ class MemoryManager:
         new_name = self._sanitize_name(new_name)
         self._check_not_ignored(old_name)
         self._check_not_ignored(new_name)
+        self._check_write_access(old_name, is_tool_context)
         self._check_write_access(new_name, is_tool_context)
 
         old_path = self.get_memory_file_path(old_name)
@@ -345,22 +348,32 @@ class MemoryManager:
 
     def rename_memory_and_propagate_references(self, old_name: str, new_name: str, is_tool_context: bool) -> tuple[str, int]:
         """
-        Renames a memory and updates every ``mem:OLD_NAME`` reference across all memories.
+        Renames a memory and updates every ``mem:OLD_NAME`` reference in the memories which
+        accept writes in the given context.
 
         Memories whose content does not contain a reference to ``old_name`` are left
-        untouched (no spurious mtime changes). Memories that do are rewritten via
-        :meth:`save_memory`.
+        untouched (no spurious mtime changes); those that do are rewritten via
+        :meth:`save_memory`. References in a memory which does not accept writes (a read-only
+        memory in a tool context) are not affected and remain reported as stale by
+        :meth:`validate_referential_integrity`.
 
         :param old_name: the current memory name (the source of the rename)
         :param new_name: the target memory name
         :param is_tool_context: forwarded to :meth:`save_memory` for read-only enforcement
         :return: a tuple of (rename message returned by :meth:`move_memory`, total number of
-            ``mem:`` reference occurrences rewritten across all memories).
+            ``mem:`` reference occurrences rewritten in those memories).
         """
         renaming_message = self.move_memory(old_name, new_name, is_tool_context=is_tool_context)
 
+        # propagate the reference, enumerating after the move such that the renamed memory
+        # itself is covered; the read-only memories are excluded in a tool context because
+        # writing to one would raise after the move was already applied, leaving the memory
+        # graph half-updated
+        memories_list = self.list_memories()
+        target_names = sorted(memories_list.memories) if is_tool_context else memories_list.get_full_list()
+
         total_updates = 0
-        for memory_name in self.list_memories().get_full_list():
+        for memory_name in target_names:
             content = self.load_memory(memory_name)
             updated_content, n_replacements = self.rename_references_to_memory(content, old_name, new_name)
             if n_replacements > 0:

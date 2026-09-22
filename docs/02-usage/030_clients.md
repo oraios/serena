@@ -124,8 +124,8 @@ When using Serena, we highly recommend that you start CC as
 claude --system-prompt="$(serena prompts print-cc-system-prompt-override)"
 ```
 
-You can also consider adding the content of `serena cc-system-prompt-override` to your `CLAUDE.md` files,
-but the effect be insufficient for counteracting Claude Code's bias towards internal tools.
+You can also consider adding the content of `serena prompts print-cc-system-prompt-override` to your `CLAUDE.md` files,
+but the effect may be insufficient for counteracting Claude Code's bias towards internal tools.
 :::
 
 **Global Configuration**. To add the Serena MCP server for all your projects, use the user-level configuration of claude code and the `--project-from-cwd` flag:

@@ -1,6 +1,7 @@
 """
 This file contains various utility functions like I/O operations, handling paths, etc.
 """
+# SPDX-License-Identifier: MIT
 
 import gzip
 import hashlib
