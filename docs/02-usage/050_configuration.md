@@ -575,7 +575,7 @@ Supported settings:
 
 | Setting | Default | Description |
 |---|---|---|
-| `expert_version` | `v0.1.0-rc.6` | Override the Expert version Serena downloads when it does not use an `expert` executable already found in PATH. |
+| `expert_version` | `v0.1.10` | Override the Expert version Serena downloads when it does not use an `expert` executable already found in PATH. |
 
 #### Elm
 
