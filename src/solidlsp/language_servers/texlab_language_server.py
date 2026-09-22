@@ -2,6 +2,7 @@
 Provides LaTeX specific instantiation of the LanguageServer class using texlab.
 texlab is downloaded as a prebuilt binary from the latex-lsp/texlab GitHub releases.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

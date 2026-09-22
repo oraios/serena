@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 import logging
 import os
 import threading
@@ -5,6 +7,7 @@ from collections.abc import Hashable
 
 from overrides import override
 
+from solidlsp.initialize_params import DefaultInitializeParamsBuilder, InitializeParamsBuilder
 from solidlsp.ls import RawDocumentSymbol, SolidLanguageServer
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -70,6 +73,13 @@ class DartLanguageServer(SolidLanguageServer):
         # Set once the Dart analysis server reports it has finished its initial workspace scan,
         # via either notification it sends for this (see _start_server).
         self.analysis_complete = threading.Event()
+
+    def _create_initialize_params_builder(self) -> InitializeParamsBuilder:
+        # The Dart analysis server treats rootUri as an additional analysis root on top of
+        # workspaceFolders, with no de-duplication, so on a monorepo root that is not a Dart
+        # package the whole tree is analysed and the server burns CPU at idle (oraios/serena#2045).
+        # Omit rootUri/rootPath and rely on workspaceFolders alone.
+        return DefaultInitializeParamsBuilder(self, set_root_uri=False)
 
     @override
     def _document_symbols_cache_fingerprint(self) -> Hashable:

@@ -10,6 +10,7 @@ workflows against a live ``MemoriesManager`` instance.
 Kept separate from the manager so the matching heuristics can be evolved
 and tested in isolation from filesystem and lifecycle concerns.
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 from __future__ import annotations
 

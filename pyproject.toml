@@ -4,13 +4,14 @@ requires = ["hatchling"]
 
 [project]
 name = "serena-agent"
-version = "1.7.1.dev0"
+version = "2.0.0.dev0"
 description = "A powerful MCP toolkit for coding, providing semantic retrieval and editing capabilities - the IDE for your agent"
 authors = [{ name = "Oraios AI", email = "info@oraios-ai.de" }]
 readme = "README.md"
 requires-python = ">=3.11, <3.15"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE", "LICENSES/*"]
 classifiers = [
-  "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
@@ -20,7 +21,8 @@ dependencies = [
   "requests==2.33.0",
   "overrides==7.7.0",
   "python-dotenv==1.2.2",
-  "mcp==1.28.1",
+  "mcp==2.2.0",
+  "click==8.3.1",
   "flask==3.1.3", # bumped from 3.1.1 for CVE fix (also fixes werkzeug alert)
   "sensai-utils==1.5.0",
   "pydantic==2.12.5",
@@ -65,9 +67,6 @@ serena = "serena.cli:top_level"
 serena-agent = "serena.cli:top_level"
 serena-hooks = "serena.hooks:hook_commands"
 
-[project.license]
-text = "MIT"
-
 [project.optional-dependencies]
 dev = [
   "jinja2==3.1.6",
@@ -109,17 +108,15 @@ packages = ["src/serena", "src/interprompt", "src/solidlsp"]
 max-line-length = 1000
 
 [tool.ty.environment]
-python-version = "3.11"
+python-version = "3.11"  # We configure the oldest Python version supported by Serena
 # Analyze for all platforms rather than defaulting to the OS ty happens to run on. This keeps the
 # check deterministic across the CI matrix (Linux/Windows/macOS) and lets platform-conditional stdlib
 # members (e.g. subprocess.CREATE_NO_WINDOW, ctypes.windll, pwd) resolve without per-OS type-ignores.
 python-platform = "all"
 
 [tool.ty.rules]
-# Mirror mypy's ignore_missing_imports=true: optional extras (e.g. agno, google-genai) and
-# platform-specific modules (e.g. AppKit on macOS) are not installed in the default dev environment,
-# so we do not want unresolvable imports to fail the type check.
-unresolved-import = "ignore"
+# Unresolvable imports do fail the type check (catching broken first-party imports); the exceptions for
+# optional extras and platform-specific modules are handled per file/line below.
 possibly-missing-submodule = "ignore"
 
 [tool.ty.src]
@@ -128,6 +125,15 @@ possibly-missing-submodule = "ignore"
 # repos under test/resources; excluding them here would suppress the diagnostics those tests rely on.
 # test/resources is instead excluded from the `ty check test` CLI task via its --exclude flag.
 exclude = ["build/", "docs/"]
+
+[[tool.ty.overrides]]
+# Modules whose imports cannot be resolved in the default dev environment: the agno integration depends
+# on the optional extra `agno`, and the pywebview integration imports macOS-only modules (AppKit, PyObjCTools)
+# in several places. Elsewhere, individual platform-specific imports are suppressed inline.
+include = ["src/serena/agno.py", "src/serena/util/pywebview.py"]
+
+[tool.ty.overrides.rules]
+unresolved-import = "ignore"
 
 [[tool.ty.overrides]]
 # Test code is heavily dynamic (pytest fixtures, MagicMock, intentionally loose Optionals). ty models
@@ -147,7 +153,6 @@ no-matching-overload = "ignore"
 not-subscriptable = "ignore"
 parameter-already-assigned = "ignore"
 too-many-positional-arguments = "ignore"
-unresolved-attribute = "ignore"
 unsupported-operator = "ignore"
 
 [tool.poe.env]

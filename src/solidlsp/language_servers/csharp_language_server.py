@@ -1,6 +1,7 @@
 """
 CSharp Language Server using Roslyn Language Server (Official Roslyn-based LSP server from NuGet.org)
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os
@@ -256,7 +257,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         return hover
 
     def _document_symbols_cache_fingerprint(self) -> Hashable | None:
-        normalize_symbol_name_version = 1
+        normalize_symbol_name_version = 2
         return normalize_symbol_name_version
 
     def _normalize_symbol_name(self, symbol: RawDocumentSymbol, relative_file_path: str) -> str:
@@ -300,15 +301,19 @@ class CSharpLanguageServer(SolidLanguageServer):
             "Add(int, int) : int" -> ("Add", "(int, int) : int")
             "ToString()" -> ("ToString", "()")
             "SimpleMethod" -> ("SimpleMethod", "")
+            "Position : (int X, string Y)" -> ("Position", ": (int X, string Y)")
 
         Returns:
             Tuple of (base_name, type_info)
 
         """
-        # Check for property pattern: "Name : Type"
-        if " : " in roslyn_name and "(" not in roslyn_name:
+        # Check for property pattern: "Name : Type". The '(' guard must look only at the
+        # name segment before the first " : ", not the whole string, since a tuple type
+        # ("(int X, string Y)") legitimately contains parentheses.
+        if " : " in roslyn_name:
             base_name, type_part = roslyn_name.split(" : ", 1)
-            return base_name.strip(), f": {type_part.strip()}"
+            if "(" not in base_name:
+                return base_name.strip(), f": {type_part.strip()}"
 
         # Check for method pattern: "MethodName(params) : ReturnType"
         if "(" in roslyn_name:
@@ -743,11 +748,24 @@ class CSharpLanguageServer(SolidLanguageServer):
             self.server.notify.send_notification("solution/open", {"solution": solution_uri})
             log.debug(f"Opened solution file: {solution_file}")
 
-        # Find and open project files
+        # Find and open project files, skipping any that the project's ignore settings exclude.
+        # Vendored, third-party and sample trees routinely contain .csproj files that the language
+        # server cannot restore or build. Each one costs a project load on every server start, and
+        # the resulting restore failures bury the diagnostics of the projects the user cares about.
         project_files = []
+        skipped = 0
         for filename in breadth_first_file_scan(self.repository_root_path):
-            if filename.endswith(".csproj"):
-                project_files.append(filename)
+            if not filename.endswith(".csproj"):
+                continue
+            relative_path = os.path.relpath(filename, self.repository_root_path)
+            # ignore_unsupported_files=False, because a .csproj is not itself a C# source file and
+            # would otherwise be excluded on file type rather than by the ignore patterns.
+            if self.is_ignored_path(relative_path, ignore_unsupported_files=False):
+                skipped += 1
+                continue
+            project_files.append(filename)
+        if skipped:
+            log.debug(f"Skipped {skipped} .csproj file(s) matched by the project's ignore settings")
 
         # Send project/open notifications for each project file
         if project_files:
