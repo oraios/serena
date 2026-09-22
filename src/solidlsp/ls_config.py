@@ -10,7 +10,7 @@ import logging
 import os
 import re
 import threading
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cache
@@ -24,13 +24,24 @@ log = logging.getLogger(__name__)
 
 
 class FilenameMatcher:
-    def __init__(self, *file_extensions: str, case_sensitive: bool = True) -> None:
+    _SHEBANG_READ_BYTES = 256
+    """bytes of an extensionless file read to look for a shebang line — `#!` plus an interpreter path fits comfortably"""
+
+    def __init__(self, *file_extensions: str, case_sensitive: bool = True, shebang_interpreters: Sequence[str] = ()) -> None:
         """
         :param file_extensions: file extensions, e.g., `.py, .yml`
         :param case_sensitive: whether the file extensions are case-sensitive.
+        :param shebang_interpreters: interpreter names (e.g. `python`, `bash`) that route an EXTENSIONLESS script to this
+            language by its shebang line (`#!/usr/bin/env python3`, `#!/bin/bash`). A name is matched against the shebang's
+            interpreter with a trailing version stripped (`python3.12` -> `python`), after resolving `env` (and its `-S`
+            and `VAR=value` arguments). Read only by :meth:`is_relevant_file`, and only for a file that exists;
+            :meth:`is_relevant_filename` decides by the name alone and never reads a file.
         """
         self._file_extensions = list(set(file_extensions)) if case_sensitive else list(set(ext.lower() for ext in file_extensions))
         self._case_sensitive = case_sensitive
+        self._shebang_interpreters = tuple(shebang_interpreters)
+        self._shebang_verdicts: dict[str, tuple[float, bool]] = {}
+        """cache of shebang sniffs, absolute path -> (mtime, verdict): a traversal asks about the same file more than once"""
         # Snapshot of the initial configuration, used by ``reset``. Relevant for matchers that are
         # per-language singletons (``Language.get_source_fn_matcher`` is ``@cache``d): extensions added
         # via ``add_extensions`` for one project must not leak into the next, so the singleton is reset
@@ -72,12 +83,74 @@ class FilenameMatcher:
                 self._file_extensions.append(norm)
 
     def is_relevant_filename(self, fn: str) -> bool:
+        """
+        :param fn: a filename, optionally with its path
+        :return: whether the filename carries one of the registered extensions. Decided by the name alone — no file is
+            ever read, so a bare filename is as good as a full path; :meth:`is_relevant_file` is the question to ask
+            when the file itself is at hand (an extensionless script is routed by its shebang line only there)
+        """
         if not self._case_sensitive:
             fn = fn.lower()
         for ext in self._file_extensions:
             if fn.endswith(ext):
                 return True
         return False
+
+    def is_relevant_file(self, path: str) -> bool:
+        """
+        :param path: the path of a file — absolute, or relative to the working directory
+        :return: whether the file is a source file of this matcher's language: its name carries one of the registered
+            extensions (:meth:`is_relevant_filename`), or it is an existing file without an extension whose shebang line
+            names one of the language's interpreters (`shebang_interpreters`). This is the one method that may read
+            the file, which is why it takes a path rather than a filename.
+        """
+        return self.is_relevant_filename(path) or self._matches_shebang(path)
+
+    @property
+    def shebang_interpreters(self) -> tuple[str, ...]:
+        """The interpreter names that route an extensionless script to this matcher's language by its shebang line."""
+        return self._shebang_interpreters
+
+    def _matches_shebang(self, path: str) -> bool:
+        """
+        Whether `path` is an existing EXTENSIONLESS file whose first line is a shebang naming one of this matcher's
+        interpreters — the way `dev`, `bin/check-*` and the like are Python or shell scripts without saying so in
+        their name. Anything with an extension is decided by the extension alone; a path that does not exist (a bare
+        filename among them) or is not a file cannot be read and does not match.
+        """
+        if not self._shebang_interpreters or os.path.splitext(os.path.basename(path))[1]:
+            return False
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            return False  # not an existing path (a bare filename, a directory that vanished): nothing to sniff
+        if not os.path.isfile(path):
+            return False
+        cached = self._shebang_verdicts.get(path)
+        if cached is not None and cached[0] == mtime:
+            return cached[1]
+        verdict = self._shebang_interpreter_of(path) in self._shebang_interpreters
+        self._shebang_verdicts[path] = (mtime, verdict)
+        return verdict
+
+    @classmethod
+    def _shebang_interpreter_of(cls, fn: str) -> str | None:
+        """The interpreter a file's shebang line names, versionless (`python3.12` -> `python`), or None without one."""
+        try:
+            with open(fn, "rb") as f:
+                first_line = f.readline(cls._SHEBANG_READ_BYTES)
+        except OSError:
+            return None
+        if not first_line.startswith(b"#!"):
+            return None
+        tokens = first_line[2:].decode("utf-8", errors="replace").split()
+        if tokens and os.path.basename(tokens[0]) == "env":
+            # `#!/usr/bin/env -S python3 -u` / `#!/usr/bin/env FOO=1 python3`: the interpreter is the first
+            # argument that is neither an env option nor an assignment
+            tokens = [t for t in tokens[1:] if not t.startswith("-") and "=" not in t]
+        if not tokens:
+            return None
+        return re.sub(r"[\d.]+$", "", os.path.basename(tokens[0]))
 
     def string_contains_relevant_filename(self, string: str) -> bool:
         """:return: whether ``string`` contains an occurrence of any registered extension as
@@ -421,7 +494,7 @@ class LanguageServerId(Enum):
     def get_source_fn_matcher(self) -> FilenameMatcher:
         match self:
             case self.PYTHON | self.PYTHON_JEDI | self.PYTHON_TY | self.PYTHON_PYREFLY | self.PYTHON_BASEDPYRIGHT:
-                return FilenameMatcher(".py", ".pyi")
+                return FilenameMatcher(".py", ".pyi", shebang_interpreters=("python", "pypy"))
             case self.JAVA:
                 return FilenameMatcher(".java")
             case self.TYPESCRIPT | self.TYPESCRIPT_VTS:
@@ -439,9 +512,9 @@ class LanguageServerId(Enum):
             case self.GO:
                 return FilenameMatcher(".go")
             case self.RUBY:
-                return FilenameMatcher(".rb", ".erb")
+                return FilenameMatcher(".rb", ".erb", shebang_interpreters=("ruby",))
             case self.RUBY_SOLARGRAPH:
-                return FilenameMatcher(".rb")
+                return FilenameMatcher(".rb", shebang_interpreters=("ruby",))
             case self.CPP:
                 # From llvm-project/clang/lib/Driver/Types.cpp types::lookupTypeForExtension:
                 return FilenameMatcher(
@@ -521,7 +594,7 @@ class LanguageServerId(Enum):
             case self.R:
                 return FilenameMatcher(".R", ".r", ".Rmd", ".Rnw")
             case self.PERL:
-                return FilenameMatcher(".pl", ".pm", ".t")
+                return FilenameMatcher(".pl", ".pm", ".t", shebang_interpreters=("perl",))
             case self.CLOJURE:
                 return FilenameMatcher(".clj", ".cljs", ".cljc", ".edn")  # codespell:ignore edn
             case self.ELIXIR:
@@ -533,7 +606,7 @@ class LanguageServerId(Enum):
             case self.SWIFT:
                 return FilenameMatcher(".swift")
             case self.BASH:
-                return FilenameMatcher(".sh", ".bash")
+                return FilenameMatcher(".sh", ".bash", shebang_interpreters=("bash", "sh", "zsh", "dash", "ksh"))
             case self.CRYSTAL:
                 return FilenameMatcher(".cr")
             case self.CUE:

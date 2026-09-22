@@ -62,13 +62,9 @@ class LanguageBackendLSP(LanguageBackend):
 
     @override
     def is_source_file(self, abs_path: str, project: "Project") -> bool:
-        is_file_in_supported_languages = False
-        for language in project.project_config.language_servers:
-            fn_matcher = language.get_source_fn_matcher()
-            if fn_matcher.is_relevant_filename(abs_path):
-                is_file_in_supported_languages = True
-                break
-        return is_file_in_supported_languages
+        # `abs_path` is a path to an existing file, so the path-aware question is the one to ask:
+        # it decides an extensionless script by its shebang line, which the name alone cannot.
+        return any(language.get_source_fn_matcher().is_relevant_file(abs_path) for language in project.project_config.language_servers)
 
     @override
     def is_external_path(self, relative_path: str) -> bool:

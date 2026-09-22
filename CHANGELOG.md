@@ -122,6 +122,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     version changed
   - Fix: A language server's cache directory was determined by the language_id rather than 
     the language server identifier's key. The two identifiers coincided in most cases.
+  - Extensionless scripts are routed to their language by the shebang line (`#!/usr/bin/env python3`,
+    `#!/bin/bash`, ...): `FilenameMatcher.is_relevant_file(path)` sniffs an existing file without an extension for
+    the interpreters a language declares (Python, Bash, Ruby, Perl), and the places that hold a path — the source
+    file gathering, the ignore checks, the language detection — ask it, so `dev`- and `bin/`-style scripts are
+    seen by the symbol index and the tools instead of being invisible. `is_relevant_filename` keeps its contract:
+    decided by the name alone, no file is read.
   - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
     preserves explicit user settings across initialization and configuration requests (#1989)
     VTS initialization options now override defaults per top-level key rather than replacing the
