@@ -40,16 +40,16 @@ MQL_CAPABILITY_REGISTRATION_TIMEOUT_S = 10.0
 # Version pinning convention (see eclipse_jdtls.py for the full spec):
 #   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
 #   DEFAULT_* — bumped on upgrades; goes into a versioned subdir once it diverges from INITIAL.
-# At introduction both point to v2.3.0 with identical asset digests.
-INITIAL_MQL_VERSION = "v2.3.0"
+# At introduction both point to v2.4.0 with identical asset digests.
+INITIAL_MQL_VERSION = "v2.4.0"
 INITIAL_MQL_SHA256_BY_PLATFORM = {
-    # sha256 values from the v2.3.0 release assets (GitHub release API + CHECKSUMS.txt, cross-verified)
-    "linux-x64": "4150c46edb5219881cd996ee02ea9023d0afe9371dceb36497b12907ee583b96",
-    "osx-x64": "e1eb459b4ba32118d4ef04e94c03b6a9215241f0f39a6c39680b3c495b40f1de",
-    "osx-arm64": "a9c35696d8d3d1a3d1ac2d541f50bef745b38bc32dc32ab52ee51c49fd2768b6",
-    "win-x64": "567360b7453adce237f25bccaf0f6d83f733da303827d3edd467c5dfa4895b22",
+    # sha256 values from the v2.4.0 release assets (GitHub release API + CHECKSUMS.txt, cross-verified)
+    "linux-x64": "9bd951065aea57c629347815bb1ac133b964f21019ada291af80e0ee8e9f9b55",
+    "osx-x64": "f1151dc97d88f3c356680ae1f83b593db0411f790e2cca33dfa3cd18822acca5",
+    "osx-arm64": "48623d67ea7f7d516ef0510a233ac065805a1cc0e6bc8d427a987d6f64587f45",
+    "win-x64": "e238bba8b2c51a43aaf1c8747d9c91f09ae1e751f1e57e8ee9f490482e9f86dc",
 }
-DEFAULT_MQL_VERSION = "v2.3.0"
+DEFAULT_MQL_VERSION = "v2.4.0"
 DEFAULT_MQL_SHA256_BY_PLATFORM = INITIAL_MQL_SHA256_BY_PLATFORM
 # Historical DEFAULT digests (kept forever, mirroring the INITIAL scheme: a user who
 # overrides to any formerly-pinned version still gets hash verification). Empty at
