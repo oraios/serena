@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
 from mcp import Implementation
-from mcp.server.fastmcp import Context
-from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata, func_metadata
+from mcp.server.mcpserver import Context
+from mcp.server.mcpserver.utilities.func_metadata import FuncMetadata, func_metadata
 from sensai.util import logging
 from sensai.util.helper import mark_used
 from sensai.util.string import dict_string

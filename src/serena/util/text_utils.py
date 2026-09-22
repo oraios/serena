@@ -406,13 +406,18 @@ class ContentReplacer:
         self.regex_multiline = regex_multiline
 
     @staticmethod
-    def _create_replacement_function(regex_pattern: str, repl_template: str, regex_flags: int) -> Callable[[re.Match], str]:
+    def _create_replacement_function(
+        regex_pattern: str, repl_template: str, regex_flags: int, expand_backrefs: bool
+    ) -> Callable[[re.Match], str]:
         """
         Creates a replacement function that validates for ambiguity and handles backreferences.
 
         :param regex_pattern: The regex pattern being used for matching
-        :param repl_template: The replacement template with $!1, $!2, etc. for backreferences
+        :param repl_template: The replacement template; in regex mode, it may contain $!1, $!2, etc. for
+            backreferences; in literal mode, it is used verbatim
         :param regex_flags: The flags to use when searching (e.g., re.DOTALL | re.MULTILINE)
+        :param expand_backrefs: Whether $!N backreferences are expanded in the template; false in literal mode,
+            mirroring the mode gate in MultiFileContentReplacer.find_occurrences
         :return: A function suitable for use with re.sub() or re.subn()
         """
 
@@ -434,11 +439,19 @@ class ContentReplacer:
                     "e.g. by matching specific context after the match, or try using the literal mode."
                 )
 
-            # Handle backreferences: replace $!1, $!2, etc. with actual matched groups
+            # in literal mode, the template is the final replacement; $!N sequences need no escaping
+            if not expand_backrefs:
+                return repl_template
+
+            # Handle backreferences: replace $!1, $!2, etc. with actual matched groups; groups that
+            # exist but did not participate in the match expand to the empty string
             def expand_backreference(m: re.Match) -> str:
                 group_num = int(m.group(1))
-                group_value = match.group(group_num)
-                return group_value if group_value is not None else m.group(0)
+                try:
+                    group_value = match.group(group_num)
+                except IndexError as e:
+                    raise ValueError(f"Backreference $!{group_num} refers to a group that does not exist in the search expression") from e
+                return group_value if group_value is not None else ""
 
             result = re.sub(r"\$!(\d+)", expand_backreference, repl_template)
             return result
@@ -458,8 +471,8 @@ class ContentReplacer:
 
         :param content: the content in which to perform the replacement
         :param needle: the search expression, which is either a literal string or a regular expression, depending on the mode
-        :param repl: the replacement string, which, in regex mode, may contain backreferences in the form of $!1, $!2, etc. to
-            refer to matched groups in the search expression
+        :param repl: the replacement string; in regex mode, it may contain backreferences in the form of $!1, $!2, etc.
+            to refer to matched groups in the search expression; in literal mode, it is used verbatim
         :return: the updated content after performing the replacement
         """
         if self.mode == "literal":
@@ -471,8 +484,8 @@ class ContentReplacer:
 
         regex_flags = (re.MULTILINE | re.DOTALL) if self.regex_multiline else 0
 
-        # create replacement function with validation and backreference handling
-        repl_fn = self._create_replacement_function(regex, repl, regex_flags=regex_flags)
+        # create replacement function with ambiguity validation and, in regex mode, backreference handling
+        repl_fn = self._create_replacement_function(regex, repl, regex_flags=regex_flags, expand_backrefs=self.mode == "regex")
 
         # perform replacement
         updated_content, n = re.subn(regex, repl_fn, content, flags=regex_flags)
@@ -548,8 +561,12 @@ class MultiFileContentReplacer:
         """Expands $!1, $!2, ... in the replacement template (same syntax as :class:`ContentReplacer`)."""
 
         def expand(m: re.Match) -> str:
-            group_value = match.group(int(m.group(1)))
-            return group_value if group_value is not None else m.group(0)
+            group_num = int(m.group(1))
+            try:
+                group_value = match.group(group_num)
+            except IndexError as e:
+                raise ValueError(f"Backreference $!{group_num} refers to a group that does not exist in the search expression") from e
+            return group_value if group_value is not None else ""
 
         return re.sub(r"\$!(\d+)", expand, repl_template)
 
