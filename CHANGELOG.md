@@ -12,7 +12,6 @@ Status of the `main` branch. Changes prior to the next official version change w
     see `CONTRIBUTING.md`
 
 * General:
-  - Document FLUJO client setup with local Streamable HTTP and tool verification
   - **Major**: Add the Serena REPL as a new agent interface, reducing the tool set to a minimum and providing
     a general code execution environment for all Serena operations.
     This has several significant advantages over regular tool executions.  
