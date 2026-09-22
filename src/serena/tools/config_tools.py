@@ -41,13 +41,12 @@ class ActivateProjectTool(Tool, ToolMarkerDoesNotRequireActiveProject):
     Activates a project based on the project name or path.
     """
 
-    # noinspection PyIncorrectDocstring
-    # (session_id is injected via apply_ex)
     def apply(self, project: str, session_id: str) -> str:
         """
         Activates the project with the given name or path.
 
         :param project: the name of a registered project to activate or a path to a project directory
+        :param session_id: your Serena session id, as provided in Serena's instructions (call `initial_instructions` if you do not have one)
         """
         is_new_activation = self.agent.activate_project_from_path_or_name(project)
         mark_used(is_new_activation)

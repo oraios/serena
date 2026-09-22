@@ -362,17 +362,9 @@ class FacadeApi(ABC):
         """
         :return: a code editor for the active project, using the active language backend
         """
-        from serena.code_editor import JetBrainsCodeEditor, LanguageServerCodeEditor
-        from serena.symbol import LanguageServerSymbolRetriever
-
         project = self._get_project()
         backend = self._agent.get_language_backend()
-        if backend.is_lsp():
-            return LanguageServerCodeEditor(LanguageServerSymbolRetriever(project))
-        elif backend.is_jetbrains():
-            return JetBrainsCodeEditor(project)
-        else:
-            raise ValueError(f"Unsupported language backend: {backend}")
+        return backend.create_code_editor(project)
 
 
 class FacadeMethod:
