@@ -75,8 +75,10 @@ class TestAstroLanguageServerBasics:
     @pytest.mark.parametrize("language_server", [LanguageServerId.ASTRO], indirect=True)
     def test_typescript_companion_server_starts(self, language_server: SolidLanguageServer) -> None:
         """Verify companion TypeScript server starts and attaches to AstroLanguageServer."""
+        from solidlsp.language_servers.astro_language_server import AstroLanguageServer
+
         astro_ls = language_server.language_server
-        assert hasattr(astro_ls, "_ts_server"), "Expected _ts_server attribute on AstroLanguageServer"
+        assert isinstance(astro_ls, AstroLanguageServer), "Expected AstroLanguageServer instance"
         assert astro_ls._ts_server is not None, "Expected companion TypeScript server to be initialized"
         assert astro_ls._ts_server_started, "Expected companion TypeScript server to be started"
 
