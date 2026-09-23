@@ -3,7 +3,14 @@ from collections.abc import Callable
 import pytest
 
 from serena.util.file_proxy import FileCollection, FileProxy
-from serena.util.text_utils import GlobMatcher, LineType, MultiFileContentReplacer, search_files, search_text
+from serena.util.text_utils import (
+    ContentReplacer,
+    GlobMatcher,
+    LineType,
+    MultiFileContentReplacer,
+    search_files,
+    search_text,
+)
 
 
 class TestSearchText:
@@ -691,3 +698,51 @@ class TestMultiFileContentReplacer:
         occ = replacer.find_occurrences([(path, content)], "old_pkg", "new_pkg")[0]
         with pytest.raises(AssertionError):
             replacer.apply_to_content("completely different content", [occ])
+
+
+class TestBackreferenceExpansion:
+    """$!N backreferences in regex-mode replacements refer to matched groups. A group that
+    exists but did not participate in the match (e.g. inside an optional construct that was
+    skipped) must expand to the empty string; a reference to a group that the search
+    expression does not define at all must fail with an error naming the problem instead of
+    a raw IndexError. Literal mode has no backreference expansion at all: the replacement is
+    used verbatim (observed in practice when an agent tried to document the $!N convention
+    itself and the literal-mode replacement crashed instead of writing the text).
+    """
+
+    def test_unmatched_group_expands_to_empty_string(self):
+        replacer = ContentReplacer(mode="regex", allow_multiple_occurrences=False)
+        needle = r"EA_INPUT(?:\((\w*)\))?"
+
+        # the group participated and captured an empty string (empty parentheses)
+        assert replacer.replace("EA_INPUT()\n", needle, r"EA_INPUT$!1(...)") == "EA_INPUT(...)\n"
+        # the group did not participate at all (no parentheses)
+        assert replacer.replace("EA_INPUT\n", needle, r"EA_INPUT$!1(...)") == "EA_INPUT(...)\n"
+
+    def test_matched_group_expands_to_its_value(self):
+        replacer = ContentReplacer(mode="regex", allow_multiple_occurrences=False)
+        assert replacer.replace("id=alpha", r"id=(\w+)", r"[$!1]") == "[alpha]"
+
+    def test_nonexistent_group_reference_raises_clear_error(self):
+        replacer = ContentReplacer(mode="regex", allow_multiple_occurrences=False)
+        with pytest.raises(ValueError, match="does not exist"):
+            replacer.replace("id=alpha", r"id=(\w+)", r"[$!2]")
+
+    def test_literal_mode_repl_is_verbatim(self):
+        """Literal mode has no groups at all and no backreference expansion: a replacement
+        containing $!N sequences is written as-is instead of failing with a backreference error.
+        """
+        replacer = ContentReplacer(mode="literal", allow_multiple_occurrences=False)
+        assert replacer.replace("literal needle", "literal needle", "$!1 stuff $!2") == "$!1 stuff $!2"
+
+    def test_multi_file_replacer_expands_unmatched_group_to_empty_string(self):
+        replacer = MultiFileContentReplacer(mode="regex")
+        files = [("f.txt", "EA_INPUT\n")]
+        occurrences = replacer.find_occurrences(files, r"EA_INPUT(?:\((\w*)\))?", r"EA_INPUT$!1(...)")
+        assert [o.replacement for o in occurrences] == ["EA_INPUT(...)"]
+
+    def test_multi_file_replacer_nonexistent_group_reference_raises_clear_error(self):
+        replacer = MultiFileContentReplacer(mode="regex")
+        files = [("f.txt", "id=alpha\n")]
+        with pytest.raises(ValueError, match="does not exist"):
+            replacer.find_occurrences(files, r"id=(\w+)", r"[$!2]")

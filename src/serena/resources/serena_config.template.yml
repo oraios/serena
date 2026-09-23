@@ -7,6 +7,18 @@
 #      in your IDE).
 language_backend: LSP
 
+# The interface through which the agent (LLM) accesses Serena's functionality:
+#  * tools: the classic tool interface, in which each operation is a separate tool.
+#      The set of tools is configurable via the tool inclusion/exclusion settings (excluded_tools etc.)
+#      of the configuration, the context, modes and the project.
+#  * REPL: operations are accessed programmatically via the serena_repl tool, which executes Python code.
+#      The set of tools is fixed (the REPL tool and the tools required for session management), and the tool
+#      inclusion/exclusion settings do not apply; instead, the operations available in the REPL are configured
+#      via the API inclusion/exclusion settings (excluded_apis etc.).
+# The interface is fixed at startup; it can be overridden by the project activated at startup.
+# IMPORTANT: The REPL interface is a BETA feature. Please provide feedback; if you encounter issues, report them.
+agent_interface: tools
+
 # line ending convention to use when writing source files.
 # Possible values: "lf" (Unix), "crlf" (Windows), "native" (platform default).
 # Note that Serena's own files (e.g. memories and configuration files) always use native line endings.
@@ -151,6 +163,13 @@ included_optional_tools: []
 # This cannot be combined with non-empty excluded_tools or included_optional_tools.
 fixed_tools: []
 
+# list of APIs (facades or facade methods, e.g. "lsp" or "lsp.find_symbol") to be globally excluded from the REPL
+excluded_apis: []
+
+# list of APIs (facades or facade methods, e.g. "lsp.get_diagnostics_for_symbol") to be included in the REPL
+# (particularly optional methods, which are disabled by default)
+included_apis: []
+
 # list of mode names to that are always to be included in the set of active modes.
 # The full set of modes to be activated is base_modes + default_modes + added_modes,
 # where added_modes can be defined by projects/CLI parameters.
@@ -220,6 +239,10 @@ project_serena_folder_location: "$projectDir/.serena"
 #     - C:\Users\Anna\Dev\work\**
 # The pattern "**" matches any project path, so it can be used to trust all projects.
 trusted_project_path_patterns: []
+
+# shared secret for authenticating communication between Serena components and services.
+# Keep this value private. When missing, null, or empty, a random UUID is generated and saved on load.
+auth_secret:
 
 # the list of registered project paths (updated automatically).
 projects: []

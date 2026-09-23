@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterator
 from typing import TypeVar
 
 from serena.util.file_system import find_all_non_ignored_files
-from solidlsp.ls_config import LanguageServerId
+from solidlsp.ls_config import LanguageServerId, LanguageServerIdLike
 
 T = TypeVar("T")
 
@@ -16,22 +16,30 @@ log = logging.getLogger(__name__)
 def iter_subclasses(
     cls: type[T], recursive: bool = True, inclusion_predicate: Callable[[type[T]], bool] = lambda t: True
 ) -> Iterator[type[T]]:
-    """Iterate over all subclasses of a class.
+    """Iterate over all subclasses of a class, yielding each subclass once (even if it is reachable via multiple base classes).
 
     :param cls: The class whose subclasses to iterate over.
     :param recursive: If True, also iterate over all subclasses of all subclasses.
     :param inclusion_predicate: a predicate function to decide whether to include a subclass in the result
     """
-    for subclass in cls.__subclasses__():
-        if inclusion_predicate(subclass):
-            yield subclass
-        if recursive:
-            yield from iter_subclasses(subclass, recursive, inclusion_predicate)
+    seen: set[type] = set()
+
+    def iterate(c: type[T]) -> Iterator[type[T]]:
+        for subclass in c.__subclasses__():
+            if subclass in seen:
+                continue
+            seen.add(subclass)
+            if inclusion_predicate(subclass):
+                yield subclass
+            if recursive:
+                yield from iterate(subclass)
+
+    yield from iterate(cls)
 
 
 def compute_language_server_support_composition(
-    repo_path: str, ls_ids: list[LanguageServerId] | None = None
-) -> dict[LanguageServerId, float]:
+    repo_path: str, ls_ids: list[LanguageServerIdLike] | None = None
+) -> dict[LanguageServerIdLike, float]:
     """
     Determine the composition of a repository in terms of the language servers that can be used to analyze it.
 
@@ -56,7 +64,7 @@ def compute_language_server_support_composition(
     matchers = {lang: lang.get_source_fn_matcher() for lang in ls_ids}
 
     # count files per language in a single pass over the files
-    ls_file_counts: dict[LanguageServerId, int] = {}
+    ls_file_counts: dict[LanguageServerIdLike, int] = {}
     recognised_files = 0
     for file_path in all_files:
         # Use just the filename for matching, not the full path
