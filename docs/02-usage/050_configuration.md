@@ -269,7 +269,7 @@ This ensures backward compatibility: existing projects that already have a `.ser
 Most users will not need to adjust these settings.
 :::
 
-Under the key `ls_specific_settings` in `serena_config.yml`, you can you pass global per-language, 
+Under the key `ls_specific_settings` in `serena_config.yml`, you can pass global per-language, 
 language server-specific configuration. 
 
 You can use the same key in the project configuration files (`project.yml`
@@ -837,10 +837,10 @@ Supported settings:
 | Setting | Default | Description |
 |---|---|---|
 | `ls_path` | managed download | Override the Kotlin Language Server executable path. |
-| `kotlin_lsp_version` | `262.9593.0` | Override the Kotlin Language Server version Serena downloads when `ls_path` is not set. |
+| `kotlin_lsp_version` | `263.4702.0` | Override the Kotlin Language Server version Serena downloads when `ls_path` is not set. |
 | `jvm_options` | `-Xmx2G` | Value assigned to `JAVA_TOOL_OPTIONS` for the Kotlin LS process. Set to `""` to disable JVM options entirely. |
 
-The managed `262.9593.0` packages include a bundled JBR. For a custom `ls_path`, point directly to
+The managed `263.4702.0` packages include a bundled JBR. For a custom `ls_path`, point directly to
 `bin/intellij-server` (`bin/intellij-server.exe` on Windows). Serena also retains the legacy download
 layout for custom Kotlin LSP versions older than `262.4739.0`. The pinned current and frozen initial
 releases are checksum-verified; arbitrary custom versions are downloaded without checksum verification.
@@ -850,7 +850,7 @@ Example:
 ```yaml
 ls_specific_settings:
   kotlin:
-    kotlin_lsp_version: "262.9593.0"
+    kotlin_lsp_version: "263.4702.0"
     jvm_options: "-Xmx4G -XX:+UseG1GC"
 ```
 
@@ -1266,6 +1266,19 @@ Supported settings:
 | `server_ready_timeout` | `10.0` | Timeout in seconds for waiting on the server-ready signal after initialization. If the signal does not arrive within this window, Serena logs a message and proceeds anyway. |
 | `indexing_start_grace` | `5.0` | Timeout in seconds to wait for tsserver to *start* reporting `$/progress` before the first cross-file reference query. tsserver must resolve the project graph before it can emit the first progress token, and that can take longer than the default on a very large project; if it takes longer than this window, Serena assumes no indexing was needed and may return incomplete cross-file references. Raising `indexing_timeout` alone does not help here, since this grace elapses first. Increase this for very large projects if `find_referencing_symbols`/`request_references` returns incomplete results shortly after project load. |
 
+##### TypeScript monorepos and cross-package references
+
+In a monorepo, `find_referencing_symbols` / `find_references` only include consumers in other packages when tsserver can walk from a package's declaration file back to its sources. That walk requires [TypeScript project references](https://www.typescriptlang.org/docs/handbook/project-references.html) (`composite` + `references`), not merely a solution-style root `tsconfig.json` or `package.json` `exports`.
+
+Without those edges, results are **silently partial**: a symbol may show only same-package references (or none) even though other packages import it. This is tsserver behaviour Serena inherits, not a Serena bug ([microsoft/TypeScript#30823](https://github.com/microsoft/TypeScript/issues/30823); oraios/serena#1939).
+
+What to do in a TypeScript monorepo:
+
+- Declare `composite: true` in each library package's `tsconfig.json` and list dependent projects under `references` in the consumer (or a solution-style root).
+- Prefer source imports (or generate declaration maps) so tsserver can map `dist/*.d.ts` back to sources.
+- After changing the project graph, restart Serena (or the TypeScript language server) so tsserver rebuilds the program.
+- If cross-package references still look short, verify with grep before treating the LSP answer as complete; same-package results being complete does not imply the package boundary was crossed.
+
 #### Svelte
 
 Serena uses `svelte-language-server` for the `svelte` language key. Use `svelte` for Svelte projects instead of also listing `typescript`, unless you intentionally want multiple language servers active for the same files.
@@ -1375,8 +1388,6 @@ It is advisable to use the default prompt as a starting point and modify it to s
 
 ### Usage Reporting
 
-On startup, Serena reports anonymous usage data to help us understand Serena usage.
-Specifically, we collect the Serena version, the operating system & language backend being used as well as the dashboard enabled status.
-No personally identifiable information or project-specific information is collected.
+On startup, Serena reports anonymous usage data to help us understand Serena usage, as explained in our [privacy policy](privacy).
 
-If you want to opt out of usage reporting, set the environment variable `SERENA_USAGE_REPORTING` to `false`.
+If you want to opt out of usage data reporting, set the environment variable `SERENA_USAGE_REPORTING` to `false`.

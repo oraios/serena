@@ -30,6 +30,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: process-tree cleanup signaled descendant language-server processes without waiting for them,
     which could leave grandchildren as zombies; cleanup now waits for the discovered descendants (#1464)
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
+  - Fix: `SerenaConfig.project_names` / `project_paths` were cached and never invalidated after
+    projects were added or removed mid-session, so user-facing project lists and error messages
+    stayed stale; the lists are no longer cached
   - Docs: `trusted_project_path_patterns` now documents how to trust a single project. Trust is decided by
     the project's root path, so a `<project root>/**` entry matches only paths below the root and therefore
     trusts no project at all; the template now shows the bare root form alongside the parent-directory
@@ -52,6 +55,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     including its project configuration, are left untouched (#2029)
 
 * Tools:
+  - Fix: `$!N` backreferences in regex-mode replacements expanded to the literal template text
+    (e.g. `EA_INPUT$!1(...)`) when the referenced group existed but did not participate in the
+    match (e.g. a group inside an optional construct that was skipped); unmatched groups now expand
+    to the empty string, and a reference to a group that the search expression does not define
+    raises a clear error instead of a raw `IndexError`. In literal mode, the replacement is now
+    used verbatim (`$!N` sequences need no escaping) instead of failing with a backreference error
   - Fix: the file-editing tools saved the edited file with `open(path, "w")`, which truncates it
     before the new content is complete, so a crash, an OOM kill or a full disk partway through the
     write could leave a source file empty or half-written. Saves now go through the same atomic
@@ -60,11 +69,17 @@ Status of the `main` branch. Changes prior to the next official version change w
     replaced by a regular file (#1958)
 
 * Memories:
+  - Fix: `move_memory` / rename only checked write access on the destination name, so a tool-context
+    rename could relocate a read-only memory; both source and destination are now checked
   - Fix: `save_memory`/`edit_memory` wrote directly to the memory file with `open(path, "w")`, which
     truncates it before the new content is written; a crash, OOM kill, or full disk partway through
     the write could destroy the previous, valid content instead of just losing the update. Both now
     write through a temp-file-plus-`os.replace` helper, matching the approach `save_yaml()` already
     uses for settings files (#1958)
+  - Fix: renaming a memory through the `rename_memory` tool raised `PermissionError` when another memory
+    marked read-only by `read_only_memory_patterns` referenced it, after the rename had already been
+    applied, leaving the memory graph half-updated; reference propagation in tool contexts now covers
+    only writable memories, as documented, while the CLI still propagates into read-only ones
 
 * JetBrains:
   - Fix: Concurrent Serena sessions activating different projects at the same time with
@@ -79,6 +94,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     Serena's own tools to close the gap (#1852)
 
 * Dashboard:
+  - Fix: DashboardManager's unsupported-mode fallback warning logged the literal text
+    `{fallback_mode.value}` because only the first string fragment was an f-string
   - Fix: On macOS, the tray manager refreshed the tray menu straight from the Flask request handlers
     for `/register`, `/update_project` and `/unregister` and from the alive-check thread. That reaches
     `NSStatusItem.setMenu_()` off the main thread, which AppKit forbids and which recent macOS
@@ -87,6 +104,14 @@ Status of the `main` branch. Changes prior to the next official version change w
     thread (#2038)
 
 * Language Servers:
+  - Fix: Dart analysis server no longer receives rootUri/rootPath, which added the monorepo root as an extra analysis root and could pin a CPU core at idle (#2045)
+  - Fix: The C# language server opened every `.csproj` found anywhere under the repository root,
+    without consulting the project's ignore settings. On repositories that vendor third-party or
+    sample C# projects, this loads projects the server cannot restore on every start, and their
+    restore failures bury the diagnostics of the projects the user actually works on. Project
+    discovery now skips `.csproj` files matched by the project's ignore patterns
+  - Kotlin: update the managed Kotlin LSP from `262.9593.0` to `263.4702.0`; the `262.9593.0` build
+    has expired and fails on startup with "This build of intellij-server has expired" (#2008)
   - Fix: Godot's GDScript parser can report a symbol's end column one column past the
     line-end convention every other language server follows (closing a node's range from
     the next lookahead token instead of the last consumed one, when that lookahead is a
@@ -110,6 +135,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     its global state under ``~/Library``; Serena now gives the child process an isolated home-directory view
     via ``solidity_state_dir`` without changing the parent process's ``HOME`` (#1817)
   - Add Fatou support as an alternative Julia language server (`julia_fatou`)
+  - Fix: C# properties/fields whose type contains a literal `(`, e.g. a tuple type like
+    `(int X, string Y)`, had their name corrupted to include a trailing `:` because the
+    parenthesis in the type was mistaken for a method's parameter list; `find_symbol` on
+    the real name then returned nothing
   - Fix: Nextflow's `_flush_deferred_workspace_scan` marked the workspace scan flushed even when both
     of its `completion` probes failed, permanently skipping the flush (and silencing retries) for the
     rest of the session (#1871)
@@ -154,6 +183,8 @@ CLI:
   - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)
 
 * Dependencies:
+  - Fix: declare `click` as a direct dependency; all three console scripts (`serena`, `serena-agent`,
+    `serena-hooks`) import it but it was only available transitively
   - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
   - Upgrade the `mcp` SDK from 1.28.1 to 2.2.0
 
