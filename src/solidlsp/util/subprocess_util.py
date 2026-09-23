@@ -437,3 +437,45 @@ def terminate_process_tree_with_kill_fallback(
             log.error(f"{process_name} (pid={process.pid}) could not be killed within timeout.")
     except Exception as e:
         log.error(f"Error during process shutdown: {e}")
+
+
+def terminate_processes_with_kill_fallback(
+    processes: list[psutil.Process],
+    terminate_timeout: float,
+    process_name: str = "Process",
+    kill_timeout: float = 2.0,
+) -> None:
+    """
+    Terminates the given processes gracefully and forcefully kills any that do not exit within
+    ``terminate_timeout``, waiting up to ``kill_timeout`` for the kill to take effect before returning.
+
+    Unlike :func:`terminate_process_tree_with_kill_fallback`, which drives a ``subprocess.Popen`` leader
+    (and optionally its process group), this operates on an already-collected snapshot of
+    :class:`psutil.Process` objects, e.g. the descendants of the current process. Missing or already-dead
+    entries are ignored.
+
+    :param processes: snapshot of processes to terminate
+    :param terminate_timeout: time to wait for graceful termination before killing
+    :param process_name: name used for logging; should start with a capital letter
+    :param kill_timeout: time to wait for killed processes to actually exit
+    """
+    procs = list(processes)
+    if not procs:
+        return
+
+    def signal_all(terminate: bool) -> None:
+        for proc in procs:
+            try:
+                proc.terminate() if terminate else proc.kill()
+            except (psutil.Error, OSError):
+                pass
+
+    signal_all(terminate=True)
+    if _wait_for_processes(procs, terminate_timeout):
+        log.info(f"{process_name} tree terminated successfully.")
+        return
+
+    log.warning(f"{process_name} tree termination timed out; killing remaining processes forcefully...")
+    signal_all(terminate=False)
+    if not _wait_for_processes(procs, kill_timeout):
+        log.error(f"{process_name} tree could not be fully killed within timeout.")

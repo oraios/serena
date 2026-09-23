@@ -11,6 +11,8 @@ import psutil
 import webview
 from PIL import Image
 
+from solidlsp.util.subprocess_util import terminate_processes_with_kill_fallback
+
 log = logging.getLogger(__name__)
 
 
@@ -106,22 +108,11 @@ class WebViewWithTray:
         Terminates and reaps any descendant processes (e.g. WebView2 subprocesses on Windows).
         """
         try:
-            current_proc = psutil.Process()
-            children = current_proc.children(recursive=True)
-            for child in children:
-                try:
-                    child.terminate()
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-            if children:
-                _, alive = psutil.wait_procs(children, timeout=1.0)
-                for child in alive:
-                    try:
-                        child.kill()
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        pass
-        except Exception as e:
-            log.warning(f"Error cleaning up child processes in dashboard viewer: {e}")
+            children = psutil.Process().children(recursive=True)
+        except (psutil.Error, OSError) as e:
+            log.warning(f"Error enumerating child processes in dashboard viewer: {e}")
+            return
+        terminate_processes_with_kill_fallback(children, terminate_timeout=1.0, process_name="Dashboard viewer child")
 
     def _monitor_parent_process(self) -> None:
         """

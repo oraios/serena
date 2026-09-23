@@ -65,7 +65,7 @@ from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import LanguageServerIdLike
 from solidlsp.util import subprocess_util
-from solidlsp.util.subprocess_util import terminate_process_tree_with_kill_fallback
+from solidlsp.util.subprocess_util import terminate_process_tree_with_kill_fallback, terminate_processes_with_kill_fallback
 
 if TYPE_CHECKING:
     from serena.gui_log_viewer import GuiLogViewer
@@ -521,31 +521,18 @@ class DashboardManager:
             try:
                 if self._dashboard_viewer_process.is_alive():
                     try:
-                        proc = psutil.Process(self._dashboard_viewer_process.pid)
-                        descendants = proc.children(recursive=True)
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        descendants = psutil.Process(self._dashboard_viewer_process.pid).children(recursive=True)
+                    except (psutil.Error, OSError):
                         descendants = []
 
                     self._dashboard_viewer_process.terminate()
-
-                    for child in descendants:
-                        try:
-                            child.terminate()
-                        except (psutil.NoSuchProcess, psutil.AccessDenied):
-                            pass
-
                     self._dashboard_viewer_process.join(timeout=2.0)
                     if self._dashboard_viewer_process.is_alive():
                         self._dashboard_viewer_process.kill()
                         self._dashboard_viewer_process.join(timeout=1.0)
 
-                    if descendants:
-                        _, alive = psutil.wait_procs(descendants, timeout=1.0)
-                        for child in alive:
-                            try:
-                                child.kill()
-                            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                                pass
+                    # WebView2 (and similar) descendants can outlive the viewer on Windows, so clean them up explicitly.
+                    terminate_processes_with_kill_fallback(descendants, terminate_timeout=1.0, process_name="Dashboard viewer child")
                 else:
                     self._dashboard_viewer_process.join(timeout=0.5)
             except Exception as e:
