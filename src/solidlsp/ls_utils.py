@@ -181,8 +181,8 @@ class TextStepper:
         return lines
 
 
-@dataclass(frozen=True, kw_only=True)
-class LineCol:
+@dataclass
+class TextCoordinates:
     """
     Represents a position in a text as a pair of 0-based line and column numbers.
     """
@@ -194,14 +194,9 @@ class LineCol:
     """the 0-based column number"""
 
 
-class TextCoordinates:
-    r"""
-    Provides line/column coordinates for character indices in a text, backed by a privately cached table of line start
-    offsets.
-
-    The table is built once upon construction and mirrors the line semantics of :class:`TextStepper`: "\n", "\r\n"
-    and a bare "\r" are all treated as line separators (as defined by the Language Server Protocol). Resolving a
-    coordinate then requires only a binary search, independent of the text length.
+class TextCoordinateProvider:
+    """
+    Accelerates multiple computations of line/column coordinates in a given text by precomputing the text's line start indices.
     """
 
     def __init__(self, text: str):
@@ -211,7 +206,7 @@ class TextCoordinates:
         self._text = text
         self._line_starts = self._compute_line_starts()
 
-    def line_col_at_index(self, index: int) -> LineCol:
+    def compute_coordinates(self, index: int) -> TextCoordinates:
         r"""
         Returns the line/column coordinates corresponding to the given character index.
 
@@ -230,9 +225,9 @@ class TextCoordinates:
 
         # an index pointing at the "\n" of a "\r\n" pair maps to the beginning of the following line
         if index > 0 and self._text[index - 1] == "\r" and self._text[index : index + 1] == "\n":
-            return LineCol(line=line_num + 1, col=0)
+            return TextCoordinates(line=line_num + 1, col=0)
 
-        return LineCol(line=line_num, col=index - line_start)
+        return TextCoordinates(line=line_num, col=index - line_start)
 
     def _compute_line_starts(self) -> list[int]:
         """
