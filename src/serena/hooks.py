@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import json
 import os
 import pickle
@@ -295,6 +297,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
     _CODE_FILE_EXTENSIONS: frozenset[str] = frozenset(
         (
             ".al",
+            ".astro",
             ".bash",
             ".c",
             ".clj",

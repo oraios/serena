@@ -4,6 +4,7 @@ You can pass the following entries in ``ls_specific_settings["al"]``:
     - al_extension_version: Override the pinned AL VS Code extension version
       downloaded by Serena (default: the bundled Serena version).
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os
@@ -34,6 +35,9 @@ INITIAL_AL_EXTENSION_VERSION = "18.0.2242655"
 INITIAL_AL_EXTENSION_SHA256 = "3971995e61a59dc4fcce4a65053072a67991ed624a16635c4f2911f12564b2b9"
 DEFAULT_AL_EXTENSION_VERSION = "18.0.2242655"
 DEFAULT_AL_EXTENSION_SHA256 = "3971995e61a59dc4fcce4a65053072a67991ed624a16635c4f2911f12564b2b9"
+
+# Base name of the language server executable within the extension; on Windows it is suffixed with ".exe"
+AL_HOST_EXECUTABLE_NAME = "Microsoft.Dynamics.Nav.EditorServices.Host"
 
 
 def _al_extension_sha(version: str) -> str | None:
@@ -187,10 +191,8 @@ class ALLanguageServer(SolidLanguageServer):
         3. Configures executable permissions on Unix systems
         4. Returns the properly formatted command string
 
-        The AL Language Server executable is located in different paths based on the platform:
-        - Windows: bin/win32/Microsoft.Dynamics.Nav.EditorServices.Host.exe
-        - Linux: bin/linux/Microsoft.Dynamics.Nav.EditorServices.Host
-        - macOS: bin/darwin/Microsoft.Dynamics.Nav.EditorServices.Host
+        The executable lives in the extension's `bin` directory, whose internal layout depends on
+        the extension version; see `_get_executable_path_candidates`.
         """
         system = platform.system()
 
@@ -208,11 +210,12 @@ class ALLanguageServer(SolidLanguageServer):
                 "3. Ensure internet connection for automatic download"
             )
 
-        # Build executable path based on platform
-        executable_path = cls._get_executable_path(extension_path, system)
+        # Build the executable path, tolerating the layouts of the different extension versions
+        candidates = cls._get_executable_path_candidates(extension_path, system)
+        executable_path = next((path for path in candidates if os.path.isfile(path)), None)
 
-        if not os.path.exists(executable_path):
-            raise RuntimeError(f"AL Language Server executable not found at: {executable_path}")
+        if executable_path is None:
+            raise RuntimeError("AL Language Server executable not found. Looked for:\n" + "\n".join(f"  - {path}" for path in candidates))
 
         # Prepare and return the executable command
         return cls._prepare_executable(executable_path, system)
@@ -288,26 +291,36 @@ class ALLanguageServer(SolidLanguageServer):
         return None
 
     @classmethod
-    def _get_executable_path(cls, extension_path: str, system: str) -> str:
+    def _get_executable_path_candidates(cls, extension_path: str, system: str) -> list[str]:
         """
-        Build platform-specific executable path.
+        Build the candidate paths of the language server executable for the given platform.
+
+        The AL extension has shipped the executable in two layouts: in the builds up to at least
+        18.0.2242655 it lies in a platform-specific subdirectory of `bin` (`bin/win32/...exe` on
+        Windows), whereas in build 18.0.2732683 the platform subdirectories are gone and it lies
+        directly in `bin`. Both are queried because the build that Serena downloads and the build
+        that the user has installed in VS Code need not be the same.
 
         Args:
             extension_path: Path to AL extension directory
             system: Operating system name
 
         Returns:
-            Full path to executable
+            Candidate paths to the executable, the platform subdirectory layout first
 
         """
         if system == "Windows":
-            return os.path.join(extension_path, "bin", "win32", "Microsoft.Dynamics.Nav.EditorServices.Host.exe")
+            platform_dir, executable_name = "win32", AL_HOST_EXECUTABLE_NAME + ".exe"
         elif system == "Linux":
-            return os.path.join(extension_path, "bin", "linux", "Microsoft.Dynamics.Nav.EditorServices.Host")
+            platform_dir, executable_name = "linux", AL_HOST_EXECUTABLE_NAME
         elif system == "Darwin":
-            return os.path.join(extension_path, "bin", "darwin", "Microsoft.Dynamics.Nav.EditorServices.Host")
+            platform_dir, executable_name = "darwin", AL_HOST_EXECUTABLE_NAME
         else:
             raise RuntimeError(f"Unsupported platform: {system}")
+        return [
+            os.path.join(extension_path, "bin", platform_dir, executable_name),
+            os.path.join(extension_path, "bin", executable_name),
+        ]
 
     @classmethod
     def _prepare_executable(cls, executable_path: str, system: str) -> str:

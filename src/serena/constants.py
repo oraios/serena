@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from pathlib import Path
 
 _repo_root_path = Path(__file__).parent.parent.parent.resolve()

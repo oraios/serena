@@ -3,6 +3,7 @@ End-to-end test for language server file synchronisation as a result of external
 
 Exercises all three ``FileChangeType`` branches against a real pyright backend:
 Created (new caller file), Changed (append a second caller), Deleted (remove the caller file).
+Also covers a Roslyn-specific Created regression (test_new_csharp_file_is_folded_into_compilation).
 """
 
 import json
@@ -62,7 +63,8 @@ class FileSystemSyncTestCase:
                 symbol_names = [ref["name_path"].split("/")[-1] for ref in ref_symbols]
                 return symbol_names
         else:
-            ls = next(iter(agent.get_active_project_or_raise().language_server_manager.iter_language_servers()))
+            ls_manager = agent.get_active_project_or_raise().get_language_server_manager_or_raise()
+            ls = next(iter(ls_manager.iter_language_servers()))
             document_symbols = ls.request_document_symbols(self._TARGET_FILE).get_all_symbols_and_roots()
             target = next((s for s in document_symbols[0] if s.get("name") == self._TARGET_SYMBOL), None)
             assert target is not None and "selectionRange" in target, f"{self._TARGET_SYMBOL} not found in {self._TARGET_FILE}"
@@ -162,7 +164,9 @@ class SymbolPositionStaleAfterExternalEditTestCase:
 
         with agent_for_project_context(LanguageServerId.PYTHON, str(repo_root)) as agent:
             project = agent.get_active_project_or_raise()
-            ls = next(iter(project.language_server_manager.iter_language_servers()))
+            ls_manager = project.language_server_manager
+            assert ls_manager is not None
+            ls = next(iter(ls_manager.iter_language_servers()))
             tool = agent.get_tool(FindSymbolTool)
 
             # Hold the file's buffer open across the external edit, mirroring the state left
@@ -189,3 +193,46 @@ def test_find_symbol_tool_reflects_external_change_to_open_buffer(tmp_path):
     of Serena's own edit tools.
     """
     SymbolPositionStaleAfterExternalEditTestCase().run(tmp_path)
+
+
+@pytest.mark.csharp
+def test_new_csharp_file_is_folded_into_compilation(tmp_path):
+    """
+    Regression test for oraios/serena#1961: a .cs file created after the project has already
+    been indexed used to stay a standalone Miscellaneous Files document to Roslyn, since the
+    generic didChangeWatchedFiles/open-close cycle that poll_and_notify sends for every backend
+    is not enough to make Roslyn's project system re-evaluate which files belong to the already-
+    loaded .csproj. The tell is a phantom 'Using directive is unnecessary' (IDE0005) on a using
+    the new file genuinely needs, since Roslyn cannot resolve the type it imports.
+    """
+    repo_root = tmp_path / "repo"
+    shutil.copytree(get_repo_path(LanguageServerId.CSHARP), repo_root)
+    new_file_rel = "UsesPerson.cs"
+    new_file_abs = repo_root / new_file_rel
+
+    with agent_for_project_context(LanguageServerId.CSHARP, str(repo_root)) as agent:
+        project = agent.get_active_project_or_raise()
+        ls = next(iter(agent.get_language_server_manager_or_raise().iter_language_servers()))
+
+        new_file_abs.write_text(
+            "using TestProject.Models;\n\n"
+            "namespace TestProject;\n\n"
+            "public class UsesPerson\n"
+            "{\n"
+            "    public Person Get() => new Person();\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        assert project.ls_sync_file_system_changes() == 1, "expected exactly one Created event"
+
+        diagnostics = ls.request_text_document_diagnostics(new_file_rel, min_severity=4)
+        messages = [d["message"] for d in diagnostics]
+
+        assert not any("unnecessary" in m.lower() for m in messages), (
+            f"new file was analyzed as a standalone document instead of being folded into the "
+            f"already-loaded project (phantom 'using directive is unnecessary'): {messages}"
+        )
+        assert any("Person" in m and "name" in m for m in messages), (
+            f"expected the real compiler diagnostic for the missing Person(name, age, email) "
+            f"argument, which only fires once the file is actually part of the compilation: {messages}"
+        )

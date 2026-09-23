@@ -1,6 +1,7 @@
 """
 CSharp Language Server using Roslyn Language Server (Official Roslyn-based LSP server from NuGet.org)
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os
@@ -8,7 +9,7 @@ import platform
 import shutil
 import tempfile
 import threading
-from collections.abc import Callable, Hashable, Iterable
+from collections.abc import Callable, Hashable, Iterable, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
@@ -229,6 +230,9 @@ class CSharpLanguageServer(SolidLanguageServer):
         # Cache for original Roslyn symbol names with type annotations
         # Key: (relative_file_path, line, character) -> Value: original name
         self._original_symbol_names: dict[tuple[str, int, int], str] = {}
+        # Set once Roslyn confirms it finished (re)loading the solution/projects; reused by
+        # notify_files_created to wait out a reload triggered after startup.
+        self._project_reload_complete = threading.Event()
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir, self._solidlsp_settings, self.repository_root_path)
@@ -263,7 +267,7 @@ class CSharpLanguageServer(SolidLanguageServer):
         return hover
 
     def _document_symbols_cache_fingerprint(self) -> Hashable | None:
-        normalize_symbol_name_version = 1
+        normalize_symbol_name_version = 2
         return normalize_symbol_name_version
 
     def _normalize_symbol_name(self, symbol: RawDocumentSymbol, relative_file_path: str) -> str:
@@ -307,15 +311,19 @@ class CSharpLanguageServer(SolidLanguageServer):
             "Add(int, int) : int" -> ("Add", "(int, int) : int")
             "ToString()" -> ("ToString", "()")
             "SimpleMethod" -> ("SimpleMethod", "")
+            "Position : (int X, string Y)" -> ("Position", ": (int X, string Y)")
 
         Returns:
             Tuple of (base_name, type_info)
 
         """
-        # Check for property pattern: "Name : Type"
-        if " : " in roslyn_name and "(" not in roslyn_name:
+        # Check for property pattern: "Name : Type". The '(' guard must look only at the
+        # name segment before the first " : ", not the whole string, since a tuple type
+        # ("(int X, string Y)") legitimately contains parentheses.
+        if " : " in roslyn_name:
             base_name, type_part = roslyn_name.split(" : ", 1)
-            return base_name.strip(), f": {type_part.strip()}"
+            if "(" not in base_name:
+                return base_name.strip(), f": {type_part.strip()}"
 
         # Check for method pattern: "MethodName(params) : ReturnType"
         if "(" in roslyn_name:
@@ -555,6 +563,12 @@ class CSharpLanguageServer(SolidLanguageServer):
 
             log.log(level_map.get(level, logging.DEBUG), f"LSP: {message_text}")
 
+            # workspace/projectInitializationComplete (below) fires too early on a project
+            # *re*-open to signal reload completion; this log line is the reliable one for
+            # notify_files_created's wait.
+            if "Completed (re)load of all projects" in message_text:
+                self._project_reload_complete.set()
+
         def handle_progress(params: dict) -> None:
             """Handle progress notifications from the language server."""
             token = params.get("token", "")
@@ -755,11 +769,15 @@ class CSharpLanguageServer(SolidLanguageServer):
             self.server.notify.send_notification("solution/open", {"solution": solution_uri})
             log.debug(f"Opened solution file: {solution_file}")
 
-        # Find and open project files
+        # Find and open project files, skipping any that the project's ignore settings exclude.
+        # Vendored, third-party and sample trees routinely contain .csproj files that the language
+        # server cannot restore or build. Each one costs a project load on every server start, and
+        # the resulting restore failures bury the diagnostics of the projects the user cares about.
         project_files = []
         for filename in breadth_first_file_scan(self.repository_root_path, is_ignored_path):
-            if filename.endswith(".csproj"):
-                project_files.append(filename)
+            if not filename.endswith(".csproj"):
+                continue
+            project_files.append(filename)
 
         # Send project/open notifications for each project file
         if project_files:
@@ -770,3 +788,19 @@ class CSharpLanguageServer(SolidLanguageServer):
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
         return 2
+
+    @override
+    def notify_files_created(self, relative_file_paths: Sequence[str]) -> None:
+        """
+        Roslyn's project system only learns which files belong to a project from the
+        `solution/open`/`project/open` notifications sent once at startup (see
+        `_open_solution_and_projects`); a plain `didChangeWatchedFiles`/open-close cycle
+        does not make it re-evaluate the project, so a file created after startup is
+        analyzed as a standalone Miscellaneous Files document instead of being folded into
+        the already-loaded compilation. Resend the same notifications and wait for the
+        server to confirm the reload before the file is opened.
+        """
+        self._project_reload_complete.clear()
+        self._open_solution_and_projects()
+        if not self._project_reload_complete.wait(30):
+            log.warning("Timeout waiting for project reload after new file(s) were created: %s", list(relative_file_paths))

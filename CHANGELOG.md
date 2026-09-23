@@ -2,29 +2,87 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Licensing:
+  - **Breaking**: The Serena application (`src/serena`, `src/interprompt` and all other non-SolidLSP code) is now
+    licensed under GPL-3.0-or-later. SolidLSP (`src/solidlsp`) remains MIT-licensed. The repository is now
+    explicitly multi-licensed by component; see `LICENSE` for the overview, the historical cutoff and the rationale.
+    The change is not retroactive: all earlier releases and commits remain available under MIT.
+  - Source files now carry `SPDX-License-Identifier` headers
+  - Contributions require acceptance of the new Contributor License Agreement (`CLA.md`), enforced via CLA assistant;
+    see `CONTRIBUTING.md`
+
 * General:
-  - Fix: MCP `initialize` now reports Serena's version instead of the installed mcp SDK version (#1889)
+  - **Major**: Add the Serena REPL as a new agent interface, reducing the tool set to a minimum and providing
+    a general code execution environment for all Serena operations.
+    This has several significant advantages over regular tool executions.  
+    Please refer to our [documentation](https://oraios.github.io/serena/01-about/035_tools.html) for details.
+  - Add `auth_secret` to `serena_config.yml` for authenticating communication between Serena components
+    and services. When missing, null, or empty, a random UUID is generated and persisted; existing values
+    are preserved
+  - Fix: MCP server now reports Serena's version instead of the installed MCP SDK version (#1889)
+  - Fix: importing Serena no longer loads the `anthropic` package unless the Anthropic token counter is
+    actually used; the unconditional import added seconds to CLI/MCP startup on some machines (#2012)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
+  - Perf: `search_for_pattern` resolved each match's line number by rescanning the file from the
+    beginning (O(n) per match, O(n*m) total for m matches); coordinates are now resolved via the new
+    `TextCoordinates` abstraction (cached line starts + binary search)
   - Fix: `TextUtils.insert_text_at_position` returned a wrong position when the inserted text merged
     with an adjacent character into a single newline sequence (e.g. a `\n` inserted directly after an
     existing `\r`); the position is now determined from the resulting text
   - Fix: process-tree cleanup signaled descendant language-server processes without waiting for them,
     which could leave grandchildren as zombies; cleanup now waits for the discovered descendants (#1464)
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
+  - Fix: `SerenaConfig.project_names` / `project_paths` were cached and never invalidated after
+    projects were added or removed mid-session, so user-facing project lists and error messages
+    stayed stale; the lists are no longer cached
+  - Docs: `trusted_project_path_patterns` now documents how to trust a single project. Trust is decided by
+    the project's root path, so a `<project root>/**` entry matches only paths below the root and therefore
+    trusts no project at all; the template now shows the bare root form alongside the parent-directory
+    glob (#2001)
+  - Session IDs are now created and tracked internally by Serena instead of being derived from the
+    MCP session, since the MCP SDK v2 no longer provides session identifiers and client session usage
+    was inconsistent anyway. Tools that need a session id (e.g. `activate_project`, the REPL tool) now
+    take it as an explicit parameter, obtained from `initial_instructions`
+  - Performance: `Project.gather_source_files` transitively re-derived from the filesystem, for every path, 
+    whether that path was a file or a directory; related methods/functions now receive the information
+    as a parameter where it is already known (#2077)
 
 * CLI:
   - Fix: `project health-check` reported `Health check passed - All tools working correctly` and
     exited 0 even when `FindReferencingSymbolsTool` had raised, because that failure was logged as
     a warning while the verdict checked `FindSymbolTool` only. A reference-search failure now fails
     the check; a symbol with no references is still a pass
+  - Add `project remove`, which unregisters a project from the project list in `serena_config.yml`,
+    addressed either by name or by path. Only the registry entry is removed; the project's own files,
+    including its project configuration, are left untouched (#2029)
+
+* Tools:
+  - Fix: `$!N` backreferences in regex-mode replacements expanded to the literal template text
+    (e.g. `EA_INPUT$!1(...)`) when the referenced group existed but did not participate in the
+    match (e.g. a group inside an optional construct that was skipped); unmatched groups now expand
+    to the empty string, and a reference to a group that the search expression does not define
+    raises a clear error instead of a raw `IndexError`. In literal mode, the replacement is now
+    used verbatim (`$!N` sequences need no escaping) instead of failing with a backreference error
+  - Fix: the file-editing tools saved the edited file with `open(path, "w")`, which truncates it
+    before the new content is complete, so a crash, an OOM kill or a full disk partway through the
+    write could leave a source file empty or half-written. Saves now go through the same atomic
+    temp-file-plus-`os.replace` helper that the memory writes already use. The helper resolves
+    symlinks first, so a symlinked file is still written through to its target rather than being
+    replaced by a regular file (#1958)
 
 * Memories:
+  - Fix: `move_memory` / rename only checked write access on the destination name, so a tool-context
+    rename could relocate a read-only memory; both source and destination are now checked
   - Fix: `save_memory`/`edit_memory` wrote directly to the memory file with `open(path, "w")`, which
     truncates it before the new content is written; a crash, OOM kill, or full disk partway through
     the write could destroy the previous, valid content instead of just losing the update. Both now
     write through a temp-file-plus-`os.replace` helper, matching the approach `save_yaml()` already
     uses for settings files (#1958)
+  - Fix: renaming a memory through the `rename_memory` tool raised `PermissionError` when another memory
+    marked read-only by `read_only_memory_patterns` referenced it, after the rename had already been
+    applied, leaving the memory graph half-updated; reference propagation in tool contexts now covers
+    only writable memories, as documented, while the CLI still propagates into read-only ones
 
 * JetBrains:
   - Fix: Concurrent Serena sessions activating different projects at the same time with
@@ -38,12 +96,51 @@ Status of the `main` branch. Changes prior to the next official version change w
     successful Serena call. Add a `serena-hooks reset` command and a `PostToolUse` example matched to
     Serena's own tools to close the gap (#1852)
 
+* Dashboard:
+  - Fix: DashboardManager's unsupported-mode fallback warning logged the literal text
+    `{fallback_mode.value}` because only the first string fragment was an f-string
+  - Fix: On macOS, the tray manager refreshed the tray menu straight from the Flask request handlers
+    for `/register`, `/update_project` and `/unregister` and from the alive-check thread. That reaches
+    `NSStatusItem.setMenu_()` off the main thread, which AppKit forbids and which recent macOS
+    versions punish with SIGTRAP, so the tray-manager process died within seconds of every agent
+    start and the tray icon never became usable. Menu refreshes are now marshalled onto the main
+    thread (#2038)
+
 * Language Servers:
+  - Add Astro language server support via `@astrojs/language-server` with a companion TypeScript language server (`@astrojs/ts-plugin`) for cross-file code intelligence (#2085)
+  - Fix: Dart analysis server no longer receives rootUri/rootPath, which added the monorepo root as an extra analysis root and could pin a CPU core at idle (#2045)
+  - Fix: The C# language server opened every `.csproj` found anywhere under the repository root,
+    without consulting the project's ignore settings. On repositories that vendor third-party or
+    sample C# projects, this loads projects the server cannot restore on every start, and their
+    restore failures bury the diagnostics of the projects the user actually works on. Project
+    discovery now skips `.csproj` files matched by the project's ignore patterns
+  - Kotlin: update the managed Kotlin LSP from `262.9593.0` to `263.4702.0`; the `262.9593.0` build
+    has expired and fails on startup with "This build of intellij-server has expired" (#2008)
+  - Fix: Godot's GDScript parser can report a symbol's end column one column past the
+    line-end convention every other language server follows (closing a node's range from
+    the next lookahead token instead of the last consumed one, when that lookahead is a
+    synthesized newline); `replace_symbol_body` on the last function in a file silently
+    consumed the separating blank line as a result. `GodotLanguageServer` now corrects this
+    specific, measured overshoot when building its high-level document symbols (#1974)
+  - Fix: High-level document symbol cache was not invalidated when the LS-specific low-level result 
+    version changed
+  - Fix: A language server's cache directory was determined by the language_id rather than 
+    the language server identifier's key. The two identifiers coincided in most cases.
+  - Bump the bundled pyrefly to 1.2.0: 1.1.1 advertises `workspace/willRenameFiles` but answers it with `null`;
+    1.2.0 answers with the import edits (measured on the Python test repo: the two absolute importers of a
+    renamed module; a relative import of it, `from .models import`, is not rewritten by either)
   - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
     preserves explicit user settings across initialization and configuration requests (#1989)
     VTS initialization options now override defaults per top-level key rather than replacing the
     entire configuration; a user-provided `typescript` block replaces the ATA default too.
     `initializationOptions` takes precedence over the legacy `initialization_options` alias.
+  - Fix: activating an additional TypeScript workspace folder could open a root-level tool
+    config (`vitest.config.ts`, `jest.config.ts`, etc.) adjacent to `tsconfig.json` instead of
+    a real source file, starting the wrong inferred project and silently losing cross-package
+    references (#2090)
+  - Fix: a C# file created after the project was already indexed was analyzed by Roslyn as a
+    standalone Miscellaneous Files document instead of being folded into the loaded project,
+    causing phantom diagnostics on the new file and on files referencing its symbols (#1961)
   - Add FreeBSD mapping to platform detection
   - Remove unnecessary platform checks from the following language servers, expanding the set of
     supported platforms accordingly: Elixir Tools, Intelephense, Perl, TypeScript, VTS
@@ -51,6 +148,14 @@ Status of the `main` branch. Changes prior to the next official version change w
     its global state under ``~/Library``; Serena now gives the child process an isolated home-directory view
     via ``solidity_state_dir`` without changing the parent process's ``HOME`` (#1817)
   - Add Fatou support as an alternative Julia language server (`julia_fatou`)
+  - Fix: C# properties/fields whose type contains a literal `(`, e.g. a tuple type like
+    `(int X, string Y)`, had their name corrupted to include a trailing `:` because the
+    parenthesis in the type was mistaken for a method's parameter list; `find_symbol` on
+    the real name then returned nothing
+  - Fix: TypeScript's `_has_waited_for_cross_file_references` latch was set after the first
+    cross-file query and never reset, so a later query that opened a file from a project tsserver
+    had not loaded yet (e.g. a monorepo package) skipped the indexing wait even while that
+    project's own `$/progress` indexing was still in flight (#1937)
   - Fix: Nextflow's `_flush_deferred_workspace_scan` marked the workspace scan flushed even when both
     of its `completion` probes failed, permanently skipping the flush (and silencing retries) for the
     rest of the session (#1871)
@@ -90,6 +195,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     symbols, which was applied outside the caches; the processing of language servers that post-process
     symbols (e.g. Go, Nix, Fortran, F#, Vue) was therefore repeated on every request or, if it mutated
     symbols in place, re-applied to already processed cached results
+  - Fix: the AL language server executable was only searched for in a platform-specific subdirectory of
+    the extension's `bin` directory (`bin/win32/...` on Windows). Some AL extension builds (e.g.
+    18.0.2732683, as opposed to the 18.0.2242655 that Serena pins) have no such subdirectories and
+    place the executable directly in `bin`, so activating an AL project failed with "AL Language
+    Server executable not found" for users whose VS Code extension was on such a build. Both layouts
+    are now probed, the platform subdirectory first (#2069)
   - Fix: C# solution/project discovery traversed and opened paths matched by the configured ignore
     patterns (incl. `.gitignore`), slowing down startup and loading ignored projects in Roslyn (#1999)
 
@@ -97,7 +208,11 @@ CLI:
   - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)
 
 * Dependencies:
+  - Fix: declare `click` as a direct dependency; all three console scripts (`serena`, `serena-agent`,
+    `serena-hooks`) import it but it was only available transitively
   - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
+  - Update `PyJWT` from 2.12.0 to 2.13.0
+  - Upgrade the `mcp` SDK from 1.28.1 to 2.2.0
 
 # v1.7.0 (2026-08-09)
 
@@ -249,7 +364,6 @@ CLI:
   - PreToolUse remind hook: coerce non-string shell command values instead of failing, and recognize
     `target_file`/`targetFile` file-path keys (shared payload parsing, applies to all hook clients).
   - Fix hook input parsing for clients that emit raw control characters in JSON string values #1743.
-
 
 # v1.6.1 (2026-07-21)
 

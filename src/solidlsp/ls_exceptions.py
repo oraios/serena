@@ -1,6 +1,7 @@
 """
 This module contains the exceptions raised by the framework.
 """
+# SPDX-License-Identifier: MIT
 
 from solidlsp.ls_config import LanguageServerIdLike
 

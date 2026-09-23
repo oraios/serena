@@ -1,6 +1,7 @@
 """
 Configuration objects for language servers
 """
+# SPDX-License-Identifier: MIT
 
 from __future__ import annotations
 
@@ -9,7 +10,7 @@ import logging
 import os
 import re
 import threading
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cache
@@ -172,6 +173,11 @@ class LanguageServerId(Enum):
     """Svelte language server using svelte-language-server.
     Supports .svelte Single File Components plus TypeScript and JavaScript
     files in Svelte projects. Requires Node.js v18+ and npm.
+    """
+    ASTRO = "astro"
+    """Astro language server using @astrojs/language-server.
+    Supports .astro Single File Components plus TypeScript and JavaScript
+    files in Astro projects. Requires Node.js v18+ and npm.
     """
     POWERSHELL = "powershell"
     PASCAL = "pascal"
@@ -403,7 +409,7 @@ class LanguageServerId(Enum):
         # the "larger" language is only chosen when it matches more strongly
         match self:
             # languages that are supersets of others (Vue/Svelte are supersets of TypeScript/JavaScript)
-            case self.VUE | self.SVELTE:
+            case self.VUE | self.SVELTE | self.ASTRO:
                 return 1
             # regular languages
             case _:
@@ -590,6 +596,12 @@ class LanguageServerId(Enum):
                     for base_pattern in ["ts", "js"]:
                         path_patterns.append(f".{prefix}{base_pattern}")
                 return FilenameMatcher(*path_patterns)
+            case self.ASTRO:
+                path_patterns = [".astro"]
+                for prefix in ["c", "m", ""]:
+                    for base_pattern in ["ts", "js"]:
+                        path_patterns.append(f".{prefix}{base_pattern}")
+                return FilenameMatcher(*path_patterns)
             case self.POWERSHELL:
                 return FilenameMatcher(".ps1", ".psm1", ".psd1")
             case self.PASCAL:
@@ -725,6 +737,10 @@ class LanguageServerId(Enum):
                 from solidlsp.language_servers.svelte_language_server import SvelteLanguageServer
 
                 return SvelteLanguageServer
+            case self.ASTRO:
+                from solidlsp.language_servers.astro_language_server import AstroLanguageServer
+
+                return AstroLanguageServer
             case self.GO:
                 from solidlsp.language_servers.gopls import Gopls
 
@@ -1064,6 +1080,14 @@ class LanguageServerRegistry:
         if key in self._registered_language_servers:
             return self._registered_language_servers[key]
         raise ValueError(f"Unknown language server key: '{key}'; Valid keys: {self.get_keys()}")
+
+    def iter_registered_ls_ids(self) -> Iterator[LanguageServerIdLike]:
+        """
+        Iterate over all registered language servers (built-in + externally-registered via
+        entry points). Order follows ``get_keys()`` (alphabetical).
+        """
+        for key in self.get_keys():
+            yield self._registered_language_servers[key]
 
     def register(self, ls_id: LanguageServerIdLike, allow_override: bool = False) -> None:
         """
