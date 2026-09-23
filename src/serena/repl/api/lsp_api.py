@@ -26,6 +26,7 @@ from serena.tools import (
     GetDiagnosticsForFileTool,
     GetDiagnosticsForSymbolTool,
     GetSymbolsOverviewTool,
+    RenameFileTool,
     RenameSymbolTool,
     RestartLanguageServerTool,
     SafeDeleteSymbol,
@@ -748,6 +749,21 @@ class LspApi(FacadeApi):
         """
         self._get_project().ls_sync_file_system_changes()
         return self._create_ls_code_editor().rename_symbol(name_path, relative_path=relative_path, new_name=new_name)
+
+    @facade_method(uses_project_server=True, can_edit=True, corresponding_tool=RenameFileTool)
+    def rename_file(self, relative_path: str, new_relative_path: str) -> str:
+        """
+        Renames or moves a file and updates the code that refers to it — the import statements in other files, as
+        proposed by the language server through `workspace/willRenameFiles`.
+
+        The directory may change (a move); missing parent directories are created. Files only, not directories.
+
+        :param relative_path: the relative path of the file to rename or move
+        :param new_relative_path: the relative path the file shall have afterwards
+        :return: a result summary naming how many files had their references updated
+        """
+        self._get_project().ls_sync_file_system_changes()
+        return self._create_ls_code_editor().rename_file(relative_path, new_relative_path)
 
     @facade_method(uses_project_server=True, can_edit=True, corresponding_tool=SafeDeleteSymbol)
     def safe_delete_symbol(self, name_path_pattern: str, relative_path: str) -> str:
