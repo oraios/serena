@@ -130,6 +130,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     VTS initialization options now override defaults per top-level key rather than replacing the
     entire configuration; a user-provided `typescript` block replaces the ATA default too.
     `initializationOptions` takes precedence over the legacy `initialization_options` alias.
+  - Fix: activating an additional TypeScript workspace folder could open a root-level tool
+    config (`vitest.config.ts`, `jest.config.ts`, etc.) adjacent to `tsconfig.json` instead of
+    a real source file, starting the wrong inferred project and silently losing cross-package
+    references (#2090)
   - Fix: a C# file created after the project was already indexed was analyzed by Roslyn as a
     standalone Miscellaneous Files document instead of being folded into the loaded project,
     causing phantom diagnostics on the new file and on files referencing its symbols (#1961)
