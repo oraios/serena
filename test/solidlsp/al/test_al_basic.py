@@ -264,7 +264,7 @@ class TestALHoverInjection:
                 char = start.get("character", 0)
                 hover = language_server.request_hover(file_path, line, char)
                 if hover and "contents" in hover:
-                    return hover, hover["contents"].get("value", "")
+                    return hover, hover["contents"].get("value", "")  # type: ignore
                 return hover, None
         return None, None
 
@@ -286,7 +286,7 @@ class TestALHoverInjection:
                         char = start.get("character", 0)
                         hover = language_server.request_hover(file_path, line, char)
                         if hover and "contents" in hover:
-                            return hover, hover["contents"].get("value", "")
+                            return hover, hover["contents"].get("value", "")  # type: ignore
                         return hover, None
         return None, None
 
@@ -373,7 +373,7 @@ class TestALHoverInjection:
                                 hover = language_server.request_hover(file_path, line, char)
 
                                 assert hover is not None, "Hover should return a result for field"
-                                value = hover.get("contents", {}).get("value", "")
+                                value = hover.get("contents", {}).get("value", "")  # type: ignore
                                 # Field hover should NOT start with ** (no injection)
                                 assert not value.startswith("**"), f"Field hover should not have injected name. Got: {value[:200]}"
                                 return
@@ -445,7 +445,7 @@ class TestALPathNormalization:
 
                 hover = language_server.request_hover(file_path, line, char)
                 assert hover is not None, "Hover should return a result"
-                value = hover.get("contents", {}).get("value", "")
+                value = hover.get("contents", {}).get("value", "")  # type: ignore
                 assert '**Table 50000 "TEST Customer"**' in value, f"Hover should have injection. Got: {value[:200]}"
                 return
 
@@ -466,7 +466,7 @@ class TestALPathNormalization:
 
                 hover = language_server.request_hover(file_path, line, char)
                 assert hover is not None, "Hover should return a result"
-                value = hover.get("contents", {}).get("value", "")
+                value = hover.get("contents", {}).get("value", "")  # type: ignore
                 assert '**Table 50000 "TEST Customer"**' in value, f"Hover should have injection. Got: {value[:200]}"
                 return
 
@@ -491,7 +491,7 @@ class TestALPathNormalization:
                 # Request hover with forward slash path (different format)
                 hover = language_server.request_hover(file_path_forward, line, char)
                 assert hover is not None, "Hover should return a result"
-                value = hover.get("contents", {}).get("value", "")
+                value = hover.get("contents", {}).get("value", "")  # type: ignore
                 assert '**Table 50000 "TEST Customer"**' in value, (
                     f"Hover injection should work with mixed path formats. Got: {value[:200]}"
                 )
@@ -518,7 +518,7 @@ class TestALPathNormalization:
                 # Request hover with backslash path (different format)
                 hover = language_server.request_hover(file_path_backslash, line, char)
                 assert hover is not None, "Hover should return a result"
-                value = hover.get("contents", {}).get("value", "")
+                value = hover.get("contents", {}).get("value", "")  # type: ignore
                 assert '**Table 50000 "TEST Customer"**' in value, (
                     f"Hover injection should work with mixed path formats. Got: {value[:200]}"
                 )
@@ -553,7 +553,7 @@ class TestALPathNormalization:
                     # Request hover with different path format
                     hover = language_server.request_hover(hover_path, line, char)
                     assert hover is not None, f"Hover should return a result for {symbol_name}"
-                    value = hover.get("contents", {}).get("value", "")
+                    value = hover.get("contents", {}).get("value", "")  # type: ignore
                     assert f"**{expected_injection}**" in value, (
                         f"Hover for {symbol_name} should have injection with mixed paths. Got: {value[:200]}"
                     )

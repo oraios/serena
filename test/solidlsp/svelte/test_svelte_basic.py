@@ -20,7 +20,7 @@ class TestSvelteLanguageServer:
     def test_svelte_language_server_root_matches_repo_path(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         assert language_server.is_running()
         assert repo_path.resolve() == svelte_test_conftest.repo_path.resolve()
-        assert Path(language_server.language_server.repo_path).resolve() == repo_path.resolve()
+        assert Path(language_server.repository_root_path).resolve() == repo_path.resolve()
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.SVELTE], indirect=True)
     def test_svelte_and_typescript_files_in_symbol_tree(self, language_server: SolidLanguageServer) -> None:
@@ -74,12 +74,13 @@ class TestSvelteLanguageServer:
     def test_definition_from_component_import_to_svelte_file(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "lib", "components", "Header.svelte")
         coords = find_text_coordinates(read_repo_file(language_server, file_path), r"(count)")
+        assert coords is not None
 
         definitions = language_server.request_definition(file_path, coords.line, coords.col)
-        definition_paths = sorted(definition["relativePath"].replace("\\", "/") for definition in definitions)
+        definition_paths = sorted(definition["relativePath"].replace("\\", "/") for definition in definitions)  # type: ignore
 
         assert len(definitions) == 1, definition_paths
-        assert definitions[0]["relativePath"].replace("\\", "/") == "src/lib/components/Counter.svelte", definition_paths
+        assert definitions[0]["relativePath"].replace("\\", "/") == "src/lib/components/Counter.svelte", definition_paths  # type: ignore
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.SVELTE], indirect=True)
     def test_diagnostics_in_typescript_file(self, language_server: SolidLanguageServer) -> None:
