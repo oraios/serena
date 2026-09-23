@@ -36,8 +36,8 @@
 # TESTING / SKIPS
 #   All language skip logic is centralized in test/conftest.py
 #   (`language_tests_enabled()`): a test is skipped when its toolchain is not expected
-#   on the current OS/CI. Lint and type-check are batch-independent and run once per
-#   OS (catch-all only), not in every batch.
+#   on the current OS/CI. Lint and type-check are batch-independent and live in their own
+#   `lint` job (once per OS), so a formatting slip cannot cancel the test matrix.
 # =============================================================================
 name: Tests
 
@@ -148,11 +148,6 @@ jobs:
       - name: List Python dependencies
         shell: bash
         run: uv pip list
-      - name: Check formatting
-        # Lint is batch-independent; run it only once per OS instead of in every batch.
-        if: matrix.batch == 'catch-all'
-        shell: bash
-        run: uv run poe lint
       # Add Go bin directory to PATH for this workflow
       # GITHUB_PATH is a special file that GitHub Actions uses to modify PATH
       # Writing to this file adds the directory to the PATH for subsequent steps
@@ -774,8 +769,61 @@ jobs:
       - name: Test with pytest
         shell: bash
         run: uv run poe test -m "${{ steps.markers.outputs.expr }}" -q --tb=short
+
+  # The static gates -- format, lint, types -- in a job of their own.
+  #
+  # They used to be two steps inside this workflow's test matrix, gated on
+  # `matrix.batch == 'catch-all'`, which put a 1-second check in front of a 10-minute one.
+  # On 2026-08-14 a single unformatted line failed `Check formatting` 31 seconds into a
+  # 628-second job and cancelled everything behind it, so `Test with pytest` and
+  # `Type-checking with ty` did not run on any OS for as long as main stayed unformatted --
+  # and every pull request opened in that window inherited three red checks it could not fix.
+  # Type-checking had the mirror-image problem: it ran last, after pytest, so a 2-second
+  # check took ~10 minutes to report.
+  #
+  # Separated, the verdict lands in well under a minute, it names itself in the checks list
+  # instead of arriving as `catch-all`, and a formatting slip no longer stops the tests.
+  # Deliberately NOT a `needs:` of the test matrix -- re-coupling them is the thing this undoes.
+  #
+  # Same three OSes as before, so nothing is checked less than it was. This adds 3 jobs
+  # (13 -> 16 total, 4 -> 5 on macOS), within the 20-job and 5-macOS ceilings noted above.
+  # Only the venv is installed: ruff and ty need no language servers, no Node and no Go.
+  lint:
+    name: lint (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.11"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: "${{ matrix.python-version }}"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Cache uv virtualenv
+        uses: actions/cache@v3
+        with:
+          path: .venv
+          # Same key as the test matrix, so this job restores that venv instead of
+          # building a second one.
+          key: uv-venv-${{ runner.os }}-${{ matrix.python-version }}-lock-${{ hashFiles('uv.lock') }}
+      - name: Create virtual environment
+        shell: bash
+        run: |
+          if [ ! -d ".venv" ]; then
+            uv venv
+          fi
+      - name: Install Python environment
+        shell: bash
+        run: uv sync --extra dev --locked
+      - name: Check formatting
+        shell: bash
+        run: uv run poe lint
       - name: Type-checking with ty
-        # Type-checking is batch-independent; run it only once per OS instead of in every batch.
-        if: matrix.batch == 'catch-all'
         shell: bash
         run: uv run poe type-check
