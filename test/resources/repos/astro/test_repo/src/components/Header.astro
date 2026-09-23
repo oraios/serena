@@ -1,0 +1,13 @@
+---
+interface Props {
+  siteName: string;
+}
+
+const { siteName } = Astro.props;
+---
+
+<header>
+  <nav>
+    <a href="/">{siteName}</a>
+  </nav>
+</header>

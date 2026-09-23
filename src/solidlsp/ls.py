@@ -1974,11 +1974,12 @@ class SolidLanguageServer(ABC):
             # no cached result: get the raw root symbols from the language server
             document_symbols = self._build_document_symbols_from_raw_symbols(relative_file_path, file_buffer=file_data)
 
-            # update cache
+            # update cache (only cache non-empty results to avoid permanently caching unindexed responses)
             content_hash = file_data.content_hash
-            log.debug("Updating cached document symbols for %s (hash=%s)", relative_file_path, content_hash)
-            self._document_symbols_cache[cache_key] = (content_hash, document_symbols)
-            self._document_symbols_cache_is_modified = True
+            if document_symbols.root_symbols:
+                log.debug("Updating cached document symbols for %s (hash=%s)", relative_file_path, content_hash)
+                self._document_symbols_cache[cache_key] = (content_hash, document_symbols)
+                self._document_symbols_cache_is_modified = True
 
             return document_symbols
 
