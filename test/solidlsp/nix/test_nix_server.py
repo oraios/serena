@@ -4,7 +4,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any, cast
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import pytest
 
@@ -215,3 +215,35 @@ def test_start_registers_configuration_handler_before_start_and_initialize(tmp_p
 
     assert events.index("request:workspace/configuration") < events.index("start") < events.index("initialize")
     assert request_handlers["workspace/configuration"]({"items": [{"section": "nixd.formatting"}]}) == [{"command": ["nixpkgs-fmt"]}]
+
+
+def test_hover_retries_transient_empty_response(tmp_path: Path) -> None:
+    server = _make_server(tmp_path)
+    hover_result = {"contents": {"kind": "markdown", "value": "makeGreeting"}}
+    cast(Any, server.server.send.hover).side_effect = [None, hover_result]
+    file_buffer = Mock(uri="file:///tmp/default.nix")
+
+    with patch("solidlsp.language_servers.nixd_ls.sleep") as wait:
+        result = server._request_hover(file_buffer, 12, 5)
+
+    expected_request = {
+        "textDocument": {"uri": "file:///tmp/default.nix"},
+        "position": {"line": 12, "character": 5},
+    }
+    assert result == hover_result
+    assert cast(Any, server.server.send.hover).call_args_list == [call(expected_request), call(expected_request)]
+    wait.assert_called_once_with(NixLanguageServer._HOVER_RETRY_DELAY_SECONDS)
+
+
+def test_hover_stops_after_bounded_retries(tmp_path: Path) -> None:
+    server = _make_server(tmp_path)
+    cast(Any, server.server.send.hover).return_value = None
+    file_buffer = Mock(uri="file:///tmp/default.nix")
+
+    with patch("solidlsp.language_servers.nixd_ls.sleep") as wait:
+        result = server._request_hover(file_buffer, 12, 5)
+
+    assert result is None
+    assert cast(Any, server.server.send.hover).call_count == NixLanguageServer._HOVER_RETRY_COUNT + 1
+    assert wait.call_count == NixLanguageServer._HOVER_RETRY_COUNT
+    wait.assert_called_with(NixLanguageServer._HOVER_RETRY_DELAY_SECONDS)
