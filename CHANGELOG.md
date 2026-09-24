@@ -33,6 +33,12 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: process-tree cleanup signaled descendant language-server processes without waiting for them,
     which could leave grandchildren as zombies; cleanup now waits for the discovered descendants (#1464)
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
+  - Fix: `MultiFileContentReplacer` accounted for the exclusivity of the match end in neither
+    `ReplacementOccurrence.end_line` nor the region rendered by `render_occurrence_diff`, so a
+    replacement whose pattern consumed a line break reported the match as ending on the following
+    line and displayed that line as both removed and added; a line break terminating a file was
+    likewise displayed as an additional line; this now applies the same rule `search_text` has used
+    since #1708 (#2080)
   - Fix: `SerenaConfig.project_names` / `project_paths` were cached and never invalidated after
     projects were added or removed mid-session, so user-facing project lists and error messages
     stayed stale; the lists are no longer cached

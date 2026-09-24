@@ -594,6 +594,14 @@ class MultiFileContentReplacer:
                 # matching again within the matched text indicates the match may have swallowed
                 # more than intended
                 is_ambiguous = "\n" in matched_text and pattern.search(matched_text[1:]) is not None
+
+                # the match end is exclusive, so a match that consumes a line break ends on the
+                # line before the one `match.end()` points at; `search_text` applies the same rule
+                start_line = content.count("\n", 0, match.start())
+                end_line = content.count("\n", 0, match.end())
+                if end_line > start_line and matched_text.endswith("\n"):
+                    end_line -= 1
+
                 occurrences.append(
                     ReplacementOccurrence(
                         occurrence_id=self.make_occurrence_id(relative_path, index_in_file, matched_text),
@@ -603,8 +611,8 @@ class MultiFileContentReplacer:
                         end=match.end(),
                         matched_text=matched_text,
                         replacement=replacement,
-                        start_line=content.count("\n", 0, match.start()),
-                        end_line=content.count("\n", 0, match.end()),
+                        start_line=start_line,
+                        end_line=end_line,
                         is_ambiguous=is_ambiguous,
                     )
                 )
@@ -655,6 +663,26 @@ class MultiFileContentReplacer:
             line_end = len(content)
         old_block = content[line_start:line_end]
         new_block = content[line_start : occ.start] + occ.replacement + content[occ.end : line_end]
+
+        # the file's final line break terminates the last line rather than starting a further one, so
+        # splitting an end-of-file window would materialize the empty remainder behind it as a phantom
+        # line; for a window ending before the file end, an empty remainder instead denotes a real
+        # blank line behind the match, which is merged away by it and therefore has to be shown
+        if line_end == len(content):
+            old_block = old_block.removesuffix("\n")
+            new_block = new_block.removesuffix("\n")
+
+        # the window runs to the next line break after the exclusive match end, so when the match
+        # itself consumed a line break the following line is included on both sides; drop such
+        # trailing lines, as a line the replacement leaves unchanged is not part of the change
+        old_lines = old_block.split("\n")
+        new_lines = new_block.split("\n")
+        while len(old_lines) > 1 and len(new_lines) > 1 and old_lines[-1] == new_lines[-1]:
+            old_lines.pop()
+            new_lines.pop()
+        old_block = "\n".join(old_lines)
+        new_block = "\n".join(new_lines)
+
         location = f"line {occ.start_line}" if occ.start_line == occ.end_line else f"lines {occ.start_line}-{occ.end_line}"
         header = f"  [{occ.occurrence_id}] {location}"
         if occ.is_ambiguous:
