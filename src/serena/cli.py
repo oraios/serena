@@ -902,7 +902,7 @@ class ProjectCommands(AutoRegisteringGroup):
         if os.path.isabs(path):
             path = os.path.relpath(path, start=proj.project_root)
         is_ignored = proj.is_ignored_path(path)
-        click.echo(f"Path '{path}' IS {'ignored' if is_ignored else 'IS NOT ignored'} by the project configuration.")
+        click.echo(f"Path '{path}' {'IS' if is_ignored else 'IS NOT'} ignored by the project configuration.")
 
     @staticmethod
     @click.command(
