@@ -297,6 +297,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
     _CODE_FILE_EXTENSIONS: frozenset[str] = frozenset(
         (
             ".al",
+            ".astro",
             ".bash",
             ".c",
             ".clj",

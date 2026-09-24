@@ -516,20 +516,25 @@ class TypeScriptLanguageServer(SolidLanguageServer):
     def _find_representative_source_file(self, directory: str) -> str | None:
         """Find a TypeScript file suitable for triggering project loading.
 
-        Prefers a file adjacent to tsconfig.json (indicating the project root),
-        then falls back to the first .ts/.tsx file found.
+        Prefers a file under a `src` subdirectory adjacent to tsconfig.json (the
+        conventional source root), so a root-level tool config that tsconfig excludes
+        (vitest.config.ts, jest.config.ts, etc.) is not picked over the project's real
+        source tree. Falls back to a file directly adjacent to tsconfig.json, then to
+        the first .ts/.tsx file found anywhere in the directory.
         """
         for root, dirs, files in os.walk(directory):
             dirs[:] = [d for d in dirs if not self.is_ignored_dirname(d)]
             if "tsconfig.json" in files:
+                src_dir = os.path.join(root, "src")
+                if os.path.isdir(src_dir):
+                    for src_root, src_dirs, src_files in os.walk(src_dir):
+                        src_dirs[:] = [d for d in src_dirs if not self.is_ignored_dirname(d)]
+                        for f in src_files:
+                            if f.endswith((".ts", ".tsx")) and not f.endswith(".d.ts"):
+                                return os.path.join(src_root, f)
                 for f in files:
                     if f.endswith((".ts", ".tsx")) and not f.endswith(".d.ts"):
                         return os.path.join(root, f)
-                src_dir = os.path.join(root, "src")
-                if os.path.isdir(src_dir):
-                    for f in os.listdir(src_dir):
-                        if f.endswith((".ts", ".tsx")) and not f.endswith(".d.ts"):
-                            return os.path.join(src_dir, f)
 
         for root, dirs, files in os.walk(directory):
             dirs[:] = [d for d in dirs if not self.is_ignored_dirname(d)]
@@ -575,18 +580,29 @@ class TypeScriptLanguageServer(SolidLanguageServer):
 
     @override
     def _wait_for_cross_file_references_if_needed(self) -> None:
-        if self._has_waited_for_cross_file_references:
+        timeout = self._get_indexing_timeout()
+        if not self._has_waited_for_cross_file_references:
+            start_grace = self._get_indexing_start_grace()
+            self._log_cross_file_indexing_wait_outcome(
+                self._wait_for_indexing_start_or_completion(timeout=timeout, start_grace=start_grace), timeout
+            )
+            self._has_waited_for_cross_file_references = True
             return
 
-        timeout = self._get_indexing_timeout()
-        start_grace = self._get_indexing_start_grace()
-        if self._wait_for_indexing_start_or_completion(timeout=timeout, start_grace=start_grace):
+        # The latch above only covers the first query; a later one can still open a file from a
+        # project tsserver has not loaded before, starting a fresh $/progress cycle to drain.
+        with self._progress_lock:
+            indexing_in_progress = bool(self._active_progress_tokens)
+        if indexing_in_progress:
+            self._log_cross_file_indexing_wait_outcome(self.wait_for_indexing(timeout=timeout), timeout)
+
+    def _log_cross_file_indexing_wait_outcome(self, completed: bool, timeout: float) -> None:
+        if completed:
             log.info("TypeScript cross-file indexing complete")
         else:
             log.warning(
                 "TypeScript cross-file indexing did not complete within %.0fs; proceeding (%s)", timeout, self.describe_indexing_state()
             )
-        self._has_waited_for_cross_file_references = True
 
     @override
     def _get_preferred_definition(self, definitions: list[ls_types.Location]) -> ls_types.Location:
