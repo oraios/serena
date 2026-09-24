@@ -9,7 +9,7 @@ import platform
 import shutil
 import tempfile
 import threading
-from collections.abc import Hashable, Iterable, Sequence
+from collections.abc import Callable, Hashable, Iterable, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
@@ -17,6 +17,7 @@ from typing import Any, cast
 from overrides import override
 
 from serena.util.dotnet import DotNETUtil
+from serena.util.file_system import match_path
 from solidlsp.ls import (
     LanguageServerDependencyProvider,
     LSPFileBuffer,
@@ -139,10 +140,14 @@ def _runtime_dependencies_for_version(version: str) -> list[RuntimeDependency]:
     return result
 
 
-def breadth_first_file_scan(root_dir: str) -> Iterable[str]:
+def breadth_first_file_scan(root_dir: str, is_ignored_path: Callable[[str], bool] = lambda _: False) -> Iterable[str]:
     """
     Perform a breadth-first scan of files in the given directory.
     Yields file paths in breadth-first order.
+
+    :param root_dir: the directory to scan
+    :param is_ignored_path: predicate on paths relative to ``root_dir``; ignored directories are not traversed
+        and ignored files are not yielded
     """
     queue = [root_dir]
     while queue:
@@ -152,6 +157,8 @@ def breadth_first_file_scan(root_dir: str) -> Iterable[str]:
                 if item.startswith("."):
                     continue
                 item_path = os.path.join(current_dir, item)
+                if is_ignored_path(os.path.relpath(item_path, root_dir)):
+                    continue
                 if os.path.isdir(item_path):
                     queue.append(item_path)
                 elif os.path.isfile(item_path):
@@ -743,10 +750,15 @@ class CSharpLanguageServer(SolidLanguageServer):
     def _open_solution_and_projects(self) -> None:
         """
         Open solution and project files using notifications.
+        Paths matched by the configured ignore patterns (e.g. from .gitignore) are neither traversed nor opened.
         """
+
+        def is_ignored_path(relative_path: str) -> bool:
+            return match_path(relative_path, self.get_ignore_spec(), root_path=self.repository_root_path)
+
         # Find solution file (.sln or .slnx)
         solution_file = None
-        for filename in breadth_first_file_scan(self.repository_root_path):
+        for filename in breadth_first_file_scan(self.repository_root_path, is_ignored_path):
             if filename.endswith((".sln", ".slnx")):
                 solution_file = filename
                 break
@@ -762,19 +774,10 @@ class CSharpLanguageServer(SolidLanguageServer):
         # server cannot restore or build. Each one costs a project load on every server start, and
         # the resulting restore failures bury the diagnostics of the projects the user cares about.
         project_files = []
-        skipped = 0
-        for filename in breadth_first_file_scan(self.repository_root_path):
+        for filename in breadth_first_file_scan(self.repository_root_path, is_ignored_path):
             if not filename.endswith(".csproj"):
                 continue
-            relative_path = os.path.relpath(filename, self.repository_root_path)
-            # ignore_unsupported_files=False, because a .csproj is not itself a C# source file and
-            # would otherwise be excluded on file type rather than by the ignore patterns.
-            if self.is_ignored_path(relative_path, ignore_unsupported_files=False):
-                skipped += 1
-                continue
             project_files.append(filename)
-        if skipped:
-            log.debug(f"Skipped {skipped} .csproj file(s) matched by the project's ignore settings")
 
         # Send project/open notifications for each project file
         if project_files:
