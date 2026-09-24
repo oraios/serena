@@ -1,9 +1,12 @@
 """Unit tests for SymbolBody / SymbolBodyFactory that need no running language server."""
 
+from pathlib import Path
+
 import pytest
 
-from solidlsp.ls import SymbolBodyFactory
+from solidlsp.ls import SolidLanguageServer, SymbolBodyFactory
 from solidlsp.ls_exceptions import InvalidTextLocationError
+from solidlsp.util.cache import load_cache, save_cache
 
 
 class _StubBuffer:
@@ -16,15 +19,31 @@ class _StubBuffer:
         return self._lines
 
 
-def _symbol(start_line: int, start_col: int, end_line: int, end_col: int) -> dict:
-    return {
+def _symbol(
+    start_line: int,
+    start_col: int,
+    end_line: int,
+    end_col: int,
+    selection_range: dict | None = None,
+    name: str = "some_symbol",
+) -> dict:
+    symbol: dict = {
+        "name": name,
         "location": {
+            "relativePath": "some_file.py",
             "range": {
                 "start": {"line": start_line, "character": start_col},
                 "end": {"line": end_line, "character": end_col},
-            }
-        }
+            },
+        },
     }
+    if selection_range is not None:
+        symbol["selectionRange"] = selection_range
+    return symbol
+
+
+def _range(start_line: int, start_col: int, end_line: int, end_col: int) -> dict:
+    return {"start": {"line": start_line, "character": start_col}, "end": {"line": end_line, "character": end_col}}
 
 
 # 3 lines, valid indices 0..2
@@ -87,3 +106,84 @@ def test_get_text_end_line_past_eof_with_nonzero_col_raises() -> None:
     body = _factory().create_symbol_body(_symbol(0, 0, len(LINES), 5))
     with pytest.raises(InvalidTextLocationError):
         body.get_text()
+
+
+def test_selection_range_within_body_range_logs_nothing(caplog: pytest.LogCaptureFixture) -> None:
+    """A selectionRange inside the body range is the normal case; it must not warn."""
+    selection_range = _range(1, 4, 1, 9)  # "var x" inside line 1
+    with caplog.at_level("WARNING"):
+        body = _factory().create_symbol_body(_symbol(0, 0, 2, len(LINES[2]), selection_range=selection_range))
+    assert body.get_text() == FULL
+    assert caplog.records == []
+
+
+def test_selection_range_mismatch_logs_at_construction_even_without_reading_body(caplog: pytest.LogCaptureFixture) -> None:
+    """A selectionRange outside the body range indicates a stale/mismatched language server
+    response (see GH issue #1593). The warning must fire at construction time regardless of
+    whether the body is ever read: request_document_symbols() builds a SymbolBody (and runs this
+    check) for every symbol unconditionally, but every tool-facing call site that could read the
+    body text defaults include_body to False - a warning that only fired from get_text() would
+    then silently miss the majority of real calls, which never read the body at all.
+    """
+    selection_range = _range(5, 0, 5, 3)  # entirely outside the symbol's own range (rows 0-2)
+    with caplog.at_level("WARNING"):
+        body = _factory().create_symbol_body(_symbol(0, 0, 2, len(LINES[2]), selection_range=selection_range, name="make-nested"))
+    assert len(caplog.records) == 1
+    assert "make-nested" in caplog.records[0].message
+    assert "some_file.py" in caplog.records[0].message
+    assert body.get_text() == FULL  # behaviour (the extracted body) is unchanged
+
+
+def test_selection_range_missing_logs_nothing(caplog: pytest.LogCaptureFixture) -> None:
+    """Symbols without a selectionRange (e.g. SymbolKind.File) skip the check entirely."""
+    with caplog.at_level("WARNING"):
+        body = _factory().create_symbol_body(_symbol(0, 0, 2, len(LINES[2])))
+        assert body.get_text() == FULL
+    assert caplog.records == []
+
+
+def test_selection_range_mismatch_logs_on_every_get_text_call(caplog: pytest.LogCaptureFixture) -> None:
+    """No deduplication across reads of the same (possibly cached) SymbolBody: every other
+    log.warning call site in this file (in SolidLanguageServer - missing containing symbol,
+    corrupt cache, unresolvable location, ...) logs unconditionally on each occurrence; there's
+    no "only once"/cooldown state anywhere in ls.py to match. Introducing a bespoke dedup/cooldown
+    mechanism here, found nowhere else in the file, would have added new state (an unbounded
+    cache keyed by file+symbol+ranges, an arbitrary interval, ...) that would itself need
+    justifying - plain, unconditional logging keeps this warning's behaviour unsurprising
+    instead.
+
+    This is also the scenario that actually matters for a stale-index diagnostic: a SymbolBody
+    built once (cache miss) but read many times afterwards (cache hits - including, in the real
+    document symbols cache, a hit in a later session after this same body was deserialized from
+    disk) must keep surfacing the mismatch on every read, not just the one at construction.
+    """
+    selection_range = _range(5, 0, 5, 3)
+    body = _factory().create_symbol_body(_symbol(0, 0, 2, len(LINES[2]), selection_range=selection_range, name="persistent"))
+    caplog.clear()  # discard the one already logged unconditionally at construction
+
+    with caplog.at_level("WARNING"):
+        body.get_text()
+        body.get_text()
+        body.get_text()
+    assert len(caplog.records) == 3
+
+
+def test_document_symbol_cache_version_bump_invalidates_pre_fix_cache(tmp_path: Path) -> None:
+    """SymbolBody has no __setstate__, so unpickling an entry cached under the old (pre-fa09b090)
+    shape restores an instance whose __dict__ is missing the new _selection_range_mismatch field
+    entirely - and get_text() reads that field unconditionally on every call. Without a cache
+    version bump, a document_symbols_cache file saved before this fix would be loaded as-is and
+    get_text() would raise AttributeError instead of just missing the cache-hit warning.
+
+    This doesn't unpickle an actual old-shape SymbolBody (constructing one would just be testing
+    Python's own pickle behaviour); it verifies the actual invalidation mechanism this fix relies
+    on: a cache file saved under the pre-fix version number must be rejected by load_cache() once
+    read back under the current version, so a stale-shaped entry is never handed back to callers.
+    """
+    cache_file = tmp_path / "document_symbols.pkl"
+    pre_fix_version = 4  # DOCUMENT_SYMBOL_CACHE_VERSION before this fix bumped it
+    assert pre_fix_version != SolidLanguageServer.DOCUMENT_SYMBOL_CACHE_VERSION
+
+    save_cache(str(cache_file), pre_fix_version, {"some/file.py": ("content-hash", "pre-fix cache entry")})
+
+    assert load_cache(str(cache_file), SolidLanguageServer.DOCUMENT_SYMBOL_CACHE_VERSION) is None
