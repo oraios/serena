@@ -716,6 +716,26 @@ CodeBuddy supports the same hook system as Claude Code. To set up hooks, add the
   permission mode (`acceptEdits` or `auto`), so blanket approvals cover Serena's destructive
   tools (e.g. `replace_symbol_body`, `rename_symbol`) instead of prompting on every call.
 
+## FLUJO
+
+After [installing Serena](install-serena), start it in Streamable HTTP mode on the same machine as [FLUJO](https://flujo.com.co/):
+
+```shell
+serena start-mcp-server --transport streamable-http --port 9121 --project /absolute/path/to/project --open-web-dashboard false
+```
+
+Keep this process running while using the connection.
+
+In FLUJO, open **Connected Apps > Connect App > I'm an expert > Configure & Test**:
+
+1. Set **Server name** to `serena` and **MCP server root path** to your project directory.
+2. Select **Streamable HTTP** and set **Server URL** to `http://127.0.0.1:9121/mcp`.
+3. Click **3) Test run**. After the MCP handshake succeeds, click **Add server**.
+
+**Verification.** Open the saved server's **Tools** tab and use **Test tool** to call `initial_instructions`.
+Then select `get_symbols_overview`, set `relative_path` to a source file in the active project,
+and click **Test tool** to inspect its symbols.
+
 ## Other Clients
 
 For other clients, follow the [general instructions](#clients-general-instructions) above to set up Serena as an MCP server.
