@@ -21,7 +21,7 @@ from ..common import RuntimeDependency
 
 log = logging.getLogger(__name__)
 
-EXPERT_VERSION = "v0.1.0-rc.6"
+EXPERT_VERSION = "v0.1.10"
 EXPERT_ALLOWED_HOSTS = (
     "github.com",
     "release-assets.githubusercontent.com",
@@ -110,7 +110,7 @@ class ElixirTools(SolidLanguageServer):
                 archive_type="binary",
                 binary_name="expert_linux_amd64",
                 extract_path="expert",
-                sha256="643a492ff972246668b0ca356a84c3d0a0f5feeae0ab5dc1b9a126876ed460e4" if expert_version == EXPERT_VERSION else None,
+                sha256="af29d5270503263139f10fccb597430feb0c510da48386821b176fbfdfe33f8d" if expert_version == EXPERT_VERSION else None,
                 allowed_hosts=EXPERT_ALLOWED_HOSTS,
             ),
             PlatformId.LINUX_arm64: RuntimeDependency(
@@ -120,7 +120,7 @@ class ElixirTools(SolidLanguageServer):
                 archive_type="binary",
                 binary_name="expert_linux_arm64",
                 extract_path="expert",
-                sha256="d8b830bdaa8991d7ebf255dacbb3674f3ea335c87d0bfba4b7f907ded4a8f014" if expert_version == EXPERT_VERSION else None,
+                sha256="eaac1a779dc8319099576edcd0c43dde3a383abf2e75ccd6989cdabf3900cd9b" if expert_version == EXPERT_VERSION else None,
                 allowed_hosts=EXPERT_ALLOWED_HOSTS,
             ),
             PlatformId.OSX_x64: RuntimeDependency(
@@ -130,7 +130,7 @@ class ElixirTools(SolidLanguageServer):
                 archive_type="binary",
                 binary_name="expert_darwin_amd64",
                 extract_path="expert",
-                sha256="964f316f1633090b33aab392b6b85fb778c5fb3c0db862671424458da34b1d4d" if expert_version == EXPERT_VERSION else None,
+                sha256="5cb885b7e83e73c9c8fc16c27f398391311629113a0a6e26134e5ae4b7005035" if expert_version == EXPERT_VERSION else None,
                 allowed_hosts=EXPERT_ALLOWED_HOSTS,
             ),
             PlatformId.OSX_arm64: RuntimeDependency(
@@ -140,7 +140,7 @@ class ElixirTools(SolidLanguageServer):
                 archive_type="binary",
                 binary_name="expert_darwin_arm64",
                 extract_path="expert",
-                sha256="5fb5be151baedd635d99835cf3f9986afc9af6ae7b07bd001a1962f4298e45da" if expert_version == EXPERT_VERSION else None,
+                sha256="992a7c6c0ad062667d6518ca378c62fe3a465d3f57350d5123028741195f1e1a" if expert_version == EXPERT_VERSION else None,
                 allowed_hosts=EXPERT_ALLOWED_HOSTS,
             ),
             PlatformId.WIN_x64: RuntimeDependency(
@@ -150,7 +150,7 @@ class ElixirTools(SolidLanguageServer):
                 archive_type="binary",
                 binary_name="expert_windows_amd64.exe",
                 extract_path="expert.exe",
-                sha256="babee77d2653679021600b99c68d984d4463290cb221e0fc0d1093b3afdeb3b0" if expert_version == EXPERT_VERSION else None,
+                sha256="163cb83a75316d77068fd1d00eb43e113dd2bb2d417af48d3e5374f6763a5880" if expert_version == EXPERT_VERSION else None,
                 allowed_hosts=EXPERT_ALLOWED_HOSTS,
             ),
         }
