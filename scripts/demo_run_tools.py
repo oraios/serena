@@ -9,8 +9,9 @@ from pathlib import Path
 from pprint import pprint
 
 from serena.agent import SerenaAgent
-from serena.config.serena_config import LanguageBackend, SerenaConfig
+from serena.config.serena_config import SerenaConfig
 from serena.constants import REPO_ROOT
+from serena.language_backend import BuiltinLanguageBackend
 from serena.tools import (
     FindFileTool,
     FindReferencingSymbolsTool,
@@ -26,7 +27,7 @@ from serena.tools import (
 if __name__ == "__main__":
     serena_config = SerenaConfig.from_config_file()
     serena_config.web_dashboard = False
-    serena_config.language_backend = LanguageBackend.LSP
+    serena_config.set_builtin_language_backend(BuiltinLanguageBackend.LSP)
     # project = Path(REPO_ROOT).parent / "serena-jetbrains-plugin-copy"
     project = Path(REPO_ROOT)
     agent = SerenaAgent(project=str(project), serena_config=serena_config)

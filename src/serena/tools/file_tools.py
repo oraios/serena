@@ -7,24 +7,42 @@ File and file system-related tools, specifically for
 """
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import os
-from collections import defaultdict
-from fnmatch import fnmatch
-from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal, cast
 
-from serena.tools import SUCCESS_RESULT, EditedFileContext, EditingToolWithDiagnostics, Tool, ToolMarkerOptional
-from serena.util.file_system import scan_directory
-from serena.util.text_utils import (
-    ContentReplacer,
-    GlobMatcher,
-    MultiFileContentReplacer,
-    ReplacementOccurrence,
-)
-from solidlsp.ls_utils import TextUtils
+from serena.tools import EditingToolWithDiagnostics, Tool, ToolMarkerOptional
+
+if TYPE_CHECKING:
+    from serena.repl.api.edit_api import EditApi
+    from serena.repl.api.fs_api import FsApi
 
 
-class ReadFileTool(Tool):
+class EditApiMixin:
+    """
+    Mixin for tools which delegate to the editing API.
+    The API is imported locally, since the API module refers to the tools (as corresponding tools).
+    """
+
+    def _api(self) -> "EditApi":
+        from serena.repl.api.edit_api import EditApi
+
+        tool = cast(Tool, cast(object, self))
+        return EditApi(tool.agent)
+
+
+class FsApiMixin:
+    """
+    Mixin for tools which delegate to the file system API.
+    The API is imported locally, since the API module refers to the tools (as corresponding tools).
+    """
+
+    def _api(self) -> "FsApi":
+        from serena.repl.api.fs_api import FsApi
+
+        tool = cast(Tool, cast(object, self))
+        return FsApi(tool.agent)
+
+
+class ReadFileTool(Tool, FsApiMixin):
     """
     Reads a file within the project directory.
     """
@@ -41,22 +59,10 @@ class ReadFileTool(Tool):
             required for the task.
         :return: the full text of the file at the given relative path
         """
-        self.project.validate_relative_path(relative_path)
-
-        # read lines, using the same (LSP-compliant) notion of line breaks as the line-based editing tools
-        result = self.project.read_file(relative_path)
-        result_lines = TextUtils.split_lines(result)
-
-        if end_line is None:
-            result_lines = result_lines[start_line:]
-        else:
-            result_lines = result_lines[start_line : end_line + 1]
-        result = "\n".join(result_lines)
-
-        return self._limit_length(result, max_answer_chars)
+        return self._api().read_file(relative_path, start_line, end_line, max_answer_chars).represent()
 
 
-class CreateTextFileTool(EditingToolWithDiagnostics):
+class CreateTextFileTool(EditingToolWithDiagnostics, FsApiMixin):
     """
     Creates/overwrites a file in the project directory.
     """
@@ -69,30 +75,11 @@ class CreateTextFileTool(EditingToolWithDiagnostics):
         :param content: the (appropriately encoded) content to write to the file
         :return: a message indicating success or failure
         """
-        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
-            # validating the destination path
-            project_root = self.get_project_root()
-            abs_path = (Path(project_root) / relative_path).resolve()
-            will_overwrite_existing = abs_path.exists()
-
-            if will_overwrite_existing:
-                self.project.validate_relative_path(relative_path)
-            else:
-                assert abs_path.is_relative_to(self.get_project_root()), (
-                    f"Cannot create file outside of the project directory, got {relative_path=}"
-                )
-
-            # writing the file
-            abs_path.parent.mkdir(parents=True, exist_ok=True)
-            abs_path.write_text(content, encoding=self.project.project_config.encoding, newline=self.project.line_ending.newline_str)
-            answer = f"File created: {relative_path}."
-            if will_overwrite_existing:
-                answer += " Overwrote existing file."
-
-            return diagnostics_context.format_result(answer)
+        with self.diagnostics_context(relative_path) as diagnostics_context:
+            return diagnostics_context.format_result(self._api().create_text_file(relative_path, content))
 
 
-class ListDirTool(Tool):
+class ListDirTool(Tool, FsApiMixin):
     """
     Lists files and directories in the given directory (optionally with recursion).
     """
@@ -109,31 +96,13 @@ class ListDirTool(Tool):
             Don't adjust unless there is really no other way to get the content required for the task.
         :return: a JSON object with the names of directories and files within the given directory
         """
-        # Check if the directory exists before validation
-        if not self.project.relative_path_exists(relative_path):
-            error_info = {
-                "error": f"Directory not found: {relative_path}",
-                "project_root": self.get_project_root(),
-                "hint": "Check if the path is correct relative to the project root",
-            }
-            return self._to_json(error_info)
-
-        self.project.validate_relative_path(relative_path)
-
-        is_ignored_path_fn = self.project.get_is_ignored_path_fn(relative_path, skip_ignored_files)
-        dirs, files = scan_directory(
-            os.path.join(self.get_project_root(), relative_path),
-            relative_to=self.get_project_root(),
-            recursive=recursive,
-            is_ignored_dir=is_ignored_path_fn,
-            is_ignored_file=is_ignored_path_fn,
-        )
-
-        result = self._to_json({"dirs": dirs, "files": files})
-        return self._limit_length(result, max_answer_chars)
+        try:
+            return self._api().list_dir(relative_path, recursive, skip_ignored_files, max_answer_chars).represent()
+        except FileNotFoundError as e:
+            return self._to_json({"error": str(e), "project_root": self.get_project_root()})
 
 
-class FindFileTool(Tool):
+class FindFileTool(Tool, FsApiMixin):
     """
     Finds files in the given relative paths
     """
@@ -147,31 +116,10 @@ class FindFileTool(Tool):
         :param skip_ignored_files: whether to skip ignored files/directories
         :return: a JSON object with the list of matching files
         """
-        self.project.validate_relative_path(relative_path)
-
-        is_ignored_path_fn = self.project.get_is_ignored_path_fn(relative_path, skip_ignored_paths=False)
-        dir_to_scan = os.path.join(self.get_project_root(), relative_path)
-
-        # find the files by ignoring everything that doesn't match
-        def is_ignored_file(abs_path: str) -> bool:
-            if is_ignored_path_fn(abs_path):
-                return True
-            filename = os.path.basename(abs_path)
-            return not fnmatch(filename, file_mask)
-
-        _dirs, files = scan_directory(
-            path=dir_to_scan,
-            recursive=True,
-            is_ignored_dir=is_ignored_path_fn,
-            is_ignored_file=is_ignored_file,
-            relative_to=self.get_project_root(),
-        )
-
-        result = self._to_json({"files": files})
-        return result
+        return self._to_json({"files": self._api().find_file(file_mask, relative_path)})
 
 
-class ReplaceContentTool(EditingToolWithDiagnostics):
+class ReplaceContentTool(EditingToolWithDiagnostics, EditApiMixin):
     """
     Replaces content in a file (optionally using regular expressions).
     """
@@ -206,17 +154,13 @@ class ReplaceContentTool(EditingToolWithDiagnostics):
         :param allow_multiple_occurrences: whether to allow matching and replacing multiple occurrences.
             If false and multiple occurrences are found, an error will be returned
         """
-        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
-            self.project.validate_relative_path(relative_path)
-            with EditedFileContext(relative_path, self.create_code_editor()) as context:
-                original_content = context.get_original_content()
-                replacer = ContentReplacer(mode=mode, allow_multiple_occurrences=allow_multiple_occurrences)
-                updated_content = replacer.replace(original_content, needle, repl)
-                context.set_updated_content(updated_content)
-            return diagnostics_context.format_result(SUCCESS_RESULT)
+        with self.diagnostics_context(relative_path) as diagnostics_context:
+            return diagnostics_context.format_result(
+                self._api().replace_content(relative_path, needle, repl, mode, allow_multiple_occurrences=allow_multiple_occurrences)
+            )
 
 
-class ReplaceInFilesTool(EditingToolWithDiagnostics):
+class ReplaceInFilesTool(EditingToolWithDiagnostics, EditApiMixin):
     """
     Replaces occurrences of a pattern across multiple files, with dry-run preview and per-occurrence selection.
     """
@@ -272,184 +216,28 @@ class ReplaceInFilesTool(EditingToolWithDiagnostics):
             returned. -1 uses the configured default.
         :return: in a dry run, the prospective changes; otherwise a summary of the applied replacements
         """
-        replacer = MultiFileContentReplacer(mode=mode)
-        files = self._collect_files(relative_path, paths_include_glob, paths_exclude_glob)
-        occurrences = replacer.find_occurrences(files, needle, repl)
-        contents = dict(files)
-
+        api = self._api()
         if dry_run:
-            return self._render_listing(replacer, occurrences, contents, max_answer_chars, dry_run=True)
-
-        if occurrence_ids is not None:
-            selected, problems = self._resolve_occurrence_ids(occurrence_ids, occurrences)
-            if problems:
-                problem_lines = "\n".join(f"  {p}" for p in problems)
-                raise ValueError(
-                    f"{len(problems)} of the given occurrence_ids could not be resolved - NO changes were applied:\n"
-                    f"{problem_lines}\n"
-                    "Re-run with dry_run=True to obtain current occurrence ids."
-                )
-            if not selected:
-                raise ValueError("occurrence_ids is empty - pass at least one id from a dry run, or omit the parameter to replace all.")
-            return self._apply_occurrences(replacer, selected, contents, needle, repl)
-
-        # blind apply (no ids)
-        if not occurrences:
-            raise ValueError(
-                "No occurrences of the pattern were found - NO changes were applied. "
-                "Check the mode (a literal needle containing regex metacharacters must use mode 'literal'; "
-                "wildcards require mode 'regex') and the path/glob restrictions, "
-                "or locate the content with search_for_pattern first."
+            return api.replace_in_files(
+                needle, repl, mode, relative_path, paths_include_glob, paths_exclude_glob, dry_run=True, max_answer_chars=max_answer_chars
+            ).represent()
+        with self.diagnostics_context() as diagnostics_context:
+            result = api.replace_in_files(
+                needle,
+                repl,
+                mode,
+                relative_path,
+                paths_include_glob,
+                paths_exclude_glob,
+                occurrence_ids=occurrence_ids,
+                expected_count=expected_count,
+                max_answer_chars=max_answer_chars,
             )
-        if expected_count >= 0 and len(occurrences) != expected_count:
-            listing = self._render_listing(replacer, occurrences, contents, max_answer_chars, dry_run=False)
-            raise ValueError(
-                f"expected_count={expected_count}, but the pattern matches {len(occurrences)} occurrence(s) - "
-                f"NO changes were applied. Review the prospective changes below; re-issue with the corrected "
-                f"expectation, a refined pattern, or occurrence_ids selecting the intended subset.\n{listing}"
-            )
-        ambiguous = [o for o in occurrences if o.is_ambiguous]
-        if ambiguous:
-            listing = self._render_listing(replacer, occurrences, contents, max_answer_chars, dry_run=False)
-            raise ValueError(
-                f"{len(ambiguous)} occurrence(s) are ambiguous (the pattern matches again inside the matched text, "
-                f"indicating possible over-matching) - NO changes were applied. Review the prospective changes below "
-                f"and either refine the pattern or explicitly select occurrences via occurrence_ids.\n{listing}"
-            )
-        return self._apply_occurrences(replacer, occurrences, contents, needle, repl)
-
-    def _collect_files(self, relative_path: str, paths_include_glob: str, paths_exclude_glob: str) -> list[tuple[str, str]]:
-        """Collects (relative_path, content) pairs of the non-ignored files in scope, in sorted path order."""
-        relative_path = relative_path.strip()
-        if relative_path:
-            self.project.validate_relative_path(relative_path, require_not_ignored=True)
-        abs_path = os.path.join(self.get_project_root(), relative_path)
-        if not os.path.exists(abs_path):
-            raise FileNotFoundError(f"Relative path {relative_path} does not exist.")
-        if os.path.isfile(abs_path):
-            rel_paths = [relative_path]
-        else:
-            _dirs, rel_paths = scan_directory(
-                path=abs_path,
-                recursive=True,
-                is_ignored_dir=self.project.is_ignored_path,
-                is_ignored_file=self.project.is_ignored_path,
-                relative_to=self.get_project_root(),
-            )
-        include_glob_matcher = GlobMatcher(paths_include_glob.strip()) if paths_include_glob.strip() else None
-        exclude_glob_matcher = GlobMatcher(paths_exclude_glob.strip()) if paths_exclude_glob.strip() else None
-        files: list[tuple[str, str]] = []
-        for path in sorted(rel_paths):
-            if include_glob_matcher and not include_glob_matcher.matches(path):
-                continue
-            if exclude_glob_matcher and exclude_glob_matcher.matches(path):
-                continue
-            try:
-                files.append((path, self.project.read_file(path)))
-            except Exception:
-                continue  # skip unreadable (e.g. binary) files
-        return files
-
-    def _render_listing(
-        self,
-        replacer: MultiFileContentReplacer,
-        occurrences: list[ReplacementOccurrence],
-        contents: dict[str, str],
-        max_answer_chars: int,
-        dry_run: bool,
-    ) -> str:
-        affected_files = sorted({o.relative_path for o in occurrences})
-        header = f"Found {len(occurrences)} occurrence(s) in {len(affected_files)} file(s)."
-        if dry_run:
-            header += (
-                " DRY RUN - no changes were applied.\n"
-                "Re-issue with dry_run=False to replace all of them, or additionally pass occurrence_ids "
-                "with the ids of the occurrences to replace."
-            )
-        parts = [header]
-        for path in affected_files:
-            file_occurrences = [o for o in occurrences if o.relative_path == path]
-            parts.append(f"\n{path} ({len(file_occurrences)} occurrence(s)):")
-            for occ in file_occurrences:
-                parts.append(replacer.render_occurrence_diff(occ, contents[path]))
-        result = "\n".join(parts)
-
-        def make_locations_only() -> str:
-            lines = [header] + [f"  [{o.occurrence_id}] line {o.start_line}" for o in occurrences]
-            return "\n".join(lines)
-
-        def make_per_file_counts() -> str:
-            counts = {path: sum(1 for o in occurrences if o.relative_path == path) for path in affected_files}
-            return f"{header}\nOccurrence counts per file:\n{self._to_json(counts)}"
-
-        def make_summary() -> str:
-            return header
-
-        return self._limit_length(
-            result, max_answer_chars, shortened_result_factories=[make_locations_only, make_per_file_counts, make_summary]
-        )
-
-    @staticmethod
-    def _resolve_occurrence_ids(
-        occurrence_ids: list[str], occurrences: list[ReplacementOccurrence]
-    ) -> tuple[list[ReplacementOccurrence], list[str]]:
-        """Resolves the requested ids against the current occurrences, diagnosing each failure."""
-        occurrences_by_id = {o.occurrence_id: o for o in occurrences}
-        indices_by_path: dict[str, set[int]] = {}
-        for o in occurrences:
-            indices_by_path.setdefault(o.relative_path, set()).add(o.index_in_file)
-        selected: dict[str, ReplacementOccurrence] = {}
-        problems: list[str] = []
-        for oid in occurrence_ids:
-            occurrence = occurrences_by_id.get(oid)
-            if occurrence is not None:
-                selected[oid] = occurrence
-                continue
-            id_match = MultiFileContentReplacer.OCCURRENCE_ID_REGEX.match(oid)
-            if id_match is None:
-                problems.append(f"{oid}: malformed id (expected '<path>:<index>@<digest>' as returned by a dry run)")
-            elif id_match.group("path") not in indices_by_path:
-                problems.append(f"{oid}: the pattern currently has no matches in this file")
-            elif int(id_match.group("index")) not in indices_by_path[id_match.group("path")]:
-                problems.append(f"{oid}: the file now has fewer matches than at dry-run time (content changed)")
-            else:
-                problems.append(f"{oid}: the matched text changed since the dry run (content changed)")
-        return list(selected.values()), problems
-
-    def _apply_occurrences(
-        self,
-        replacer: MultiFileContentReplacer,
-        occurrences: list[ReplacementOccurrence],
-        contents: dict[str, str],
-        needle: str,
-        repl: str,
-    ) -> str:
-        occurrences_by_file: dict[str, list[ReplacementOccurrence]] = {}
-        for occ in occurrences:
-            occurrences_by_file.setdefault(occ.relative_path, []).append(occ)
-        with self.DiagnosticsContext(self, *occurrences_by_file.keys()) as diagnostics_context:
-            code_editor = self.create_code_editor()
-            for path, file_occurrences in occurrences_by_file.items():
-                with EditedFileContext(path, code_editor) as context:
-                    original_content = context.get_original_content()
-                    if original_content != contents[path]:
-                        # the editor's view differs from what was scanned (e.g. line-ending normalization);
-                        # re-derive the occurrences from the authoritative content and re-validate by id
-                        fresh_by_id = {o.occurrence_id: o for o in replacer.find_occurrences([(path, original_content)], needle, repl)}
-                        try:
-                            file_occurrences = [fresh_by_id[o.occurrence_id] for o in file_occurrences]
-                        except KeyError as e:
-                            raise ValueError(
-                                f"The content of {path} changed while replacing (occurrence {e} no longer resolves); "
-                                f"the file was NOT modified. Re-run with dry_run=True for current ids."
-                            ) from e
-                    context.set_updated_content(replacer.apply_to_content(original_content, file_occurrences))
-            per_file = "\n".join(f"  {path}: {len(occs)}" for path, occs in occurrences_by_file.items())
-            summary = f"Replaced {len(occurrences)} occurrence(s) in {len(occurrences_by_file)} file(s):\n{per_file}"
-            return diagnostics_context.format_result(summary)
+            assert isinstance(result, str)
+            return diagnostics_context.format_result(result)
 
 
-class DeleteLinesTool(EditingToolWithDiagnostics, ToolMarkerOptional):
+class DeleteLinesTool(EditingToolWithDiagnostics, ToolMarkerOptional, EditApiMixin):
     """
     Deletes a range of lines within a file.
     """
@@ -469,13 +257,11 @@ class DeleteLinesTool(EditingToolWithDiagnostics, ToolMarkerOptional):
         :param start_line: the 0-based index of the first line to be deleted
         :param end_line: the 0-based index of the last line to be deleted
         """
-        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
-            code_editor = self.create_code_editor()
-            code_editor.delete_lines(relative_path, start_line, end_line)
-            return diagnostics_context.format_result(SUCCESS_RESULT)
+        with self.diagnostics_context(relative_path) as diagnostics_context:
+            return diagnostics_context.format_result(self._api().delete_lines(relative_path, start_line, end_line))
 
 
-class ReplaceLinesTool(EditingToolWithDiagnostics, ToolMarkerOptional):
+class ReplaceLinesTool(EditingToolWithDiagnostics, ToolMarkerOptional, EditApiMixin):
     """
     Replaces a range of lines within a file with new content.
     """
@@ -497,19 +283,11 @@ class ReplaceLinesTool(EditingToolWithDiagnostics, ToolMarkerOptional):
         :param end_line: the 0-based index of the last line to be deleted
         :param content: the content to insert
         """
-        # normalizing the replacement content
-        if not content.endswith("\n"):
-            content += "\n"
-
-        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
-            code_editor = self.create_code_editor()
-            code_editor.delete_lines(relative_path, start_line, end_line)
-            code_editor.insert_at_line(relative_path, start_line, content)
-
-            return diagnostics_context.format_result(SUCCESS_RESULT)
+        with self.diagnostics_context(relative_path) as diagnostics_context:
+            return diagnostics_context.format_result(self._api().replace_lines(relative_path, start_line, end_line, content))
 
 
-class InsertAtLineTool(EditingToolWithDiagnostics, ToolMarkerOptional):
+class InsertAtLineTool(EditingToolWithDiagnostics, ToolMarkerOptional, EditApiMixin):
     """
     Inserts content at a given line in a file.
     """
@@ -530,18 +308,11 @@ class InsertAtLineTool(EditingToolWithDiagnostics, ToolMarkerOptional):
         :param line: the 0-based index of the line to insert content at
         :param content: the content to be inserted
         """
-        # normalizing the inserted content
-        if not content.endswith("\n"):
-            content += "\n"
-
-        with self.DiagnosticsContext(self, relative_path) as diagnostics_context:
-            code_editor = self.create_code_editor()
-            code_editor.insert_at_line(relative_path, line, content)
-
-            return diagnostics_context.format_result(SUCCESS_RESULT)
+        with self.diagnostics_context(relative_path) as diagnostics_context:
+            return diagnostics_context.format_result(self._api().insert_at_line(relative_path, line, content))
 
 
-class SearchForPatternTool(Tool):
+class SearchForPatternTool(Tool, FsApiMixin):
     def apply(
         self,
         substring_pattern: str,
@@ -573,92 +344,19 @@ class SearchForPatternTool(Tool):
             ``-1`` uses the configured default.
         :return: A mapping from file paths to matched consecutive lines (0-based line numbers).
         """
-        relative_path = relative_path.strip()
-        if relative_path:
-            self.project.validate_relative_path(relative_path)
-
-        matches = self.project.search_project_files_for_pattern(
-            pattern=substring_pattern,
-            relative_path=relative_path,
-            context_lines_before=context_lines_before,
-            context_lines_after=context_lines_after,
-            paths_include_glob=paths_include_glob.strip(),
-            paths_exclude_glob=paths_exclude_glob.strip(),
-            multiline=multiline,
-            code_files_only=restrict_search_to_code_files,
-            skip_ignored_files=skip_ignored_files,
+        return (
+            self._api()
+            .search_for_pattern(
+                substring_pattern,
+                context_lines_before=context_lines_before,
+                context_lines_after=context_lines_after,
+                paths_include_glob=paths_include_glob,
+                paths_exclude_glob=paths_exclude_glob,
+                relative_path=relative_path,
+                restrict_search_to_code_files=restrict_search_to_code_files,
+                skip_ignored_files=skip_ignored_files,
+                multiline=multiline,
+                max_answer_chars=max_answer_chars,
+            )
+            .represent()
         )
-
-        # group matches by file
-        file_to_matches: dict[str, list[str]] = defaultdict(list)
-        for match in matches:
-            assert match.source_file_path is not None
-            file_to_matches[match.source_file_path].append(match.to_display_string())
-
-        # capture lightweight match data for shortening before serialization
-        match_lines_by_file: dict[str, list[dict[str, int | str]]] = defaultdict(list)
-        for match in matches:
-            assert match.source_file_path is not None
-            first = match.matched_lines[0]
-            match_lines_by_file[match.source_file_path].append({"line": first.line_number, "text": first.line_content.strip()})
-
-        # shortened result closures, from least to most aggressive shortening
-        _TEXT_TRUNCATE = 60
-
-        def render_first_lines(truncate: bool) -> str:
-            """Render each match's first line, either in full or truncated to a fixed length."""
-
-            def entry_text(text: str) -> str:
-                if truncate and len(text) > _TEXT_TRUNCATE:
-                    return text[:_TEXT_TRUNCATE] + "..."
-                return text
-
-            compact = {
-                path: [{"line": m["line"], "text": entry_text(str(m["text"]))} for m in lines]
-                for path, lines in match_lines_by_file.items()
-            }
-            if truncate:
-                header = (
-                    f"Matched lines (text over {_TEXT_TRUNCATE} chars is truncated, marked with a trailing '...'); "
-                    "use read_file with the line numbers for full content:"
-                )
-            else:
-                header = "Matched lines per file; use read_file with the line numbers for surrounding context:"
-            return f"{header}\n{self._to_json(compact)}"
-
-        def make_first_lines_full() -> str:
-            """Match locations with each match's full first line."""
-            return render_first_lines(truncate=False)
-
-        def make_first_lines_truncated() -> str:
-            """Match locations with each match's first line truncated to a fixed length."""
-            return render_first_lines(truncate=True)
-
-        def make_line_numbers_only() -> str:
-            """Match locations as bare line numbers (no text)."""
-            numbers = {path: [m["line"] for m in lines] for path, lines in match_lines_by_file.items()}
-            return f"Match lines per file:\n{self._to_json(numbers)}"
-
-        def make_per_file_counts() -> str:
-            counts = {path: len(lines) for path, lines in match_lines_by_file.items()}
-            return f"Match counts per file:\n{self._to_json(counts)}"
-
-        def make_summary() -> str:
-            return f"Found {len(matches)} matches in {len(match_lines_by_file)} files."
-
-        result = self._to_json(file_to_matches)
-        return self._limit_length(
-            result,
-            max_answer_chars,
-            shortened_result_factories=[
-                make_first_lines_full,
-                make_first_lines_truncated,
-                make_line_numbers_only,
-                make_per_file_counts,
-                make_summary,
-            ],
-        )
-
-    """
-    Performs a search for a pattern in the project.
-    """

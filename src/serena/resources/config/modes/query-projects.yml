@@ -6,3 +6,5 @@ excluded_tools: []
 included_optional_tools:
   - list_queryable_projects
   - query_project
+included_apis:
+  - ext
