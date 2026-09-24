@@ -18,6 +18,7 @@ from mcp.server.mcpserver.server import Context
 from mcp.server.mcpserver.server import MCPServer as FastMCP
 from mcp.server.mcpserver.tools.base import Tool as FastMCPTool
 from mcp.types import ToolAnnotations
+from pydantic import AnyHttpUrl
 from sensai.util import logging
 
 from serena import __version__ as serena_version_str
@@ -26,6 +27,7 @@ from serena.agent import (
 )
 from serena.config.context_mode import SerenaAgentContext
 from serena.config.serena_config import AgentInterface, ModeSelectionDefinition, SerenaConfig
+from serena.connection_access import ConnectionAccessControl
 from serena.constants import DEFAULT_CONTEXT, SERENA_LOG_FORMAT
 from serena.language_backend import LanguageBackend
 from serena.tools import Tool, ToolCallError
@@ -52,12 +54,19 @@ class SerenaMCPRequestContext:
 
 
 class SerenaFastMCPTool(FastMCPTool):
-    def __init__(self, tool: Tool, openai_tool_compatible: bool, structured_output: bool | None):
+    def __init__(
+        self,
+        tool: Tool,
+        openai_tool_compatible: bool,
+        structured_output: bool | None,
+        access_control: ConnectionAccessControl | None = None,
+    ):
         """
         :param tool: the Serena tool
         :param openai_tool_compatible: whether to process the tool schema to be compatible with OpenAI tools
             (doesn't accept integer, needs number instead, etc.). This allows using Serena MCP within Codex.
         :param structured_output: whether to use structured output for the tool (None = auto)
+        :param access_control: optional connection access control used to reject editing tools on read-only connections
         """
         func_name = tool.get_name()
         func_doc = tool.get_apply_docstring() or ""
@@ -96,7 +105,26 @@ class SerenaFastMCPTool(FastMCPTool):
                 param_desc = f"{param_doc.description.strip().strip('.') + '.'}"
                 properties["description"] = param_desc[0].upper() + param_desc[1:]
 
+        can_edit = tool.can_edit()
+        access_control_for_tool = access_control
+
         def execute_fn(**kwargs) -> str:
+            if access_control_for_tool is not None and access_control_for_tool.enabled:
+                # Prefer MCP SDK auth-context scopes (TokenVerifier); fall back to the
+                # request Authorization header. Concurrent streamable-http connections
+                # share one FastMCP instance, so permission is always per invocation.
+                mcp_ctx = kwargs.get("mcp_ctx")
+                permission = access_control_for_tool.permission_for_mcp_context(mcp_ctx)
+                if not access_control_for_tool.allows(permission, can_edit=can_edit):
+                    if permission is None:
+                        raise ToolError(
+                            f"Tool '{func_name}' requires a valid connection access token "
+                            f"(Authorization: Bearer <token>). Missing or unknown tokens are rejected."
+                        )
+                    raise ToolError(
+                        f"Tool '{func_name}' requires edit permission; this connection is read-only. "
+                        f"Use a token with edit access or a tool that does not modify the project."
+                    )
             try:
                 return tool.apply_ex(log_call=True, catch_exceptions=False, **kwargs)
             except ToolCallError as e:
@@ -106,7 +134,6 @@ class SerenaFastMCPTool(FastMCPTool):
         tool_title = " ".join(word.capitalize() for word in func_name.split("_"))
 
         # Create annotations with appropriate hints based on tool capabilities
-        can_edit = tool.can_edit()
         annotations = ToolAnnotations(
             title=tool_title,
             read_only_hint=not can_edit,
@@ -168,6 +195,7 @@ class SerenaMCPFactory:
         self.project = project
         self.agent: SerenaAgent | None = None
         self.memory_log_handler = memory_log_handler
+        self.access_control: ConnectionAccessControl | None = None
 
     @staticmethod
     def _sanitize_for_openai_tools(schema: dict) -> dict:
@@ -277,7 +305,12 @@ class SerenaMCPFactory:
         return walk(s)
 
     @staticmethod
-    def make_mcp_tool(tool: Tool, openai_tool_compatible: bool = True, structured_output: bool | None = None) -> SerenaFastMCPTool:
+    def make_mcp_tool(
+        tool: Tool,
+        openai_tool_compatible: bool = True,
+        structured_output: bool | None = None,
+        access_control: ConnectionAccessControl | None = None,
+    ) -> SerenaFastMCPTool:
         """
         Creates an MCP tool from a Serena Tool instance.
 
@@ -285,26 +318,43 @@ class SerenaMCPFactory:
         :param openai_tool_compatible: whether to process the tool schema to be compatible with OpenAI tools
             (doesn't accept integer, needs number instead, etc.). This allows using Serena MCP within codex.
         :param structured_output: whether to use structured output for the tool (None = auto)
+        :param access_control: optional connection access control
         """
-        return SerenaFastMCPTool(tool, openai_tool_compatible=openai_tool_compatible, structured_output=structured_output)
+        return SerenaFastMCPTool(
+            tool,
+            openai_tool_compatible=openai_tool_compatible,
+            structured_output=structured_output,
+            access_control=access_control,
+        )
 
     def _iter_tools(self) -> Iterator[Tool]:
         assert self.agent is not None
         yield from self.agent.get_exposed_tool_instances()
 
     # noinspection PyProtectedMember
-    def _set_mcp_tools(self, mcp: FastMCP, openai_tool_compatible: bool, structured_output: bool | None) -> None:
+    def _set_mcp_tools(
+        self,
+        mcp: FastMCP,
+        openai_tool_compatible: bool,
+        structured_output: bool | None,
+    ) -> None:
         """
-        Update the tools in the MCP server
+        Update the tools in the MCP server.
 
-        :param mcp: The MCP server to update
-        :param openai_tool_compatible: whether to process the tool schema to be compatible with OpenAI tools
-        :param structured_output: whether to use structured output for the tools (None = auto)
+        The tool list is process-global. Connection permissions (see
+        :mod:`serena.connection_access`) are enforced per tool call, not by omitting tools
+        here: concurrent HTTP connections share this instance, so a per-connection list
+        would race.
         """
         if mcp is not None:
             mcp._tool_manager._tools = {}
             for tool in self._iter_tools():
-                mcp_tool = self.make_mcp_tool(tool, openai_tool_compatible=openai_tool_compatible, structured_output=structured_output)
+                mcp_tool = self.make_mcp_tool(
+                    tool,
+                    openai_tool_compatible=openai_tool_compatible,
+                    structured_output=structured_output,
+                    access_control=self.access_control,
+                )
                 mcp._tool_manager._tools[tool.get_name()] = mcp_tool
             log.info(f"Starting MCP server with {len(mcp._tool_manager._tools)} tools: {list(mcp._tool_manager._tools.keys())}")
 
@@ -372,6 +422,20 @@ class SerenaMCPFactory:
             if agent_interface is not None:
                 config.agent_interface = agent_interface
 
+            if config.connection_access_tokens:
+                if self.transport == "stdio":
+                    log.info("connection_access_tokens is set but ignored for stdio transport (single local client)")
+                    self.access_control = None
+                else:
+                    self.access_control = ConnectionAccessControl(config.connection_access_tokens)
+                    log.info(
+                        "Connection access control enabled for %s transport (%d token(s))",
+                        self.transport,
+                        len(config.connection_access_tokens),
+                    )
+            else:
+                self.access_control = None
+
             self.agent = self._create_serena_agent(config, modes=mode_selection_def, project_activation_error=project_activation_error)
 
         except Exception as e:
@@ -380,12 +444,37 @@ class SerenaMCPFactory:
 
         instructions = self._get_initial_instructions()
         log.info("MCP server initial instructions:\n%s", instructions)
+
+        # Optional HTTP bearer-token auth via the MCP SDK (oraios/serena#1971). The
+        # application supplies the token checker (TokenVerifier); Serena does not issue
+        # tokens. required_scopes is the floor for any call; edit tools re-check for the
+        # "edit" scope on every invocation.
+        token_verifier = None
+        auth_settings = None
+        if self.access_control is not None and self.access_control.enabled:
+            from mcp.server.auth.settings import AuthSettings
+
+            token_verifier = self.access_control.token_verifier
+            # AuthSettings requires OAuth-shaped URLs for protected-resource metadata.
+            # Tokens here are application-supplied static secrets; the URLs are placeholders
+            # so clients that only send Authorization: Bearer keep working.
+            auth_settings = AuthSettings(
+                issuer_url=AnyHttpUrl("http://127.0.0.1/"),
+                # Placeholder resource URL: tokens are static app secrets, not OAuth issues.
+                resource_server_url=AnyHttpUrl("http://127.0.0.1/mcp"),
+                required_scopes=["read"],
+                # TokenVerifier validates the token itself; there is no resource audience.
+                validate_token_resource=False,
+            )
+
         mcp = FastMCP(
             name="Serena",
             version=serena_version_str,
             lifespan=self.server_lifespan,
             website_url="https://oraios.github.io/serena",
             instructions=instructions,
+            token_verifier=token_verifier,
+            auth=auth_settings,
         )
         return mcp
 
