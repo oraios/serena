@@ -122,6 +122,13 @@ ignored_paths: []
 # Added on 2025-04-18
 read_only: false
 
+# whether editing tools report the diagnostics (warnings and errors) an edit newly introduced in the edited
+# files, as the language server sees them. The answer names the language server the diagnostics come from
+# (`diagnostics_from`), since one server's verdict is not every checker's.
+# Off by default: intermediate edits often introduce diagnostics on purpose (a signature changed here, its
+# callers in the next edit), and reporting them at every step is noise for such workflows.
+edit_diagnostics: false
+
 # list of tool names to exclude.
 # This extends the existing exclusions (e.g. from the global configuration)
 # Find the list of tools here: https://oraios.github.io/serena/01-about/035_tools.html

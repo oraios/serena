@@ -156,12 +156,14 @@ class DiagnosticsDiff:
         symbol_retriever: "LanguageServerSymbolRetriever",
     ):
         grouped_diagnostics = GroupedDiagnostics()
+        language_server_ids: dict[str, str] = {}
 
         for edited_file_path in edited_files:
             try:
                 language_server = symbol_retriever.get_language_server(edited_file_path.after_relative_path)
             except:
                 continue
+            language_server_ids[edited_file_path.after_relative_path] = language_server.ls_id.get_key()
 
             published_diagnostics = language_server.request_published_text_document_diagnostics(
                 relative_file_path=edited_file_path.after_relative_path,
@@ -202,9 +204,14 @@ class DiagnosticsDiff:
                 grouped_diagnostics.add(edited_file_path.after_relative_path, name_path, diagnostic)
 
         self._grouped_diagnostics = grouped_diagnostics
+        self._language_server_ids = language_server_ids
 
     def get_grouped_diagnostics(self) -> GroupedDiagnostics:
         return self._grouped_diagnostics
+
+    def get_language_server_ids(self) -> dict[str, str]:
+        """:return: for each edited file whose diagnostics were requested, the id of the language server that answered"""
+        return self._language_server_ids
 
 
 class DiagnosticsContext:
@@ -217,6 +224,11 @@ class DiagnosticsContext:
     """
 
     DIAGNOSTICS_KEY = "diagnostics[warning-or-higher]"
+    DIAGNOSTICS_SOURCE_KEY = "diagnostics_from"
+    """
+    the key under which the answer names, per edited file, the language server whose diagnostics are reported —
+    one server's verdict is not every checker's (a project may grade with a second type checker at its gate)
+    """
 
     def __init__(self, agent: "SerenaAgent", *edited_relative_paths: str, enable: bool = ENABLE_DIAGNOSTICS_DEFAULT) -> None:
         self._is_diagnostics_enabled = enable and agent.get_language_backend()
@@ -255,5 +267,8 @@ class DiagnosticsContext:
             result_dict = {
                 "result": base_result,
                 self.DIAGNOSTICS_KEY: grouped_diagnostics,
+                self.DIAGNOSTICS_SOURCE_KEY: {
+                    path: ls_id for path, ls_id in diagnostics_diff.get_language_server_ids().items() if path in grouped_diagnostics
+                },
             }
             return TextOutputUtils.to_json(result_dict)

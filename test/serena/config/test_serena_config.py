@@ -221,6 +221,20 @@ class TestProjectConfigLanguageBackend:
         config = ProjectConfig._from_dict(data, local_override_keys=[])
         assert config.language_backend is None
 
+    def test_edit_diagnostics_is_read_from_project_yml(self):
+        """
+        `edit_diagnostics: true` in project.yml reaches the loaded configuration (the field has a default, so a
+        loader that forgot to read it would silently answer False for every project).
+        """
+        serena_config = create_default_serena_config()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            yml_path = Path(serena_config.get_project_yml_location(tmp_dir))
+            yml_path.parent.mkdir(parents=True)
+            yml_path.write_text("project_name: test\nlanguage_servers: [python]\nedit_diagnostics: true\n", encoding="utf-8")
+            config = ProjectConfig.load(tmp_dir, serena_config=serena_config)
+        assert config.edit_diagnostics is True
+        assert ProjectConfig(project_name="test", language_servers=[LanguageServerId.PYTHON]).edit_diagnostics is False
+
 
 class TestAgentInterface:
     """Tests for the agent_interface setting (global and per project)."""

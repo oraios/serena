@@ -431,8 +431,8 @@ class EditingToolWithDiagnostics(Tool, ToolMarkerCanEdit):
     """
     Global flag to enable/disable diagnostics for LSP-based editing tools derived from this class.
     The feature is currently disabled, because per-edit diagnostics are a questionable feature, since individual
-    edits often intentionally introduce diagnostics (e.g. function signature mismatches or even syntax errors) that 
-    are then resolved in subsequent edits.
+    edits often intentionally introduce diagnostics (e.g. function signature mismatches or even syntax errors) that
+    are then resolved in subsequent edits. A project opts in through `edit_diagnostics: true` in its configuration.
     """
 
     def diagnostics_context(self, *edited_relative_paths: str) -> DiagnosticsContext:
@@ -444,7 +444,14 @@ class EditingToolWithDiagnostics(Tool, ToolMarkerCanEdit):
         :return: a context which captures the diagnostics before the edit, such that changes can be reported
             via `format_result`
         """
-        return DiagnosticsContext(self.agent, *edited_relative_paths, enable=self.ENABLE_DIAGNOSTICS)
+        return DiagnosticsContext(
+            self.agent, *edited_relative_paths, enable=self.ENABLE_DIAGNOSTICS or self._is_edit_diagnostics_configured()
+        )
+
+    def _is_edit_diagnostics_configured(self) -> bool:
+        """:return: whether the active project asked for per-edit diagnostics (`edit_diagnostics` in its configuration)"""
+        project = self.agent.get_active_project()
+        return project is not None and project.project_config.edit_diagnostics
 
 
 @dataclass(kw_only=True)

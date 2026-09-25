@@ -10,6 +10,11 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Source files now carry `SPDX-License-Identifier` headers
   - Contributions require acceptance of the new Contributor License Agreement (`CLA.md`), enforced via CLA assistant;
     see `CONTRIBUTING.md`
+* Tools:
+  - Per-edit diagnostics (the warnings and errors an edit newly introduces, reported by the editing tools) can be
+    enabled per project with `edit_diagnostics: true` in `project.yml` (default off, as before). The answer now also
+    names the language server the diagnostics come from, per file (`diagnostics_from`): one server's verdict is not
+    every checker's.
 
 * General:
   - **Major**: Add the Serena REPL as a new agent interface, reducing the tool set to a minimum and providing
