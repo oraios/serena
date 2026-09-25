@@ -101,6 +101,9 @@ class Location(TypedDict):
     range: Range
     absolutePath: str
     relativePath: str | None
+    external: NotRequired[bool]
+    """ True for a location outside the repository and its workspace folders (the standard library, an installed
+    package): read-only, addressed by `absolutePath` """
 
 
 class CompletionItemKind(IntEnum):
