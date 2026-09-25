@@ -22,6 +22,7 @@ dependencies = [
   "overrides==7.7.0",
   "python-dotenv==1.2.2",
   "mcp==2.2.0",
+  "click==8.3.1",
   "flask==3.1.3", # bumped from 3.1.1 for CVE fix (also fixes werkzeug alert)
   "sensai-utils==1.5.0",
   "pydantic==2.12.5",
@@ -92,7 +93,7 @@ dev = [
   "tornado==6.5.7",
   "wheel==0.46.3",
   "pyasn1==0.6.4",
-  "PyJWT==2.12.0",
+  "PyJWT==2.13.0",
 ]
 agno = ["agno==2.6.6", "sqlalchemy==2.0.41"]  # agno bumped for session state overwrite CVE
 google = ["google-genai==1.27.0"]
@@ -385,6 +386,7 @@ markers = [
   "qml: language server running for QML (uses Qt's qmlls)",
   "gleam: language server running for Gleam (uses the Gleam compiler's bundled `gleam lsp`)",
   "wolfram: language server running for Wolfram Language (requires Mathematica 13.0+ or Wolfram Engine 12.1+)",
+  "astro: language server running for Astro (uses @astrojs/language-server)",
 ]
 
 [tool.codespell]

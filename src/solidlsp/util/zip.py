@@ -101,6 +101,13 @@ class SafeZipExtractor:
             with zip_ref.open(member) as source, open(final_path, "wb") as target:
                 target.write(source.read())
 
+            # stdlib zipfile does not restore Unix permission bits on extraction; tracked
+            # upstream at https://github.com/python/cpython/pull/150061
+            if os.name == "posix":
+                unix_mode = member.external_attr >> 16
+                if unix_mode:
+                    os.chmod(final_path, unix_mode)
+
             if self.verbose:
                 log.info(f"Extracted: {member.filename}")
 

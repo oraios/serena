@@ -10,7 +10,7 @@ import shutil
 import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Callable, Hashable, Iterator
+from collections.abc import Callable, Hashable, Iterator, Sequence
 from contextlib import contextmanager
 from copy import copy
 from dataclasses import dataclass
@@ -1045,6 +1045,16 @@ class SolidLanguageServer(ABC):
         """
         return 2
 
+    def notify_files_created(self, relative_file_paths: Sequence[str]) -> None:
+        """
+        Called when one or more files were newly created on disk (detected outside of Serena's own file
+        tools, e.g. by :class:`serena.ls_manager.LanguageServerFileChangeNotifier`), before those files are
+        opened via :meth:`open_file`. The default implementation does nothing: a `didChangeWatchedFiles`
+        notification followed by an open/close cycle is enough for most backends to fold a new file into
+        their index. Override this for a language server whose project system needs an explicit reload to
+        become aware of a file that did not exist when the project was first loaded.
+        """
+
     # --- Cross-workspace / additional workspace folder support ---
 
     @staticmethod
@@ -1964,11 +1974,12 @@ class SolidLanguageServer(ABC):
             # no cached result: get the raw root symbols from the language server
             document_symbols = self._build_document_symbols_from_raw_symbols(relative_file_path, file_buffer=file_data)
 
-            # update cache
+            # update cache (only cache non-empty results to avoid permanently caching unindexed responses)
             content_hash = file_data.content_hash
-            log.debug("Updating cached document symbols for %s (hash=%s)", relative_file_path, content_hash)
-            self._document_symbols_cache[cache_key] = (content_hash, document_symbols)
-            self._document_symbols_cache_is_modified = True
+            if document_symbols.root_symbols:
+                log.debug("Updating cached document symbols for %s (hash=%s)", relative_file_path, content_hash)
+                self._document_symbols_cache[cache_key] = (content_hash, document_symbols)
+                self._document_symbols_cache_is_modified = True
 
             return document_symbols
 
