@@ -47,6 +47,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Performance: `Project.gather_source_files` transitively re-derived from the filesystem, for every path, 
     whether that path was a file or a directory; related methods/functions now receive the information
     as a parameter where it is already known (#2077)
+  - Fix: a request whose write to the language server's stdin failed stayed pending until its
+    timeout, because `StdioLanguageServer._send_payload` logged the failure and returned. The
+    failure now surfaces as `LanguageServerTerminatedException`, the signal the restart path acts
+    on, both for a broken pipe and for a stdin that shutdown had already closed (#2004)
 
 * CLI:
   - Fix: `project health-check` reported `Health check passed - All tools working correctly` and
