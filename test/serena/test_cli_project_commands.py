@@ -239,6 +239,25 @@ class TestProjectIndex:
             shutil.rmtree(dir1, ignore_errors=True)
             shutil.rmtree(dir2, ignore_errors=True)
 
+    def test_index_failure_log_is_written_as_utf8(self, cli_runner, temp_project_dir, monkeypatch):
+        """The failed-files log must not depend on the locale encoding (e.g. cp1252 on Windows)."""
+        from solidlsp.ls import SolidLanguageServer
+
+        with open(os.path.join(temp_project_dir, "数据.py"), "w", encoding="utf-8") as f:
+            f.write("def hello():\n    pass\n")
+
+        def fail(self, relative_file_path, file_buffer=None):
+            raise RuntimeError(f"cannot index {relative_file_path}")
+
+        monkeypatch.setattr(SolidLanguageServer, "request_document_symbols", fail)
+        result = cli_runner.invoke(
+            ProjectCommands.index, [temp_project_dir, "--language", "python", "--log-level", "ERROR", "--timeout", "5"]
+        )
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+        log_file = os.path.join(temp_project_dir, ".serena", "logs", "indexing.txt")
+        with open(log_file, encoding="utf-8") as f:
+            assert "数据.py" in f.read()
+
 
 class TestProjectCreateHelper:
     """Tests for _create_project helper method."""

@@ -872,7 +872,7 @@ class ProjectCommands(AutoRegisteringGroup):
 
             if len(files_failed) > 0:
                 os.makedirs(os.path.dirname(log_file), exist_ok=True)
-                with open(log_file, "w") as f:
+                with open(log_file, "w", encoding="utf-8") as f:
                     for file, exception in zip(files_failed, collected_exceptions, strict=True):
                         f.write(f"{file}\n")
                         f.write(f"{exception}\n")
