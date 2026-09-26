@@ -49,6 +49,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     as a parameter where it is already known (#2077)
 
 * CLI:
+  - Fix: `project index` crashed while writing `.serena/logs/indexing.txt` when a failed file's path or
+    error contained characters outside the locale encoding (e.g. CJK names on Windows); the log is now
+    written as UTF-8
   - Fix: `project health-check` reported `Health check passed - All tools working correctly` and
     exited 0 even when `FindReferencingSymbolsTool` had raised, because that failure was logged as
     a warning while the verdict checked `FindSymbolTool` only. A reference-search failure now fails
