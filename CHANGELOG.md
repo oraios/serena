@@ -30,6 +30,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Perf: `search_for_pattern` resolved each match's line number by rescanning the file from the
     beginning (O(n) per match, O(n*m) total for m matches); coordinates are now resolved via the new
     `TextCoordinates` abstraction (cached line starts + binary search)
+  - Fix: `replace_lines` deleted the line range and inserted the replacement as two separate writes, so a
+    failure while inserting left the file with the range already removed; the replacement is now applied
+    within a single edit, like `replace_symbol_body` and `replace_content`
   - Fix: `TextUtils.insert_text_at_position` returned a wrong position when the inserted text merged
     with an adjacent character into a single newline sequence (e.g. a `\n` inserted directly after an
     existing `\r`); the position is now determined from the resulting text
