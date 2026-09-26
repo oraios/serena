@@ -84,6 +84,23 @@ class TestTextUtils:
             # end_line = 5 is well past the one-line-past-EOF position (3) for a 3-line file.
             TextUtils.delete_text_between_positions("a\nb\nc", 0, 0, 5, 0)
 
+    def test_delete_text_rejects_inverted_range(self) -> None:
+        """A start position after the end position must not duplicate the text between them.
+
+        delete_lines(k, start, end) documents start as the first line to delete and
+        end as the last one, both inclusive, so start > end is not a range. Slicing it
+        anyway copies the span (text[:start] + text[end:]) and reports success, which
+        silently grows the file.
+        """
+        text = "a\nb\nc\nd\n"
+        with pytest.raises(InvalidTextLocationError):
+            TextUtils.delete_text_between_positions(text, 3, 0, 2, 0)
+
+    def test_delete_text_rejects_inverted_range_within_one_line(self) -> None:
+        """The same holds for columns within a single line."""
+        with pytest.raises(InvalidTextLocationError):
+            TextUtils.delete_text_between_positions("abcdef\n", 0, 4, 0, 1)
+
     def test_insert_position_accounts_for_newline_merge(self) -> None:
         r"""A leading "\n" inserted directly after an existing "\r" merges with it into a single
         "\r\n" newline sequence. The returned position must therefore be derived from the

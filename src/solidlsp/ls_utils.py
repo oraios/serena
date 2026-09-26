@@ -332,6 +332,11 @@ class TextUtils:
             else:
                 raise
 
+        if del_start_idx > del_end_idx:
+            # An inverted range would make the slice below copy the span instead of
+            # removing it, silently duplicating the text between the two positions.
+            raise InvalidTextLocationError(f"{start_line=}, {start_col=}, {end_line=}, {end_col=}")
+
         deleted_text = text[del_start_idx:del_end_idx]
         new_text = text[:del_start_idx] + text[del_end_idx:]
         return new_text, deleted_text
