@@ -27,6 +27,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Perf: `search_for_pattern` resolved each match's line number by rescanning the file from the
     beginning (O(n) per match, O(n*m) total for m matches); coordinates are now resolved via the new
     `TextCoordinates` abstraction (cached line starts + binary search)
+  - Fix: `TextUtils.delete_text_between_positions` with a start position after the end position copied
+    the text between them instead of removing it, so a `delete_lines`/`replace_lines` call with the line
+    range reversed silently grew the file and reported success; such a range now raises
+    `InvalidTextLocationError` like an out-of-range position does
   - Fix: `TextUtils.insert_text_at_position` returned a wrong position when the inserted text merged
     with an adjacent character into a single newline sequence (e.g. a `\n` inserted directly after an
     existing `\r`); the position is now determined from the resulting text
