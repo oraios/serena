@@ -24,6 +24,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     actually used; the unconditional import added seconds to CLI/MCP startup on some machines (#2012)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
+  - Fix: the reload-merge-write in `_persist_projects` (the residual half of the fix above) had no
+    cross-process lock, so two Serena instances could still lose a registration change if their
+    persist calls overlapped; it is now wrapped in a `filelock.FileLock` (#2101)
   - Perf: `search_for_pattern` resolved each match's line number by rescanning the file from the
     beginning (O(n) per match, O(n*m) total for m matches); coordinates are now resolved via the new
     `TextCoordinates` abstraction (cached line starts + binary search)
