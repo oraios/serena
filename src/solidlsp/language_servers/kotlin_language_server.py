@@ -20,6 +20,7 @@ Example configuration for large projects:
 import logging
 import os
 import pathlib
+import shutil
 import stat
 import threading
 from dataclasses import dataclass
@@ -120,6 +121,7 @@ class KotlinLanguageServer(SolidLanguageServer):
         def __init__(self, custom_settings: SolidLSPSettings.CustomLSSettings, ls_resources_dir: str, project_cache_dir: str):
             super().__init__(custom_settings, ls_resources_dir)
             self._storage_lock: FileLock | None = None
+            self._is_fallback_storage_dir = False
             self.storage_dir = self._claim_storage_dir(project_cache_dir)
 
         def _claim_storage_dir(self, project_cache_dir: str) -> str:
@@ -129,7 +131,8 @@ class KotlinLanguageServer(SolidLanguageServer):
             single Serena instance keeps reusing its index across restarts (the primary use case, which must
             not regress). If another live Serena instance already holds that directory (concurrent sessions
             on the same project, see oraios/serena#1966), falls back to a directory unique to this process
-            instead of two Kotlin LSP processes contending for the same index.
+            instead of two Kotlin LSP processes contending for the same index. That fallback directory is
+            this instance's alone, so it is removed once the instance releases it (see release_storage_lock).
             """
             lock = FileLock(f"{project_cache_dir}.lock")
             try:
@@ -137,6 +140,7 @@ class KotlinLanguageServer(SolidLanguageServer):
             except Timeout:
                 instance_dir = f"{project_cache_dir}-instance-{os.getpid()}"
                 os.makedirs(instance_dir, exist_ok=True)
+                self._is_fallback_storage_dir = True
                 log.info(
                     "Kotlin LSP storage directory %s is in use by another Serena instance; using %s for this instance",
                     project_cache_dir,
@@ -147,6 +151,9 @@ class KotlinLanguageServer(SolidLanguageServer):
             return project_cache_dir
 
         def release_storage_lock(self) -> None:
+            if self._is_fallback_storage_dir:
+                shutil.rmtree(self.storage_dir, ignore_errors=True)
+                self._is_fallback_storage_dir = False
             if self._storage_lock is not None:
                 self._storage_lock.release()
                 self._storage_lock = None
