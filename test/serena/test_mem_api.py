@@ -66,3 +66,22 @@ def test_memory_lifecycle(api: MemoryApi) -> None:
 def test_write_memory_rejects_overlong_content(api: MemoryApi) -> None:
     with pytest.raises(ValueError, match="too long"):
         api.write_memory("big", "x" * 100, max_chars=10)
+
+
+def test_onboarding_seeds_memory_maintenance_when_writable(api: MemoryApi) -> None:
+    result = api.onboarding()
+    assert result != "Memory writing tool not activated, skipping onboarding."
+    assert api.list_memories().memories == ["memory_maintenance"]
+
+
+def test_onboarding_skips_the_write_under_a_read_only_project(tmp_path: Path) -> None:
+    project = Project.load(str(tmp_path), serena_config=SerenaConfig(gui_log_window=False, web_dashboard=False))
+    project.project_config.read_only = True
+    agent = MagicMock()
+    agent.get_active_project_or_raise.return_value = project
+    agent.serena_config.default_max_tool_answer_chars = 10000
+    api = MemoryApi(agent)
+
+    result = api.onboarding()
+    assert result == "Memory writing tool not activated, skipping onboarding."
+    assert api.list_memories().memories == []

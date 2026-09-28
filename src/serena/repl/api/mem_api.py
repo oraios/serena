@@ -173,6 +173,9 @@ class MemoryApi(FacadeApi):
 
         :return: the instructions on how to create the onboarding information
         """
+        if self._get_project().project_config.read_only:
+            # onboarding's own can_edit is False, so exclude_editing() leaves it callable; check read-only directly
+            return "Memory writing tool not activated, skipping onboarding."
         # seed the project-local memory-maintenance memory (or detect a global override) so
         # the prompt can point the agent at the conventions before it writes anything
         memory_maintenance_name = self._get_memory_manager().ensure_memory_maintenance_memory()
