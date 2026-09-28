@@ -47,7 +47,7 @@ def test_startup_does_not_wait_out_the_full_timeout() -> None:
         assert all_symbols == []
 
 
-def test_adding_graphql_config_invalidates_the_stale_empty_cache(tmp_path: Path) -> None:
+def test_adding_graphql_config_invalidates_the_stale_empty_cache(tmp_path_factory: pytest.TempPathFactory) -> None:
     """
     Regression test: `_raw_document_symbols_cache_fingerprint` must account for the resolved
     graphql-config, or Serena's own on-disk document-symbols cache -- keyed only on each file's
@@ -56,7 +56,11 @@ def test_adding_graphql_config_invalidates_the_stale_empty_cache(tmp_path: Path)
     Reproduces a real-world case: enabling the `graphql` language server on a project that had no
     graphql-config, then adding one later without ever touching schema.graphql itself.
     """
-    repo_path = tmp_path / "test_repo"
+    # Deliberately not `tmp_path`: that directory is named after this test, and a path containing
+    # "graphql_config" makes the server skip the file entirely. It detects config files with
+    # `uri.match("graphql.config")`, where the string is used as a regex, so the "." also matches
+    # "_" and every document under such a directory is treated as a config file and never cached.
+    repo_path = tmp_path_factory.mktemp("repo") / "test_repo"
     shutil.copytree(_FIXTURE_REPO, repo_path)
 
     # First run: no graphql-config -- document symbols must be empty, and that empty result gets
