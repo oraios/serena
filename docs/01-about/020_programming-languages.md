@@ -85,7 +85,8 @@ Some languages require additional installations or setup steps, as noted.
 * **Go**  
   (requires installation of `gopls`)
 * **Groovy**  
-  (requires local groovy-language-server.jar setup via `GROOVY_LS_JAR_PATH` or configuration)
+  (requires a local groovy-language-server.jar, configured via `ls_jar_path` in `ls_specific_settings`;
+  see the [Groovy Setup Guide](../03-special-guides/groovy_setup_guide_for_serena) for details)
 * **Haskell**  
   (automatically locates HLS via ghcup, stack, or system PATH; supports Stack and Cabal projects)
 * **Haxe**
