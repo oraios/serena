@@ -12,6 +12,8 @@ instance), every edit position after it was one code point too far, silently cor
 file while returning success.
 """
 
+import os
+import tempfile
 from unittest.mock import MagicMock
 
 from solidlsp.ls import SolidLanguageServer
@@ -37,7 +39,12 @@ class _FakeFileBuffer:
 
 def _make_server(contents: str) -> tuple[SolidLanguageServer, _FakeFileBuffer, str]:
     language_server = object.__new__(DummyLanguageServer)
-    language_server.repository_root_path = "/repo"
+    # `_resolve_file_uri` builds a `pathlib.Path` from this and calls `as_uri()`, which raises
+    # unless the path is absolute in the *running platform's* sense: a POSIX-style literal such
+    # as "/repo" has no drive letter, so on Windows `pathlib.Path` reports it as not absolute and
+    # `as_uri()` raises "relative path can't be expressed as a file URI". Use a real absolute
+    # path native to whichever platform the tests run on instead of a hardcoded POSIX one.
+    language_server.repository_root_path = os.path.join(tempfile.gettempdir(), "repo")
     language_server.server_started = True
     language_server.server = MagicMock()
 
