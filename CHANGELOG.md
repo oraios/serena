@@ -177,6 +177,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     symbols, which was applied outside the caches; the processing of language servers that post-process
     symbols (e.g. Go, Nix, Fortran, F#, Vue) was therefore repeated on every request or, if it mutated
     symbols in place, re-applied to already processed cached results
+  - Elixir: Bump Expert to v0.1.10, fixing several behavioural issues (#2098)
 
 CLI:
   - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)

@@ -3,6 +3,7 @@
 import logging
 import os
 import pathlib
+import shutil
 import stat
 import threading
 from collections.abc import Hashable
@@ -26,6 +27,18 @@ EXPERT_ALLOWED_HOSTS = (
     "github.com",
     "release-assets.githubusercontent.com",
     "objects.githubusercontent.com",
+)
+# SHA256 checksums of previously pinned Expert binaries (v0.1.0-rc.6) that are known to be broken
+# (document_symbols and definition requests crash). Existing installs matching one of these are removed
+# so that the currently pinned version is downloaded instead.
+EXPERT_OUTDATED_SHA256S = frozenset(
+    {
+        "643a492ff972246668b0ca356a84c3d0a0f5feeae0ab5dc1b9a126876ed460e4",  # v0.1.0-rc.6 linux_amd64
+        "d8b830bdaa8991d7ebf255dacbb3674f3ea335c87d0bfba4b7f907ded4a8f014",  # v0.1.0-rc.6 linux_arm64
+        "964f316f1633090b33aab392b6b85fb778c5fb3c0db862671424458da34b1d4d",  # v0.1.0-rc.6 darwin_amd64
+        "5fb5be151baedd635d99835cf3f9986afc9af6ae7b07bd001a1962f4298e45da",  # v0.1.0-rc.6 darwin_arm64
+        "babee77d2653679021600b99c68d984d4463290cb221e0fc0d1093b3afdeb3b0",  # v0.1.0-rc.6 windows_amd64
+    }
 )
 
 
@@ -74,6 +87,22 @@ class ElixirTools(SolidLanguageServer):
         return None
 
     @classmethod
+    def _remove_outdated_expert_install(cls, expert_dir: str, executable_path: str) -> None:
+        """
+        Remove a previously downloaded Expert install if it is a known outdated version,
+        such that the currently pinned version is downloaded instead.
+        """
+        if not os.path.exists(executable_path):
+            return
+        installed_sha256 = FileUtils.calculate_sha256(os.path.realpath(executable_path))
+        if installed_sha256 in EXPERT_OUTDATED_SHA256S:
+            log.warning(
+                f"Found outdated Expert binary at {executable_path} (sha256={installed_sha256}); "
+                f"removing {expert_dir} so that Expert {EXPERT_VERSION} is downloaded"
+            )
+            shutil.rmtree(expert_dir)
+
+    @classmethod
     def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> str:
         """
         Setup runtime dependencies for Expert.
@@ -91,8 +120,6 @@ class ElixirTools(SolidLanguageServer):
         log.info(f"Found Elixir: {elixir_version}")
 
         # First, check if expert is already in PATH (user may have installed it manually)
-        import shutil
-
         expert_in_path = shutil.which("expert")
         if expert_in_path:
             log.info(f"Found Expert in PATH: {expert_in_path}")
@@ -163,6 +190,10 @@ class ElixirTools(SolidLanguageServer):
         executable_path = os.path.join(expert_dir, executable_name)
         assert dependency.binary_name is not None
         binary_path = os.path.join(expert_dir, dependency.binary_name)
+
+        # Only the pinned default version is checked; an explicitly configured expert_version is left alone
+        if expert_version == EXPERT_VERSION:
+            cls._remove_outdated_expert_install(expert_dir, executable_path)
 
         if not os.path.exists(executable_path):
             log.info(f"Downloading Expert binary from {dependency.url}")
