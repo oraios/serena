@@ -593,6 +593,10 @@ CLI:
 * Dependencies:
   - Add dependency `oslex`
 
+* Performance:
+  - Speed up nested `.gitignore` discovery for large repositories: `GitignoreParser.should_ignore` consults only the specs on a path's ancestor chain (specs are scoped to their own directory), and the discovery walk is pruned by the global/project `ignored_paths`, so excluded subtrees are never entered. A 145k-directory tree with 4,146 nested `.gitignore` files now gathers its ignore spec in 0.4 s instead of 23 min.
+    Behaviour changes: configured `ignored_paths` now have the final say, applied after every `.gitignore` pattern in their configured order (previously a `.gitignore` negation could re-include a configured exclusion; a configured re-inclusion is no longer narrowed by a nested `.gitignore`); directory names with surrounding whitespace no longer leak their `.gitignore` onto sibling directories; gitignore-derived patterns are no longer separator-normalised on Windows, which corrupted the escape backslashes introduced in #1806.
+
 # v1.5.3 (2026-05-26)
 
 Add meta-data for the GitHub MCP registry
