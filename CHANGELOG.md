@@ -48,6 +48,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     whether that path was a file or a directory; related methods/functions now receive the information
     as a parameter where it is already known (#2077)
 
+* General:
+  - Add optional `connection_access_tokens` mapping for HTTP MCP transports: each bearer token maps to
+    `read` or `edit`. Tokens are verified through the MCP SDK `TokenVerifier` protocol. Invalid/missing
+    tokens are rejected by the SDK auth middleware before any tool runs; read connections cannot invoke
+    editing tools (checked per call via scopes). Stdio is unaffected (#1971)
+
 * CLI:
   - Fix: `project health-check` reported `Health check passed - All tools working correctly` and
     exited 0 even when `FindReferencingSymbolsTool` had raised, because that failure was logged as
