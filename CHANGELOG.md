@@ -107,6 +107,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     thread (#2038)
 
 * Language Servers:
+  - Add VB.NET language server support (via the Roslyn-based `Microsoft.CodeAnalysis.LanguageServer`,
+    also shared with the C# language server)
   - Fix: `SafeZipExtractor` discarded Unix executable permission bits stored in extracted
     archives' `ZipInfo.external_attr` (a long-standing stdlib `zipfile` limitation,
     tracked upstream at https://github.com/python/cpython/pull/150061), leaving every
