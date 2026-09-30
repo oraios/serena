@@ -37,7 +37,7 @@ from serena.constants import (
 from serena.util.inspection import compute_language_server_support_composition
 from serena.util.text_utils import GlobMatcher
 from serena.util.yaml import YamlCommentNormalisation, load_yaml, normalise_yaml_comments, save_yaml, transfer_yaml_comments
-from solidlsp.ls_config import LanguageServerId, LanguageServerIdLike, LanguageServerRegistry
+from solidlsp.ls_config import LanguageServerIdLike, LanguageServerRegistry
 
 from ..analytics import RegisteredTokenCountEstimator
 from ..language_backend import BuiltinLanguageBackend, LanguageBackend, LanguageBackendRegistry
@@ -368,11 +368,15 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         log.info("Determining suitable language servers for the project")
 
         # determine language servers to be considered and their priorities
-        ls_priorities = {}
-        for language in LanguageServerId:
-            priority = serena_config.get_ls_priority(language)
+        # the registry is the single source of truth — it includes both built-in enum members
+        # and externally-registered adapters (via solidlsp.language_server_registration entry points).
+        # priorities are user-configurable per-key via serena_config.ls_priorities (works for both kinds).
+        ls_priorities: dict[LanguageServerIdLike, int] = {}
+        registry = LanguageServerRegistry.get_instance()
+        for ls_id in registry.iter_registered_ls_ids():
+            priority = serena_config.get_ls_priority(ls_id)
             if priority > 0:
-                ls_priorities[language] = priority
+                ls_priorities[ls_id] = priority
 
         log.debug("Language server priorities: %s", ls_priorities)
         ls_composition = compute_language_server_support_composition(project_root, list(ls_priorities.keys()))
@@ -399,7 +403,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
             if len(other_language_pairs) > 0 and interactive:
                 print(
                     "Detected and enabled main language server '%s' (%.2f%% of source files)."
-                    % (top_language_pair[0].value, top_language_pair[1])
+                    % (top_language_pair[0].get_key(), top_language_pair[1])
                 )
                 print(f"Additionally detected {len(other_language_pairs)} other applicable language servers.\n")
                 print("Note: Enable only servers for languages you need symbolic retrieval/editing capabilities for.")
@@ -407,7 +411,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
                 print("      system-level installations/configuration (see Serena documentation).")
                 print("\nWhich additional language servers do you want to enable?")
                 for ls_id, perc in other_language_pairs:
-                    enable = ask_yes_no("Enable %s (%.2f%% of source files)?" % (ls_id.value, perc), default=False)
+                    enable = ask_yes_no("Enable %s (%.2f%% of source files)?" % (ls_id.get_key(), perc), default=False)
                     if enable:
                         language_servers_to_use.append(ls_id)
                 print()
@@ -421,7 +425,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         project_root: str | Path,
         serena_config: "SerenaConfig",
         project_name: str | None = None,
-        languages: list[LanguageServerId] | None = None,
+        languages: list[LanguageServerIdLike] | None = None,
         save_to_disk: bool = True,
         interactive: bool = False,
         asynchronous: bool = False,
@@ -460,7 +464,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
                     )
                     languages_to_use = [l.get_key() for l in determined_languages]
             else:
-                languages_to_use = [lang.value for lang in languages]
+                languages_to_use = [lang.get_key() for lang in languages]
             config_with_comments, _ = cls._load_yaml_dict(PROJECT_TEMPLATE_FILE)
             config_with_comments["project_name"] = project_name
             config_with_comments["language_servers"] = languages_to_use
@@ -1564,7 +1568,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
                 log.info(f"Using language backend from global configuration: {language_backend.name}")
         return language_backend
 
-    def get_ls_priority(self, ls_id: LanguageServerId) -> int:
+    def get_ls_priority(self, ls_id: LanguageServerIdLike) -> int:
         """
         Gets the priority value associated with a language server
 
@@ -1573,9 +1577,9 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         """
         if self.ls_priorities is not None:
             try:
-                configured_value = self.ls_priorities.get(ls_id.value)
+                configured_value = self.ls_priorities.get(ls_id.get_key())
                 if configured_value is not None:
                     return int(configured_value)
             except Exception as e:
-                log.error("Error reading language priority for %s: %s. Using default priority.", ls_id.value, e)
+                log.error("Error reading language priority for %s: %s. Using default priority.", ls_id.get_key(), e)
         return ls_id.get_priority()
