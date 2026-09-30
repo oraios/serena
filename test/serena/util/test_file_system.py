@@ -170,6 +170,8 @@ def test_literal_gitignore_directory(tmp_path: Path, pattern: str):
 
 @pytest.mark.parametrize("directory_name", [" nested", "nested ", " nested "])
 def test_whitespace_gitignore_directory(tmp_path: Path, directory_name: str):
+    if sys.platform == "win32" and directory_name.endswith(" "):
+        pytest.skip("Windows does not support directory names with trailing spaces")
     for name in (directory_name, "nested"):
         (tmp_path / name).mkdir()
         (tmp_path / name / "drop.txt").touch()

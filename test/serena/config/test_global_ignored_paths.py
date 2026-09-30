@@ -1,5 +1,6 @@
 import os
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 
@@ -233,6 +234,8 @@ class TestGlobalIgnoredPathsWithGitignore:
 
     @pytest.mark.parametrize("directory_name", [" nested", "nested ", " nested "])
     def test_whitespace_gitignore_directory_combined_spec(self, directory_name: str) -> None:
+        if sys.platform == "win32" and directory_name.endswith(" "):
+            pytest.skip("Windows does not support directory names with trailing spaces")
         for name in (directory_name, "nested"):
             (self.project_path / name).mkdir()
             (self.project_path / name / "drop.txt").touch()
