@@ -353,7 +353,13 @@ class LanguageServerInterface(ABC):
         self._send_payload(make_request(method, request_id, params))
 
         log.debug("Waiting for response to request %s with params:\n%s", method, params)
-        result = request.get_result(timeout=self._request_timeout)
+        try:
+            result = request.get_result(timeout=self._request_timeout)
+        except TimeoutError:
+            # a late response is then handled by _response_handler's unknown-id branch
+            with self._response_handlers_lock:
+                self._pending_requests.pop(request_id, None)
+            raise
         log.debug("Completed: %s", request)
         return result
 
