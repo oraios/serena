@@ -313,6 +313,7 @@ _LANGUAGE_PYTEST_MARKERS: dict[LanguageServerId, list[MarkDecorator | Mark]] = {
     LanguageServerId.ANGULAR: [pytest.mark.angular],
     LanguageServerId.HTML: [pytest.mark.html],
     LanguageServerId.SCSS: [pytest.mark.scss],
+    LanguageServerId.GRAPHQL: [pytest.mark.graphql],
     LanguageServerId.ASTRO: [pytest.mark.astro],
 }
 
