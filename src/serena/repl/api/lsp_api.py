@@ -7,7 +7,7 @@ import os
 from collections import Counter, defaultdict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from serena.code_editor import LanguageServerCodeEditor
 from serena.lsp.lsp_diagnostics import GroupedDiagnostics
@@ -23,6 +23,7 @@ from serena.tools import (
     FindImplementationsTool,
     FindReferencingSymbolsTool,
     FindSymbolTool,
+    FindTypeHierarchyTool,
     GetDiagnosticsForFileTool,
     GetDiagnosticsForSymbolTool,
     GetSymbolsOverviewTool,
@@ -589,6 +590,51 @@ class LspApi(FacadeApi):
 
         symbol_retriever = self._create_symbol_retriever()
         symbols = symbol_retriever.find_implementing_symbols(
+            name_path,
+            relative_file_path=relative_path,
+            include_body=False,
+            include_kinds=self._parse_kinds(include_kinds),
+            exclude_kinds=self._parse_kinds(exclude_kinds),
+        )
+        output_params = SymbolOutputParams(kind=True, relative_path=True, body_location=True, include_info=include_info)
+        renderer = LspSymbolCollectionRenderer(self._agent, max_answer_chars, output_params)
+        return LspSymbolCollection(symbols, renderer, self._request_info(symbol_retriever, symbols, output_params))
+
+    @facade_method(uses_project_server=True, optional=True, corresponding_tool=FindTypeHierarchyTool)
+    def find_type_hierarchy(
+        self,
+        name_path: str,
+        relative_path: str,
+        direction: Literal["subtypes", "supertypes"] = "subtypes",
+        include_info: bool = False,
+        include_kinds: Sequence[int] = (),
+        exclude_kinds: Sequence[int] = (),
+        max_answer_chars: int = -1,
+    ) -> LspSymbolCollection:
+        """
+        Finds the subtypes or the supertypes of the type at the given `name_path` over the language server's
+        type hierarchy.
+
+        The direct ones per the LSP specification, though some servers (pyrefly) include the indirect ones too.
+        Types defined outside the project are not included, and the result is empty when the server provides no
+        type hierarchy.
+
+        :param name_path: the type's name path
+        :param relative_path: the relative path to the file containing the type.
+            Note that here you can't pass a directory but must pass a file.
+        :param direction: "subtypes" (the classes extending it, the types implementing it) or "supertypes"
+            (the bases it extends, the interfaces it implements)
+        :param include_info: whether to include additional info (hover-like, typically including docstring and
+            signature), about the related types.
+        :param include_kinds: (optional) limits results to the given LSP symbol kinds (integers, i.e. values of `SymbolKind`)
+        :param exclude_kinds: (optional) list of LSP symbol kinds (integers, i.e. values of `SymbolKind`) to exclude.
+        :return: the types related to the given type in the requested direction
+        """
+        self._get_project().ls_sync_file_system_changes()
+
+        symbol_retriever = self._create_symbol_retriever()
+        find = symbol_retriever.find_subtype_symbols if direction == "subtypes" else symbol_retriever.find_supertype_symbols
+        symbols = find(
             name_path,
             relative_file_path=relative_path,
             include_body=False,

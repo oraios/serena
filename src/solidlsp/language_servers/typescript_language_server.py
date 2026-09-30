@@ -358,6 +358,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
                     "codeAction": {"dynamicRegistration": True},
                     "rename": {"dynamicRegistration": True, "prepareSupport": True},
                     "publishDiagnostics": {"relatedInformation": True},
+                    "typeHierarchy": {"dynamicRegistration": True},
                 },
                 "workspace": {
                     "workspaceFolders": True,

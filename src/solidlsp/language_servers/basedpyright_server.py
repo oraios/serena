@@ -97,6 +97,7 @@ class BasedPyrightLanguageServer(SolidLanguageServer):
                         "hierarchicalDocumentSymbolSupport": True,
                     },
                     "publishDiagnostics": {"relatedInformation": True},
+                    "typeHierarchy": {"dynamicRegistration": True},
                 },
             },
         }
