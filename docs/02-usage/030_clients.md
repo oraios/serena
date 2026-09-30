@@ -215,7 +215,9 @@ Claude Code settings file (`.claude/settings.json` in your project directory, or
 The hooks will:
 
 - **`remind`**: Nudge the agent to use Serena's symbolic tools when it makes too many consecutive
-  `grep` or `read_file` calls without using any Serena tools in between.
+  `grep` or `read_file` calls without using any Serena tools in between. On native Claude Code
+  installations, searches and source-file reads routed through `Bash` are classified as well,
+  including common compound commands such as `cd project && rg pattern file.py`.
 - **`activate`**: Prompt the agent to activate the project and read Serena's instructions at session start.
 - **`cleanup`**: Clean up hook session data when the session ends.
 - **`auto-approve`**: Auto-approve Serena tool calls whenever Claude Code is in a permissive
