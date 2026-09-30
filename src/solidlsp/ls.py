@@ -1363,6 +1363,14 @@ class SolidLanguageServer(ABC):
             with self.open_file(relative_file_path, open_in_ls=open_in_ls) as fb:
                 yield fb
 
+    def _line_text(self, text: str, line: int) -> str:
+        """
+        :return: the text of the given 0-based line, without its line terminator, or "" if `line`
+            is beyond the end of `text` (e.g. an append position one line past the last line)
+        """
+        lines = TextUtils.split_lines(text)
+        return lines[line] if 0 <= line < len(lines) else ""
+
     def insert_text_at_position(self, relative_file_path: str, line: int, column: int, text_to_be_inserted: str) -> ls_types.Position:
         """
         Insert text at the given line and column in the given file and return
@@ -1370,7 +1378,8 @@ class SolidLanguageServer(ABC):
 
         :param relative_file_path: The relative path of the file to open.
         :param line: The line number at which text should be inserted.
-        :param column: The column number at which text should be inserted.
+        :param column: The column number, in UTF-16 code units as defined by the LSP spec, at
+            which text should be inserted.
         :param text_to_be_inserted: The text to insert.
         """
         if not self.server_started:
@@ -1385,8 +1394,12 @@ class SolidLanguageServer(ABC):
         file_buffer = self.open_file_buffers[uri]
         file_buffer.version += 1
 
-        new_contents, new_l, new_c = TextUtils.insert_text_at_position(file_buffer.contents, line, column, text_to_be_inserted)
+        # `column` is a UTF-16 code unit offset (the LSP convention); TextUtils indexes the
+        # buffer's Python str by code point, so convert at this LSP/internal boundary.
+        codepoint_column = TextUtils.utf16_offset_to_codepoint_offset(self._line_text(file_buffer.contents, line), column)
+        new_contents, new_l, new_c = TextUtils.insert_text_at_position(file_buffer.contents, line, codepoint_column, text_to_be_inserted)
         file_buffer.contents = new_contents
+        new_c_utf16 = TextUtils.codepoint_offset_to_utf16_offset(self._line_text(new_contents, new_l), new_c)
         self.server.notify.did_change_text_document(
             {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
                 LSPConstants.TEXT_DOCUMENT: {
@@ -1404,7 +1417,7 @@ class SolidLanguageServer(ABC):
                 ],
             }
         )
-        return ls_types.Position(line=new_l, character=new_c)
+        return ls_types.Position(line=new_l, character=new_c_utf16)
 
     def delete_text_between_positions(
         self,
@@ -1426,8 +1439,12 @@ class SolidLanguageServer(ABC):
 
         file_buffer = self.open_file_buffers[uri]
         file_buffer.version += 1
+        # start/end characters are UTF-16 code units (the LSP convention); convert to code points
+        # before indexing into the buffer's Python str, same boundary as insert_text_at_position.
+        start_col = TextUtils.utf16_offset_to_codepoint_offset(self._line_text(file_buffer.contents, start["line"]), start["character"])
+        end_col = TextUtils.utf16_offset_to_codepoint_offset(self._line_text(file_buffer.contents, end["line"]), end["character"])
         new_contents, deleted_text = TextUtils.delete_text_between_positions(
-            file_buffer.contents, start_line=start["line"], start_col=start["character"], end_line=end["line"], end_col=end["character"]
+            file_buffer.contents, start_line=start["line"], start_col=start_col, end_line=end["line"], end_col=end_col
         )
         file_buffer.contents = new_contents
         self.server.notify.did_change_text_document(
