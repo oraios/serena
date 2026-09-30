@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Optional, Self, TypeVar
 from uuid import uuid4
 
 import yaml
+from filelock import FileLock
 from ruamel.yaml.comments import CommentedMap
 from sensai.util import logging
 from sensai.util.logging import LogTime, datetime_tag
@@ -1378,31 +1379,37 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         removals and additions from changes made by another process: unchanged baseline projects
         follow the current disk copy, while removed baseline projects are filtered out and newly
         added instance projects are appended.
+
+        The reload-merge-write sequence is itself not atomic, so it is wrapped in a cross-process
+        file lock: without it, two agent processes racing through this method can each read the
+        disk copy before the other writes, and the later write silently discards whichever
+        process's change was not yet on disk when the other one read.
         """
         if self.config_file_path is None:
             return
 
-        persisted = SerenaConfig.from_config_file()
-        current_projects_by_path = {str(project.project_root): project for project in self.projects}
-        current_paths = set(current_projects_by_path)
-        removed_paths = self._projects_at_load - current_paths
-        added_paths = current_paths - self._projects_at_load
+        with FileLock(self.config_file_path + ".lock"):
+            persisted = SerenaConfig.from_config_file()
+            current_projects_by_path = {str(project.project_root): project for project in self.projects}
+            current_paths = set(current_projects_by_path)
+            removed_paths = self._projects_at_load - current_paths
+            added_paths = current_paths - self._projects_at_load
 
-        combined_projects = []
-        handled_project_paths = set()
-        for project in persisted.projects:
-            project_path = str(project.project_root)
-            if project_path not in removed_paths:
-                combined_projects.append(project)
-                handled_project_paths.add(project_path)
-        for project_path in added_paths:
-            if project_path not in handled_project_paths:
-                combined_projects.append(current_projects_by_path[project_path])
-                handled_project_paths.add(project_path)
+            combined_projects = []
+            handled_project_paths = set()
+            for project in persisted.projects:
+                project_path = str(project.project_root)
+                if project_path not in removed_paths:
+                    combined_projects.append(project)
+                    handled_project_paths.add(project_path)
+            for project_path in added_paths:
+                if project_path not in handled_project_paths:
+                    combined_projects.append(current_projects_by_path[project_path])
+                    handled_project_paths.add(project_path)
 
-        persisted.projects = combined_projects
-        persisted._save()
-        self._projects_at_load = current_paths
+            persisted.projects = combined_projects
+            persisted._save()
+            self._projects_at_load = current_paths
 
     def _save(self) -> None:
         """
