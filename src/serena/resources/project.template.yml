@@ -123,11 +123,12 @@ ignored_paths: []
 read_only: false
 
 # whether editing tools report the diagnostics (warnings and errors) an edit newly introduced in the edited
-# files, as the language server sees them. The answer names the language server the diagnostics come from
-# (`diagnostics_from`), since one server's verdict is not every checker's.
+# files, as the language server sees them (LSP backend only). The answer names the language server the
+# diagnostics come from (`diagnostics_from`), since one server's verdict is not every checker's.
+# This currently affects the `tools` agent interface only; the REPL interface does not report per-edit diagnostics.
 # Off by default: intermediate edits often introduce diagnostics on purpose (a signature changed here, its
 # callers in the next edit), and reporting them at every step is noise for such workflows.
-edit_diagnostics: false
+ls_edit_diagnostics: false
 
 # list of tool names to exclude.
 # This extends the existing exclusions (e.g. from the global configuration)

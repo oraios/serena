@@ -12,9 +12,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     see `CONTRIBUTING.md`
 * Tools:
   - Per-edit diagnostics (the warnings and errors an edit newly introduces, reported by the editing tools) can be
-    enabled per project with `edit_diagnostics: true` in `project.yml` (default off, as before). The answer now also
-    names the language server the diagnostics come from, per file (`diagnostics_from`): one server's verdict is not
-    every checker's.
+    enabled per project with `ls_edit_diagnostics: true` in `project.yml` (default off, as before; LSP backend and
+    `tools` interface only). The answer now also names the language server the diagnostics come from, per file
+    (`diagnostics_from`).
 
 * General:
   - **Major**: Add the Serena REPL as a new agent interface, reducing the tool set to a minimum and providing
