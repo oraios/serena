@@ -49,6 +49,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     as a parameter where it is already known (#2077)
 
 * CLI:
+  - Add `download-ls-dependencies` to prefetch runtime dependencies for selected language servers, or all
+    non-experimental servers with `--all`, for environments with restricted network access (#664)
   - Fix: `project health-check` reported `Health check passed - All tools working correctly` and
     exited 0 even when `FindReferencingSymbolsTool` had raised, because that failure was logged as
     a warning while the verdict checked `FindSymbolTool` only. A reference-search failure now fails
@@ -105,6 +107,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     versions punish with SIGTRAP, so the tray-manager process died within seconds of every agent
     start and the tray icon never became usable. Menu refreshes are now marshalled onto the main
     thread (#2038)
+
+* CLI:
+  - Add `download-ls-dependencies` to prefetch runtime dependencies for selected language servers, or all
+    non-experimental servers with `--all`, for environments with restricted network access (#664)
 
 * Language Servers:
   - Fix: `SafeZipExtractor` discarded Unix executable permission bits stored in extracted
