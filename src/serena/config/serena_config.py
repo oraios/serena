@@ -332,6 +332,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
     ls_workspace_folders: list[str] = field(default_factory=lambda: ["."])
     ls_additional_workspace_folders: list[str] = field(default_factory=list)
     read_only: bool = False
+    ls_edit_diagnostics: bool = False
     ignore_all_files_in_gitignore: bool = True
     initial_prompt: str = ""
     encoding: str = DEFAULT_SOURCE_FILE_ENCODING
@@ -651,6 +652,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
             excluded_apis=excluded_apis,
             included_apis=included_apis,
             read_only=data["read_only"],
+            ls_edit_diagnostics=data["ls_edit_diagnostics"],
             read_only_memory_patterns=data.get("read_only_memory_patterns", []),
             ignored_memory_patterns=data.get("ignored_memory_patterns", []),
             ignore_all_files_in_gitignore=data["ignore_all_files_in_gitignore"],
