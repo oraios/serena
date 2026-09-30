@@ -24,8 +24,17 @@ class TestNextflowLanguageServer:
     @pytest.mark.parametrize("language_server", [LanguageServerId.NEXTFLOW], indirect=True)
     def test_document_symbols_workflows(self, language_server: SolidLanguageServer) -> None:
         """Workflows declared in a script are reported, with the ``workflow`` keyword stripped."""
-        all_symbols, _ = language_server.request_document_symbols("main.nf").get_all_symbols_and_roots()
-        names = [s["name"] for s in all_symbols]
+        import time
+
+        deadline = time.monotonic() + 10.0
+        names: list[str] = []
+        while time.monotonic() < deadline:
+            all_symbols, _ = language_server.request_document_symbols("main.nf").get_all_symbols_and_roots()
+            names = [s["name"] for s in all_symbols]
+            if "SAY_HELLO" in names:
+                break
+            time.sleep(0.5)
+
         assert "SAY_HELLO" in names, f"SAY_HELLO not found in main.nf symbols. Found: {names}"
         # the implicit entry workflow has no name of its own; the language server calls it "<entry>"
         assert "<entry>" in names, f"entry workflow not found in main.nf symbols. Found: {names}"

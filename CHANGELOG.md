@@ -31,6 +31,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     actually used; the unconditional import added seconds to CLI/MCP startup on some machines (#2012)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
+  - Perf: `search_for_pattern` resolved each match's line number by rescanning the file from the
+    beginning (O(n) per match, O(n*m) total for m matches); coordinates are now resolved via the new
+    `TextCoordinates` abstraction (cached line starts + binary search)
   - Fix: `TextUtils.insert_text_at_position` returned a wrong position when the inserted text merged
     with an adjacent character into a single newline sequence (e.g. a `\n` inserted directly after an
     existing `\r`); the position is now determined from the resulting text
@@ -111,6 +114,15 @@ Status of the `main` branch. Changes prior to the next official version change w
     thread (#2038)
 
 * Language Servers:
+  - Fix: `SafeZipExtractor` discarded Unix executable permission bits stored in extracted
+    archives' `ZipInfo.external_attr` (a long-standing stdlib `zipfile` limitation,
+    tracked upstream at https://github.com/python/cpython/pull/150061), leaving every
+    extracted file with default, non-executable permissions. This broke language servers
+    whose archive contains more than the single top-level launcher script that
+    per-language-server setup code re-chmods, e.g. the Kotlin Language Server's bundled
+    JetBrains Runtime (`jbr/bin/java` and native libs), whose launcher failed to exec it
+    with a permission error. Executable bits are now restored for every extracted file (#2100)
+  - Add Astro language server support via `@astrojs/language-server` with a companion TypeScript language server (`@astrojs/ts-plugin`) for cross-file code intelligence (#2085)
   - Fix: Dart analysis server no longer receives rootUri/rootPath, which added the monorepo root as an extra analysis root and could pin a CPU core at idle (#2045)
   - Fix: The C# language server opened every `.csproj` found anywhere under the repository root,
     without consulting the project's ignore settings. On repositories that vendor third-party or
@@ -129,6 +141,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     version changed
   - Fix: A language server's cache directory was determined by the language_id rather than 
     the language server identifier's key. The two identifiers coincided in most cases.
+  - Bump the bundled pyrefly to 1.2.0: 1.1.1 advertises `workspace/willRenameFiles` but answers it with `null`;
+    1.2.0 answers with the import edits (measured on the Python test repo: the two absolute importers of a
+    renamed module; a relative import of it, `from .models import`, is not rewritten by either)
   - The Python servers (pyright, basedpyright, ty, pyrefly) and the TypeScript server advertise the
     `textDocument.typeHierarchy` client capability.
   - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
@@ -136,6 +151,13 @@ Status of the `main` branch. Changes prior to the next official version change w
     VTS initialization options now override defaults per top-level key rather than replacing the
     entire configuration; a user-provided `typescript` block replaces the ATA default too.
     `initializationOptions` takes precedence over the legacy `initialization_options` alias.
+  - Fix: activating an additional TypeScript workspace folder could open a root-level tool
+    config (`vitest.config.ts`, `jest.config.ts`, etc.) adjacent to `tsconfig.json` instead of
+    a real source file, starting the wrong inferred project and silently losing cross-package
+    references (#2090)
+  - Fix: a C# file created after the project was already indexed was analyzed by Roslyn as a
+    standalone Miscellaneous Files document instead of being folded into the loaded project,
+    causing phantom diagnostics on the new file and on files referencing its symbols (#1961)
   - Add FreeBSD mapping to platform detection
   - Remove unnecessary platform checks from the following language servers, expanding the set of
     supported platforms accordingly: Elixir Tools, Intelephense, Perl, TypeScript, VTS
@@ -147,6 +169,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     `(int X, string Y)`, had their name corrupted to include a trailing `:` because the
     parenthesis in the type was mistaken for a method's parameter list; `find_symbol` on
     the real name then returned nothing
+  - Fix: TypeScript's `_has_waited_for_cross_file_references` latch was set after the first
+    cross-file query and never reset, so a later query that opened a file from a project tsserver
+    had not loaded yet (e.g. a monorepo package) skipped the indexing wait even while that
+    project's own `$/progress` indexing was still in flight (#1937)
   - Fix: Nextflow's `_flush_deferred_workspace_scan` marked the workspace scan flushed even when both
     of its `completion` probes failed, permanently skipping the flush (and silencing retries) for the
     rest of the session (#1871)
@@ -186,6 +212,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     symbols, which was applied outside the caches; the processing of language servers that post-process
     symbols (e.g. Go, Nix, Fortran, F#, Vue) was therefore repeated on every request or, if it mutated
     symbols in place, re-applied to already processed cached results
+  - Fix: the AL language server executable was only searched for in a platform-specific subdirectory of
+    the extension's `bin` directory (`bin/win32/...` on Windows). Some AL extension builds (e.g.
+    18.0.2732683, as opposed to the 18.0.2242655 that Serena pins) have no such subdirectories and
+    place the executable directly in `bin`, so activating an AL project failed with "AL Language
+    Server executable not found" for users whose VS Code extension was on such a build. Both layouts
+    are now probed, the platform subdirectory first (#2069)
 
 CLI:
   - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)
@@ -194,6 +226,7 @@ CLI:
   - Fix: declare `click` as a direct dependency; all three console scripts (`serena`, `serena-agent`,
     `serena-hooks`) import it but it was only available transitively
   - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
+  - Update `PyJWT` from 2.12.0 to 2.13.0
   - Upgrade the `mcp` SDK from 1.28.1 to 2.2.0
 
 # v1.7.0 (2026-08-09)
