@@ -95,6 +95,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     reset-on-Serena-tool-use branch was unreachable there and reminder counters never cleared after a
     successful Serena call. Add a `serena-hooks reset` command and a `PostToolUse` example matched to
     Serena's own tools to close the gap (#1852)
+  - Add ZCode support (context `zcode`, hooks) #1837
 
 * Dashboard:
   - Fix: DashboardManager's unsupported-mode fallback warning logged the literal text
