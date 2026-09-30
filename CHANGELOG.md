@@ -83,6 +83,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     marked read-only by `read_only_memory_patterns` referenced it, after the rename had already been
     applied, leaving the memory graph half-updated; reference propagation in tool contexts now covers
     only writable memories, as documented, while the CLI still propagates into read-only ones
+  - Fix: the REPL's `mem.onboarding()` wrote the project-local memory-maintenance memory even
+    when the active project was read-only; it now skips the write under read-only, matching
+    `OnboardingTool` (#2106)
 
 * JetBrains:
   - Fix: Concurrent Serena sessions activating different projects at the same time with
