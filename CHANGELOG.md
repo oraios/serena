@@ -20,6 +20,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     and services. When missing, null, or empty, a random UUID is generated and persisted; existing values
     are preserved
   - Fix: MCP server now reports Serena's version instead of the installed MCP SDK version (#1889)
+  - Fix: `ignored_paths` did not prune the search for `.gitignore` files, so activating a project
+    walked every directory the user had asked to ignore; the search now skips them (#1991)
   - Fix: importing Serena no longer loads the `anthropic` package unless the Anthropic token counter is
     actually used; the unconditional import added seconds to CLI/MCP startup on some machines (#2012)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
