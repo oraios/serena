@@ -209,6 +209,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     place the executable directly in `bin`, so activating an AL project failed with "AL Language
     Server executable not found" for users whose VS Code extension was on such a build. Both layouts
     are now probed, the platform subdirectory first (#2069)
+  - Fix: C# solution/project discovery traversed and opened paths matched by the configured ignore
+    patterns (incl. `.gitignore`), slowing down startup and loading ignored projects in Roslyn (#1999)
 
 CLI:
   - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)
