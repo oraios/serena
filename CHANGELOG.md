@@ -199,6 +199,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     storage directory via a lock; a single instance (including across restarts) still gets the
     same directory, and a second concurrent instance gets a directory of its own instead of
     contending for the first one's (#1966)
+  - Fix: the per-instance fallback storage directory introduced by the concurrent-instance fix above
+    was never removed, so every lock collision permanently leaked a multi-MB IntelliJ index directory;
+    it is now deleted when the instance releases its storage lock
   - Fix: document symbol caching did not account for language-server-specific post-processing of
     symbols, which was applied outside the caches; the processing of language servers that post-process
     symbols (e.g. Go, Nix, Fortran, F#, Vue) was therefore repeated on every request or, if it mutated
