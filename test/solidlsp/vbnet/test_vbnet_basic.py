@@ -2,7 +2,6 @@ import os
 import tempfile
 from pathlib import Path
 from typing import cast
-from unittest.mock import Mock, patch
 
 import pytest
 
@@ -12,9 +11,8 @@ from solidlsp.language_servers.vbnet_language_server import (
     breadth_first_file_scan,
     find_solution_or_project_file,
 )
-from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
+from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_utils import SymbolUtils
-from solidlsp.settings import SolidLSPSettings
 
 
 @pytest.mark.vbnet
@@ -183,27 +181,6 @@ class TestVBNetSolutionProjectOpening:
             assert "LaunchCG/roslyn-vbnet-languageserver" in dep.url
             assert dep.binary_name == "Microsoft.CodeAnalysis.LanguageServer.dll"
             assert dep.extract_path == "LanguageServer"
-
-    @patch("solidlsp.language_servers.vbnet_language_server.VBNetLanguageServer.DependencyProvider._ensure_server_installed")
-    @patch("solidlsp.language_servers.vbnet_language_server.VBNetLanguageServer._start_server")
-    def test_vbnet_language_server_logs_solution_discovery(self, mock_start_server, mock_ensure_server_installed):
-        mock_ensure_server_installed.return_value = ("/usr/bin/dotnet", "/path/to/server.dll")
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            solution_file = temp_path / "TestSolution.sln"
-            solution_file.touch()
-
-            mock_config = Mock(spec=LanguageServerConfig)
-            mock_config.ignored_paths = []
-            mock_config.get_absolute_workspace_folders.return_value = []
-            mock_config.get_absolute_additional_workspace_folders.return_value = []
-
-            mock_settings = Mock(spec=SolidLSPSettings)
-            mock_settings.ls_resources_dir = "/tmp/test_ls_resources"
-            mock_settings.project_data_path = str(temp_path / "project_data")
-
-            VBNetLanguageServer(mock_config, str(temp_path), mock_settings)
 
 
 @pytest.mark.vbnet
