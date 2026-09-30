@@ -83,7 +83,11 @@ class Project(ToStringMixin):
             try:
                 # gather ignored paths from the global configuration, project configuration, and gitignore files
                 global_ignored_paths = self.serena_config.ignored_paths
-                ignored_patterns = list(global_ignored_paths) + list(self.project_config.ignored_paths)
+                # Only configured paths need separator normalization; gitignore patterns already use POSIX syntax and escapes.
+                configured_patterns = [
+                    pattern.replace(os.path.sep, "/") for pattern in [*global_ignored_paths, *self.project_config.ignored_paths]
+                ]
+                ignored_patterns = list(configured_patterns)
                 if len(global_ignored_paths) > 0:
                     log.info(f"Using {len(global_ignored_paths)} ignored paths from the global configuration.")
                     log.debug(f"Global ignored paths: {list(global_ignored_paths)}")
@@ -92,21 +96,24 @@ class Project(ToStringMixin):
                     log.debug(f"Project ignored paths: {self.project_config.ignored_paths}")
                 log.debug(f"Combined ignored patterns: {ignored_patterns}")
                 if self.project_config.ignore_all_files_in_gitignore:
-                    gitignore_parser = GitignoreParser(self.project_root)
+                    # Directories excluded by the configured patterns are never entered by the .gitignore
+                    # discovery walk (the configured patterns have the final say, see below, so nested
+                    # .gitignore rules under such a directory could never change a verdict anyway).
+                    prune_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, configured_patterns)
+                    gitignore_parser = GitignoreParser(self.project_root, prune_spec=prune_spec)
                     for spec in gitignore_parser.get_ignore_specs():
                         log.debug(f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths.")
                         ignored_patterns.extend(spec.patterns)
+                    # Explicit configuration has the final say, in its configured order: re-appending it after
+                    # the .gitignore patterns means neither a .gitignore negation can re-include a configured
+                    # exclusion nor a .gitignore rule can narrow a configured re-inclusion. This is what keeps
+                    # discovery pruning (by configuration) and the final verdict consistent by construction.
+                    ignored_patterns.extend(configured_patterns)
                 self.__ignored_patterns = ignored_patterns
 
                 # Set up the pathspec matcher for the ignored paths
-                # for all absolute paths in ignored_paths, convert them to relative paths
-                processed_patterns = []
-                for pattern in ignored_patterns:
-                    # Normalize separators (pathspec expects forward slashes)
-                    pattern = pattern.replace(os.path.sep, "/")
-                    processed_patterns.append(pattern)
-                log.debug(f"Processing {len(processed_patterns)} ignored paths")
-                self.__ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)
+                log.debug(f"Processing {len(ignored_patterns)} ignored paths")
+                self.__ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, ignored_patterns)
             except Exception as e:
                 log.error(f"Error while gathering ignore spec for project {self.project_config.project_name}: {e}", exc_info=e)
 
@@ -183,7 +190,7 @@ class Project(ToStringMixin):
     def _ignore_spec(self) -> pathspec.PathSpec:
         """
         :return: the pathspec matcher for the paths that were configured to be ignored,
-            either explicitly or implicitly through .gitignore files.
+            either explicitly or implicitly through .gitignore files, with explicit configuration taking precedence.
         """
         if not self._ignore_spec_available.is_set():
             log.info("Waiting for ignore spec to become available ...")
