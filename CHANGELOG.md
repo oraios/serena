@@ -12,6 +12,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     see `CONTRIBUTING.md`
 
 * General:
+  - Fix: closing the in-memory log handler left its background worker running and retained the handler;
+    closing now signals the worker to drain queued messages and exit
   - **Major**: Add the Serena REPL as a new agent interface, reducing the tool set to a minimum and providing
     a general code execution environment for all Serena operations.
     This has several significant advantages over regular tool executions.  
