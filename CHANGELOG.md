@@ -107,6 +107,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     thread (#2038)
 
 * Language Servers:
+  - Fix: Vue companion TypeScript indexing now respects project ignore patterns and ignored
+    directory names, avoiding opening ignored release snapshots, vendored components and build output
   - Fix: `SafeZipExtractor` discarded Unix executable permission bits stored in extracted
     archives' `ZipInfo.external_attr` (a long-standing stdlib `zipfile` limitation,
     tracked upstream at https://github.com/python/cpython/pull/150061), leaving every
