@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-class LanguageBackendLSP(LanguageBackend):
+class LSPLanguageBackend(LanguageBackend):
     def __init__(self):
         super().__init__(BuiltinLanguageBackend.LSP.value)
 

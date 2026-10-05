@@ -14,6 +14,10 @@ For other changes, please open an issue first to discuss your ideas with the mai
 Do not submit pull requests for beta features (unless they are trivial bug fixes); instead, provide feedback via issues or discussions.
 At present, the Serena REPL is a beta feature.
 
+### Adding Support for a New Language Server
+
+See the corresponding [memory](.serena/memories/adding_new_language_support_guide.md).
+
 ## Licensing and Contributor License Agreement (CLA)
 
 Serena is multi-licensed by component (see [LICENSE](LICENSE)):
@@ -38,14 +42,10 @@ When adding new source files, include the SPDX identifier that matches the compo
 `# SPDX-License-Identifier: GPL-3.0-or-later` for Serena application code and
 `# SPDX-License-Identifier: MIT` for SolidLSP.
 
+## Submitting Pull Requests
+
 When submitting a PR, ensure a well-defined scope.
 Every PR should cover a single logical change or a set of closely related changes.
-
-### Adding Support for a New Language Server
-
-See the corresponding [memory](.serena/memories/adding_new_language_support_guide.md).
-
-## Submitting Pull Requests
 
 Before submitting a PR, be sure to document your relevant changes (i.e. new features, fixes) in `CHANGELOG.md`;
 documentation changes should not be included.
