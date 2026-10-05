@@ -220,6 +220,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     place the executable directly in `bin`, so activating an AL project failed with "AL Language
     Server executable not found" for users whose VS Code extension was on such a build. Both layouts
     are now probed, the platform subdirectory first (#2069)
+  - Remove support for migration of legacy cache format (document_symbols_cache_v23-06-25.pkl)
+  - Fix: Avoid file/package symbols leaking into the high-level document symbol cache 
+    as a result of `request_full_symbol_tree` linking document root symbols to file symbols
+    by modifying the cached symbols in place; shallow copies are now made before linking (#2126)
 
 CLI:
   - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)
@@ -230,6 +234,7 @@ CLI:
   - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
   - Update `PyJWT` from 2.12.0 to 2.13.0
   - Upgrade the `mcp` SDK from 1.28.1 to 2.2.0
+  - Upgrade `urllib3` from 2.7.0 to 2.8.0
 
 # v1.7.0 (2026-08-09)
 
