@@ -235,6 +235,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Avoid file/package symbols leaking into the high-level document symbol cache 
     as a result of `request_full_symbol_tree` linking document root symbols to file symbols
     by modifying the cached symbols in place; shallow copies are now made before linking (#2126)
+  - Fix: `find_referencing_symbols` dropped callers that have the same name and kind as the target
+    symbol (e.g. `a.run` calling `b.run` in Gleam) whenever the language server listed them after the
+    target's declaration, mistaking them for imports; a referencing symbol is now only treated as an
+    import if the reference lies within its name (#2133)
 
 CLI:
   - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)

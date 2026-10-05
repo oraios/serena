@@ -2533,11 +2533,18 @@ class SolidLanguageServer(ABC):
                 # This is neither really safe nor elegant, but if we don't do it,
                 # there is no way to distinguish between definitions and imports as import is not a symbol-type
                 # and we get the type referenced symbol resulting from imports...
+                # An import symbol is located at the reference itself, whereas a same-named symbol whose body
+                # merely contains the reference (e.g. a caller) is not an import.
+                selection_start = containing_symbol["selectionRange"]["start"]
+                selection_end = containing_symbol["selectionRange"]["end"]
                 if (
                     not include_imports
                     and incoming_symbol is not None
                     and containing_symbol["name"] == incoming_symbol["name"]
                     and containing_symbol["kind"] == incoming_symbol["kind"]
+                    and (selection_start["line"], selection_start["character"])
+                    <= (ref_line, ref_col)
+                    <= (selection_end["line"], selection_end["character"])
                 ):
                     log.debug(
                         f"Found import of referenced symbol {incoming_symbol['name']}"
