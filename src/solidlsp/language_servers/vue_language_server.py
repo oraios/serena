@@ -251,7 +251,7 @@ class VueLanguageServer(SolidLanguageServer):
         for vue_file in repo_path.rglob("*.vue"):
             try:
                 relative_path = str(vue_file.relative_to(repo_path))
-                if "node_modules" not in relative_path and not relative_path.startswith("."):
+                if not relative_path.startswith(".") and not self.is_ignored_path(relative_path):
                     vue_files.append(relative_path)
             except Exception as e:
                 log.debug(f"Error processing Vue file {vue_file}: {e}")
