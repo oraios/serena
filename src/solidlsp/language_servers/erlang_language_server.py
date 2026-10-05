@@ -1,4 +1,5 @@
 """Erlang Language Server implementation using Erlang LS."""
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

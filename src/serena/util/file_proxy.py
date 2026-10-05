@@ -1,10 +1,10 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import logging
 import os
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Self
-
-from serena.jetbrains import jetbrains_types as jb
 
 if TYPE_CHECKING:
     from serena.project import Project
@@ -28,19 +28,15 @@ class FileProxy(ABC):
         """
 
     @staticmethod
-    def is_external_path(relative_path: str) -> bool:
+    def is_external_path(relative_path: str, project: "Project") -> bool:
         """
         :return: whether the given relative path is an encoded external path (not a local project file)
         """
-        # This is intended to be extended once we also support external paths in other backends
-        return jb.is_external_path(relative_path)
+        return project.language_backend.is_external_path(relative_path)
 
     @classmethod
     def from_project_relative_path(cls, project: "Project", relative_path: str) -> "FileProxy":
-        if cls.is_external_path(relative_path):
-            if project.language_backend.is_jetbrains():
-                return JetBrainsFileProxy(relative_path, project)
-        return LocalProjectFileProxy(relative_path, project)
+        return project.language_backend.create_file_proxy(relative_path, project)
 
 
 class LocalProjectFileProxy(FileProxy):
@@ -58,29 +54,6 @@ class LocalProjectFileProxy(FileProxy):
 
     def is_glob_supported(self):
         return True
-
-
-class JetBrainsFileProxy(FileProxy):
-    """
-    Retrieves the contents of a file from the JetBrains plugin via the plugin client, given its relative path,
-    which may be an external path (e.g., "<ext:FileUtil.class|472e0a13>")
-    """
-
-    def __init__(self, relative_path: str, project: "Project"):
-        self._relative_path = relative_path
-        self._project = project
-
-    def get_contents(self) -> str:
-        from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
-
-        client = JetBrainsPluginClient.from_project(self._project)
-        return client.read_file(self._relative_path)
-
-    def get_relative_path(self) -> str:
-        return self._relative_path
-
-    def is_glob_supported(self):
-        return False
 
 
 class FileCollection:

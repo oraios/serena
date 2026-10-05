@@ -272,6 +272,9 @@ cabal.project.local*
 # Lean 4
 .lake/
 
+# Nix
+/result
+
 zz-misc/
 vue-implementation/
 

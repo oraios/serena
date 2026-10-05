@@ -42,6 +42,7 @@ Example configuration in ~/.serena/serena_config.yml:
             fpcdir: "D:/laz32/fpcsrc"
             lazarusdir: "D:/laz32/lazarus"
 """
+# SPDX-License-Identifier: MIT
 
 from __future__ import annotations
 

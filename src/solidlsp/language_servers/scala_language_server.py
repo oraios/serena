@@ -1,6 +1,7 @@
 """
 Provides Scala specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Scala.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os
@@ -532,7 +533,7 @@ class ScalaLanguageServer(SolidLanguageServer):
             config,
             repository_root_path,
             ProcessLaunchInfo(cmd=scala_lsp_executable_path, cwd=repository_root_path),
-            config.ls_id.value,
+            "scala",
             solidlsp_settings,
         )
 

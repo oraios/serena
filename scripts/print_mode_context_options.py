@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 
 if __name__ == "__main__":

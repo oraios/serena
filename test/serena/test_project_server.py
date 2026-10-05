@@ -8,8 +8,11 @@ from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
+from flask import Flask
+from werkzeug.serving import make_server
 
-from serena.project_server import ProjectServer, QueryProjectRequest
+from serena.config.serena_config import SerenaConfig
+from serena.project_server import ProjectServer, ProjectServerClient, QueryProjectRequest
 
 
 @pytest.fixture
@@ -21,6 +24,53 @@ def project_server() -> ProjectServer:
     server._active_project_lock = threading.Lock()
     server._loaded_projects_lock = threading.Lock()
     return server
+
+
+@pytest.fixture
+def authenticated_server(project_server: ProjectServer, monkeypatch: pytest.MonkeyPatch) -> ProjectServer:
+    # expose the real HTTP routes with a query handler that needs no language servers
+    project_server._agent.serena_config.auth_secret = "test-shared-secret"
+    project_server._app = Flask(__name__)
+    monkeypatch.setattr(project_server, "_query_project", lambda req: req.project_name)
+    project_server._setup_routes()
+    return project_server
+
+
+@pytest.mark.parametrize("authorization", [None, "Bearer wrong-secret", "test-shared-secret", "Bearer café"])
+@pytest.mark.parametrize("path", ["/heartbeat", "/query_project"])
+def test_project_server_rejects_invalid_credentials(authenticated_server: ProjectServer, authorization: str | None, path: str) -> None:
+    # unauthorized requests are rejected even before query payload validation
+    headers = {} if authorization is None else {"Authorization": authorization}
+    with authenticated_server._app.test_client() as client:
+        response = client.open(path, method="GET" if path == "/heartbeat" else "POST", headers=headers)
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize("use_wrong_password", [True, False])
+def test_project_server_client_authenticates_requests(authenticated_server: ProjectServer, use_wrong_password: bool) -> None:
+    # run the authenticated endpoints on an ephemeral local port
+    http_server = make_server("127.0.0.1", 0, authenticated_server._app)
+    thread = threading.Thread(target=http_server.serve_forever, daemon=True)
+    thread.start()
+    try:
+
+        def check_client():
+            serena_config = SerenaConfig()
+            serena_config.auth_secret = "wrong-secret" if use_wrong_password else authenticated_server.get_auth_secret()
+            client = ProjectServerClient(serena_config, port=http_server.server_port)
+            assert client.query_project("other", "find_symbol", "{}") == "other"
+
+        # construction authenticates the heartbeat, raising a Connection error if using the wrong password
+        if use_wrong_password:
+            with pytest.raises(expected_exception=ConnectionError, match="401"):
+                check_client()
+        else:
+            check_client()
+
+    finally:
+        http_server.shutdown()
+        thread.join(timeout=5)
+        http_server.server_close()
 
 
 def test_cached_project_lookup_is_not_blocked_by_unrelated_cold_load(project_server: ProjectServer) -> None:

@@ -1,6 +1,7 @@
 """
 Provides Haskell specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Haskell.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

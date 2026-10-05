@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from typing import Any
 
 import jinja2
@@ -6,7 +8,7 @@ import jinja2.nodes
 import jinja2.visitor
 from jinja2.sandbox import SandboxedEnvironment
 
-from interprompt.util.class_decorators import singleton
+from .util.class_decorators import singleton
 
 
 class ParameterizedTemplateInterface:

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import logging
 import os
 from enum import Enum
@@ -325,7 +327,8 @@ class MultiLangPromptCollection:
             except KeyError as e:
                 raise KeyError(f"Invalid yaml structure (missing 'prompts' key) in file {path}") from e
 
-            lang_code = prompts_data.get("lang", DEFAULT_LANG_CODE)
+            lang_code = data.get("lang", DEFAULT_LANG_CODE)
+
             # add the data to the collection
             for prompt_name, prompt_template_or_list in prompts_data.items():
                 if isinstance(prompt_template_or_list, list):

@@ -603,6 +603,23 @@ code, pre, kbd, samp,
     cursor: default;
 }
 
+.facade-block {
+    margin-bottom: 12px;
+}
+
+.facade-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.facade-name.disabled,
+.tool-item.disabled {
+    color: var(--text-secondary);
+    opacity: 0.5;
+}
+
 /* Projects List */
 .project-item {
     padding: 10px 12px;

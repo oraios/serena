@@ -124,8 +124,8 @@ When using Serena, we highly recommend that you start CC as
 claude --system-prompt="$(serena prompts print-cc-system-prompt-override)"
 ```
 
-You can also consider adding the content of `serena cc-system-prompt-override` to your `CLAUDE.md` files,
-but the effect be insufficient for counteracting Claude Code's bias towards internal tools.
+You can also consider adding the content of `serena prompts print-cc-system-prompt-override` to your `CLAUDE.md` files,
+but the effect may be insufficient for counteracting Claude Code's bias towards internal tools.
 :::
 
 **Global Configuration**. To add the Serena MCP server for all your projects, use the user-level configuration of claude code and the `--project-from-cwd` flag:
@@ -344,6 +344,17 @@ Then create `~/.codex/hooks.json` with the following content:
                 ]
             }
         ],
+        "PostToolUse": [
+            {
+                "matcher": "^mcp__serena__.*$",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "serena-hooks reset --client=codex"
+                    }
+                ]
+            }
+        ],
         "SessionStart": [
             {
                 "matcher": "startup|resume",
@@ -381,10 +392,15 @@ The hooks will:
   when a Codex session starts or resumes.
 - **`remind`**: Nudge the agent to use Serena's symbolic tools when it makes too many consecutive
   code-search or code-file-read calls without using Serena tools in between.
+- **`reset`**: Clear the reminder counters after a successful Serena symbolic tool call, so using
+  Serena's tools starts a fresh count instead of leaving the prior grep/read streak in place.
 - **`cleanup`**: Clean up hook session data when the session ends.
 
-The `PreToolUse` matcher is intentionally restricted to `Bash`. The Serena reminder hook for Codex
-tracks shell-based grep and code-file reads, so running it for every tool call is unnecessary.
+The `PreToolUse` matcher is intentionally restricted to `Bash`: the reminder hook tracks shell-based
+grep and code-file reads, so running it for every tool call is unnecessary. That matcher never sees
+`mcp__serena__*` tool names, though, so it cannot also perform the counter reset on Serena tool use
+the way it does for clients whose `PreToolUse` hook observes every tool call. The separate `reset`
+hook above, matched to `PostToolUse` on Serena's own tools, covers that case for Codex instead.
 
 ## Grok
 
@@ -699,6 +715,71 @@ CodeBuddy supports the same hook system as Claude Code. To set up hooks, add the
 - **`auto-approve`**: Auto-approve Serena tool calls whenever CodeBuddy is in a permissive
   permission mode (`acceptEdits` or `auto`), so blanket approvals cover Serena's destructive
   tools (e.g. `replace_symbol_body`, `rename_symbol`) instead of prompting on every call.
+
+## ZCode
+
+Serena provides `serena-hooks` support for [ZCode](https://zcode.z.ai), Z.ai's coding agent harness. There is
+currently no `serena setup zcode` command (unlike Claude Code, CodeBuddy, Codex and Grok, ZCode does not
+document a CLI subcommand for registering an MCP server), so the MCP server has to be added manually.
+
+### Manual Setup
+
+Add Serena as an MCP server in ZCode's configuration (`~/.zcode/cli/config.json` for all workspaces, or
+`.zcode/config.json` in a project directory for that project only):
+
+```json
+{
+  "mcpServers": {
+    "serena": {
+      "enabled": true,
+      "type": "http",
+      "url": "http://127.0.0.1:9121/mcp"
+    }
+  }
+}
+```
+
+This assumes Serena is already running in [HTTP/SSE mode](streamable-http) on the given port; start it with
+`--context=zcode --project-from-cwd` for a single-project setup, or `--context=zcode` if you intend to
+activate a project from within the chat.
+
+### Hooks
+
+ZCode supports lifecycle hooks with the same event names as Claude Code (`SessionStart`, `PreToolUse`,
+`Stop`, ...). To set up hooks, add the following to your ZCode hooks configuration
+(`~/.zcode/cli/config.json` globally, or `.zcode/config.json` for a single project), under
+`hooks.events`, with `hooks.enabled` set to `true`:
+
+```json
+{
+  "hooks": {
+    "enabled": true,
+    "events": {
+      "SessionStart": [
+        { "hooks": [ { "type": "process", "command": "serena-hooks", "args": ["activate", "--client", "zcode"] } ] }
+      ],
+      "PreToolUse": [
+        { "matcher": "Read|Bash", "hooks": [ { "type": "process", "command": "serena-hooks", "args": ["remind", "--client", "zcode"] } ] }
+      ],
+      "Stop": [
+        { "hooks": [ { "type": "process", "command": "serena-hooks", "args": ["cleanup", "--client", "zcode"] } ] }
+      ]
+    }
+  }
+}
+```
+
+### Hook Descriptions
+
+- **`activate`**: Prompt the agent to activate the project at session start and read Serena's instructions.
+- **`remind`**: Remind the agent to use Serena's tools instead of built-in read and search tools.
+- **`cleanup`**: Clean up hook session data when the session ends.
+- **`auto-approve`**: Auto-approve Serena tool calls whenever ZCode is in a permissive permission mode, so
+  blanket approvals cover Serena's destructive tools (e.g. `replace_symbol_body`, `rename_symbol`) instead
+  of prompting on every call. Wire it to `serena-hooks auto-approve --client=zcode` the same way as
+  `remind` above; the exact matcher for restricting it to Serena's own tool calls has not been confirmed
+  against a live ZCode session, so start with an unscoped matcher and narrow it if ZCode's permission
+  prompts turn out to fire on non-Serena tools too.
 
 ## Other Clients
 

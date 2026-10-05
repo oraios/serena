@@ -8,6 +8,7 @@ You can pass the following entries in ``ls_specific_settings["powershell"]``:
     - psscriptanalyzer_version: Override the pinned PSScriptAnalyzer version
       saved into the bundled PowerShell Editor Services module path.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

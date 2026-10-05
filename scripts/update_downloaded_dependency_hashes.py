@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from sensai.util import logging
 
 from solidlsp.language_servers.eclipse_jdtls import EclipseJDTLS

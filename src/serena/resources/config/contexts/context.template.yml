@@ -23,6 +23,13 @@ included_optional_tools: []
 # Find the list of tools here: https://oraios.github.io/serena/01-about/035_tools.html
 fixed_tools: []
 
+# APIs (facades or facade methods, e.g. "lsp" or "lsp.find_symbol") to be excluded from the REPL in this context.
+excluded_apis: []
+
+# included APIs that would otherwise be excluded (particularly optional facade methods, which are disabled by default),
+# e.g. "lsp.get_diagnostics_for_symbol".
+included_apis: []
+
 # mapping of tool names to an override of their descriptions (the default description is the docstring of the Tool's apply method).
 # Sometimes, tool descriptions are too long (e.g., for ChatGPT), or users may want to override them for another reason.
 tool_description_overrides: {}

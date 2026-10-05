@@ -23,7 +23,7 @@ def test_request_document_symbols_returns_none_without_contacting_server() -> No
     to None instead of sending a request that is guaranteed to fail. Runs with no
     language server process, node, or npm required.
     """
-    assert AnsibleLanguageServer._request_document_symbols(None, "playbook.yml", None) is None
+    assert AnsibleLanguageServer._request_raw_document_symbols(None, "playbook.yml", None) is None
 
 
 @pytest.mark.skipif(

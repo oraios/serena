@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 import logging
@@ -7,9 +9,14 @@ from collections import defaultdict
 from copy import copy
 from dataclasses import asdict, dataclass
 from enum import Enum
+from typing import TYPE_CHECKING
 
-from anthropic.types import MessageParam, MessageTokensCount
 from dotenv import load_dotenv
+
+if TYPE_CHECKING:
+    # Imported for annotations only: loading the anthropic package costs seconds on some
+    # machines (see #2012) and is only needed when the Anthropic token counter is used.
+    from anthropic.types import MessageTokensCount
 
 log = logging.getLogger(__name__)
 
@@ -62,7 +69,7 @@ class AnthropicTokenCount(TokenCountEstimator):
     def _send_count_tokens_request(self, text: str) -> MessageTokensCount:
         return self._anthropic_client.messages.count_tokens(
             model=self._model_name,
-            messages=[MessageParam(role="user", content=text)],
+            messages=[{"role": "user", "content": text}],
         )
 
     def estimate_token_count(self, text: str) -> int:

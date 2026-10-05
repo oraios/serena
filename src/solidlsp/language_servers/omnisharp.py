@@ -1,6 +1,7 @@
 """
 Provides C# specific instantiation of the LanguageServer class. Contains various configurations and settings specific to C#.
 """
+# SPDX-License-Identifier: MIT
 
 import json
 import logging
