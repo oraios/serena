@@ -2,8 +2,10 @@ import logging
 import os
 import shutil
 import tempfile
+import threading
 from copy import deepcopy
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -767,6 +769,67 @@ class TestSerenaConfigLoadSave:
         adding_config = SerenaConfig.from_config_file(generate_if_missing=False)
         removing_config.remove_project("project2")
         adding_config.add_project_from_path(p3)
+
+        reloaded = SerenaConfig.from_config_file(generate_if_missing=False)
+        assert {project.project_config.project_name for project in reloaded.projects} == {"project1", "project3"}
+
+    def test_persist_projects_serializes_overlapping_reads_and_writes(self, monkeypatch):
+        """A write started before another process's write must not clobber it with a stale read.
+
+        The two tests above call ``remove_project``/``add_project_from_path`` back to back, so
+        by the time the second one reads the disk copy, the first one has already finished
+        writing it; there is no actual overlap between the two. Here the first call's disk read
+        is held open on a background thread until a second, independent call has fully read,
+        merged and written its own change, reproducing the interleaving that two concurrent
+        agent processes can hit.
+        """
+        p1 = self._make_project_dir("project1", 'project_name: "project1"\nlanguages: ["python"]\n')
+        p2 = self._make_project_dir("project2", 'project_name: "project2"\nlanguages: ["python"]\n')
+        p3 = self._make_project_dir("project3", 'project_name: "project3"\nlanguages: ["python"]\n')
+        self._write_master_config([p1, p2])
+
+        adding_config = SerenaConfig.from_config_file(generate_if_missing=False)
+        removing_config = SerenaConfig.from_config_file(generate_if_missing=False)
+        adding_config.projects.append(RegisteredProject.from_project_root(p3, serena_config=adding_config))
+        for i, project in enumerate(list(removing_config.projects)):
+            if project.project_name == "project2":
+                del removing_config.projects[i]
+                break
+
+        real_from_config_file = SerenaConfig.from_config_file.__func__
+        first_read_started = threading.Event()
+        first_call_may_write = threading.Event()
+        call_count = {"n": 0}
+
+        def paused_from_config_file(cls: type[SerenaConfig], *args: Any, **kwargs: Any) -> SerenaConfig:
+            call_count["n"] += 1
+            result = real_from_config_file(cls, *args, **kwargs)
+            if call_count["n"] == 1:
+                first_read_started.set()
+                assert first_call_may_write.wait(timeout=5), "test never released the paused first call"
+            return result
+
+        monkeypatch.setattr(SerenaConfig, "from_config_file", classmethod(paused_from_config_file))
+
+        adder_thread = threading.Thread(target=adding_config._persist_projects)
+        adder_thread.start()
+        assert first_read_started.wait(timeout=5), "adding_config never reached its disk read"
+
+        # Run the second call on its own thread too: with the fix, it blocks acquiring the same
+        # lock the paused first call is still holding, so calling it inline here would deadlock.
+        # Do not use a sleep to guess whether it got a chance to run: join with a timeout instead,
+        # so the outcome depends on the lock actually blocking it, not on scheduler luck. Without
+        # the fix, nothing blocks it and it always finishes well inside the timeout; with the fix,
+        # it is still blocked on the lock the paused first call holds, so it never does.
+        remover_thread = threading.Thread(target=removing_config._persist_projects)
+        remover_thread.start()
+        remover_thread.join(timeout=1)
+
+        first_call_may_write.set()
+        adder_thread.join(timeout=5)
+        remover_thread.join(timeout=5)
+        assert not adder_thread.is_alive()
+        assert not remover_thread.is_alive()
 
         reloaded = SerenaConfig.from_config_file(generate_if_missing=False)
         assert {project.project_config.project_name for project in reloaded.projects} == {"project1", "project3"}
