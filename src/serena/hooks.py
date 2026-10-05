@@ -290,6 +290,41 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
     #: shell-command tool calls whose ``cmd`` or ``command`` field starts with one of these.
     _READ_SHELL_COMMANDS: frozenset[str] = frozenset(("cat", "head", "tail", "sed", "less", "more", "bat", "get-content", "gc"))
 
+    #: Common search/read flags whose *next* token is a value (not a positional pattern or path).
+    #: Without this, ``rg --type py needle src`` would treat ``py`` as the search pattern.
+    _SHELL_FLAGS_WITH_VALUES: frozenset[str] = frozenset(
+        (
+            "-t",
+            "--type",
+            "--type-add",
+            "-g",
+            "--glob",
+            "-e",
+            "--regexp",
+            "-A",
+            "-B",
+            "-C",
+            "--after-context",
+            "--before-context",
+            "--context",
+            "-m",
+            "--max-count",
+            "-j",
+            "--threads",
+            "-f",
+            "--file",
+            "--max-depth",
+            "--max-filesize",
+            "--include",
+            "--exclude",
+            "-name",
+            "-iname",
+            "-path",
+            "-ipath",
+            "-type",
+        )
+    )
+
     #: file suffixes for source-like files where symbolic tools are usually more
     #: appropriate than repeated raw reads. Lowercase and extension-only.
     #: Note: ``search_for_pattern`` is always available regardless of extension and
@@ -438,13 +473,35 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         if self._command_args_str is None:
             return arguments
 
-        for raw_argument in self._command_args_str.split():
+        tokens = self._command_args_str.split()
+        index = 0
+        while index < len(tokens):
+            raw_argument = tokens[index]
             argument = raw_argument.strip().strip("'\"")
-            if not argument or argument.startswith("-"):
+            index += 1
+            if not argument:
+                continue
+            if argument.startswith("-"):
+                # flags may write their value as ``--type=py`` (attached) or ``--type py`` (next token)
+                flag = argument.split("=", 1)[0]
+                if flag in self._SHELL_FLAGS_WITH_VALUES and "=" not in argument and index < len(tokens):
+                    index += 1
                 continue
             arguments.append(argument)
 
         return arguments
+
+    @classmethod
+    def _code_file_extensions(cls) -> frozenset[str]:
+        """Return the configured source-file extensions used by the hook."""
+        configured = os.getenv("SERENA_HOOK_CODE_FILE_EXTENSIONS", "").strip()
+        if not configured:
+            return cls._CODE_FILE_EXTENSIONS
+        return frozenset(
+            extension if extension.startswith(".") else f".{extension}"
+            for extension in (item.strip().lower() for item in configured.split(","))
+            if extension
+        )
 
     @classmethod
     def _is_code_file_path(cls, file_path: str) -> bool:
@@ -452,7 +509,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         cleaned_path = file_path.strip().strip("'\"")
         if not cleaned_path:
             return False
-        return Path(cleaned_path).suffix.lower() in cls._CODE_FILE_EXTENSIONS
+        return Path(cleaned_path).suffix.lower() in cls._code_file_extensions()
 
     def execute(self) -> None:
         # gate the entire hook on the rate-limit window: while we are within
@@ -572,6 +629,75 @@ class PostToolUseResetSymbolicToolCounterHook(Hook):
         counter.save(self)
 
 
+class PreToolUseEnforceSymbolicToolsHook(PreToolUseRemindAboutSymbolicToolsHook):
+    """Hard-block direct code searches and reads in favor of Serena's symbolic tools.
+
+    Unlike the reminder hook, this hook emits a deny response on every matching call. It is
+    opt-in and leaves the existing ``remind`` behavior unchanged. The default code-file suffix
+    set can be replaced for a process by setting ``SERENA_HOOK_CODE_FILE_EXTENSIONS`` to a
+    comma-separated list such as ``py,pyi,rs``.
+    """
+
+    def _replacement_call(self) -> str:
+        if self.is_read_code_file_call():
+            file_path = self._file_path
+            if file_path is None:
+                file_path = next(
+                    (argument for argument in self._iter_shell_path_arguments() if self._is_code_file_path(argument)),
+                    "<relative_path>",
+                )
+            arguments = [f"relative_path={json.dumps(file_path)}"]
+            if self._tool_input is not None:
+                for key in ("start_line", "end_line", "max_answer_chars"):
+                    value = self._tool_input.get(key)
+                    if value is not None:
+                        arguments.append(f"{key}={json.dumps(value)}")
+            return f"mcp__serena__read_file({', '.join(arguments)})"
+
+        pattern = "<pattern>"
+        relative_path: str | None = None
+        if self._tool_input is not None:
+            for key in ("pattern", "query", "substring_pattern", "search_query"):
+                value = self._tool_input.get(key)
+                if value is not None:
+                    pattern = str(value)
+                    break
+            for key in ("relative_path", "path", "file_path"):
+                value = self._tool_input.get(key)
+                if value is not None:
+                    relative_path = str(value)
+                    break
+        # Shell-command clients (Codex/Grok) carry the needle and the target file in the
+        # command line instead of ``tool_input``; fall back to the same shell-argument
+        # parsing the read branch uses, so the retry suggestion keeps the actual values.
+        if pattern == "<pattern>" or relative_path is None:
+            shell_arguments = self._iter_shell_path_arguments()
+            if pattern == "<pattern>":
+                pattern = next((a for a in shell_arguments if not self._is_code_file_path(a)), "<pattern>")
+            if relative_path is None:
+                relative_path = next((a for a in shell_arguments if self._is_code_file_path(a)), None)
+        arguments = [f"substring_pattern={json.dumps(pattern)}"]
+        if relative_path:
+            arguments.append(f"relative_path={json.dumps(relative_path)}")
+        return f"mcp__serena__search_for_pattern({', '.join(arguments)})"
+
+    def execute(self) -> None:
+        # The replacement calls are themselves non-symbolic Serena tools. They must be allowed,
+        # otherwise the denial creates an infinite retry loop in the client.
+        if "serena" in self._tool_name:
+            return
+        if not self.is_read_code_file_call() and not self.is_grep_call():
+            return
+
+        replacement = self._replacement_call()
+        reason = (
+            "Forbidden: direct code-file search/read. Use Serena's symbolic tools instead.\n"
+            f"Retry with: {replacement}\n"
+            'For a named symbol, use: mcp__serena__find_symbol(name_path="<symbol>", include_body=True)'
+        )
+        click.echo(self.OutputData(permission_decision="deny", permission_decision_reason=reason).to_json_string(self._client))
+
+
 class SessionStartActivateProjectHook(Hook):
     def execute(self) -> None:
         message = (
@@ -670,6 +796,15 @@ class HookCommands(AutoRegisteringGroup):
     @_client_option
     def remind(client: str) -> None:
         PreToolUseRemindAboutSymbolicToolsHook(HookClient(client)).execute()
+
+    @staticmethod
+    @click.command(
+        "enforce",
+        help="Set this as hook at PreToolUse to block direct code searches and reads and suggest Serena symbolic replacements.",
+    )
+    @_client_option
+    def enforce(client: str) -> None:
+        PreToolUseEnforceSymbolicToolsHook(HookClient(client)).execute()
 
     @staticmethod
     @click.command(
