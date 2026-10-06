@@ -21,9 +21,9 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-class LanguageBackendJetBrains(LanguageBackend):
-    def __init__(self):
-        super().__init__(BuiltinLanguageBackend.JETBRAINS.value)
+class JetBrainsLanguageBackend(LanguageBackend):
+    def __init__(self, key: str | None = None):
+        super().__init__(key or BuiltinLanguageBackend.JETBRAINS.value)
 
     @override
     def get_lsp_tool_class_replacements(self) -> "dict[type[Tool], type[Tool]]":
@@ -39,12 +39,21 @@ class LanguageBackendJetBrains(LanguageBackend):
             symbol_tools.SafeDeleteSymbol: jetbrains_tools.JetBrainsSafeDeleteTool,
         }
 
-    @override
-    def create_facades(self, agent: "SerenaAgent", api_scope: "ApiScope") -> list["Facade"]:
+    def _create_ide_facade(self, agent: "SerenaAgent", api_scope: "ApiScope") -> "Facade":
         from ..repl.api.jb_api import JetBrainsApi
         from ..repl.facade import Facade
 
-        return [Facade.from_api(JetBrainsApi(agent), api_scope)]
+        return Facade.from_api(JetBrainsApi(agent), api_scope)
+
+    @override
+    def create_facades(self, agent: "SerenaAgent", api_scope: "ApiScope") -> list["Facade"]:
+        return [self._create_ide_facade(agent, api_scope)]
+
+    def _init_project_ide_launch(self, agent: "SerenaAgent") -> None:
+        project = agent.get_active_project_or_raise()
+        launch_command = agent.serena_config.jetbrains_launch_command
+        if launch_command:
+            launch_coordinator.launch_and_wait_for_plugin_server(project, launch_command)
 
     @override
     def init_active_project(self, agent: "SerenaAgent") -> None:
@@ -53,13 +62,11 @@ class LanguageBackendJetBrains(LanguageBackend):
         if client is not None:
             log.info("Found Serena JetBrains Plugin server: %s", client)
         else:
-            log.info("Serena JetBrains Plugin server not found for project %s", project.project_name)
-            launch_command = agent.serena_config.jetbrains_launch_command
-            if launch_command:
-                launch_coordinator.launch_and_wait_for_plugin_server(project, launch_command)
+            self._init_project_ide_launch(agent)
 
     @override
     def shutdown_active_project(self, project: "Project", timeout: float) -> None:
+        # Do nothing; IDE lifecycle is user-controlled
         pass
 
     @override
