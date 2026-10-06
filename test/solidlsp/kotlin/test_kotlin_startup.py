@@ -107,3 +107,15 @@ def test_modern_ready_timeout_warns_and_continues(tmp_path: Path, caplog: Any) -
         server._start_server()
 
     assert "Kotlin LSP did not signal indexing completion within 120s; proceeding anyway" in caplog.text
+
+
+def test_storage_path_is_no_longer_hardcoded_none(tmp_path: Path) -> None:
+    """A hardcoded None here means every instance shares the LSP's own default index
+    location; two concurrent instances on the same project then contend for it and the
+    second fails to index (oraios/serena#1966).
+    """
+    server, _indexing_complete, _intellij_server_ready = _make_server(tmp_path)
+
+    storage_path = server._create_base_initialize_params()["initializationOptions"]["storagePath"]
+
+    assert storage_path == str(tmp_path / "project" / "cache" / "kotlin")

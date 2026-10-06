@@ -1,6 +1,7 @@
 """
 Provides Clojure specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Clojure.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

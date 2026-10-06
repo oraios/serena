@@ -1,6 +1,7 @@
 """
 Context and Mode configuration loader
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import os
 from dataclasses import dataclass, field
@@ -11,7 +12,7 @@ import yaml
 from sensai.util import logging
 from sensai.util.string import ToStringMixin
 
-from serena.config.serena_config import SerenaPaths, ToolInclusionDefinition
+from serena.config.serena_config import ApiInclusionDefinition, SerenaPaths, ToolInclusionDefinition
 from serena.constants import (
     DEFAULT_CONTEXT,
     INTERNAL_MODE_YAMLS_DIR,
@@ -31,7 +32,7 @@ def looks_like_yaml_path(s: str) -> bool:
 
 
 @dataclass(kw_only=True)
-class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
+class SerenaAgentMode(ToolInclusionDefinition, ApiInclusionDefinition, ToStringMixin):
     """Represents a mode of operation for the agent, typically read off a YAML file.
     An agent can be in multiple modes simultaneously as long as they are not mutually exclusive.
     The modes can be adjusted after the agent is running, for example for switching from planning to editing.
@@ -147,7 +148,7 @@ class SerenaAgentMode(ToolInclusionDefinition, ToStringMixin):
 
 
 @dataclass(kw_only=True)
-class SerenaAgentContext(ToolInclusionDefinition, ToStringMixin):
+class SerenaAgentContext(ToolInclusionDefinition, ApiInclusionDefinition, ToStringMixin):
     """Represents a context where the agent is operating (an IDE, a chat, etc.), typically read off a YAML file.
     An agent can only be in a single context at a time.
     The contexts cannot be changed after the agent is running.

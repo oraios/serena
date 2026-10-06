@@ -307,7 +307,7 @@ class TestErlangLanguageServerSymbols:
 
     @pytest.mark.timeout(60)  # Add 60 second timeout
     @pytest.mark.xfail(
-        reason="Known intermittent timeout issue in Erlang LS in CI environments. May pass locally but can timeout on slower CI systems.",
+        reason="Known intermittent timeout issue in ELP in CI environments. May pass locally but can timeout on slower CI systems.",
         strict=False,
     )
     @pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
@@ -405,9 +405,8 @@ class TestErlangLanguageServerSymbols:
 
     @pytest.mark.timeout(60)  # Add 60 second timeout
     @pytest.mark.xfail(
-        reason="Known intermittent timeout issue in Erlang LS in CI environments. "
-        "May pass locally but can timeout on slower CI systems, especially macOS. "
-        "Similar to known Next LS timeout issues.",
+        reason="Known intermittent timeout issue in ELP in CI environments. "
+        "May pass locally but can timeout on slower CI systems, especially macOS.",
         strict=False,
     )
     @pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)

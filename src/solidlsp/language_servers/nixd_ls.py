@@ -4,14 +4,17 @@ Provides Nix specific instantiation of the LanguageServer class using nixd (Nix 
 
 Note: Windows is not supported as Nix itself doesn't support Windows natively.
 """
+# SPDX-License-Identifier: MIT
 
 import json
 import logging
 import platform
 import shutil
 import subprocess
+from collections.abc import Hashable
 from copy import deepcopy
 from pathlib import Path
+from time import sleep
 from typing import Any
 
 from overrides import override
@@ -30,6 +33,9 @@ class NixLanguageServer(SolidLanguageServer):
     """
     Provides Nix specific instantiation of the LanguageServer class using nixd.
     """
+
+    _HOVER_RETRY_COUNT = 5
+    _HOVER_RETRY_DELAY_SECONDS = 0.1
 
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
         """Provides the nixd launch command and managed dependency fallback."""
@@ -184,16 +190,22 @@ class NixLanguageServer(SolidLanguageServer):
         return symbol
 
     @override
-    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
+    def _document_symbols_cache_fingerprint(self) -> Hashable | None:
+        build_document_symbols_version = 2
+        return build_document_symbols_version
+
+    @override
+    def _build_document_symbols_from_raw_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer) -> DocumentSymbols:
         # Override to extend Nix symbol ranges to include trailing semicolons.
         # nixd provides expression-level ranges (excluding semicolons) but serena needs
         # statement-level ranges (including semicolons) for proper symbol replacement.
+        # IMPORTANT: Update _document_symbols_cache_fingerprint() when changing this method.
 
         # Get symbols from parent implementation
-        document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
+        document_symbols = super()._build_document_symbols_from_raw_symbols(relative_file_path, file_buffer=file_buffer)
 
         # Get file content for range extension
-        file_content = self.language_server.retrieve_full_file_content(relative_file_path)
+        file_content = file_buffer.contents
 
         # Extend ranges for all symbols recursively
         def extend_symbol_and_children(symbol: ls_types.UnifiedSymbolInformation) -> ls_types.UnifiedSymbolInformation:
@@ -225,12 +237,7 @@ class NixLanguageServer(SolidLanguageServer):
         return {
             "nixpkgs": {"expr": "import <nixpkgs> { }"},
             "formatting": {"command": ["nixpkgs-fmt"]},
-            "options": {
-                "enable": True,
-                "target": {
-                    "installable": "",
-                },
-            },
+            "options": {},
         }
 
     @classmethod
@@ -377,6 +384,23 @@ class NixLanguageServer(SolidLanguageServer):
             "initializationOptions": deepcopy(self._nixd_settings),
         }
         return initialize_params
+
+    @override
+    def _request_hover(self, file_buffer: LSPFileBuffer, line: int, column: int) -> ls_types.Hover | None:
+        """Retry an empty hover while nixd finishes its initial analysis.
+
+        nixd can answer the first hover request with ``null`` immediately after
+        ``textDocument/didOpen`` even though the same position becomes available
+        shortly afterwards. Keep the retry bounded so a genuinely unsupported
+        hover still returns promptly.
+        """
+        result = super()._request_hover(file_buffer, line, column)
+        for _ in range(self._HOVER_RETRY_COUNT):
+            if result is not None:
+                return result
+            sleep(self._HOVER_RETRY_DELAY_SECONDS)
+            result = super()._request_hover(file_buffer, line, column)
+        return result
 
     @override
     def _supports_pull_diagnostics(self) -> bool:

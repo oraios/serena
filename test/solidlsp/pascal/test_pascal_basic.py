@@ -192,7 +192,7 @@ class TestPascalLanguageServerBasics:
             contents = hover.get("contents", {})
             value = contents.get("value", "") if isinstance(contents, dict) else str(contents)
         else:
-            value = hover.contents.value if hasattr(hover.contents, "value") else str(hover.contents)
+            value = hover.contents.value if hasattr(hover.contents, "value") else str(hover.contents)  # type: ignore
 
         # Should contain the function signature
         assert "CalculateSum" in value, f"Hover should show function name. Got: {value[:500]}"

@@ -6,6 +6,7 @@ for aliases, events, menus, dialogs, and CTCP handlers.
 
 Launched as a subprocess by MslLanguageServer. Communicates via stdio.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

@@ -49,6 +49,7 @@ Hard project requirements (failure modes if violated):
       run in the project. Without it, ngserver's `isInAngularProject` returns
       false for every file and template features silently return empty.
 """
+# SPDX-License-Identifier: MIT
 
 from __future__ import annotations
 
@@ -95,11 +96,6 @@ class AngularTypeScriptServer(TypeScriptLanguageServer):
     cross-file references that span Angular templates.
     """
 
-    @classmethod
-    @override
-    def get_language_server_id(cls) -> LanguageServerId:
-        return LanguageServerId.TYPESCRIPT
-
     def get_source_fn_matcher(self) -> FilenameMatcher:
         # Use the Angular matcher so .html template files aren't filtered out of
         # reference / search results when the companion is asked about them.
@@ -130,9 +126,15 @@ class AngularTypeScriptServer(TypeScriptLanguageServer):
     @override
     def _get_language_id_for_file(self, relative_file_path: str) -> str:
         ext = os.path.splitext(relative_file_path)[1].lower()
-        if ext in (".ts", ".tsx", ".mts", ".cts"):
+        # JSX must use *react language IDs; plain typescript/javascript parse JSX as TS
+        # and silently truncate symbol ranges at multi-line JSX expressions (#1436).
+        if ext == ".tsx":
+            return "typescriptreact"
+        if ext == ".jsx":
+            return "javascriptreact"
+        if ext in (".ts", ".mts", ".cts"):
             return "typescript"
-        if ext in (".js", ".jsx", ".mjs", ".cjs"):
+        if ext in (".js", ".mjs", ".cjs"):
             return "javascript"
         if ext in (".html", ".htm"):
             return "html"
@@ -265,9 +267,15 @@ class AngularLanguageServer(SolidLanguageServer):
     @override
     def _get_language_id_for_file(self, relative_file_path: str) -> str:
         ext = os.path.splitext(relative_file_path)[1].lower()
-        if ext in (".ts", ".tsx", ".mts", ".cts"):
+        # JSX must use *react language IDs; plain typescript/javascript parse JSX as TS
+        # and silently truncate symbol ranges at multi-line JSX expressions (#1436).
+        if ext == ".tsx":
+            return "typescriptreact"
+        if ext == ".jsx":
+            return "javascriptreact"
+        if ext in (".ts", ".mts", ".cts"):
             return "typescript"
-        if ext in (".js", ".jsx", ".mjs", ".cjs"):
+        if ext in (".js", ".mjs", ".cjs"):
             return "javascript"
         if ext in (".html", ".htm"):
             return "html"
@@ -611,22 +619,22 @@ class AngularLanguageServer(SolidLanguageServer):
     # ---------------------------------------------------------------------
 
     @override
-    def _request_document_symbols(
+    def _request_raw_document_symbols(
         self, relative_file_path: str, file_data: LSPFileBuffer | None
     ) -> list[SymbolInformation] | list[DocumentSymbol] | None:
         if self._ts_server is not None and self._is_typescript_file(relative_file_path):
             with self._ts_server.open_file(relative_file_path):
-                return self._ts_server._request_document_symbols(relative_file_path, file_data=None)
+                return self._ts_server._request_raw_document_symbols(relative_file_path, file_data=None)
         # ngserver returns -32601 for textDocument/documentSymbol on every .html file.
         # Route to the HTML companion which gives the structural element tree
         # (works on both plain HTML like index.html and Angular templates).
         if self._is_html_template_file(relative_file_path):
             if self._html_server is not None and self._html_server_started:
                 with self._html_server.open_file(relative_file_path):
-                    return self._html_server._request_document_symbols(relative_file_path, file_data=None)
+                    return self._html_server._request_raw_document_symbols(relative_file_path, file_data=None)
             log.debug("HTML companion unavailable for %s; returning None", relative_file_path)
             return None
-        return super()._request_document_symbols(relative_file_path, file_data)
+        return super()._request_raw_document_symbols(relative_file_path, file_data)
 
     @override
     def request_definition(self, relative_file_path: str, line: int, column: int) -> list[ls_types.Location]:

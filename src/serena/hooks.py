@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import json
 import os
 import pickle
@@ -12,6 +14,7 @@ from typing import Literal, Self
 
 import click
 
+from serena.generated.tool_capabilities import EDIT_CAPABLE_TOOL_NAMES
 from serena.util.cli_util import AutoRegisteringGroup
 
 # copied from serena_config.py, we don't want to import anything here to keep the hook commands fast
@@ -26,6 +29,8 @@ class HookClient(Enum):
     VSCODE = "vscode"
     CODEX = "codex"
     GROK = "grok"
+    DSH = "dsh"
+    ZCODE = "zcode"
 
 
 class Hook(ABC):
@@ -34,6 +39,10 @@ class Hook(ABC):
         input_data = json.loads(raw, strict=False)
         self._input_data = input_data
         self._client = client
+
+        # parse the permission mode shared by Codex hook events
+        raw_permission_mode = input_data.get("permission_mode") or input_data.get("permissionMode") or ""
+        self._permission_mode = str(raw_permission_mode).strip()
 
         session_id = input_data.get("session_id") or input_data.get("sessionId")
         if not session_id:
@@ -47,24 +56,36 @@ class Hook(ABC):
     def execute(self) -> None:
         pass
 
+    def _is_plan_mode(self) -> bool:
+        """Whether the current hook payload reports Codex plan mode."""
+        return self._permission_mode == "plan"
+
+
+#: substrings that mark a "serena"-containing tool name as one of Serena's own non-symbolic
+#: utilities (read/config/dashboard/shell) rather than a code-navigation tool; shared across
+#: PreToolUse and PostToolUse hooks so both classify a call the same way.
+_NON_SYMBOLIC_SERENA_TOOL_NAME_SUBSTRINGS = frozenset(
+    (
+        "pattern",
+        "read",
+        "diagnostics",
+        "memory",
+        "onboarding",
+        "config",
+        "list_file",
+        "find_file",
+        "shell",
+        "dashboard",
+        "restart_language_server",
+    )
+)
+
+
+def _is_serena_symbolic_tool_name(tool_name: str) -> bool:
+    return "serena" in tool_name and not any(substring in tool_name for substring in _NON_SYMBOLIC_SERENA_TOOL_NAME_SUBSTRINGS)
+
 
 class PreToolUseHook(Hook, ABC):
-    _NON_SYMBOLIC_SERENA_TOOL_NAME_SUBSTRINGS = frozenset(
-        (
-            "pattern",
-            "read",
-            "diagnostics",
-            "memory",
-            "onboarding",
-            "config",
-            "list_file",
-            "find_file",
-            "shell",
-            "dashboard",
-            "restart_language_server",
-        )
-    )
-
     def __init__(self, client: HookClient):
         super().__init__(client)
         _tool_name = self._input_data.get("tool_name") or self._input_data.get("toolName", "") or ""
@@ -77,10 +98,6 @@ class PreToolUseHook(Hook, ABC):
         #  Example: "tool_input":"*** Begin Patch\n*** Add File: /Users/acbdef/.copilot/session-state/08a961db-02f0-4c7c-b783-1e9818290292/files/hook-tool-test-3.txt\n+third edit tool test\n*** End Patch\n"
         #  We currently don't parse such tool input and hence don't react to it in hooks
         self._tool_input: dict | None = raw_tool_input if isinstance(raw_tool_input, dict) else None
-
-        # only relevant in claude code at the moment, (not all events include this field; default to empty string)
-        raw_permission_mode = self._input_data.get("permission_mode") or self._input_data.get("permissionMode") or ""
-        self._permission_mode = str(raw_permission_mode).strip()
 
     @dataclass
     class OutputData:
@@ -107,9 +124,16 @@ class PreToolUseHook(Hook, ABC):
             return json.dumps(hook_output)
 
     def is_serena_symbolic_tool(self) -> bool:
-        return "serena" in self._tool_name and not any(
-            substring in self._tool_name for substring in self._NON_SYMBOLIC_SERENA_TOOL_NAME_SUBSTRINGS
-        )
+        return _is_serena_symbolic_tool_name(self._tool_name)
+
+    def _get_codex_serena_tool_name(self) -> str | None:
+        """Serena tool name from a canonical Codex MCP hook name, if present."""
+        prefix = "mcp__serena__"
+        if not self._tool_name.startswith(prefix):
+            return None
+
+        tool_name = self._tool_name.removeprefix(prefix)
+        return tool_name or None
 
 
 class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
@@ -289,6 +313,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
     _CODE_FILE_EXTENSIONS: frozenset[str] = frozenset(
         (
             ".al",
+            ".astro",
             ".bash",
             ".c",
             ".clj",
@@ -380,7 +405,16 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             self._file_path = str(file_path).strip() or None
 
     def is_grep_call(self) -> bool:
-        if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
+        # DSH is Claude Code-compatible and routes shell work through the native Bash tool.
+        # Gate shell classification on that tool name so an unrelated MCP tool with a
+        # ``command`` parameter is not counted (same concern as #1928 for Claude/CodeBuddy).
+        if self._client is HookClient.DSH:
+            return (
+                self._tool_name == "grep"
+                or "search_for_pattern" in self._tool_name
+                or (self._tool_name == "bash" and self._is_shell_command_call() and self._command_name in self._GREP_SHELL_COMMANDS)
+            )
+        if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY, HookClient.ZCODE):
             return self._tool_name == "grep" or "search_for_pattern" in self._tool_name
         if self._client == HookClient.GROK:
             return self._tool_name == "grep" or (self._is_shell_command_call() and self._command_name in self._GREP_SHELL_COMMANDS)
@@ -390,7 +424,13 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         return "grep" in self._tool_name
 
     def is_read_call(self) -> bool:
-        if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY):
+        if self._client is HookClient.DSH:
+            return (
+                self._tool_name == "read"
+                or "read_file" in self._tool_name
+                or (self._tool_name == "bash" and self._is_shell_command_call() and self._command_name in self._READ_SHELL_COMMANDS)
+            )
+        if self._client in (HookClient.CLAUDE_CODE, HookClient.CODEBUDDY, HookClient.ZCODE):
             return self._tool_name == "read" or "read_file" in self._tool_name
         if self._client == HookClient.GROK:
             return self._tool_name == "read_file" or (self._is_shell_command_call() and self._command_name in self._READ_SHELL_COMMANDS)
@@ -418,7 +458,11 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         if self._file_path is not None:
             return self._is_code_file_path(self._file_path)
 
-        if self._client in (HookClient.CODEX, HookClient.GROK) and self._command_args_str is not None:
+        # Codex/Grok always carry a shell command; DSH only when the call came from native Bash.
+        inspect_shell_paths = self._client in (HookClient.CODEX, HookClient.GROK) or (
+            self._client is HookClient.DSH and self._tool_name == "bash"
+        )
+        if inspect_shell_paths and self._command_args_str is not None:
             return any(self._is_code_file_path(argument) for argument in self._iter_shell_path_arguments())
 
         return True
@@ -521,6 +565,48 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         )
 
 
+class PostToolUseResetSymbolicToolCounterHook(Hook):
+    """Post-tool-use hook that resets :class:`PreToolUseRemindAboutSymbolicToolsHook`'s
+    persisted counters after a successful Serena symbolic tool call.
+
+    ``PreToolUseRemindAboutSymbolicToolsHook`` already resets on a Serena tool call, but
+    only when it is itself invoked for that call, which requires the client's PreToolUse
+    matcher to observe ``mcp__serena__*`` tool names. Codex's documented wiring (see
+    docs/02-usage/030_clients.md) attaches ``remind`` to the ``Bash`` matcher only, so it
+    is never invoked for Serena's own tools there and the reset branch is unreachable.
+    This hook closes that gap from the other side of the call: wired to PostToolUse with a
+    matcher on Serena's tools, it fires once the call has completed.
+
+    Gated on the call having succeeded (``tool_response`` carrying no ``isError: true``,
+    the MCP ``tools/call`` result shape) so a failed Serena call does not mask a real
+    grep/read-drift streak the agent is still in.
+    """
+
+    def __init__(self, client: HookClient):
+        super().__init__(client)
+        raw_tool_name = self._input_data.get("tool_name") or self._input_data.get("toolName", "") or ""
+        tool_name = str(raw_tool_name).lower().strip()
+        if not tool_name:
+            raise ValueError("Tool name is required in the hook input data")
+        self._tool_name = tool_name
+        raw_tool_response = self._input_data.get("tool_response") or self._input_data.get("toolResponse")
+        self._tool_response: dict | None = raw_tool_response if isinstance(raw_tool_response, dict) else None
+
+    def _call_succeeded(self) -> bool:
+        # no structured response to check: be conservative and treat it as not confirmed
+        # successful, rather than resetting on data we can't actually read
+        if self._tool_response is None:
+            return False
+        return self._tool_response.get("isError") is not True
+
+    def execute(self) -> None:
+        if not _is_serena_symbolic_tool_name(self._tool_name) or not self._call_succeeded():
+            return
+        counter = PreToolUseRemindAboutSymbolicToolsHook.ToolUseCounter.load(self)
+        counter.reset()
+        counter.save(self)
+
+
 class SessionStartActivateProjectHook(Hook):
     def execute(self) -> None:
         message = (
@@ -544,15 +630,17 @@ class SessionEndCleanupHook(Hook):
 
 
 class PreToolUseAutoApproveSerenaHook(PreToolUseHook):
-    """Pre-tool-use hook that auto-approves Serena tool calls while the client is in a permissive permission mode.
+    """Pre-tool-use hook that auto-approves Serena tool calls for supported clients.
 
     Claude Code's permissive permission modes (``acceptEdits`` for blanket edit approval and
     ``auto`` for hands-off autonomous execution) only apply to its built-in editing tools or
     its auto-mode classifier; Serena's destructive tools (e.g. ``replace_symbol_body`` or
     ``rename_symbol``) would still prompt the user on every call. This hook emits an ``allow``
-    decision for any Serena MCP tool call whenever the client reports one of these modes as
-    the active permission mode, so blanket approvals also cover Serena's tools. In all other
-    situations it stays silent, preserving the default approval flow.
+    decision for any Serena MCP tool call whenever the client reports one of these modes as the
+    active permission mode, so blanket approvals also cover Serena's tools. The DSH bridge does
+    not use Claude's ``allow`` decision for pre-approval, so this hook intentionally stays silent
+    for DSH. In all other situations it stays silent, preserving the default approval flow.
+
 
     ``bypassPermissions`` and ``dontAsk`` are deliberately excluded. ``bypassPermissions``
     already approves everything before the hook would matter, so silence here is harmless.
@@ -570,6 +658,9 @@ class PreToolUseAutoApproveSerenaHook(PreToolUseHook):
         return self._permission_mode in self._AUTO_APPROVE_MODES
 
     def execute(self) -> None:
+        # DSH's Claude-compatible bridge does not implement allow as pre-approval.
+        if self._client == HookClient.DSH:
+            return
         # only emit a decision when both the tool and the mode match; stay silent otherwise
         if not self.is_serena_symbolic_tool() or not self.is_auto_approve_mode():
             return
@@ -579,6 +670,49 @@ class PreToolUseAutoApproveSerenaHook(PreToolUseHook):
         output_data = self.OutputData(
             permission_decision="allow",
             permission_decision_reason=f"Auto-approved: Serena tool call while client is in {self._permission_mode} mode.",
+        )
+        click.echo(output_data.to_json_string(self._client))
+
+
+class CodexPlanContextHook(Hook):
+    """User-prompt hook that supplies Serena's plan-mode usage boundary to Codex."""
+
+    _ADDITIONAL_CONTEXT = (
+        "Codex is in plan mode. Use Serena only for read-only repository analysis and planning; do not call edit-capable Serena tools."
+    )
+
+    def execute(self) -> None:
+        # gate guidance on the current event's permission mode
+        if not self._is_plan_mode():
+            return
+
+        # emit Codex's event-specific additional-context shape
+        result = {
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": self._ADDITIONAL_CONTEXT,
+            }
+        }
+        click.echo(json.dumps(result))
+
+
+class CodexPlanGuardHook(PreToolUseHook):
+    """Pre-tool-use hook that blocks edit-capable Serena tools in Codex plan mode."""
+
+    def execute(self) -> None:
+        # gate enforcement on the current event's permission mode
+        if not self._is_plan_mode():
+            return
+
+        # classify the canonical MCP tool name through generated metadata
+        tool_name = self._get_codex_serena_tool_name()
+        if tool_name not in EDIT_CAPABLE_TOOL_NAMES:
+            return
+
+        # deny only edit-capable Serena tools
+        output_data = self.OutputData(
+            permission_decision="deny",
+            permission_decision_reason=f"Blocked Serena tool '{tool_name}': edit-capable tools are unavailable in plan mode.",
         )
         click.echo(output_data.to_json_string(self._client))
 
@@ -595,6 +729,14 @@ _client_option = click.option(
 class HookCommands(AutoRegisteringGroup):
     def __init__(self) -> None:
         super().__init__(name="serena-hook", help="Commands that send reminders to agents when appropriate, to be used in hooks.")
+
+    @staticmethod
+    def _require_codex_client(client: str) -> HookClient:
+        """Codex client value or a usage error for unsupported clients."""
+        hook_client = HookClient(client)
+        if hook_client != HookClient.CODEX:
+            raise click.UsageError("This command is only supported for Codex (--client=codex).")
+        return hook_client
 
     @staticmethod
     @click.command(
@@ -623,12 +765,41 @@ class HookCommands(AutoRegisteringGroup):
     @staticmethod
     @click.command(
         "auto-approve",
-        help="Set this as hook at PreToolUse to auto-approve Serena tool calls while the client is in a "
-        "permissive permission mode (acceptEdits or auto, Claude Code).",
+        help="Set this as a Claude Code hook at PreToolUse to auto-approve Serena tool calls while the client is in a "
+        "permissive permission mode (acceptEdits or auto). DSH does not support this decision.",
     )
     @_client_option
     def auto_approve(client: str) -> None:
         PreToolUseAutoApproveSerenaHook(HookClient(client)).execute()
+
+    @staticmethod
+    @click.command(
+        "plan-context",
+        help="Set this as a Codex UserPromptSubmit hook to add Serena's read-only plan-mode guidance.",
+    )
+    @_client_option
+    def plan_context(client: str) -> None:
+        CodexPlanContextHook(HookCommands._require_codex_client(client)).execute()
+
+    @staticmethod
+    @click.command(
+        "plan-guard",
+        help="Set this as a Codex PreToolUse hook to block edit-capable Serena tools in plan mode.",
+    )
+    @_client_option
+    def plan_guard(client: str) -> None:
+        CodexPlanGuardHook(HookCommands._require_codex_client(client)).execute()
+
+    @staticmethod
+    @click.command(
+        "reset",
+        help="Set this as hook at PostToolUse, matched to Serena's own tools, to reset the grep/read-drift "
+        "counters after a successful Serena tool call. For clients whose PreToolUse wiring does not observe "
+        "Serena tool calls (e.g. Codex, matched to Bash only); complements `remind`'s own reset branch.",
+    )
+    @_client_option
+    def reset(client: str) -> None:
+        PostToolUseResetSymbolicToolCounterHook(HookClient(client)).execute()
 
 
 hook_commands = HookCommands()
