@@ -211,10 +211,8 @@ class FsApi(FacadeApi):
         abs_path = (project_root / relative_path).resolve()
         will_overwrite_existing = abs_path.exists()
 
-        # validate the destination path (always; never rely on assert for sandboxing — stripped under python -O)
+        # validate the destination path
         project.validate_relative_path(relative_path)
-        if not abs_path.is_relative_to(project_root.resolve()):
-            raise ValueError(f"Cannot create file outside of the project directory, got {relative_path=}")
 
         # write the file
         abs_path.parent.mkdir(parents=True, exist_ok=True)
