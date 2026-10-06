@@ -135,6 +135,14 @@ Status of the `main` branch. Changes prior to the next official version change w
     thread (#2038)
 
 * Language Servers:
+  - Fix: PHPantom and Phpactor now honor their `ls_specific_settings.*.file_filter`, so
+    project-specific PHP extensions such as `.inc` participate in symbol queries; Phpactor's
+    indexer is configured accordingly, such that references contained in these files are found too
+  - Fix: Phpactor's first cross-file query of a session could return nothing, or fail outright with
+    "Dirty index file path cannot be created", because it was answered from an index Phpactor had
+    not written yet. Serena now waits for the indexing progress Phpactor reports, bounded by the new
+    `indexing_timeout` and `indexing_start_grace` settings, and keeps the index in the project's
+    cache directory, keyed by the indexed extensions so that widening `file_filter` reindexes
   - Fix: Angular, Vue and Svelte language servers opened `.tsx`/`.jsx` files with `typescript`/`javascript`
     language IDs, so JSX symbol ranges truncated at multi-line expressions (same class of bug as the
     typescript-language-server fix; `typescriptreact`/`javascriptreact` are now used). Regression tests
