@@ -219,7 +219,7 @@ class DiagnosticsContext:
     DIAGNOSTICS_KEY = "diagnostics[warning-or-higher]"
 
     def __init__(self, agent: "SerenaAgent", *edited_relative_paths: str, enable: bool = ENABLE_DIAGNOSTICS_DEFAULT) -> None:
-        self._is_diagnostics_enabled = enable and agent.is_using_language_server()
+        self._is_diagnostics_enabled = enable and agent.get_language_backend()
         self._edited_files = [EditedFilePath(path, path) for path in edited_relative_paths]
         self._before_edit_diagnostics_snapshot: PublishedDiagnosticsSnapshot | None = None
         self._symbol_retriever: Optional["LanguageServerSymbolRetriever"] | None = None

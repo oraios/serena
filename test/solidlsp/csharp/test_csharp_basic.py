@@ -7,6 +7,7 @@ import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.language_servers.csharp_language_server import (
+    CSharpLanguageServer,
     breadth_first_file_scan,
     find_solution_or_project_file,
 )
@@ -200,6 +201,28 @@ class TestCSharpLanguageServer:
             ), f"Expected ConsoleGreeter.FormatGreeting symbol, got: {implementing_symbols}"
 
 
+class TestCSharpExtractBaseNameAndType:
+    """Regression tests for _extract_base_name_and_type, no running language server needed."""
+
+    @pytest.mark.parametrize(
+        ("roslyn_name", "expected"),
+        [
+            # Property whose type is a tuple: the literal '(' in the type must not be
+            # mistaken for a method's parameter list.
+            ("Position : (int X, string Y)", ("Position", ": (int X, string Y)")),
+            ("Name : string", ("Name", ": string")),
+            ("Add(int, int) : int", ("Add", "(int, int) : int")),
+            ("ToString()", ("ToString", "()")),
+            ("SimpleMethod", ("SimpleMethod", "")),
+            # Both still have a '(' before the first " : ", so they keep the method branch.
+            ("GetPair() : (int, int)", ("GetPair", "() : (int, int)")),
+            ("Merge((int, int) a, (int, int) b) : void", ("Merge", "((int, int) a, (int, int) b) : void")),
+        ],
+    )
+    def test_extract_base_name_and_type(self, roslyn_name: str, expected: tuple[str, str]) -> None:
+        assert CSharpLanguageServer._extract_base_name_and_type(roslyn_name) == expected
+
+
 @pytest.mark.csharp
 class TestCSharpSolutionProjectOpening:
     """Test C# language server solution and project opening functionality."""
@@ -231,6 +254,23 @@ class TestCSharpSolutionProjectOpening:
 
             # file1.txt should be found first (breadth-first)
             assert filenames[0] == "file1.txt"
+
+    def test_breadth_first_file_scan_skips_ignored_paths(self):
+        """Test that breadth_first_file_scan neither yields ignored files nor traverses ignored directories."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+
+            # Create a project, an ignored directory containing a project and an ignored project file
+            (temp_path / "src").mkdir()
+            (temp_path / "src" / "App.csproj").touch()
+            (temp_path / "vendor" / "nested").mkdir(parents=True)
+            (temp_path / "vendor" / "nested" / "Vendored.csproj").touch()
+            (temp_path / "Generated.csproj").touch()
+
+            ignored_paths = {"vendor", "Generated.csproj"}
+            files = list(breadth_first_file_scan(str(temp_path), lambda relative_path: relative_path in ignored_paths))
+
+            assert [os.path.relpath(f, temp_path) for f in files] == [os.path.join("src", "App.csproj")]
 
     def test_find_solution_or_project_file_with_solution(self):
         """Test that find_solution_or_project_file prefers .sln files."""

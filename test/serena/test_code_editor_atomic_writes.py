@@ -18,6 +18,7 @@ from typing import Any
 import pytest
 
 from serena.code_editor import CodeEditor
+from serena.language_backend import BuiltinLanguageBackend
 from serena.util import file_system
 
 
@@ -44,7 +45,14 @@ class _InMemoryEditedFile(CodeEditor.EditedFile):
 class _StubCodeEditor(CodeEditor[Any]):
     """A ``CodeEditor`` whose only inherited behaviour under test is the file-saving path."""
 
+    class DummyProject:
+        """A dummy project object with only the attributes needed to construct a ``CodeEditor``."""
+
+        def __init__(self) -> None:
+            self.language_backend = BuiltinLanguageBackend.LSP.get_instance()
+
     def __init__(self, project_root: str, encoding: str = "utf-8", newline: str | None = None) -> None:
+        self.project = self.DummyProject()
         self.project_root = project_root
         self.encoding = encoding
         self.newline = newline

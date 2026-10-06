@@ -38,7 +38,7 @@ def test_start_stops_process_when_start_server_raises_after_spawning():
     with pytest.raises(RuntimeError, match="capability assertion"):
         server.start()
 
-    server.server.stop.assert_called_once()
+    server.server.stop.assert_called_once()  # type: ignore
     assert server.server_started is False
 
 
@@ -51,5 +51,5 @@ def test_start_does_not_call_stop_when_start_server_raises_before_spawning():
     with pytest.raises(RuntimeError, match="capability assertion"):
         server.start()
 
-    server.server.stop.assert_not_called()
+    server.server.stop.assert_not_called()  # type: ignore
     assert server.server_started is False

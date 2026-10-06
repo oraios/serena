@@ -192,7 +192,7 @@ def autogen_tool_list(target_filename = "01-about/035_tools.md"):
         def facades_section():
             from serena.repl.facade import ApiScope
             from serena.agent import SerenaAgent, SerenaConfig
-            from serena.config.serena_config import LanguageBackend
+            from serena.language_backend import BuiltinLanguageBackend
 
             f.write("\n\n## Serena's REPL (Code Execution-Based Interface)\n\n")
             f.write(
@@ -236,8 +236,8 @@ def autogen_tool_list(target_filename = "01-about/035_tools.md"):
             api_scope = ApiScope()
             agent = SerenaAgent(serena_config=SerenaConfig().with_headless_mode_overrides())
             facades = []
-            for backend in LanguageBackend:
-                facades.extend(backend.create_facades(agent, api_scope))
+            for backend in BuiltinLanguageBackend:
+                facades.extend(backend.get_instance().create_facades(agent, api_scope))
             facades.extend(agent.create_default_facade_list(api_scope))
 
             text = TextBuilder()

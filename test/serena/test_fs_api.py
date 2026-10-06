@@ -54,7 +54,7 @@ def test_create_text_file(api: FsApi, project: Project) -> None:
     result = api.create_text_file("sub/new.txt", "changed\n")
     assert "Overwrote" in result
 
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError, match="outside the project root"):
         api.create_text_file("../outside.txt", "nope")
 
 
@@ -73,9 +73,9 @@ def test_list_dir_and_find_file(api: FsApi) -> None:
 def test_search_for_pattern(api: FsApi) -> None:
     matches = api.search_for_pattern("foo", relative_path="src")
     assert len(matches) == 3
-    assert {m.source_file_path.replace("\\", "/") for m in matches.matches} == {"src/a.py", "src/b.txt"}
+    assert {m.source_file_path.replace("\\", "/") for m in matches.matches} == {"src/a.py", "src/b.txt"}  # type: ignore
 
     # restricting to code files excludes the text file; the rendering maps files to matched lines
     code_matches = api.search_for_pattern("foo", restrict_search_to_code_files=True)
-    assert all(m.source_file_path.endswith("a.py") for m in code_matches.matches)
+    assert all(m.source_file_path.endswith("a.py") for m in code_matches.matches)  # type: ignore
     assert "foo(1)" in code_matches.represent()

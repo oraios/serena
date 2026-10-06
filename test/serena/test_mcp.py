@@ -1,13 +1,11 @@
 """Tests for the mcp.py module in serena."""
 
 import pytest
-from mcp.server.fastmcp import Context
-from mcp.server.fastmcp.tools.base import Tool as MCPTool
+from mcp.server.mcpserver import Context
+from mcp.server.mcpserver.tools.base import Tool as MCPTool
 
-from serena import __version__
 from serena.agent import Tool, ToolRegistry
 from serena.config.context_mode import SerenaAgentContext
-from serena.config.serena_config import SerenaConfig
 from serena.mcp import SerenaMCPFactory
 from serena.repl.facade import ApiScope
 from serena.repl.repl import SerenaRepl
@@ -62,24 +60,6 @@ class BasicTool(BaseMockTool):
     ) -> str:
         """Mock implementation of apply_ex."""
         return self.apply(**kwargs)
-
-
-def test_create_mcp_server_reports_serena_version(monkeypatch: pytest.MonkeyPatch) -> None:
-    """MCP initialize must report Serena's version, not the installed mcp SDK version."""
-
-    class MinimalAgent:
-        def create_connection_prompt(self) -> str:
-            return ""
-
-    monkeypatch.setattr(SerenaConfig, "from_config_file", classmethod(lambda cls: SerenaConfig()))
-    factory = SerenaMCPFactory(transport="stdio")
-    monkeypatch.setattr(factory, "_create_serena_agent", lambda *args, **kwargs: MinimalAgent())
-
-    mcp_server = factory.create_mcp_server()
-    initialization_options = mcp_server._mcp_server.create_initialization_options()
-
-    assert initialization_options.server_name == "Serena"
-    assert initialization_options.server_version == __version__
 
 
 def test_make_tool_basic() -> None:

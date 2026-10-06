@@ -7,7 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from serena.config.serena_config import ApiInclusionDefinition, LanguageBackend
+from serena.config.serena_config import ApiInclusionDefinition
+from serena.language_backend import BuiltinLanguageBackend
 from serena.repl.api.edit_api import EditApi
 from serena.repl.api.lsp_api import LspApi
 from serena.repl.external_project import ExternalProjectExecution
@@ -83,10 +84,11 @@ class TestReplExecution:
         overview = rebuilt_repl.execute("facades()", session)
         assert "s.edit" in overview and "s.lsp" not in overview
 
-    @pytest.mark.parametrize("backend", [LanguageBackend.LSP, LanguageBackend.JETBRAINS])
+    @pytest.mark.parametrize("builtin_backend", [BuiltinLanguageBackend.LSP, BuiltinLanguageBackend.JETBRAINS])
     @pytest.mark.parametrize("read_only", [True, False])
-    def test_external_project_dispatch(self, backend: LanguageBackend, read_only: bool) -> None:
+    def test_external_project_dispatch(self, builtin_backend: BuiltinLanguageBackend, read_only: bool) -> None:
         agent = MagicMock()
+        backend = builtin_backend.get_instance()
         agent.get_language_backend.return_value = backend
 
         class FakeExternalProject(ExternalProjectExecution):

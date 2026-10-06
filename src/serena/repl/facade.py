@@ -362,17 +362,9 @@ class FacadeApi(ABC):
         """
         :return: a code editor for the active project, using the active language backend
         """
-        from serena.code_editor import JetBrainsCodeEditor, LanguageServerCodeEditor
-        from serena.symbol import LanguageServerSymbolRetriever
-
         project = self._get_project()
         backend = self._agent.get_language_backend()
-        if backend.is_lsp():
-            return LanguageServerCodeEditor(LanguageServerSymbolRetriever(project))
-        elif backend.is_jetbrains():
-            return JetBrainsCodeEditor(project)
-        else:
-            raise ValueError(f"Unsupported language backend: {backend}")
+        return backend.create_code_editor(project)
 
 
 class FacadeMethod:
@@ -559,7 +551,7 @@ class ApiScope:
             return False
         facade_scope = self._get_facade_scope(facade_name)
         # A method that would be disabled because the facade it is part of is not included
-        # or the method itself is optional must be explicitly included in order to be enabled.
+        # or a method that itself is optional must be explicitly included in order to be enabled.
         if not facade_scope.is_facade_included(is_facade_optional) or method_info.optional:
             return method_info.name in facade_scope.method_inclusions
         # A method that is not optional and whose facade is included is enabled unless it is explicitly excluded.
@@ -655,6 +647,18 @@ class Facade:
     @property
     def description(self) -> str:
         return self._description
+
+    def set_name(self, name: str):
+        """
+        :param name: the new name of the facade
+        """
+        object.__setattr__(self, "_name", name)
+
+    def set_description(self, description: str):
+        """
+        :param description: the new description of the facade
+        """
+        object.__setattr__(self, "_description", description)
 
     @property
     def enabled_method_names(self) -> list[str]:

@@ -68,7 +68,7 @@ class TestRustLanguageServer:
 
             implementations = language_server.request_implementation(os.path.join("src", "lib.rs"), *pos)
             assert implementations, "Expected at least one implementation of Greeter.format_greeting"
-            assert any("src/lib.rs" in implementation.get("relativePath", "").replace("\\", "/") for implementation in implementations), (
+            assert any("src/lib.rs" in implementation.get("relativePath", "").replace("\\", "/") for implementation in implementations), (  # type: ignore
                 f"Expected ConsoleGreeter.format_greeting in implementations, got: {implementations}"
             )
 
@@ -81,7 +81,7 @@ class TestRustLanguageServer:
             implementing_symbols = language_server.request_implementing_symbols(os.path.join("src", "lib.rs"), *pos)
             assert implementing_symbols, "Expected implementing symbols for Greeter.format_greeting"
             assert any(
-                symbol.get("name") == "format_greeting" and "src/lib.rs" in symbol["location"].get("relativePath", "").replace("\\", "/")
+                symbol.get("name") == "format_greeting" and "src/lib.rs" in symbol["location"].get("relativePath", "").replace("\\", "/")  # type: ignore
                 for symbol in implementing_symbols
             ), f"Expected ConsoleGreeter.format_greeting symbol, got: {implementing_symbols}"
 

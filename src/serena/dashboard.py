@@ -651,7 +651,7 @@ class SerenaDashboardAPI:
             modes=modes_info,
             active_tools=active_tools,
             agent_interface=self._agent.get_agent_interface().value,
-            language_backend=self._agent.get_language_backend().value,
+            language_backend=self._agent.get_language_backend().get_key(),
             facades=facades,
             tool_stats_summary=tool_stats_summary,
             registered_projects=registered_projects,
