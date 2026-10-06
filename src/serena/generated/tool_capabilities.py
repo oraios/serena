@@ -14,6 +14,7 @@ EDIT_CAPABLE_TOOL_NAMES: frozenset[str] = frozenset(
         "jet_brains_move",
         "jet_brains_rename",
         "jet_brains_safe_delete",
+        "onboarding",
         "rename_memory",
         "rename_symbol",
         "replace_content",
