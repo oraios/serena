@@ -197,6 +197,41 @@ class TestSearchText:
 
         assert len(matches) == 0
 
+    def test_search_text_crlf_line_numbers(self):
+        """Matches in CRLF content report the same line numbers as with LF endings."""
+        crlf = "alpha\r\nbeta\r\ngamma\r\n"
+        lf = "alpha\nbeta\ngamma\n"
+        crlf_matches = search_text("beta", content=crlf)
+        lf_matches = search_text("beta", content=lf)
+        assert len(crlf_matches) == 1
+        assert len(lf_matches) == 1
+        assert crlf_matches[0].start_line == lf_matches[0].start_line == 1
+        assert crlf_matches[0].end_line == lf_matches[0].end_line == 1
+
+    def test_search_text_bare_cr_line_numbers(self):
+        r"""Bare \r line endings produce separate lines, matching TextStepper semantics."""
+        content = "alpha\rbeta\r"
+        matches = search_text("beta", content=content)
+        assert len(matches) == 1
+        assert matches[0].start_line == 1
+        assert matches[0].end_line == 1
+
+    def test_search_text_match_at_boundaries(self):
+        """Matches at the very start and very end of the content resolve to sane line numbers."""
+        content = "first\nmiddle\nlast"
+        first = search_text("first", content=content)
+        assert first[0].start_line == 0
+        last = search_text("last", content=content)
+        assert last[0].start_line == 2
+
+    def test_search_text_multiline_match_line_range(self):
+        """A multiline match spanning several lines reports the full matched range."""
+        content = "a\nTARGET_START\nb\nc\nTARGET_END\nd\n"
+        matches = search_text("TARGET_START[\\s\\S]*?TARGET_END", content=content)
+        assert len(matches) == 1
+        assert matches[0].start_line == 1
+        assert matches[0].end_line == 4
+
 
 # Mock file reader that always returns matching content
 def mock_reader_always_match(file_path: str) -> str:
@@ -663,6 +698,84 @@ class TestMultiFileContentReplacer:
         occ = replacer.find_occurrences([(path, content)], "old_pkg", "new_pkg")[0]
         with pytest.raises(AssertionError):
             replacer.apply_to_content("completely different content", [occ])
+
+    def test_match_consuming_a_line_break_ends_on_the_matched_line(self):
+        replacer = MultiFileContentReplacer(mode="literal")
+        occ = replacer.find_occurrences([("f.txt", "alpha\nbeta\ngamma\n")], "beta\n", "BETA\n")[0]
+        assert (occ.start_line, occ.end_line) == (1, 1)
+
+    def test_render_occurrence_diff_omits_the_line_after_a_line_break_match(self):
+        replacer = MultiFileContentReplacer(mode="literal")
+        content = "alpha\nbeta\ngamma\n"
+        occ = replacer.find_occurrences([("f.txt", content)], "beta\n", "BETA\n")[0]
+        diff = replacer.render_occurrence_diff(occ, content)
+        assert f"[{occ.occurrence_id}] line 1" in diff
+        assert diff.endswith("    - beta\n    + BETA")
+
+    def test_render_occurrence_diff_shows_lines_added_by_the_replacement(self):
+        replacer = MultiFileContentReplacer(mode="literal")
+        content = "alpha\nbeta\ngamma\n"
+        occ = replacer.find_occurrences([("f.txt", content)], "beta\n", "one\ntwo\n")[0]
+        diff = replacer.render_occurrence_diff(occ, content)
+        assert diff.endswith("    - beta\n    + one\n    + two")
+        assert "gamma" not in diff
+
+    def test_render_occurrence_diff_shows_lines_merged_by_a_removed_line_break(self):
+        replacer = MultiFileContentReplacer(mode="literal")
+        content = "alpha\nbeta\ngamma\n"
+        occ = replacer.find_occurrences([("f.txt", content)], "beta\n", "BETA")[0]
+        diff = replacer.render_occurrence_diff(occ, content)
+        assert f"[{occ.occurrence_id}] line 1" in diff
+        assert diff.endswith("    - beta\n    - gamma\n    + BETAgamma")
+
+    def test_render_occurrence_diff_omits_the_files_final_line_break_at_the_end_of_the_file(self):
+        replacer = MultiFileContentReplacer(mode="literal")
+        content = "alpha\nbeta\n"  # a single line "beta", terminated by the file's final line break
+        occ = replacer.find_occurrences([("f.txt", content)], "beta\n", "BETA")[0]
+        diff = replacer.render_occurrence_diff(occ, content)
+        assert f"[{occ.occurrence_id}] line 1" in diff
+        assert diff.endswith("    - beta\n    + BETA")
+
+    def test_render_occurrence_diff_omits_the_final_line_break_of_a_replacement_ending_the_file(self):
+        replacer = MultiFileContentReplacer(mode="literal")
+        content = "alpha\nbeta\n"
+        occ = replacer.find_occurrences([("f.txt", content)], "beta\n", "BETA\n")[0]
+        diff = replacer.render_occurrence_diff(occ, content)
+        assert diff.endswith("    - beta\n    + BETA")
+
+    def test_render_occurrence_diff_omits_the_final_line_break_of_a_multi_line_match_at_the_end_of_the_file(self):
+        replacer = MultiFileContentReplacer(mode="literal")
+        content = "alpha\nbeta\ngamma\n"
+        split_occ = replacer.find_occurrences([("f.txt", content)], "beta\ngamma\n", "BETA\nGAMMA")[0]
+        diff = replacer.render_occurrence_diff(split_occ, content)
+        assert f"[{split_occ.occurrence_id}] lines 1-2" in diff
+        assert diff.endswith("    - beta\n    - gamma\n    + BETA\n    + GAMMA")
+        merged_occ = replacer.find_occurrences([("f.txt", content)], "beta\ngamma\n", "BETA")[0]
+        assert replacer.render_occurrence_diff(merged_occ, content).endswith("    - beta\n    - gamma\n    + BETA")
+
+    def test_render_occurrence_diff_omits_the_final_line_break_in_a_crlf_file(self):
+        replacer = MultiFileContentReplacer(mode="literal")
+        content = "alpha\r\nbeta\r\n"
+        occ = replacer.find_occurrences([("f.txt", content)], "beta\r\n", "BETA")[0]
+        diff = replacer.render_occurrence_diff(occ, content)
+        assert diff.endswith("    - beta\r\n    + BETA")
+
+    def test_render_occurrence_diff_keeps_a_blank_last_line_that_the_match_consumes(self):
+        replacer = MultiFileContentReplacer(mode="literal")
+        content = "alpha\nbeta\n\n"  # lines "beta" and an empty one, both consumed by the match
+        occ = replacer.find_occurrences([("f.txt", content)], "beta\n\n", "BETA")[0]
+        diff = replacer.render_occurrence_diff(occ, content)
+        assert f"[{occ.occurrence_id}] lines 1-2" in diff
+        assert diff.endswith("    - beta\n    - \n    + BETA")
+
+    def test_render_occurrence_diff_for_a_match_spanning_the_whole_newline_terminated_file(self):
+        replacer = MultiFileContentReplacer(mode="literal")
+        content = "alpha\nbeta\n"
+        occ = replacer.find_occurrences([("f.txt", content)], "alpha\nbeta\n", "X")[0]
+        diff = replacer.render_occurrence_diff(occ, content)
+        assert diff.endswith("    - alpha\n    - beta\n    + X")
+        blank_occ = replacer.find_occurrences([("f.txt", "\n")], "\n", "X")[0]
+        assert replacer.render_occurrence_diff(blank_occ, "\n").endswith("    - \n    + X")
 
 
 class TestBackreferenceExpansion:

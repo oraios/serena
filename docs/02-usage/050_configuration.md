@@ -575,7 +575,7 @@ Supported settings:
 
 | Setting | Default | Description |
 |---|---|---|
-| `expert_version` | `v0.1.0-rc.6` | Override the Expert version Serena downloads when it does not use an `expert` executable already found in PATH. |
+| `expert_version` | `v0.1.10` | Override the Expert version Serena downloads when it does not use an `expert` executable already found in PATH. |
 
 #### Erlang
 
@@ -1164,7 +1164,7 @@ Supported settings:
 
 | Setting | Default | Description |
 |---|---|---|
-| `metals_version` | `1.6.4` | Override the Metals version Serena bootstraps. |
+| `metals_version` | `1.6.8` | Override the Metals version Serena bootstraps. |
 | `client_name` | `Serena` | Client identifier sent to Metals. |
 | `on_stale_lock` | `auto-clean` | How Serena handles stale Metals H2 database locks. Supported values: `auto-clean`, `warn`, `fail`. |
 | `log_multi_instance_notice` | `true` | Log a notice when another Metals instance is detected. |

@@ -108,6 +108,22 @@ class TestGleamLanguageServer:
         assert "calculator.gleam" in ref_files, f"Expected cross-file reference in calculator.gleam, got {ref_files}"
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.GLEAM], indirect=True)
+    def test_referencing_symbols_with_same_name_as_target(self, language_server: SolidLanguageServer) -> None:
+        """Callers named like the target (``first.run`` and ``second.run`` calling ``task.run``) are all returned.
+
+        The Gleam LS includes the declaration among the references, so callers listed after it must not be
+        mistaken for imports just because they share the target's name and kind.
+        """
+        rel = os.path.join("src", "runner", "task.gleam")
+        content = read_repo_file(language_server, rel)
+        coords = find_text_coordinates(content, r"pub fn (run)\(")
+        assert coords is not None, "Could not locate `pub fn run` definition in task.gleam"
+
+        refs = language_server.request_referencing_symbols(rel, coords.line, coords.col, include_imports=False)
+        callers = {(Path(ref.symbol["location"]["relativePath"]).name, ref.symbol["name"]) for ref in refs}
+        assert callers == {("first.gleam", "run"), ("second.gleam", "run")}, f"Expected both same-named callers, got {callers}"
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.GLEAM], indirect=True)
     def test_file_diagnostics(self, language_server: SolidLanguageServer) -> None:
         """diagnostics_sample.gleam references an undefined symbol; the LSP should report it."""
         assert_file_diagnostics(

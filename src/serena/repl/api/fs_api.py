@@ -194,7 +194,10 @@ class FsApi(FacadeApi):
 
         # read lines, using the same (LSP-compliant) notion of line breaks as the line-based editing operations
         lines = TextUtils.split_lines(project.read_file(relative_path))
-        lines = lines[start_line:] if end_line is None else lines[start_line : end_line + 1]
+
+        start_idx, end_idx = TextUtils.line_slice_indices(start_line, end_line, len(lines))
+        lines = lines[start_idx:end_idx]
+
         return FileContent(lines, FileContentRenderer(self._agent, max_answer_chars))
 
     @facade_method(can_edit=True, corresponding_tool=CreateTextFileTool)

@@ -24,12 +24,24 @@ Status of the `main` branch. Changes prior to the next official version change w
     actually used; the unconditional import added seconds to CLI/MCP startup on some machines (#2012)
   - Fix: Parallel agents auto-registering projects could overwrite each other's changes to the global
     project list in `serena_config.yml`
+  - Fix: the reload-merge-write in `_persist_projects` (the residual half of the fix above) had no
+    cross-process lock, so two Serena instances could still lose a registration change if their
+    persist calls overlapped; it is now wrapped in a `filelock.FileLock` (#2101)
+  - Perf: `search_for_pattern` resolved each match's line number by rescanning the file from the
+    beginning (O(n) per match, O(n*m) total for m matches); coordinates are now resolved via the new
+    `TextCoordinates` abstraction (cached line starts + binary search)
   - Fix: `TextUtils.insert_text_at_position` returned a wrong position when the inserted text merged
     with an adjacent character into a single newline sequence (e.g. a `\n` inserted directly after an
     existing `\r`); the position is now determined from the resulting text
   - Fix: process-tree cleanup signaled descendant language-server processes without waiting for them,
     which could leave grandchildren as zombies; cleanup now waits for the discovered descendants (#1464)
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
+  - Fix: `MultiFileContentReplacer` accounted for the exclusivity of the match end in neither
+    `ReplacementOccurrence.end_line` nor the region rendered by `render_occurrence_diff`, so a
+    replacement whose pattern consumed a line break reported the match as ending on the following
+    line and displayed that line as both removed and added; a line break terminating a file was
+    likewise displayed as an additional line; this now applies the same rule `search_text` has used
+    since #1708 (#2080)
   - Fix: `SerenaConfig.project_names` / `project_paths` were cached and never invalidated after
     projects were added or removed mid-session, so user-facing project lists and error messages
     stayed stale; the lists are no longer cached
@@ -92,6 +104,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     reset-on-Serena-tool-use branch was unreachable there and reminder counters never cleared after a
     successful Serena call. Add a `serena-hooks reset` command and a `PostToolUse` example matched to
     Serena's own tools to close the gap (#1852)
+  - Add ZCode support (context `zcode`, hooks) #1837
 
 * Dashboard:
   - Fix: DashboardManager's unsupported-mode fallback warning logged the literal text
@@ -103,7 +116,23 @@ Status of the `main` branch. Changes prior to the next official version change w
     start and the tray icon never became usable. Menu refreshes are now marshalled onto the main
     thread (#2038)
 
+* Hooks:
+  - Add Codex plan-mode context and enforcement hooks driven by each tool's edit-capability metadata. #1854
+  - Document safer Codex hook defaults, timeouts, status messages, event mappings and troubleshooting guidance.
+
 * Language Servers:
+  - Scala: bump the default Metals version from 1.6.4 to 1.6.8. 1.6.4 bootstraps sbt-bloop 2.0.17,
+    which is not published for sbt 2, so `bloopInstall` fails to resolve and no build server is ever
+    started for an sbt 2 project.
+  - Fix: `SafeZipExtractor` discarded Unix executable permission bits stored in extracted
+    archives' `ZipInfo.external_attr` (a long-standing stdlib `zipfile` limitation,
+    tracked upstream at https://github.com/python/cpython/pull/150061), leaving every
+    extracted file with default, non-executable permissions. This broke language servers
+    whose archive contains more than the single top-level launcher script that
+    per-language-server setup code re-chmods, e.g. the Kotlin Language Server's bundled
+    JetBrains Runtime (`jbr/bin/java` and native libs), whose launcher failed to exec it
+    with a permission error. Executable bits are now restored for every extracted file (#2100)
+  - Add Astro language server support via `@astrojs/language-server` with a companion TypeScript language server (`@astrojs/ts-plugin`) for cross-file code intelligence (#2085)
   - Fix: Dart analysis server no longer receives rootUri/rootPath, which added the monorepo root as an extra analysis root and could pin a CPU core at idle (#2045)
   - Fix: The C# language server opened every `.csproj` found anywhere under the repository root,
     without consulting the project's ignore settings. On repositories that vendor third-party or
@@ -122,12 +151,22 @@ Status of the `main` branch. Changes prior to the next official version change w
     version changed
   - Fix: A language server's cache directory was determined by the language_id rather than 
     the language server identifier's key. The two identifiers coincided in most cases.
+  - Bump the bundled pyrefly to 1.2.0: 1.1.1 advertises `workspace/willRenameFiles` but answers it with `null`;
+    1.2.0 answers with the import edits (measured on the Python test repo: the two absolute importers of a
+    renamed module; a relative import of it, `from .models import`, is not rewritten by either)
   - Fix: TypeScript and VTS now disable automatic type acquisition as intended, while VTS
     preserves explicit user settings across initialization and configuration requests (#1989)
     VTS initialization options now override defaults per top-level key rather than replacing the
     entire configuration; a user-provided `typescript` block replaces the ATA default too.
     `initializationOptions` takes precedence over the legacy `initialization_options` alias.
   - Fix: Erlang support now uses the maintained Erlang Language Platform (ELP) instead of the archived Erlang LS; Serena downloads a verified platform release (#771)
+  - Fix: activating an additional TypeScript workspace folder could open a root-level tool
+    config (`vitest.config.ts`, `jest.config.ts`, etc.) adjacent to `tsconfig.json` instead of
+    a real source file, starting the wrong inferred project and silently losing cross-package
+    references (#2090)
+  - Fix: a C# file created after the project was already indexed was analyzed by Roslyn as a
+    standalone Miscellaneous Files document instead of being folded into the loaded project,
+    causing phantom diagnostics on the new file and on files referencing its symbols (#1961)
   - Add FreeBSD mapping to platform detection
   - Remove unnecessary platform checks from the following language servers, expanding the set of
     supported platforms accordingly: Elixir Tools, Intelephense, Perl, TypeScript, VTS
@@ -139,6 +178,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     `(int X, string Y)`, had their name corrupted to include a trailing `:` because the
     parenthesis in the type was mistaken for a method's parameter list; `find_symbol` on
     the real name then returned nothing
+  - Fix: TypeScript's `_has_waited_for_cross_file_references` latch was set after the first
+    cross-file query and never reset, so a later query that opened a file from a project tsserver
+    had not loaded yet (e.g. a monorepo package) skipped the indexing wait even while that
+    project's own `$/progress` indexing was still in flight (#1937)
   - Fix: Nextflow's `_flush_deferred_workspace_scan` marked the workspace scan flushed even when both
     of its `completion` probes failed, permanently skipping the flush (and silencing retries) for the
     rest of the session (#1871)
@@ -174,10 +217,30 @@ Status of the `main` branch. Changes prior to the next official version change w
     storage directory via a lock; a single instance (including across restarts) still gets the
     same directory, and a second concurrent instance gets a directory of its own instead of
     contending for the first one's (#1966)
+  - Fix: the per-instance fallback storage directory introduced by the concurrent-instance fix above
+    was never removed, so every lock collision permanently leaked a multi-MB IntelliJ index directory;
+    it is now deleted when the instance releases its storage lock
   - Fix: document symbol caching did not account for language-server-specific post-processing of
     symbols, which was applied outside the caches; the processing of language servers that post-process
     symbols (e.g. Go, Nix, Fortran, F#, Vue) was therefore repeated on every request or, if it mutated
     symbols in place, re-applied to already processed cached results
+  - Elixir: Bump Expert to v0.1.10, fixing several behavioural issues (#2098)
+  - Fix: the AL language server executable was only searched for in a platform-specific subdirectory of
+    the extension's `bin` directory (`bin/win32/...` on Windows). Some AL extension builds (e.g.
+    18.0.2732683, as opposed to the 18.0.2242655 that Serena pins) have no such subdirectories and
+    place the executable directly in `bin`, so activating an AL project failed with "AL Language
+    Server executable not found" for users whose VS Code extension was on such a build. Both layouts
+    are now probed, the platform subdirectory first (#2069)
+  - Fix: C# solution/project discovery traversed and opened paths matched by the configured ignore
+    patterns (incl. `.gitignore`), slowing down startup and loading ignored projects in Roslyn (#1999)
+  - Remove support for migration of legacy cache format (document_symbols_cache_v23-06-25.pkl)
+  - Fix: Avoid file/package symbols leaking into the high-level document symbol cache 
+    as a result of `request_full_symbol_tree` linking document root symbols to file symbols
+    by modifying the cached symbols in place; shallow copies are now made before linking (#2126)
+  - Fix: `find_referencing_symbols` dropped callers that have the same name and kind as the target
+    symbol (e.g. `a.run` calling `b.run` in Gleam) whenever the language server listed them after the
+    target's declaration, mistaking them for imports; a referencing symbol is now only treated as an
+    import if the reference lies within its name (#2133)
 
 CLI:
   - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)
@@ -186,7 +249,9 @@ CLI:
   - Fix: declare `click` as a direct dependency; all three console scripts (`serena`, `serena-agent`,
     `serena-hooks`) import it but it was only available transitively
   - Remove the redundant `dotenv` dependency; the `dotenv` module is provided by `python-dotenv`
+  - Update `PyJWT` from 2.12.0 to 2.13.0
   - Upgrade the `mcp` SDK from 1.28.1 to 2.2.0
+  - Upgrade `urllib3` from 2.7.0 to 2.8.0
 
 # v1.7.0 (2026-08-09)
 
@@ -240,6 +305,7 @@ CLI:
     - Tools that traverse a subtree of the project (`list_dir`, `find_file`, `search_for_pattern`) now all have an 
       option `skip_ignored_files` (whether to skip ignored sub-paths).
       Note that if the base path is itself ignored, ignored paths cannot be considered.
+  - `read_file`: More lenient index handling, allowing negative indices for `end_index`
 
 * JetBrains:
   - `jet_brains_find_symbol`: Disallow wildcard-only search, delegating to overview tool if request is for file
@@ -248,7 +314,7 @@ CLI:
   - Add Gleam language server support (via the `gleam lsp` server bundled with the Gleam compiler)
   - Allow language server priorities to be configured in `serena_config.yml` (for auto-detection during 
     project creation) 
-  - **Add support for Nextflow** (language server `nextflow`), using the official
+  - Add support for Nextflow (language server `nextflow`), using the official
     [Nextflow language server](https://github.com/nextflow-io/language-server); the JAR is downloaded
     automatically, a Java 17+ runtime is required
   - Add `python_basedpyright` as an alternative Python language server
@@ -464,6 +530,7 @@ CLI:
     instead of accepting the deletion (change in `TextUtils.delete_text_between_positions`,
     which now accepts the end position similar to `insert_text_at_position`).
   - Fix: glob pattern expansion in `expand_braces` did not terminate with empty or unbalanced braces #1690
+  - Fix: Update model used by Anthropic token estimator
 
 * CLI:
   - Fix `--project-from-cwd` hijacking git worktrees nested under a Serena project. `find_project_root`
@@ -523,8 +590,8 @@ CLI:
     source from the symbol tools even when they were not gitignored. Removed the hardcoded override; real
     build output is already excluded via `.gitignore`. #1645
   - Improve quoting of arguments in shell executions
-  - Add **LaTeX** support (experimental) via [texlab](https://github.com/latex-lsp/texlab).
-  - Add **QML** support via Qt's [`qmlls`](https://doc.qt.io/qt-6/qtqml-tool-qmlls.html) language
+  - Add LaTeX support (experimental) via [texlab](https://github.com/latex-lsp/texlab).
+  - Add QML support via Qt's [`qmlls`](https://doc.qt.io/qt-6/qtqml-tool-qmlls.html) language
     server (requires Qt 6 with `qmlls`/`qmlls6` on PATH). #1381
   - PHP: add support for PHPantom as alternative to the already supported PHP LS #1554.
   - Add new launch command customization options: `ls_args`, `ls_extra_args` and `ls_base_cmd`
@@ -561,6 +628,10 @@ CLI:
 * Dependencies:
   - Add dependency `oslex`
 
+* Performance:
+  - Speed up nested `.gitignore` discovery for large repositories: `GitignoreParser.should_ignore` consults only the specs on a path's ancestor chain (specs are scoped to their own directory), and the discovery walk is pruned by the global/project `ignored_paths`, so excluded subtrees are never entered. A 145k-directory tree with 4,146 nested `.gitignore` files now gathers its ignore spec in 0.4 s instead of 23 min.
+    Behaviour changes: configured `ignored_paths` now have the final say, applied after every `.gitignore` pattern in their configured order (previously a `.gitignore` negation could re-include a configured exclusion; a configured re-inclusion is no longer narrowed by a nested `.gitignore`); directory names with surrounding whitespace no longer leak their `.gitignore` onto sibling directories; gitignore-derived patterns are no longer separator-normalised on Windows, which corrupted the escape backslashes introduced in #1806.
+
 # v1.5.3 (2026-05-26)
 
 Add meta-data for the GitHub MCP registry
@@ -584,7 +655,7 @@ Add meta-data for the GitHub MCP registry
   - Fix `onboarding_tool`: Used incorrect path to bootstrap memory (regression in v1.5.0)  
  
 * Language Servers:
-  - Add **CUE** support via the LSP mode of the official [`cue` CLI](https://github.com/cue-lang/cue) (`cue lsp`).
+  - Add CUE support via the LSP mode of the official [`cue` CLI](https://github.com/cue-lang/cue) (`cue lsp`).
 
 # v1.5.0 (2026-05-18)
 
@@ -594,7 +665,7 @@ Add meta-data for the GitHub MCP registry
 
 * Language Servers:
   - No longer store temporary files (e.g. downloads) in `~/solidlsp_tmp`; instead, use OS-specific temporary directories
-  - Add **GDScript** (Godot Engine) support. Serena connects over TCP to the Godot editor's built-in LSP server (port 6008, same for Godot 3 and 4) — no separate language server process to install. Godot major version is auto-detected from `config_version` in `project.godot`. Note: Godot's LSP does not implement `workspace/symbol`; first workspace-wide scans fall back to per-file requests and can be slow for large projects (results are cached to disk). See the [GDScript Setup Guide](https://oraios.github.io/serena/03-special-guides/godot_gdscript_setup_guide_for_serena.html) for details. Closes #1446.
+  - Add GDScript (Godot Engine) support. Serena connects over TCP to the Godot editor's built-in LSP server (port 6008, same for Godot 3 and 4) — no separate language server process to install. Godot major version is auto-detected from `config_version` in `project.godot`. Note: Godot's LSP does not implement `workspace/symbol`; first workspace-wide scans fall back to per-file requests and can be slow for large projects (results are cached to disk). See the [GDScript Setup Guide](https://oraios.github.io/serena/03-special-guides/godot_gdscript_setup_guide_for_serena.html) for details. Closes #1446.
 
 * Dashboard:
   - UI polish: switch UI font to Inter (with system fallbacks) and use JetBrains Mono only for code/logs/paths/identifiers; refine the light/dark palette with softer borders, clearer text hierarchy, and a more nuanced shadow/elevation system; introduce a consistent spacing scale; keep the orange accent.
@@ -646,11 +717,11 @@ Add meta-data for the GitHub MCP registry
   - Elixir (`elixir-tools/next-ls`): Fix deadlock in monorepo projects where `mix.exs` lives in a subdirectory. The server now searches immediate subdirectories when no `mix.exs` is found at the repository root. #1444
   - Java (`eclipse.jdt.ls`): Add upstream JDTLS mode for offline / restricted-network use. Setting both `jdtls_path` and `lombok_path` in `ls_specific_settings.java` makes Serena use an existing upstream JDTLS installation (e.g. `brew install jdtls`) and the system JDK 21+, skipping the ~500 MB vscode-java VSIX, Gradle, and IntelliCode downloads. New related setting `java_home` lets the user override the JDK used to launch JDTLS. Default behavior unchanged — the JDTLS workspace hash is preserved bit-for-bit for users on the default route, so existing project caches are reused without a one-time reindex; the launcher path is mixed into the hash only when `jdtls_path` is set, isolating upstream installations from the default workspace. #1415
   - Java (eclipse.jdt.ls): Lombok-generated methods (getters/setters, builder(), equals/hashCode/toString, etc.) are now included in symbol-based tools (find_symbol, get_symbols_overview, edits). Added lombok_show_generated setting (default: on) to toggle this. Updated bundled vscode-java to 1.54.0-923. Issue #1432.
-  - Add **Ada / SPARK** support using AdaCore's [Ada Language Server](https://github.com/AdaCore/ada_language_server). Auto-downloads the official prebuilt ALS binary (linux-x64/arm64, darwin-x64/arm64, win32-x64). A single `ada` language covers both Ada and SPARK, since the server uses the same `.ads`/`.adb` files for both and distinguishes SPARK by source-level pragmas/aspects. Users can override the binary by setting `ls_specific_settings.ada.ls_path` to a pre-installed `ada_language_server` (e.g. from Alire, GNAT Studio, or the VS Code Ada extension).
-  - Add **Angular** (experimental) via a dual-server architecture: `@angular/language-server` (ngserver) handles standalone `.html` template files, while a companion `typescript-language-server` with `@angular/language-service` loaded as a tsserver plugin handles all `.ts` operations including inline templates. Provides type-aware navigation between templates and component classes. Requires Node.js, npm, and `@angular/core` installed in the project (`npm install` in the project root). Subsumes `typescript`+`html` for `.ts`/`.html` files when active; SCSS is not subsumed.
-  - Add **HTML** (experimental) using `vscode-html-language-server` from the `vscode-langservers-extracted` npm package. Provides in-file element/id symbols via documentSymbol; cross-file references are not meaningful for HTML. Also used as a companion server by the Angular LS for plain HTML documentSymbol support.
-  - Add **SCSS / Sass / CSS** (experimental) using [some-sass-language-server](https://github.com/wkillerud/some-sass). Handles `.scss`, `.sass`, and `.css` through one server, with full `@use`/`@forward` workspace-wide go-to-definition and find-references for variables, mixins, and functions across Sass files. The `.css` path uses the same `vscode-css-languageservice` engine that powers the standalone CSS LS; CSS feature toggles default off upstream and are flipped on at startup so symbols, hover, completion, and syntax-level diagnostics work for plain CSS as well.
-  - Add **1C / OneScript** support using [BSL Language Server](https://github.com/1c-syntax/bsl-language-server/).
+  - Add Ada / SPARK support using AdaCore's [Ada Language Server](https://github.com/AdaCore/ada_language_server). Auto-downloads the official prebuilt ALS binary (linux-x64/arm64, darwin-x64/arm64, win32-x64). A single `ada` language covers both Ada and SPARK, since the server uses the same `.ads`/`.adb` files for both and distinguishes SPARK by source-level pragmas/aspects. Users can override the binary by setting `ls_specific_settings.ada.ls_path` to a pre-installed `ada_language_server` (e.g. from Alire, GNAT Studio, or the VS Code Ada extension).
+  - Add Angular (experimental) via a dual-server architecture: `@angular/language-server` (ngserver) handles standalone `.html` template files, while a companion `typescript-language-server` with `@angular/language-service` loaded as a tsserver plugin handles all `.ts` operations including inline templates. Provides type-aware navigation between templates and component classes. Requires Node.js, npm, and `@angular/core` installed in the project (`npm install` in the project root). Subsumes `typescript`+`html` for `.ts`/`.html` files when active; SCSS is not subsumed.
+  - Add HTML (experimental) using `vscode-html-language-server` from the `vscode-langservers-extracted` npm package. Provides in-file element/id symbols via documentSymbol; cross-file references are not meaningful for HTML. Also used as a companion server by the Angular LS for plain HTML documentSymbol support.
+  - Add SCSS / Sass / CSS (experimental) using [some-sass-language-server](https://github.com/wkillerud/some-sass). Handles `.scss`, `.sass`, and `.css` through one server, with full `@use`/`@forward` workspace-wide go-to-definition and find-references for variables, mixins, and functions across Sass files. The `.css` path uses the same `vscode-css-languageservice` engine that powers the standalone CSS LS; CSS feature toggles default off upstream and are flipped on at startup so symbols, hover, completion, and syntax-level diagnostics work for plain CSS as well.
+  - Add 1C / OneScript support using [BSL Language Server](https://github.com/1c-syntax/bsl-language-server/).
   - Add support for more filenames to be considered by ccls and clangd.
   - Clojure (`clojure-lsp`): Fix incomplete `find_referencing_symbols` results in multi-module monorepos. clojure-lsp only discovers source paths from the descriptor at the workspace root and does not recurse for sub-module `deps.edn` / `project.clj` / `shadow-cljs.edn` / `bb.edn` files, so references in sibling modules were silently missed until those files happened to be opened by `find_symbol` / `get_symbols_overview`. Serena now scans the repo for project descriptors at startup and passes the union of their declared source paths to clojure-lsp via `initializationOptions`. Project-local `.lsp/config.edn` files are honoured as-is (no override). New `ls_specific_settings.clojure` keys: `source_paths` (explicit override) and `config_edn_path` (parse `:source-paths` from a user-supplied config file).
 
@@ -835,34 +906,34 @@ Add meta-data for the GitHub MCP registry
 
 * Language support:
 
-  * **Add support for Lean 4** via built-in `lean --server` with cross-file reference support (requires `lean` and `lake` via [elan](https://github.com/leanprover/elan))
-  * **Add support for OCaml** via ocaml-lsp-server with cross-file reference support on OCaml 5.2+ (requires opam; see [setup guide](docs/03-special-guides/ocaml_setup_guide_for_serena.md))
-  * **Add Phpactor as alternative PHP language server** (specify `php_phpactor` as language; requires PHP 8.1+)
-  * **Add support for Fortran** via fortls language server (requires `pip install fortls`)
-  * **Add partial support for Groovy** requires user-provided Groovy language server JAR (see [setup guide](docs/03-special-guides/groovy_setup_guide_for_serena.md))
-  * **Add support for Julia** via LanguageServer.jl
-  * **Add support for Haskell** via Haskell Language Server (HLS) with automatic discovery via ghcup, stack, or system PATH; supports both Stack and Cabal projects
-  * **Add support for Scala** via Metals language server (requires some [manual setup](docs/03-special-guides/scala_setup_guide_for_serena.md))
-  * **Add support for F#** via FsAutoComplete/Ionide LSP server. 
-  * **Add support for Elm** via @elm-tooling/elm-language-server (automatically downloads if not installed; requires Elm compiler)
-  * **Add support for Perl** via Perl::LanguageServer with LSP integration for .pl, .pm, and .t files
-  * **Add support for AL (Application Language)** for Microsoft Dynamics 365 Business Central development. Requires VS Code AL extension (ms-dynamics-smb.al).
-  * **Add support for R** via the R languageserver package with LSP integration, performance optimizations, and fallback symbol extraction
-  * **Add support for Zig** via ZLS (cross-file references may not fully work on Windows)
-  * **Add support for Lua** via lua-language-server
-  * **Add support for Nix** requires nixd installation (Windows not supported)
-  * **Add experimental support for YAML** via yaml-language-server with LSP integration for .yaml and .yml files
-  * **Add support for TOML** via Taplo language server with automatic binary download, validation, formatting, and schema support for .toml files
-  * **Dart now officially supported**: Dart was always working, but now tests were added, and it is promoted to "officially supported"
-  * **Rust now uses already installed rustup**: The rust-analyzer is no longer bundled with Serena. Instead, it uses the rust-analyzer from your Rust toolchain managed by rustup. This ensures compatibility with your Rust version and eliminates outdated bundled binaries.
-  * **Kotlin now officially supported**: We now use the official Kotlin LS, tests run through and performance is good, even though the LS is in an early development stage.
-  * **Add support for Erlang** experimental, may hang or be slow, uses the recently archived [erlang_ls](https://github.com/erlang-ls/erlang_ls)
-  * **Ruby dual language server support**: Added ruby-lsp as the modern primary Ruby language server. Solargraph remains available as an experimental legacy option. ruby-lsp supports both .rb and .erb files, while Solargraph supports .rb files only.
-  * **Add support for PowerShell** via PowerShell Editor Services (PSES). Requires `pwsh` (PowerShell Core) to be installed and available in PATH. Supports symbol navigation, go-to-definition, and within-file references for .ps1 files.
-  * **Add support for MATLAB** via the official MathWorks MATLAB Language Server. Requires MATLAB R2021b or later and Node.js. Set `MATLAB_PATH` environment variable or configure `matlab_path` in `ls_specific_settings`. Supports .m, .mlx, and .mlapp files with code completion, diagnostics, go-to-definition, find references, document symbols, formatting, and rename.
-  * **Add support for Pascal** via the official Pascal Language Server.
-  * **C/C++ alternate LS (ccls)**: Add experimental, opt-in support for ccls as an alternative backend to clangd. Enable via `cpp_ccls` in project configuration. Requires `ccls` installed and ideally a `compile_commands.json` at repo root.
-  * **Add support for Solidity** via the Nomic Foundation `@nomicfoundation/solidity-language-server` (automatically installed via npm)
+  * Add support for Lean 4 via built-in `lean --server` with cross-file reference support (requires `lean` and `lake` via [elan](https://github.com/leanprover/elan))
+  * Add support for OCaml via ocaml-lsp-server with cross-file reference support on OCaml 5.2+ (requires opam; see [setup guide](docs/03-special-guides/ocaml_setup_guide_for_serena.md))
+  * Add Phpactor as alternative PHP language server (specify `php_phpactor` as language; requires PHP 8.1+)
+  * Add support for Fortran via fortls language server (requires `pip install fortls`)
+  * Add partial support for Groovy requires user-provided Groovy language server JAR (see [setup guide](docs/03-special-guides/groovy_setup_guide_for_serena.md))
+  * Add support for Julia via LanguageServer.jl
+  * Add support for Haskell via Haskell Language Server (HLS) with automatic discovery via ghcup, stack, or system PATH; supports both Stack and Cabal projects
+  * Add support for Scala via Metals language server (requires some [manual setup](docs/03-special-guides/scala_setup_guide_for_serena.md))
+  * Add support for F# via FsAutoComplete/Ionide LSP server. 
+  * Add support for Elm via @elm-tooling/elm-language-server (automatically downloads if not installed; requires Elm compiler)
+  * Add support for Perl via Perl::LanguageServer with LSP integration for .pl, .pm, and .t files
+  * Add support for AL (Application Language) for Microsoft Dynamics 365 Business Central development. Requires VS Code AL extension (ms-dynamics-smb.al).
+  * Add support for R via the R languageserver package with LSP integration, performance optimizations, and fallback symbol extraction
+  * Add support for Zig via ZLS (cross-file references may not fully work on Windows)
+  * Add support for Lua via lua-language-server
+  * Add support for Nix requires nixd installation (Windows not supported)
+  * Add experimental support for YAML via yaml-language-server with LSP integration for .yaml and .yml files
+  * Add support for TOML via Taplo language server with automatic binary download, validation, formatting, and schema support for .toml files
+  * Dart now officially supported: Dart was always working, but now tests were added, and it is promoted to "officially supported"
+  * Rust now uses already installed rustup: The rust-analyzer is no longer bundled with Serena. Instead, it uses the rust-analyzer from your Rust toolchain managed by rustup. This ensures compatibility with your Rust version and eliminates outdated bundled binaries.
+  * Kotlin now officially supported: We now use the official Kotlin LS, tests run through and performance is good, even though the LS is in an early development stage.
+  * Add support for Erlang experimental, may hang or be slow, uses the recently archived [erlang_ls](https://github.com/erlang-ls/erlang_ls)
+  * Ruby dual language server support: Added ruby-lsp as the modern primary Ruby language server. Solargraph remains available as an experimental legacy option. ruby-lsp supports both .rb and .erb files, while Solargraph supports .rb files only.
+  * Add support for PowerShell via PowerShell Editor Services (PSES). Requires `pwsh` (PowerShell Core) to be installed and available in PATH. Supports symbol navigation, go-to-definition, and within-file references for .ps1 files.
+  * Add support for MATLAB via the official MathWorks MATLAB Language Server. Requires MATLAB R2021b or later and Node.js. Set `MATLAB_PATH` environment variable or configure `matlab_path` in `ls_specific_settings`. Supports .m, .mlx, and .mlapp files with code completion, diagnostics, go-to-definition, find references, document symbols, formatting, and rename.
+  * Add support for Pascal via the official Pascal Language Server.
+  * C/C++ alternate LS (ccls): Add experimental, opt-in support for ccls as an alternative backend to clangd. Enable via `cpp_ccls` in project configuration. Requires `ccls` installed and ideally a `compile_commands.json` at repo root.
+  * Add support for Solidity via the Nomic Foundation `@nomicfoundation/solidity-language-server` (automatically installed via npm)
 
 # v0.1.4 (2025-08-15)
 
@@ -875,7 +946,7 @@ Since the last release, several new languages were supported, and the Serena CLI
 We thank all external contributors who made a lot of the improvements possible!
 
 * General:
-  * **Initial instructions no longer need to be loaded by the user**
+  * Initial instructions no longer need to be loaded by the user
   * Significantly extended CLI
   * Removed `replace_regex` tool from `ide-assistant` and `codex` contexts.
     The current string replacement tool in Claude Code seems to be sufficiently efficient and is better
@@ -893,8 +964,8 @@ We thank all external contributors who made a lot of the improvements possible!
   * Reliably detect language server termination and propagate the respective error all the way
     back to the tool application, where an unexpected termination is handled by restarting the language server
     and subsequently retrying the tool application.
-  * **Add support for Swift**
-  * **Add support for Bash**
+  * Add support for Swift
+  * Add support for Bash
   * Enhance Solargraph (Ruby) integration
     * Automatic Rails project detection via config/application.rb, Rakefile, and Gemfile analysis
     * Ruby/Rails-specific exclude patterns for improved indexing performance (vendor/, .bundle/, tmp/, log/, coverage/)
@@ -932,7 +1003,7 @@ stability and performance, as well as extended functionality, improved editing t
 * `SearchForPatternTool`: Better default, extended parameters and description for restricting the search
 * Language support:
    * Better support for C# by switching from `omnisharp` to Microsoft's official C# language server.
-   * **Add support for Clojure, Elixir and Terraform. New language servers for C# and typescript.**
+   * Add support for Clojure, Elixir and Terraform. New language servers for C# and TypeScript.
    * Experimental language server implementations can now be accessed by users through configuring the `language` field
 * Configuration:
    * Add option `web_dashboard_open_on_launch` (allowing the dashboard to be enabled without opening a browser window) 
@@ -1021,7 +1092,7 @@ Fixes:
     * FindSymbolTool: allow passing a file for restricting search, not just a directory (Gemini was too dumb to pass directories)
     * Native support for gitignore files for configuring files to be ignored by serena. See also
       in *Language Servers* section below.
-    * **Major Feature**: Allow Serena to switch between projects (project activation)
+    * **Project Switching**: Allow Serena to switch between projects (project activation)
         * Add central Serena configuration in `serena_config.yml`, which 
             * contains the list of available projects
             * allows to configure whether project activation is enabled
@@ -1034,7 +1105,7 @@ Fixes:
 * Language Servers:
     * Fix C# language server initialization issue when the project path contains spaces
     * Native support for gitignore in overview, document-tree and find_references operations.
-      This is an **important** addition, since previously things like `venv` and `node_modules` were scanned
+      This is an important addition, since previously things like `venv` and `node_modules` were scanned
       and were likely responsible for slowness of tools and even server crashes (presumably due to OOM errors).
 * Agno: 
     * Fix Agno reloading mechanism causing failures when initializing the sqlite memory database #8
