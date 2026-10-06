@@ -13,6 +13,7 @@ You can configure the following options in ls_specific_settings (in serena_confi
         jvm_options: ['-Xmx2G']                      # JVM options for the language server process
         exclude_patterns: ['work', '.nextflow']      # workspace paths the language server shall ignore
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os
@@ -320,12 +321,14 @@ class NextflowLanguageServer(SolidLanguageServer):
             "textDocument": {"uri": self._resolve_file_uri(relative_file_path)},
             "position": {"line": 0, "character": 0},
         }
+        flushed = False
         for _ in range(2):
             try:
                 self.server.send.completion(params)
+                flushed = True
             except Exception as e:
                 log.debug("Completion request used to flush the Nextflow workspace scan failed: %s", e)
-        self._workspace_scan_flushed = True
+        self._workspace_scan_flushed = flushed
 
     @override
     def _send_references_request(self, relative_file_path: str, line: int, column: int) -> list[lsp_types.Location] | None:

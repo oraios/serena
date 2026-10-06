@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 import logging
@@ -7,9 +9,14 @@ from collections import defaultdict
 from copy import copy
 from dataclasses import asdict, dataclass
 from enum import Enum
+from typing import TYPE_CHECKING
 
-from anthropic.types import MessageParam, MessageTokensCount
 from dotenv import load_dotenv
+
+if TYPE_CHECKING:
+    # Imported for annotations only: loading the anthropic package costs seconds on some
+    # machines (see #2012) and is only needed when the Anthropic token counter is used.
+    from anthropic.types import MessageTokensCount
 
 log = logging.getLogger(__name__)
 
@@ -51,7 +58,7 @@ class AnthropicTokenCount(TokenCountEstimator):
     See https://docs.anthropic.com/en/docs/build-with-claude/token-counting
     """
 
-    def __init__(self, model_name: str = "claude-sonnet-4-20250514", api_key: str | None = None):
+    def __init__(self, model_name: str, api_key: str | None = None):
         import anthropic
 
         self._model_name = model_name
@@ -62,7 +69,7 @@ class AnthropicTokenCount(TokenCountEstimator):
     def _send_count_tokens_request(self, text: str) -> MessageTokensCount:
         return self._anthropic_client.messages.count_tokens(
             model=self._model_name,
-            messages=[MessageParam(role="user", content=text)],
+            messages=[{"role": "user", "content": text}],
         )
 
     def estimate_token_count(self, text: str) -> int:
@@ -102,7 +109,7 @@ class RegisteredTokenCountEstimator(Enum):
             case RegisteredTokenCountEstimator.TIKTOKEN_GPT4O:
                 return TiktokenCountEstimator(model_name="gpt-4o")
             case RegisteredTokenCountEstimator.ANTHROPIC_CLAUDE_SONNET_4:
-                return AnthropicTokenCount(model_name="claude-sonnet-4-20250514")
+                return AnthropicTokenCount(model_name="claude-sonnet-4-6")
             case RegisteredTokenCountEstimator.CHAR_COUNT:
                 return CharCountEstimator(avg_chars_per_token=4)
             case _:

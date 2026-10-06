@@ -7,6 +7,7 @@ Usage:
 This reads all .html files from the `news/` directory and creates
 `news/news.json` containing a mapping of news IDs to HTML content strings.
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import json
 import os

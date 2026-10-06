@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 import json
 import logging
 import os

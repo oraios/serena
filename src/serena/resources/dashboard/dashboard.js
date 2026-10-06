@@ -614,6 +614,7 @@ class Dashboard {
             const $existingToolsContent = $('#tools-content');
             const $existingMemoriesContent = $('#memories-content');
             const wasToolsExpanded = $existingToolsContent.is(':visible');
+            const wasFunctionsExpanded = $('#functions-content').is(':visible');
             const wasMemoriesExpanded = $existingMemoriesContent.is(':visible');
 
             let html = '<div class="config-grid">';
@@ -634,10 +635,14 @@ class Dashboard {
                 html += '<div class="config-value">' + (config.active_project.name || 'None') + '</div>';
             }
 
-            html += '<div class="config-label">Languages:</div>';
-            if (this.jetbrainsMode) {
-                html += '<div class="config-value">Using JetBrains backend</div>';
-            } else {
+            html += '<div class="config-label">Interface:</div>';
+            html += '<div class="config-value">' + config.agent_interface + '</div>';
+
+            html += '<div class="config-label">Backend:</div>';
+            html += '<div class="config-value">' + config.language_backend + '</div>';
+
+            if (!this.jetbrainsMode) {
+                html += '<div class="config-label">Languages:</div>';
                 html += '<div class="config-value">';
                 if (config.languages && config.languages.length > 0) {
                     html += '<div class="languages-container">';
@@ -704,6 +709,32 @@ class Dashboard {
             });
             html += '</div>';
             html += '</div>';
+
+            // Active functions of the REPL's facades - collapsible (REPL interface only)
+            if (config.facades) {
+                const enabledMethodCount = config.facades.reduce(function (count, facade) {
+                    return count + facade.methods.filter(function (method) { return method.is_enabled; }).length;
+                }, 0);
+                html += '<div style="margin-top: 20px;">';
+                html += '<h3 class="collapsible-header" id="functions-header" style="font-size: 16px; margin: 0;">';
+                html += '<span>Active Functions (' + enabledMethodCount + ')</span>';
+                html += '<span class="toggle-icon' + (wasFunctionsExpanded ? ' expanded' : '') + '">▼</span>';
+                html += '</h3>';
+                html += '<div class="collapsible-content" id="functions-content" style="' + (wasFunctionsExpanded ? '' : 'display:none;') + ' margin-top: 10px;">';
+                config.facades.forEach(function (facade) {
+                    html += '<div class="facade-block">';
+                    html += '<div class="facade-name' + (facade.is_enabled ? '' : ' disabled') + '">s.' + facade.name + '</div>';
+                    html += '<div class="tools-grid">';
+                    facade.methods.forEach(function (method) {
+                        const title = facade.name + '.' + method.name + (method.is_enabled ? '' : ' (disabled)');
+                        html += '<div class="tool-item' + (method.is_enabled ? '' : ' disabled') + '" title="' + title + '">' + method.name + '</div>';
+                    });
+                    html += '</div>';
+                    html += '</div>';
+                });
+                html += '</div>';
+                html += '</div>';
+            }
 
             // Available memories - collapsible (show if memories exist or if project exists)
             if (config.active_project && config.active_project.name) {
@@ -773,6 +804,15 @@ class Dashboard {
             $('#create-memory-btn').click(this.openCreateMemoryModal.bind(this));
 
             // Re-attach collapsible handler for the newly created tools header
+            $('#functions-header').click(function () {
+                const $header = $(this);
+                const $content = $('#functions-content');
+                const $icon = $header.find('.toggle-icon');
+
+                $content.slideToggle(300);
+                $icon.toggleClass('expanded');
+            });
+
             $('#tools-header').click(function () {
                 const $header = $(this);
                 const $content = $('#tools-content');

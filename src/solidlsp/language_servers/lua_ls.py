@@ -5,6 +5,7 @@ You can pass the following entries in ``ls_specific_settings["lua"]``:
     - lua_language_server_version: Override the pinned lua-language-server version
       downloaded by Serena (default: the bundled Serena version).
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import platform
