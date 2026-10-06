@@ -33,14 +33,14 @@ PLUGIN_SERVER_POLL_INTERVAL = 1.0
 """The interval at which we poll for the plugin server while waiting for it to come up."""
 
 
-def _lock_path_for_launch_command(launch_command: str) -> Path:
+def _lock_path_for_launch_command(launch_command: str | list[str]) -> Path:
     """
     :param launch_command: the configured `jetbrains_launch_command`
     :return: a stable, cross-process lock file path for the given launch command, so that
         concurrent Serena sessions configured with the same launch command serialize on the
         same file regardless of which project each of them is activating
     """
-    digest = hashlib.sha256(launch_command.encode("utf-8")).hexdigest()[:16]
+    digest = hashlib.sha256(str(launch_command).encode("utf-8")).hexdigest()[:16]
     return Path(tempfile.gettempdir()) / f"serena-jetbrains-launch-{digest}.lock"
 
 
@@ -57,7 +57,7 @@ def find_plugin_server(project: Project) -> "jetbrains_plugin_client.JetBrainsPl
 
 def launch_and_wait_for_plugin_server(
     project: Project,
-    launch_command: str,
+    launch_command: str | list[str],
     lock_acquire_timeout: float = LOCK_ACQUIRE_TIMEOUT,
     plugin_server_wait_timeout: float = PLUGIN_SERVER_WAIT_TIMEOUT,
     plugin_server_poll_interval: float = PLUGIN_SERVER_POLL_INTERVAL,
@@ -76,7 +76,8 @@ def launch_and_wait_for_plugin_server(
     than in a failed tool call) or finds it already serving (and returns immediately).
 
     :param project: the project being activated
-    :param launch_command: the configured `jetbrains_launch_command`
+    :param launch_command: the base command, to which the project directory is to be added, either as a string
+        (e.g. "idea") or as a list of strings (e.g. ["idea", "--wait"])
     :param lock_acquire_timeout: how long to wait for another session's launch to finish before
         giving up on launching our own instance
     :param plugin_server_wait_timeout: how long to poll for the plugin server to become
@@ -90,7 +91,11 @@ def launch_and_wait_for_plugin_server(
                 # another session launched the IDE while we were waiting for the lock
                 return
 
-            cmd = subprocess_util.convert_shell_cmd([launch_command, project.project_root])
+            if isinstance(launch_command, list):
+                cmd_list = launch_command + [project.project_root]
+            else:
+                cmd_list = [launch_command, project.project_root]
+            cmd = subprocess_util.convert_shell_cmd(cmd_list)
             log.info("Launching IDE with command: %s", cmd)
             p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
             stdout, stderr = p.communicate()

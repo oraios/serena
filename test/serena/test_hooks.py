@@ -77,6 +77,33 @@ def _read_input(tool_name: str = "read", session_id: str = "test-session-123", f
     }
 
 
+def _codex_prompt_input(permission_mode: str | None, permission_mode_key: str = "permission_mode") -> dict:
+    data = {
+        "session_id": "codex-plan-context",
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Plan this change",
+    }
+    if permission_mode is not None:
+        data[permission_mode_key] = permission_mode
+    return data
+
+
+def _codex_tool_input(
+    tool_name: str,
+    permission_mode: str | None,
+    session_id: str = "codex-plan-guard",
+) -> dict:
+    data = {
+        "session_id": session_id,
+        "hook_event_name": "PreToolUse",
+        "tool_name": tool_name,
+        "tool_input": {},
+    }
+    if permission_mode is not None:
+        data["permission_mode"] = permission_mode
+    return data
+
+
 def _execute_remind_hook(client: HookClient, payload: dict, tmp_path: Path) -> None:
     with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
         PreToolUseRemindAboutSymbolicToolsHook(client).execute()
@@ -111,6 +138,12 @@ class TestHookClientDetection:
             hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.GROK)
         assert hook._client == HookClient.GROK
 
+    def test_zcode_client(self, tmp_path: Path):
+        stdin_data = _base_input()
+        with patch("sys.stdin", _make_stdin(stdin_data)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.ZCODE)
+        assert hook._client == HookClient.ZCODE
+
 
 class TestPreToolUseRemindAboutSerenaHook:
     """Tests for the PreToolUse hook that nudges the agent toward symbolic tools."""
@@ -133,6 +166,13 @@ class TestPreToolUseRemindAboutSerenaHook:
             with patch("sys.stdin", _make_stdin(_base_input(tool_name=name))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
                 hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.CLAUDE_CODE)
             assert hook.is_grep_call() == expected, f"is_grep_tool() wrong for {name} (claude-code)"
+
+    def test_grep_tool_detection_zcode(self, tmp_path: Path):
+        """ZCode is grouped with Claude Code / CodeBuddy: exact tool name ``grep``."""
+        for name, expected in [("grep", True), ("grep_search", False), ("mcp_grep", False), ("read", False)]:
+            with patch("sys.stdin", _make_stdin(_base_input(tool_name=name))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+                hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.ZCODE)
+            assert hook.is_grep_call() == expected, f"is_grep_tool() wrong for {name} (zcode)"
 
     def test_grep_tool_detection_non_claude_code(self, tmp_path: Path):
         """Non-Claude-Code clients fall back to substring matching to cover verbose tool names."""
@@ -196,6 +236,16 @@ class TestPreToolUseRemindAboutSerenaHook:
             ):
                 hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.CLAUDE_CODE)
             assert hook.is_read_file_call() == expected, f"is_read_file_tool() wrong for {name} (claude-code)"
+
+    def test_read_file_tool_detection_zcode(self, tmp_path: Path):
+        """ZCode is grouped with Claude Code / CodeBuddy: exact tool name ``read``."""
+        for name, expected in [("read", True), ("mcp__serena__read_file", True), ("grep", False), ("serena_search_for_pattern", False)]:
+            with (
+                patch("sys.stdin", _make_stdin(_read_input(tool_name=name))),
+                patch("serena.hooks.serena_home_dir", str(tmp_path)),
+            ):
+                hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.ZCODE)
+            assert hook.is_read_file_call() == expected, f"is_read_file_tool() wrong for {name} (zcode)"
 
     def test_read_file_tool_detection_non_claude_code(self, tmp_path: Path):
         """Non-Claude-Code clients accept any read-style verb (``read``/``view``/``open``/``show``)
@@ -1092,6 +1142,138 @@ class TestPostToolUseResetSymbolicToolCounterHook:
         assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+class TestCodexPlanHooks:
+    def test_plan_context_emits_read_only_guidance(self):
+        runner = CliRunner()
+        result = runner.invoke(
+            hook_commands,
+            ["plan-context", "--client", "codex"],
+            input=json.dumps(_codex_prompt_input("plan")),
+        )
+
+        assert result.exit_code == 0
+        assert json.loads(result.output) == {
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": (
+                    "Codex is in plan mode. Use Serena only for read-only repository analysis and planning; "
+                    "do not call edit-capable Serena tools."
+                ),
+            }
+        }
+
+    def test_plan_context_accepts_camel_case_permission_mode(self):
+        runner = CliRunner()
+        result = runner.invoke(
+            hook_commands,
+            ["plan-context", "--client", "codex"],
+            input=json.dumps(_codex_prompt_input("plan", permission_mode_key="permissionMode")),
+        )
+
+        assert result.exit_code == 0
+        assert json.loads(result.output)["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
+
+    @pytest.mark.parametrize("permission_mode", [None, "default", "acceptEdits", "dontAsk", "bypassPermissions"])
+    def test_plan_context_stays_silent_outside_plan_mode(self, permission_mode: str | None):
+        runner = CliRunner()
+        result = runner.invoke(
+            hook_commands,
+            ["plan-context", "--client", "codex"],
+            input=json.dumps(_codex_prompt_input(permission_mode)),
+        )
+
+        assert result.exit_code == 0
+        assert result.output == ""
+
+    @pytest.mark.parametrize(
+        "tool_name",
+        [
+            "mcp__serena__replace_symbol_body",
+            "mcp__serena__create_text_file",
+            "mcp__serena__write_memory",
+            "mcp__serena__execute_shell_command",
+        ],
+    )
+    def test_plan_guard_denies_edit_capable_serena_tools(self, tool_name: str):
+        runner = CliRunner()
+        result = runner.invoke(
+            hook_commands,
+            ["plan-guard", "--client", "codex"],
+            input=json.dumps(_codex_tool_input(tool_name, "plan")),
+        )
+
+        assert result.exit_code == 0
+        hook_output = json.loads(result.output)["hookSpecificOutput"]
+        assert hook_output["hookEventName"] == "PreToolUse"
+        assert hook_output["permissionDecision"] == "deny"
+        assert tool_name.removeprefix("mcp__serena__") in hook_output["permissionDecisionReason"]
+        assert "plan mode" in hook_output["permissionDecisionReason"]
+
+    @pytest.mark.parametrize(
+        "tool_name",
+        [
+            "mcp__serena__find_symbol",
+            "mcp__serena__future_unknown_tool",
+            "mcp__filesystem__replace_symbol_body",
+            "replace_symbol_body",
+        ],
+    )
+    def test_plan_guard_stays_silent_for_unblocked_tools(self, tool_name: str):
+        runner = CliRunner()
+        result = runner.invoke(
+            hook_commands,
+            ["plan-guard", "--client", "codex"],
+            input=json.dumps(_codex_tool_input(tool_name, "plan")),
+        )
+
+        assert result.exit_code == 0
+        assert result.output == ""
+
+    @pytest.mark.parametrize("permission_mode", [None, "default", "acceptEdits", "dontAsk", "bypassPermissions"])
+    def test_plan_guard_stays_silent_outside_plan_mode(self, permission_mode: str | None):
+        runner = CliRunner()
+        result = runner.invoke(
+            hook_commands,
+            ["plan-guard", "--client", "codex"],
+            input=json.dumps(_codex_tool_input("mcp__serena__replace_symbol_body", permission_mode)),
+        )
+
+        assert result.exit_code == 0
+        assert result.output == ""
+
+    def test_plan_guard_uses_each_payload_without_persisting_mode(self):
+        runner = CliRunner()
+        session_id = "codex-plan-transition"
+
+        plan_result = runner.invoke(
+            hook_commands,
+            ["plan-guard", "--client", "codex"],
+            input=json.dumps(_codex_tool_input("mcp__serena__replace_symbol_body", "plan", session_id=session_id)),
+        )
+        default_result = runner.invoke(
+            hook_commands,
+            ["plan-guard", "--client", "codex"],
+            input=json.dumps(_codex_tool_input("mcp__serena__replace_symbol_body", "default", session_id=session_id)),
+        )
+
+        assert json.loads(plan_result.output)["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert default_result.exit_code == 0
+        assert default_result.output == ""
+
+    @pytest.mark.parametrize("command", ["plan-context", "plan-guard"])
+    def test_plan_commands_reject_non_codex_clients(self, command: str):
+        payload = _codex_prompt_input("plan") if command == "plan-context" else _codex_tool_input("mcp__serena__find_symbol", "plan")
+        runner = CliRunner()
+        result = runner.invoke(
+            hook_commands,
+            [command, "--client", "claude-code"],
+            input=json.dumps(payload),
+        )
+
+        assert result.exit_code != 0
+        assert "only supported for codex" in result.output.lower()
+
+
 class TestSessionEndCleanupHook:
     def test_removes_session_dir(self, tmp_path: Path):
         session_dir = tmp_path / "hook_data" / "cleanup-session"
@@ -1265,6 +1447,22 @@ class TestHookCli:
         assert result.exit_code == 0
         assert result.output == ""
 
+    def test_auto_approve_command_dsh_stays_silent(self, tmp_path: Path):
+        """DSH's Claude-compatible bridge does not treat ``allow`` as pre-approval."""
+        stdin_json = json.dumps(
+            {
+                "session_id": "cli-auto-approve-dsh",
+                "tool_name": "mcp__serena__find_symbol",
+                "tool_input": {},
+                "permission_mode": "auto",
+            }
+        )
+        runner = CliRunner()
+        with patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            result = runner.invoke(hook_commands, ["auto-approve", "--client", "dsh"], input=stdin_json)
+        assert result.exit_code == 0
+        assert result.output == ""
+
     def test_auto_approve_command_grok_uses_native_output(self, tmp_path: Path):
         """The ``auto-approve`` CLI command accepts ``--client=grok`` and emits Grok-native JSON."""
         stdin_json = json.dumps(
@@ -1339,3 +1537,67 @@ class TestHookCli:
         with patch("serena.hooks.serena_home_dir", str(tmp_path)):
             result = runner.invoke(hook_commands, ["activate", "--client", "claude-code"], input="not json")
         assert result.exit_code != 0
+
+
+class TestDSHHookClient:
+    """DSH uses the Claude Code-compatible hooks bridge documented in issue #1869."""
+
+    def test_dsh_client_detects_grep_and_read_tools(self, tmp_path: Path) -> None:
+        with patch("sys.stdin", _make_stdin(_base_input("grep"))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            grep_hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.DSH)
+        with patch("sys.stdin", _make_stdin(_read_input())), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            read_hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.DSH)
+
+        assert grep_hook._client is HookClient.DSH
+        assert grep_hook.is_grep_call()
+        assert read_hook.is_read_code_file_call()
+
+    def test_dsh_bash_classifies_shell_grep_and_read(self, tmp_path: Path) -> None:
+        """DSH routes shell work through Claude Code's native Bash tool."""
+        with (
+            patch("sys.stdin", _make_stdin(_base_input("Bash", tool_input={"command": "rg -n foo src/main.py"}))),
+            patch("serena.hooks.serena_home_dir", str(tmp_path)),
+        ):
+            grep_hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.DSH)
+        with (
+            patch("sys.stdin", _make_stdin(_base_input("Bash", tool_input={"command": "cat src/main.py"}))),
+            patch("serena.hooks.serena_home_dir", str(tmp_path)),
+        ):
+            read_hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.DSH)
+        with (
+            patch("sys.stdin", _make_stdin(_base_input("Bash", tool_input={"command": "cat README.md"}))),
+            patch("serena.hooks.serena_home_dir", str(tmp_path)),
+        ):
+            markdown_read_hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.DSH)
+
+        assert grep_hook.is_grep_call() is True
+        assert read_hook.is_read_call() is True
+        assert read_hook.is_read_code_file_call() is True
+        assert markdown_read_hook.is_read_call() is True
+        assert markdown_read_hook.is_read_code_file_call() is False
+
+    def test_dsh_non_shell_mcp_tool_with_command_parameter_is_not_classified(self, tmp_path: Path) -> None:
+        payload = _base_input("mcp__deploy__run_task", tool_input={"command": "cat /etc/secrets.env", "task_name": "print-config"})
+        with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.DSH)
+
+        assert hook.is_grep_call() is False
+        assert hook.is_read_call() is False
+        assert hook.is_read_file_call() is False
+
+    def test_dsh_uses_claude_compatible_deny_payload(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
+            _execute_remind_hook(HookClient.DSH, _base_input("grep"), tmp_path)
+
+        result = json.loads(capsys.readouterr().out.strip())
+        output = result["hookSpecificOutput"]
+        assert output["hookEventName"] == "PreToolUse"
+        assert output["permissionDecision"] == "deny"
+        assert "additionalContext" in output
+        assert "grep" in output["additionalContext"].lower()
+
+    def test_dsh_is_accepted_by_cli_client_choice(self) -> None:
+        result = CliRunner().invoke(hook_commands, ["remind", "--help"])
+
+        assert result.exit_code == 0
+        assert "dsh" in result.output

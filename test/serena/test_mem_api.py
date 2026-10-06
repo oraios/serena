@@ -39,6 +39,7 @@ def test_facade_exposes_memory_operations(api: MemoryApi) -> None:
         "edit_memory",
         "rename_memory",
         "delete_memory",
+        "onboarding",
     }
 
 
