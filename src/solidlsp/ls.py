@@ -10,7 +10,7 @@ import shutil
 import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Callable, Hashable, Iterator
+from collections.abc import Callable, Hashable, Iterator, Sequence
 from contextlib import contextmanager
 from copy import copy
 from dataclasses import dataclass
@@ -20,7 +20,7 @@ from typing import Any, Self, Union, cast
 
 import pathspec
 from sensai.util.helper import mark_used
-from sensai.util.pickle import getstate, load_pickle
+from sensai.util.pickle import getstate
 from sensai.util.string import ToStringMixin
 
 from serena.util.file_system import match_path
@@ -59,6 +59,7 @@ from solidlsp.lsp_protocol_handler.server import (
 )
 from solidlsp.settings import SolidLSPSettings
 from solidlsp.util.cache import load_cache, save_cache
+from solidlsp.util.pickle_util import SafePickleLoader
 
 RawDocumentSymbol = Union[DocumentSymbol, SymbolInformation]
 """
@@ -357,8 +358,7 @@ class SolidLanguageServer(ABC):
     the LS-specific version should be incremented instead.
     """
     RAW_DOCUMENT_SYMBOL_CACHE_FILENAME = "raw_document_symbols.pkl"
-    RAW_DOCUMENT_SYMBOL_CACHE_FILENAME_LEGACY_FALLBACK = "document_symbols_cache_v23-06-25.pkl"
-    DOCUMENT_SYMBOL_CACHE_VERSION = 4
+    DOCUMENT_SYMBOL_CACHE_VERSION = 5
     """
     defines the version of the high-level document symbol format.
     This should be incremented whenever there is a change in the way document symbols are stored.
@@ -388,6 +388,8 @@ class SolidLanguageServer(ABC):
             ".vscode",  # Doesn't contain symbols
         }
     )
+
+    _cache_loader = SafePickleLoader(allowed_classes=[DocumentSymbols, SymbolBody, SymbolKind])
 
     # To be overridden and extended by subclasses
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -1044,6 +1046,16 @@ class SolidLanguageServer(ABC):
         if the LS is not fully initialized yet.
         """
         return 2
+
+    def notify_files_created(self, relative_file_paths: Sequence[str]) -> None:
+        """
+        Called when one or more files were newly created on disk (detected outside of Serena's own file
+        tools, e.g. by :class:`serena.ls_manager.LanguageServerFileChangeNotifier`), before those files are
+        opened via :meth:`open_file`. The default implementation does nothing: a `didChangeWatchedFiles`
+        notification followed by an open/close cycle is enough for most backends to fold a new file into
+        their index. Override this for a language server whose project system needs an explicit reload to
+        become aware of a file that did not exist when the project was first loaded.
+        """
 
     # --- Cross-workspace / additional workspace folder support ---
 
@@ -1964,11 +1976,12 @@ class SolidLanguageServer(ABC):
             # no cached result: get the raw root symbols from the language server
             document_symbols = self._build_document_symbols_from_raw_symbols(relative_file_path, file_buffer=file_data)
 
-            # update cache
+            # update cache (only cache non-empty results to avoid permanently caching unindexed responses)
             content_hash = file_data.content_hash
-            log.debug("Updating cached document symbols for %s (hash=%s)", relative_file_path, content_hash)
-            self._document_symbols_cache[cache_key] = (content_hash, document_symbols)
-            self._document_symbols_cache_is_modified = True
+            if document_symbols.root_symbols:
+                log.debug("Updating cached document symbols for %s (hash=%s)", relative_file_path, content_hash)
+                self._document_symbols_cache[cache_key] = (content_hash, document_symbols)
+                self._document_symbols_cache_is_modified = True
 
             return document_symbols
 
@@ -2160,7 +2173,10 @@ class SolidLanguageServer(ABC):
                 elif os.path.isfile(contained_dir_or_file_abs_path):
                     with self._open_file_context(contained_dir_or_file_rel_path, open_in_ls=False) as file_data:
                         document_symbols = self.request_document_symbols(contained_dir_or_file_rel_path, file_data)
-                        file_root_nodes = document_symbols.root_symbols
+
+                        # create shallow copies of the document root symbols to avoid modifying the cached symbols
+                        # when linking them to the file symbol #2126
+                        file_root_nodes = [r.copy() for r in document_symbols.root_symbols]
 
                         # Create file symbol, link with children
                         file_range = self._get_range_from_file_content(file_data.contents)
@@ -3037,38 +3053,10 @@ class SolidLanguageServer(ABC):
 
     def _load_raw_document_symbols_cache(self) -> None:
         cache_file = self.cache_dir / self.RAW_DOCUMENT_SYMBOL_CACHE_FILENAME
-
-        if not cache_file.exists():
-            # check for legacy cache to load to migrate
-            legacy_cache_file = self.cache_dir / self.RAW_DOCUMENT_SYMBOL_CACHE_FILENAME_LEGACY_FALLBACK
-            if legacy_cache_file.exists():
-                try:
-                    legacy_cache: dict[
-                        str, tuple[str, tuple[list[ls_types.UnifiedSymbolInformation], list[ls_types.UnifiedSymbolInformation]]]
-                    ] = load_pickle(legacy_cache_file)
-                    log.info("Migrating legacy document symbols cache with %d entries", len(legacy_cache))
-                    num_symbols_migrated = 0
-                    migrated_cache = {}
-                    for cache_key, (file_hash, (all_symbols, root_symbols)) in legacy_cache.items():
-                        if cache_key.endswith("-True"):  # include_body=True
-                            new_cache_key = cache_key[:-5]
-                            migrated_cache[new_cache_key] = (file_hash, root_symbols)
-                            num_symbols_migrated += len(all_symbols)
-                    log.info("Migrated %d document symbols from legacy cache", num_symbols_migrated)
-                    self._raw_document_symbols_cache = migrated_cache
-                    self._raw_document_symbols_cache_is_modified = True
-                    self._save_raw_document_symbols_cache()
-                    legacy_cache_file.unlink()
-                    return
-                except Exception as e:
-                    log.error("Error during cache migration: %s", e)
-                    return
-
-        # load existing cache (if any)
         if cache_file.exists():
             log.info("Loading document symbols cache from %s", cache_file)
             try:
-                saved_cache = load_cache(str(cache_file), self._raw_document_symbols_cache_version())
+                saved_cache = load_cache(str(cache_file), self._raw_document_symbols_cache_version(), loader=self._cache_loader)
                 if saved_cache is not None:
                     self._raw_document_symbols_cache = saved_cache
                     log.info(f"Loaded {len(self._raw_document_symbols_cache)} entries from raw document symbols cache.")
@@ -3103,7 +3091,7 @@ class SolidLanguageServer(ABC):
         if cache_file.exists():
             log.info("Loading document symbols cache from %s", cache_file)
             try:
-                saved_cache = load_cache(str(cache_file), self._document_symbols_cache_version())
+                saved_cache = load_cache(str(cache_file), self._document_symbols_cache_version(), loader=self._cache_loader)
                 if saved_cache is not None:
                     self._document_symbols_cache = saved_cache
                     log.info(f"Loaded {len(self._document_symbols_cache)} entries from document symbols cache.")

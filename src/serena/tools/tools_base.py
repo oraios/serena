@@ -235,6 +235,14 @@ class Tool(Component):
 
         return func_metadata(apply_fn, skip_names=["self", "cls"], structured_output=structured_output)
 
+    def _format_tool_params(self, params: dict) -> str:
+        """
+        Formats the tool parameters for logging
+        :param params: the parameters to format
+        :return: a string to be displayed in log messages, e.g. "param1=value1, param2=value2"
+        """
+        return dict_string(params)
+
     def _log_tool_application(self, frame: Any) -> None:
         params = {}
         ignored_params = {"self", "log_call", "catch_exceptions", "args", "apply_fn"}
@@ -245,7 +253,7 @@ class Tool(Component):
                 params.update(value)
             else:
                 params[param] = value
-        log.info(f"{self.get_name_from_cls()}: {dict_string(params)}")
+        log.info(f"{self.get_name_from_cls()}: {self._format_tool_params(params)}")
 
     def _resolve_max_answer_chars(self, max_answer_chars: int) -> int:
         """

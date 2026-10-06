@@ -439,7 +439,7 @@ class DashboardManager:
             fallback_mode = self.Mode.from_platform()
             log.warning(
                 f"Dashboard interface mode '{mode.value}' is not supported on the current platform; "
-                "falling back to '{fallback_mode.value}'."
+                f"falling back to '{fallback_mode.value}'."
             )
             mode = fallback_mode
 

@@ -124,8 +124,8 @@ When using Serena, we highly recommend that you start CC as
 claude --system-prompt="$(serena prompts print-cc-system-prompt-override)"
 ```
 
-You can also consider adding the content of `serena cc-system-prompt-override` to your `CLAUDE.md` files,
-but the effect be insufficient for counteracting Claude Code's bias towards internal tools.
+You can also consider adding the content of `serena prompts print-cc-system-prompt-override` to your `CLAUDE.md` files,
+but the effect may be insufficient for counteracting Claude Code's bias towards internal tools.
 :::
 
 **Global Configuration**. To add the Serena MCP server for all your projects, use the user-level configuration of claude code and the `--project-from-cwd` flag:
@@ -319,16 +319,9 @@ asking Codex to "Activate the current dir as project using serena" at the start 
 do this automatically).
 
 **Hooks.**
-Codex supports lifecycle hooks; see the
-[Codex hooks documentation](https://developers.openai.com/codex/hooks) for details. To enable
-Serena's hooks for Codex, add this feature flag to `~/.codex/config.toml`:
-
-```toml
-[features]
-codex_hooks = true
-```
-
-Then create `~/.codex/hooks.json` with the following content:
+Current Codex versions enable lifecycle hooks by default, so no feature flag is required. See the
+[Codex hooks documentation](https://developers.openai.com/codex/hooks) for details. Create
+`~/.codex/hooks.json` with the following content:
 
 ```json
 {
@@ -339,7 +332,20 @@ Then create `~/.codex/hooks.json` with the following content:
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "serena-hooks remind --client=codex"
+                        "command": "serena-hooks remind --client=codex",
+                        "statusMessage": "Checking Serena tool usage",
+                        "timeout": 5
+                    }
+                ]
+            },
+            {
+                "matcher": "^mcp__serena__",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "serena-hooks plan-guard --client=codex",
+                        "statusMessage": "Checking Serena plan-mode permissions",
+                        "timeout": 5
                     }
                 ]
             }
@@ -361,7 +367,21 @@ Then create `~/.codex/hooks.json` with the following content:
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "serena-hooks activate --client=codex"
+                        "command": "serena-hooks activate --client=codex",
+                        "statusMessage": "Activating Serena project",
+                        "timeout": 5
+                    }
+                ]
+            }
+        ],
+        "UserPromptSubmit": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "serena-hooks plan-context --client=codex",
+                        "statusMessage": "Applying Serena plan context",
+                        "timeout": 5
                     }
                 ]
             }
@@ -371,7 +391,9 @@ Then create `~/.codex/hooks.json` with the following content:
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "serena-hooks cleanup --client=codex"
+                        "command": "serena-hooks cleanup --client=codex",
+                        "statusMessage": "Cleaning up Serena hook state",
+                        "timeout": 3
                     }
                 ]
             }
@@ -380,13 +402,39 @@ Then create `~/.codex/hooks.json` with the following content:
 }
 ```
 
+These timeout values are specific to Codex. Without an explicit timeout, Codex allows most hooks
+to run for 600 seconds, so the five-second reminder and activation timeouts prevent a stuck hook
+from blocking a `Bash` call or session startup for that entire default. `SessionEnd` instead
+defaults to one second and supports at most three seconds, so the cleanup hook uses that maximum.
+Codex reports timed-out commands as hook failures. Other clients may have different timeout
+behaviour; in particular, the Grok cleanup example below intentionally remains at five seconds.
+
 The `SessionEnd` cleanup hook requires Codex 0.145.0 or newer. Older Codex versions only support
 `Stop` for cleanup, which currently has a [known compatibility issue](https://github.com/oraios/serena/issues/1533).
 If you still configure it, replace `SessionEnd` with `Stop` in the example above. Configure cleanup
 under exactly one of these events, never both: `Stop` runs after every turn, while `SessionEnd` runs
 when Codex tears down the root thread.
 
-The hooks will:
+Each Codex event maps to one Serena hook command:
+
+| Codex event | Serena command | When it runs |
+| --- | --- | --- |
+| `PreToolUse` with matcher `Bash` | `serena-hooks remind` | Before a shell command, to detect drift from Serena's symbolic tools |
+| `PreToolUse` with matcher `^mcp__serena__` | `serena-hooks plan-guard` | Before a Serena MCP tool call, to block edit-capable tools in plan mode |
+| `SessionStart` with matcher `startup\|resume` | `serena-hooks activate` | When a session starts or resumes, to prompt project activation |
+| `UserPromptSubmit` | `serena-hooks plan-context` | Before each prompt, to add read-only Serena guidance in plan mode |
+| `SessionEnd` | `serena-hooks cleanup` | When Codex tears down the root thread, to clean up hook session data |
+
+The distinct `statusMessage` values make the five kinds of hook activity distinguishable while
+they run.
+
+The reminder hook's `PreToolUse` matcher is intentionally restricted to `Bash`. It tracks
+shell-based grep and code-file reads, so running it for every tool call is unnecessary. The separate
+plan guard targets Serena MCP calls. While Codex reports `permission_mode: "plan"`, it blocks every
+Serena tool marked as edit-capable, including memory-writing and shell-command tools, while leaving
+read-only tools available. Both plan hooks evaluate the current event without retaining mode state,
+so they become silent and editing is available again as soon as Codex leaves plan mode; Serena's MCP
+server does not need to restart.
 
 - **`activate`**: Prompt the agent to activate the current project and read Serena's instructions
   when a Codex session starts or resumes.
@@ -401,6 +449,19 @@ grep and code-file reads, so running it for every tool call is unnecessary. That
 `mcp__serena__*` tool names, though, so it cannot also perform the counter reset on Serena tool use
 the way it does for clients whose `PreToolUse` hook observes every tool call. The separate `reset`
 hook above, matched to `PostToolUse` on Serena's own tools, covers that case for Codex instead.
+
+### Diagnosing opaque Codex hook failures
+
+Codex may report that a hook failed without identifying the configured command or showing enough
+of its output to diagnose the cause. [Codex issue #27052](https://github.com/openai/codex/issues/27052)
+tracks richer hook failure diagnostics. Use Codex's `/hooks` command first to inspect hook sources,
+trust state, and enabled hooks.
+
+While that issue remains open, an advanced local wrapper can add an inner timeout and capture a
+bounded, redacted tail of stdout and stderr. Keep wrappers out of the standard setup: they add
+another script and executable path, platform-specific timeout behaviour, log rotation and redaction
+concerns, and another hook definition hash to review and trust. Such wrappers work around Codex's
+diagnostic limitations; Serena does not require them.
 
 ## Grok
 
@@ -715,6 +776,71 @@ CodeBuddy supports the same hook system as Claude Code. To set up hooks, add the
 - **`auto-approve`**: Auto-approve Serena tool calls whenever CodeBuddy is in a permissive
   permission mode (`acceptEdits` or `auto`), so blanket approvals cover Serena's destructive
   tools (e.g. `replace_symbol_body`, `rename_symbol`) instead of prompting on every call.
+
+## ZCode
+
+Serena provides `serena-hooks` support for [ZCode](https://zcode.z.ai), Z.ai's coding agent harness. There is
+currently no `serena setup zcode` command (unlike Claude Code, CodeBuddy, Codex and Grok, ZCode does not
+document a CLI subcommand for registering an MCP server), so the MCP server has to be added manually.
+
+### Manual Setup
+
+Add Serena as an MCP server in ZCode's configuration (`~/.zcode/cli/config.json` for all workspaces, or
+`.zcode/config.json` in a project directory for that project only):
+
+```json
+{
+  "mcpServers": {
+    "serena": {
+      "enabled": true,
+      "type": "http",
+      "url": "http://127.0.0.1:9121/mcp"
+    }
+  }
+}
+```
+
+This assumes Serena is already running in [HTTP/SSE mode](streamable-http) on the given port; start it with
+`--context=zcode --project-from-cwd` for a single-project setup, or `--context=zcode` if you intend to
+activate a project from within the chat.
+
+### Hooks
+
+ZCode supports lifecycle hooks with the same event names as Claude Code (`SessionStart`, `PreToolUse`,
+`Stop`, ...). To set up hooks, add the following to your ZCode hooks configuration
+(`~/.zcode/cli/config.json` globally, or `.zcode/config.json` for a single project), under
+`hooks.events`, with `hooks.enabled` set to `true`:
+
+```json
+{
+  "hooks": {
+    "enabled": true,
+    "events": {
+      "SessionStart": [
+        { "hooks": [ { "type": "process", "command": "serena-hooks", "args": ["activate", "--client", "zcode"] } ] }
+      ],
+      "PreToolUse": [
+        { "matcher": "Read|Bash", "hooks": [ { "type": "process", "command": "serena-hooks", "args": ["remind", "--client", "zcode"] } ] }
+      ],
+      "Stop": [
+        { "hooks": [ { "type": "process", "command": "serena-hooks", "args": ["cleanup", "--client", "zcode"] } ] }
+      ]
+    }
+  }
+}
+```
+
+### Hook Descriptions
+
+- **`activate`**: Prompt the agent to activate the project at session start and read Serena's instructions.
+- **`remind`**: Remind the agent to use Serena's tools instead of built-in read and search tools.
+- **`cleanup`**: Clean up hook session data when the session ends.
+- **`auto-approve`**: Auto-approve Serena tool calls whenever ZCode is in a permissive permission mode, so
+  blanket approvals cover Serena's destructive tools (e.g. `replace_symbol_body`, `rename_symbol`) instead
+  of prompting on every call. Wire it to `serena-hooks auto-approve --client=zcode` the same way as
+  `remind` above; the exact matcher for restricting it to Serena's own tool calls has not been confirmed
+  against a live ZCode session, so start with an unscoped matcher and narrow it if ZCode's permission
+  prompts turn out to fire on non-Serena tools too.
 
 ## Other Clients
 
