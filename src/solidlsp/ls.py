@@ -16,7 +16,7 @@ from copy import copy
 from dataclasses import dataclass
 from pathlib import Path, PurePath
 from time import monotonic, perf_counter, sleep
-from typing import Any, NamedTuple, Self, Union, cast
+from typing import Any, Self, Union, cast
 
 import pathspec
 from sensai.util.helper import mark_used
@@ -224,12 +224,12 @@ class LSPFileBuffer:
         return self.contents.split("\n")
 
 
-class SelectionRangeMismatch(NamedTuple):
+@dataclass(frozen=True)
+class SelectionRangeMismatch:
     """
-    Records that a symbol's selectionRange fell outside its body range (see #1968). Logged both
-    at the point of detection (SymbolBodyFactory.create_symbol_body, unconditionally) and again
-    from SymbolBody.get_text() on every subsequent read - see the two call sites for why one
-    location alone isn't enough.
+    A symbol whose selectionRange lies outside the range its body is sliced from.
+    The LSP spec requires the former to be contained in the latter, so a mismatch indicates
+    a stale language server index, i.e. the body may belong to a different symbol.
     """
 
     symbol_name: str | None
@@ -237,6 +237,14 @@ class SelectionRangeMismatch(NamedTuple):
     selection_range: ls_types.Range
 
     def log(self, start_line: int, start_col: int, end_line: int, end_col: int) -> None:
+        """
+        Logs a warning describing the mismatch.
+
+        :param start_line: the start line of the body range
+        :param start_col: the start column of the body range
+        :param end_line: the end line of the body range
+        :param end_col: the end column of the body range
+        """
         log.warning(
             "Symbol '%s' in %s has a selectionRange %s outside of its body range "
             "(line %d, col %d) to (line %d, col %d); the extracted body may belong to a "
@@ -281,13 +289,7 @@ class SymbolBody(ToStringMixin):
         return ["_lines"]
 
     def get_text(self) -> str:
-        # Re-emit the stale-index warning (if any) on every read, in addition to the
-        # unconditional one already logged at construction (SymbolBodyFactory.create_symbol_body):
-        # this SymbolBody is also what ends up cached in DocumentSymbols - in memory and
-        # persisted to disk, keyed by file content hash - so a cache hit returns it without ever
-        # reaching the factory again. Without this, a caller that reads the body across a cache
-        # hit (same session or a later one) would see the warning fire at most once per file
-        # content. See #1968 review and the analogous constructor-vs-cached-instance fix in #1701.
+        # warn on every read, since cached instances are returned without being re-created
         if self._selection_range_mismatch is not None:
             self._selection_range_mismatch.log(self._start_line, self._start_col, self._end_line, self._end_col)
 
@@ -348,24 +350,7 @@ class SymbolBodyFactory:
         start_col = symbol["location"]["range"]["start"]["character"]
         end_col = symbol["location"]["range"]["end"]["character"]
 
-        # detect a language server response where the identifier position (selectionRange) falls
-        # outside the range the body is sliced from; such a mismatch typically indicates a stale
-        # index on the server side and would otherwise silently yield a body for the wrong symbol.
-        #
-        # Logged in *two* places, deliberately, not just one:
-        #  - Here, unconditionally, so the mismatch is visible even for callers that never read
-        #    the body text at all. request_document_symbols() builds a SymbolBody (and therefore
-        #    runs this check) for every symbol regardless of the include_body flags further up
-        #    the stack (Symbol.body / to_dict(body=...) / request_referencing_symbols(...)), and
-        #    those default to False in every tool-facing call site - a get_text()-only warning
-        #    would then only ever fire for the minority of calls that explicitly opt into body
-        #    text, silently missing it for the rest.
-        #  - Again, from SymbolBody.get_text() (see there), because this SymbolBody is also what
-        #    ends up cached in DocumentSymbols - in memory and persisted to disk, keyed by file
-        #    content hash - so a cache hit in request_document_symbols() returns it without ever
-        #    reaching this method again. For callers that *do* read the body, logging here alone
-        #    would still make the warning fire at most once per file content, even across
-        #    sessions.
+        # detect a selectionRange outside the body range (warned here as well, as the body text may never be read)
         selection_range = symbol.get("selectionRange")
         mismatch = None
         if selection_range is not None and not self._range_contains(selection_range, start_line, start_col, end_line, end_col):
