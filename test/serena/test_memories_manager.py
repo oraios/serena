@@ -844,3 +844,41 @@ class TestAutoPrefixBareReferences:
         # idempotent: the second run should not touch anything
         assert second.total_replacements == 0
         assert fs_manager.load_memory("docs") == "the mem:auth/login process"
+
+
+class TestRenameMemorySparesReadOnlyMemories:
+    """Regression: a tool-context rename enumerated read-only memories, so propagating the
+    reference into one raised ``PermissionError`` after the rename itself had already been applied.
+    """
+
+    @staticmethod
+    def _manager(tmp_path, monkeypatch) -> MemoryManager:
+        manager = MemoryManager(serena_data_folder=tmp_path, read_only_memory_patterns=[r"frozen/.*"])
+        # the global memories of the machine would otherwise join the enumeration as well
+        global_dir = tmp_path / "global"
+        global_dir.mkdir()
+        monkeypatch.setattr(manager, "_global_memory_dir", global_dir)
+        _write(manager, "auth/login", "# login notes")
+        _write(manager, "frozen/notes", "see `mem:auth/login`")
+        _write(manager, "docs", "first `mem:auth/login`, then `mem:auth/login`")
+        return manager
+
+    def test_tool_context_rename_completes_and_leaves_read_only_reference_alone(self, tmp_path, monkeypatch) -> None:
+        manager = self._manager(tmp_path, monkeypatch)
+
+        message, n_updated = manager.rename_memory_and_propagate_references("auth/login", "auth/signin", is_tool_context=True)
+
+        assert "auth/signin" in message
+        assert manager.load_memory("auth/signin") == "# login notes"
+        assert manager.load_memory("docs") == "first `mem:auth/signin`, then `mem:auth/signin`"
+        assert manager.load_memory("frozen/notes") == "see `mem:auth/login`"
+        assert n_updated == 2
+
+    def test_cli_context_rename_still_propagates_into_read_only_memories(self, tmp_path, monkeypatch) -> None:
+        manager = self._manager(tmp_path, monkeypatch)
+
+        _, n_updated = manager.rename_memory_and_propagate_references("auth/login", "auth/signin", is_tool_context=False)
+
+        assert manager.load_memory("frozen/notes") == "see `mem:auth/signin`"
+        assert manager.load_memory("docs") == "first `mem:auth/signin`, then `mem:auth/signin`"
+        assert n_updated == 3

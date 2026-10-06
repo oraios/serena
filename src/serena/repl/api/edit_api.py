@@ -227,8 +227,7 @@ class EditApi(FacadeApi):
         :return: a success message
         """
         code_editor = self._create_code_editor()
-        code_editor.delete_lines(relative_path, start_line, end_line)
-        code_editor.insert_at_line(relative_path, start_line, self._normalize_inserted_content(content))
+        code_editor.replace_lines(relative_path, start_line, end_line, self._normalize_inserted_content(content))
         return SUCCESS_RESULT
 
     @facade_method(optional=True, can_edit=True, corresponding_tool=InsertAtLineTool)

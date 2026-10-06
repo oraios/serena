@@ -14,7 +14,7 @@ from joblib import Parallel, delayed
 from sensai.util.string import ToStringMixin
 
 from serena.util.file_proxy import FileCollection, FileProxy
-from solidlsp.ls_utils import TextUtils
+from solidlsp.ls_utils import TextCoordinateProvider, TextCoordinates, TextUtils
 
 if TYPE_CHECKING:
     from serena.code_editor import CodeEditor
@@ -155,6 +155,10 @@ def search_text(
     lines = TextUtils.split_lines(content)
     total_lines = len(lines)
 
+    # precompute line start offsets once so that each match's coordinates can be resolved via binary search
+    # instead of re-scanning the text from the beginning for every match
+    coordinates = TextCoordinateProvider(content)
+
     # For multiline matches, optionally use DOTALL so '.' matches newlines
     flags = (re.MULTILINE | re.DOTALL) if multiline else 0
     compiled_pattern = re.compile(pattern, flags)
@@ -164,9 +168,10 @@ def search_text(
         end_pos = match.end()
 
         # Find the line numbers for the start and end positions
-        start_line_num = TextUtils.get_line_from_index(content, start_pos)
-        end_line_num = TextUtils.get_line_from_index(content, end_pos)
-        if end_line_num > start_line_num and TextUtils.get_line_col_from_index(content, end_pos)[1] == 0:
+        start_loc = coordinates.compute_coordinates(start_pos)
+        end_loc = coordinates.compute_coordinates(end_pos)
+        start_line_num, end_line_num = start_loc.line, end_loc.line
+        if end_line_num > start_line_num and end_loc.col == 0:
             # `end_pos` is exclusive, so if it is at the start of a line, the match ends with the
             # preceding line's newline and does not extend into the line that `end_pos` points to
             end_line_num -= 1
@@ -406,13 +411,18 @@ class ContentReplacer:
         self.regex_multiline = regex_multiline
 
     @staticmethod
-    def _create_replacement_function(regex_pattern: str, repl_template: str, regex_flags: int) -> Callable[[re.Match], str]:
+    def _create_replacement_function(
+        regex_pattern: str, repl_template: str, regex_flags: int, expand_backrefs: bool
+    ) -> Callable[[re.Match], str]:
         """
         Creates a replacement function that validates for ambiguity and handles backreferences.
 
         :param regex_pattern: The regex pattern being used for matching
-        :param repl_template: The replacement template with $!1, $!2, etc. for backreferences
+        :param repl_template: The replacement template; in regex mode, it may contain $!1, $!2, etc. for
+            backreferences; in literal mode, it is used verbatim
         :param regex_flags: The flags to use when searching (e.g., re.DOTALL | re.MULTILINE)
+        :param expand_backrefs: Whether $!N backreferences are expanded in the template; false in literal mode,
+            mirroring the mode gate in MultiFileContentReplacer.find_occurrences
         :return: A function suitable for use with re.sub() or re.subn()
         """
 
@@ -434,11 +444,19 @@ class ContentReplacer:
                     "e.g. by matching specific context after the match, or try using the literal mode."
                 )
 
-            # Handle backreferences: replace $!1, $!2, etc. with actual matched groups
+            # in literal mode, the template is the final replacement; $!N sequences need no escaping
+            if not expand_backrefs:
+                return repl_template
+
+            # Handle backreferences: replace $!1, $!2, etc. with actual matched groups; groups that
+            # exist but did not participate in the match expand to the empty string
             def expand_backreference(m: re.Match) -> str:
                 group_num = int(m.group(1))
-                group_value = match.group(group_num)
-                return group_value if group_value is not None else m.group(0)
+                try:
+                    group_value = match.group(group_num)
+                except IndexError as e:
+                    raise ValueError(f"Backreference $!{group_num} refers to a group that does not exist in the search expression") from e
+                return group_value if group_value is not None else ""
 
             result = re.sub(r"\$!(\d+)", expand_backreference, repl_template)
             return result
@@ -458,8 +476,8 @@ class ContentReplacer:
 
         :param content: the content in which to perform the replacement
         :param needle: the search expression, which is either a literal string or a regular expression, depending on the mode
-        :param repl: the replacement string, which, in regex mode, may contain backreferences in the form of $!1, $!2, etc. to
-            refer to matched groups in the search expression
+        :param repl: the replacement string; in regex mode, it may contain backreferences in the form of $!1, $!2, etc.
+            to refer to matched groups in the search expression; in literal mode, it is used verbatim
         :return: the updated content after performing the replacement
         """
         if self.mode == "literal":
@@ -471,8 +489,8 @@ class ContentReplacer:
 
         regex_flags = (re.MULTILINE | re.DOTALL) if self.regex_multiline else 0
 
-        # create replacement function with validation and backreference handling
-        repl_fn = self._create_replacement_function(regex, repl, regex_flags=regex_flags)
+        # create replacement function with ambiguity validation and, in regex mode, backreference handling
+        repl_fn = self._create_replacement_function(regex, repl, regex_flags=regex_flags, expand_backrefs=self.mode == "regex")
 
         # perform replacement
         updated_content, n = re.subn(regex, repl_fn, content, flags=regex_flags)
@@ -548,8 +566,12 @@ class MultiFileContentReplacer:
         """Expands $!1, $!2, ... in the replacement template (same syntax as :class:`ContentReplacer`)."""
 
         def expand(m: re.Match) -> str:
-            group_value = match.group(int(m.group(1)))
-            return group_value if group_value is not None else m.group(0)
+            group_num = int(m.group(1))
+            try:
+                group_value = match.group(group_num)
+            except IndexError as e:
+                raise ValueError(f"Backreference $!{group_num} refers to a group that does not exist in the search expression") from e
+            return group_value if group_value is not None else ""
 
         return re.sub(r"\$!(\d+)", expand, repl_template)
 
@@ -572,6 +594,14 @@ class MultiFileContentReplacer:
                 # matching again within the matched text indicates the match may have swallowed
                 # more than intended
                 is_ambiguous = "\n" in matched_text and pattern.search(matched_text[1:]) is not None
+
+                # the match end is exclusive, so a match that consumes a line break ends on the
+                # line before the one `match.end()` points at; `search_text` applies the same rule
+                start_line = content.count("\n", 0, match.start())
+                end_line = content.count("\n", 0, match.end())
+                if end_line > start_line and matched_text.endswith("\n"):
+                    end_line -= 1
+
                 occurrences.append(
                     ReplacementOccurrence(
                         occurrence_id=self.make_occurrence_id(relative_path, index_in_file, matched_text),
@@ -581,8 +611,8 @@ class MultiFileContentReplacer:
                         end=match.end(),
                         matched_text=matched_text,
                         replacement=replacement,
-                        start_line=content.count("\n", 0, match.start()),
-                        end_line=content.count("\n", 0, match.end()),
+                        start_line=start_line,
+                        end_line=end_line,
                         is_ambiguous=is_ambiguous,
                     )
                 )
@@ -633,6 +663,26 @@ class MultiFileContentReplacer:
             line_end = len(content)
         old_block = content[line_start:line_end]
         new_block = content[line_start : occ.start] + occ.replacement + content[occ.end : line_end]
+
+        # the file's final line break terminates the last line rather than starting a further one, so
+        # splitting an end-of-file window would materialize the empty remainder behind it as a phantom
+        # line; for a window ending before the file end, an empty remainder instead denotes a real
+        # blank line behind the match, which is merged away by it and therefore has to be shown
+        if line_end == len(content):
+            old_block = old_block.removesuffix("\n")
+            new_block = new_block.removesuffix("\n")
+
+        # the window runs to the next line break after the exclusive match end, so when the match
+        # itself consumed a line break the following line is included on both sides; drop such
+        # trailing lines, as a line the replacement leaves unchanged is not part of the change
+        old_lines = old_block.split("\n")
+        new_lines = new_block.split("\n")
+        while len(old_lines) > 1 and len(new_lines) > 1 and old_lines[-1] == new_lines[-1]:
+            old_lines.pop()
+            new_lines.pop()
+        old_block = "\n".join(old_lines)
+        new_block = "\n".join(new_lines)
+
         location = f"line {occ.start_line}" if occ.start_line == occ.end_line else f"lines {occ.start_line}-{occ.end_line}"
         header = f"  [{occ.occurrence_id}] {location}"
         if occ.is_ambiguous:
@@ -890,19 +940,7 @@ class MultiFileReplacement:
         return MultiFileReplacementResult({path: len(occs) for path, occs in occurrences_by_file.items()})
 
 
-@dataclass
-class TextCoords:
-    line: int
-    """
-    0-based line number
-    """
-    col: int
-    """
-    0-based column number
-    """
-
-
-def find_text_coordinates(content: str, regex: str, require_unique: bool = False) -> TextCoords | None:
+def find_text_coordinates(content: str, regex: str, require_unique: bool = False) -> TextCoordinates | None:
     """
     Finds the line and column number of the first match of a regex pattern in the given content.
 
@@ -927,7 +965,7 @@ def find_text_coordinates(content: str, regex: str, require_unique: bool = False
             raise ValueError(f"Regex must contain exactly one group to capture the position, but found {len(match.groups())} groups.")
         index_in_content = match.start(1)
         line, col = TextUtils.get_line_col_from_index(content, index_in_content)
-        return TextCoords(line, col)
+        return TextCoordinates(line, col)
 
 
 class TextOutputUtils:
