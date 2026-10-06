@@ -40,8 +40,10 @@ You can customize this location via project settings:
 ```yaml
 # .serena/project.yml
 language_servers:
+  - cpp
+ls_specific_settings:
   cpp:
-    compile_commands_dir: custom/rel/path (defaults to .serena)
+    compile_commands_dir: custom/rel/path  # defaults to .serena
 ```
 
 ### With ccls
@@ -76,7 +78,7 @@ choco install ccls
 #### Configuration
 
 After installing ccls, configure Serena to use it via project settings (in `.serena/project.yml`)
-by adding `cpp_ccls` to the `languages` list. Replace `cpp` with `cpp_ccls` if you already have the `cpp` entry.
+by adding `cpp_ccls` to the `language_servers` list. Replace `cpp` with `cpp_ccls` if you already have the `cpp` entry.
 
 ccls can handle relative paths in `compile_commands.json`, so no transformation is necessary
 and no transformed `compile_commands.json` file will be created.

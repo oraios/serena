@@ -80,7 +80,9 @@ def _spawn_ready(src: str) -> subprocess.Popen:
     test_pdeathsig.py's driver pattern (deterministic sync instead of a blind sleep).
     """
     proc = subprocess.Popen([sys.executable, "-c", src], start_new_session=True, stdout=subprocess.PIPE, text=True)
-    ready_line = proc.stdout.readline()
+    stdout = proc.stdout
+    assert stdout is not None
+    ready_line = stdout.readline()
     assert ready_line.strip() == "READY", f"helper process failed to start: {ready_line!r}"
     return proc
 
@@ -341,8 +343,10 @@ class TestPsutilDenialConsequences:
             """
         )
         proc = subprocess.Popen([sys.executable, "-c", src], start_new_session=True, stdout=subprocess.PIPE, text=True)
-        child_pid = int(proc.stdout.readline().strip())
-        ready_line = proc.stdout.readline()
+        stdout = proc.stdout
+        assert stdout is not None
+        child_pid = int(stdout.readline().strip())
+        ready_line = stdout.readline()
         assert ready_line.strip() == "READY", f"helper process failed to start: {ready_line!r}"
         return proc, child_pid
 

@@ -25,7 +25,7 @@ class TestFatouLanguageServer:
     def test_cross_file_references(self, language_server: SolidLanguageServer) -> None:
         references = language_server.request_references("src/fatou_a.jl", line=0, column=2)
 
-        locations = {(reference["relativePath"].replace("\\", "/"), reference["range"]["start"]["line"]) for reference in references}
+        locations = {(reference["relativePath"].replace("\\", "/"), reference["range"]["start"]["line"]) for reference in references}  # type: ignore
         assert locations >= {("src/fatou_a.jl", 1), ("src/fatou_b.jl", 0)}
 
     def test_file_matching(self) -> None:

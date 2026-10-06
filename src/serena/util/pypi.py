@@ -1,4 +1,5 @@
 """Utilities for querying package information from the Python Package Index (PyPI)."""
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import requests
 

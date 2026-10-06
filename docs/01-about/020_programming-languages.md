@@ -42,16 +42,18 @@ Some languages require additional installations or setup steps, as noted.
   subsumes `typescript` and `html` for `.ts`/`.html` files, so do not also list those)
 * **Ansible**  
   (experimental; requires Node.js and npm; automatically installs `@ansible/ansible-language-server`;
-  must be explicitly specified in the `languages` entry in the `project.yml`; requires `ansible` in PATH for full functionality)
+  must be explicitly specified in the `language_servers` entry in the `project.yml`; requires `ansible` in PATH for full functionality;
   the upstream `@ansible/ansible-language-server@1.2.3` supports hover, completion, definition,
   semantic tokens, and validation; document symbols, workspace symbols, references, and rename
   are not supported by this version)
+* **Astro**  
+  (requires Node.js v18+ and npm; supports `.astro` files plus TypeScript/JavaScript files via `@astrojs/language-server`; a companion `typescript-language-server` + `@astrojs/ts-plugin` is spawned automatically for cross-file rename, go-to-definition, and references across `.ts`/`.js` and `.astro` files; use language `astro` for Astro projects instead of also enabling `typescript`)
 * **Bash**
 * **BSL** (1C:Enterprise / OneScript)  
   (requires Java 21+ on PATH; uses [bsl-language-server](https://github.com/1c-syntax/bsl-language-server) by 1c-syntax; the JAR is auto-downloaded and SHA-256-verified for the bundled default version; supports `.bsl` and `.os` files; configure optional `ls_path` or `bsl_ls_version` under `ls_specific_settings.bsl`)
 * **C#**  
   (by default, uses the Roslyn language server (language `csharp`), requiring [.NET v10+](https://dotnet.microsoft.com/en-us/download/dotnet) and, on Windows, `pwsh` ([PowerShell 7+](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows?view=powershell-7.5));
-  set language to `csharp_omnisharp` to use OmiSharp instead)
+  set language to `csharp_omnisharp` to use OmniSharp instead)
 * **C/C++**  
   (by default, uses the clangd language server (language `cpp`) but we also support ccls (language `cpp_ccls`);
   for best results, provide a `compile_commands.json` at the repository root;
@@ -65,11 +67,11 @@ Some languages require additional installations or setup steps, as noted.
 * **Dart**
 * **Elixir**  
   (requires Elixir installation; Expert language server is downloaded automatically)
-* **Elm**  
-  (requires Elm compiler)
 * **Erlang**  
-  (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls); experimental, might be slow or hang;
-  note that functions are addressed as `name#arity`, e.g. `create_user#4`, because `/` is reserved as the name path separator)
+  (uses the [Erlang Language Platform](https://github.com/WhatsApp/erlang-language-platform); Serena downloads the pinned platform release automatically; requires Erlang/OTP; functions are addressed as `name#arity`, e.g. `create_user#4`, because `/` is reserved as the name path separator)
+* **Elm**
+
+  (requires Elm compiler)
 * **F#**  
   (requires [.NET v8.0+](https://dotnet.microsoft.com/en-us/download/dotnet); uses FsAutoComplete/Ionide, which is auto-installed; for Homebrew .NET on macOS, set DOTNET_ROOT in your environment)
 * **Fortran**   
@@ -83,7 +85,8 @@ Some languages require additional installations or setup steps, as noted.
 * **Go**  
   (requires installation of `gopls`)
 * **Groovy**  
-  (requires local groovy-language-server.jar setup via `GROOVY_LS_JAR_PATH` or configuration)
+  (requires a local groovy-language-server.jar, configured via `ls_jar_path` in `ls_specific_settings`;
+  see the [Groovy Setup Guide](../03-special-guides/groovy_setup_guide_for_serena) for details)
 * **Haskell**  
   (automatically locates HLS via ghcup, stack, or system PATH; supports Stack and Cabal projects)
 * **Haxe**
@@ -136,7 +139,9 @@ Some languages require additional installations or setup steps, as noted.
 * **PHP**  
   (by default, uses the Intelephense language server (language `php`), set `INTELEPHENSE_LICENSE_KEY` environment variable for premium features;
   we also support [Phpactor](https://github.com/phpactor/phpactor) (language `php_phpactor`), which requires PHP 8.1+;
-  and the experimental [PHPantom](https://github.com/PHPantom-dev/phpantom_lsp) backend (language `php_phpantom`)
+  the experimental [PHPantom](https://github.com/PHPantom-dev/phpantom_lsp) backend (language `php_phpantom`);
+  and the experimental standalone [Devsense PHP Language Server](https://www.npmjs.com/package/devsense-php-ls)
+  (language `php_devsense`), which is installed with npm when needed
 * **PowerShell**  
   (requires PowerShell 7+ (`pwsh`) on PATH or in a standard install location; Serena automatically downloads PowerShell Editor Services 4.4.0 and installs PSScriptAnalyzer 1.25.0 via `Save-Module` from your configured PowerShell repository)
 * **Python**
@@ -190,8 +195,9 @@ Some languages require additional installations or setup steps, as noted.
 * **Zig**  
   (requires installation of ZLS - Zig Language Server)
 
-Support for further languages can easily be added by providing a shallow adapter for a new language server implementation,
-see Serena's [memory on that](https://github.com/oraios/serena/blob/main/.serena/memories/adding_new_language_support_guide.md).
+Additional language servers can easily be supported by providing an adapter implementation;
+see our [contribution guide](https://github.com/oraios/serena/blob/main/CONTRIBUTING.md).
+If you need to support a custom language server which is not yet publicly available, you have the option to [register an external language server](external-ls-registration).
 
 ## The Serena JetBrains Plugin
 

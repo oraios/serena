@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from __future__ import annotations
 
 import logging
@@ -15,98 +17,110 @@ from serena.util.git import get_git_status
 log = logging.getLogger(__name__)
 
 VersionPart = Literal["major", "minor", "patch"]
+#: a version part to bump or, in the case of "current", the version already reserved by the current .dev version
+VersionTarget = Literal["major", "minor", "patch", "current"]
 _VERSION_PATTERN = re.compile(r"^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(\.\w+)?$")
 _INIT_VERSION_PATTERN = re.compile(r'^(?P<before>__version__\s*=\s*")(?P<version>\d+\.\d+\.\d+(?:\.\w+)?)(?P<after>"\s*)$', re.MULTILINE)
 _PYPROJECT_VERSION_PATTERN = re.compile(
     r'(?m)^(?P<before>\[project\]\n(?:.*\n)*?^version\s*=\s*")(?P<version>\d+\.\d+\.\d+(?:\.\w+)?)(?P<after>"\s*)$'
 )
+_VERSION_SUFFIX_PATTERN = re.compile(r"^\d+\.\d+\.\d+\.(?P<suffix>\w+)$")
 _UNRELEASED_HEADER = "# Unreleased (main)\n"
 
 
-@click.command()
-@click.option("--major", "major", is_flag=True, help="Bump the major version and reset minor and patch to 0.")
-@click.option("--minor", "minor", is_flag=True, help="Bump the minor version and reset patch to 0.")
-@click.option("--patch", "patch", is_flag=True, help="Bump the patch version.")
-@click.option("--version", "-v", "target_version", metavar="X.Y.Z", help="Set an explicit version instead of bumping.")
-@click.option("--dry-run", is_flag=True, help="Show what would change without writing any files.")
-def bump_version(major: bool, minor: bool, patch: bool, target_version: str | None, dry_run: bool) -> None:
-    git_status = get_git_status()
-    if not git_status.is_clean:
-        raise click.ClickException("Working directory is not clean. Please commit or stash your changes first.")
+_version_target_argument = click.argument("version_target", type=click.Choice(["current", "major", "minor", "patch"]))
+_version_part_argument = click.argument("version_part", type=click.Choice(["major", "minor", "patch"]))
+_dry_run_option = click.option("--dry-run", is_flag=True, help="Show what would change without writing any files.")
 
-    log.info("bump_version called: major=%s, minor=%s, patch=%s, target_version=%s", major, minor, patch, target_version)
 
-    # determine part to bump
-    version_part = resolve_version_selection(major=major, minor=minor, patch=patch, target_version=target_version)
-    log.info("Resolved version_part=%s", version_part)
+@click.group()
+def cli() -> None:
+    """Manages the Serena version."""
 
-    # bump it (never incrementing patch because it was already updated with the last .dev version)
+
+@cli.command()
+@_version_target_argument
+@_dry_run_option
+def release(version_target: VersionTarget, dry_run: bool) -> None:
+    """Bumps the version for a release and starts the next dev iteration.
+
+    Bumps the version, updates the changelog, commits and tags the release, and then commits
+    the subsequent .dev0 version.
+
+    VERSION_TARGET is either "current", releasing the version already reserved by the current .dev version
+    (the usual case), or the part of the version to bump beyond it (major, minor or patch).
+    """
+    require_clean_working_directory()
+    log.info("release called: version_target=%s", version_target)
+
     repo_root = find_repo_root()
     log.info("Repo root: %s", repo_root)
-    new_version = bump_repo_version(
-        repo_root, version_part=version_part, target_version=target_version, dry_run=dry_run, increment_patch=False
-    )
-    log.info("New version: %s", new_version)
 
-    # commit and tag for new version
+    # bump to the release version
+    new_version = bump_repo_version(repo_root, version_target=version_target, dry_run=dry_run)
+    log.info("New version: %s", new_version)
     if dry_run:
         click.echo(f"Dry run complete. Version would be bumped to {new_version}")
         return
-    else:
-        os.system("uv lock")
-        click.echo(f"Bumped version to {new_version}")
-        os.system("git add -u")
-        os.system(f'git commit -m "Release v{new_version}"')
-        os.system(f"git tag v{new_version}")
 
-    # bump patch and add suffix for next dev iteration
-    new_snapshot_version = bump_repo_version(
-        repo_root,
-        version_part="patch",
-        target_version=None,
-        dry_run=dry_run,
-        target_version_suffix=".dev0",
-        increment_patch=True,
-    )
+    # commit and tag the release version
+    commit_version_change(new_version, message=f"Release v{new_version}")
+    os.system(f"git tag v{new_version}")
+
+    # bump patch and add the suffix for the next dev iteration
+    new_snapshot_version = bump_repo_version(repo_root, version_target="patch", dry_run=dry_run, target_version_suffix=".dev0")
     log.info("New snapshot version: %s", new_snapshot_version)
+    commit_version_change(new_snapshot_version, message=f"Set version to v{new_snapshot_version}")
 
-    # commit the new snapshot version
+
+@cli.command()
+@_version_part_argument
+@_dry_run_option
+def dev(version_part: VersionPart, dry_run: bool) -> None:
+    """Bumps the development version without creating a release.
+
+    Sets the version to a new .dev0 version and commits it; no tag is created and the changelog
+    is not modified.
+
+    VERSION_PART is the part of the version to bump (major, minor or patch).
+    """
+    require_clean_working_directory()
+    log.info("dev called: version_part=%s", version_part)
+
+    repo_root = find_repo_root()
+    log.info("Repo root: %s", repo_root)
+
+    new_version = bump_repo_version(repo_root, version_target=version_part, dry_run=dry_run, target_version_suffix=".dev0")
+    log.info("New version: %s", new_version)
+    if dry_run:
+        click.echo(f"Dry run complete. Version would be bumped to {new_version}")
+        return
+
+    commit_version_change(new_version, message=f"Set version to v{new_version}")
+
+
+def require_clean_working_directory() -> None:
+    if not get_git_status().is_clean:
+        raise click.ClickException("Working directory is not clean. Please commit or stash your changes first.")
+
+
+def commit_version_change(new_version: str, *, message: str) -> None:
     os.system("uv lock")
-    click.echo(f"Bumped version to {new_snapshot_version}")
+    click.echo(f"Bumped version to {new_version}")
     os.system("git add -u")
-    os.system(f'git commit -m "Set version to v{new_snapshot_version}"')
+    os.system(f'git commit -m "{message}"')
 
 
 def find_repo_root() -> Path:
     return Path(REPO_ROOT)
 
 
-def resolve_version_selection(*, major: bool, minor: bool, patch: bool, target_version: str | None) -> VersionPart | None:
-    bump_flags_selected = sum([major, minor, patch])
-    if target_version is not None and bump_flags_selected > 0:
-        raise click.ClickException("Use either --version or one of --major/--minor/--patch, not both.")
-    if bump_flags_selected > 1:
-        raise click.ClickException("Use only one of --major, --minor, or --patch.")
-    if target_version is not None:
-        validate_version_string(target_version)
-        return None
-    if major:
-        return "major"
-    if minor:
-        return "minor"
-    if patch:
-        return "patch"
-    raise click.ClickException("No version bump selected. Use --major, --minor, --patch or --version.")
-
-
 def bump_repo_version(
     repo_root: Path,
     *,
-    version_part: VersionPart | None,
-    target_version: str | None,
+    version_target: VersionTarget,
     dry_run: bool = False,
     target_version_suffix: str | None = None,
-    increment_patch: bool = True,
 ) -> str:
     pyproject_path = repo_root / "pyproject.toml"
     init_path = repo_root / "src" / "serena" / "__init__.py"
@@ -128,12 +142,12 @@ def bump_repo_version(
             f"Version mismatch between pyproject.toml and src/serena/__init__.py: {current_version} != {init_version}"
         )
 
-    if target_version is not None:
-        new_version = validate_version_string(target_version)
-    else:
-        if version_part is None:
-            raise click.ClickException("No version target specified.")
-        new_version = increment_version(current_version, version_part, increment_patch=increment_patch)
+    if version_target == "current" and _VERSION_SUFFIX_PATTERN.search(current_version) is None:
+        raise click.ClickException(
+            f"The current version {current_version} is not a development version, so there is no reserved version to release. "
+            f"Use major, minor or patch to bump the version instead."
+        )
+    new_version = increment_version(current_version, version_target)
     if target_version_suffix is not None:
         new_version += target_version_suffix
     log.info("New version will be: %s", new_version)
@@ -197,7 +211,14 @@ def replace_version(text: str, pattern: re.Pattern[str], new_version: str, file_
     return f"{text[: match.start('version')]}{new_version}{text[match.end('version') :]}"
 
 
-def increment_version(version: str, version_part: VersionPart, increment_patch: bool) -> str:
+def increment_version(version: str, version_target: VersionTarget) -> str:
+    """
+    Computes the new version, dropping any development suffix of the given version.
+
+    :param version: the current version
+    :param version_target: the part of the version to bump or "current" to keep the version as is
+    :return: the new version
+    """
     match = _VERSION_PATTERN.fullmatch(version)
     if match is None:
         raise click.ClickException(f"Unsupported version format: {version}")
@@ -206,22 +227,17 @@ def increment_version(version: str, version_part: VersionPart, increment_patch: 
     minor = int(match.group("minor"))
     patch = int(match.group("patch"))
 
-    if version_part == "major":
-        return f"{major + 1}.0.0"
-    if version_part == "minor":
-        return f"{major}.{minor + 1}.0"
-    elif version_part == "patch":
-        if increment_patch:
-            patch += 1
-        return f"{major}.{minor}.{patch}"
-    else:
-        raise ValueError(version_part)
-
-
-def validate_version_string(version: str) -> str:
-    if _VERSION_PATTERN.fullmatch(version) is None:
-        raise click.ClickException(f"Unsupported version format: {version}")
-    return version
+    match version_target:
+        case "major":
+            return f"{major + 1}.0.0"
+        case "minor":
+            return f"{major}.{minor + 1}.0"
+        case "patch":
+            return f"{major}.{minor}.{patch + 1}"
+        case "current":
+            return f"{major}.{minor}.{patch}"
+        case _:
+            raise ValueError(version_target)
 
 
 def update_changelog(changelog_text: str, new_version: str) -> str:
@@ -276,4 +292,4 @@ def split_unreleased_body(unreleased_body: str) -> tuple[str, str]:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, format="%(levelname)s %(name)s: %(message)s")
     log.info("Script starting")
-    bump_version()
+    cli()

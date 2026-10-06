@@ -100,6 +100,202 @@ class TestWriteFileAtomic:
         assert target.read_text(encoding="utf-8") == "new"
 
 
+def _linear_should_ignore(parser: GitignoreParser, path: str) -> bool:
+    """Reproduce the pre-index lookup, independently of the parser's private index."""
+    if os.path.isabs(path):
+        try:
+            rel_path = os.path.relpath(path, parser.repo_root)
+        except Exception:
+            return True
+    else:
+        rel_path = path
+    if Path(rel_path).parts[0] == ".git":
+        return True
+    abs_path = os.path.join(parser.repo_root, rel_path)
+    rel_path = rel_path.replace(os.sep, "/")
+    if os.path.exists(abs_path) and os.path.isdir(abs_path) and not rel_path.endswith("/"):
+        rel_path += "/"
+    for spec in parser.ignore_specs:
+        if spec.matches(rel_path):
+            return True
+    return False
+
+
+def _assert_linear_equivalence(parser: GitignoreParser, root: Path) -> None:
+    for entry in root.rglob("*"):
+        relative = entry.relative_to(root).as_posix()
+        paths = [relative, str(entry), "./" + relative]
+        if entry.is_dir():
+            paths.extend([relative + "/", str(entry) + "/"])
+        for path in paths:
+            assert parser.should_ignore(path) == _linear_should_ignore(parser, path), path
+
+
+def test_nested_lookup_equivalence(tmp_path: Path):
+    directories = [tmp_path]
+    level = [tmp_path]
+    for _ in range(2):
+        level = [parent / name for parent in level for name in ("left", "right")]
+        for directory in level:
+            directory.mkdir()
+        directories.extend(level)
+    for index, directory in enumerate(directories):
+        (directory / ".gitignore").write_text(f"/anchored-{index}\nloose-{index}\n**/deep-{index}\n*.tmp\n!keep.tmp\nblocked-{index}/\n")
+        # Each spec's names occur both inside and outside its subtree, at every depth.
+        for target in directories:
+            for name in (f"anchored-{index}", f"loose-{index}", f"deep-{index}"):
+                (target / name).touch()
+        (directory / f"blocked-{index}").mkdir()
+        for name in ("drop.tmp", "keep.tmp", "plain.txt"):
+            (directory / name).touch()
+    parser = GitignoreParser(str(tmp_path))
+    assert len(parser.ignore_specs) == len(directories)
+    _assert_linear_equivalence(parser, tmp_path)
+
+
+@pytest.mark.parametrize("pattern", ["/drop.txt", "drop.txt", "**/drop.txt"])
+def test_literal_gitignore_directory(tmp_path: Path, pattern: str):
+    for name in ("a[bc]", "ab"):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "drop.txt").touch()
+    (tmp_path / "a[bc]" / ".gitignore").write_text(pattern)
+    parser = GitignoreParser(str(tmp_path))
+    assert parser.should_ignore("a[bc]/drop.txt")
+    assert not parser.should_ignore("ab/drop.txt")
+    # Also pin the compiled patterns used by Project's combined spec.
+    assert parser.ignore_specs[0].matches("a[bc]/drop.txt")
+    assert not parser.ignore_specs[0].matches("ab/drop.txt")
+    _assert_linear_equivalence(parser, tmp_path)
+
+
+@pytest.mark.parametrize("directory_name", [" nested", "nested ", " nested "])
+def test_whitespace_gitignore_directory(tmp_path: Path, directory_name: str):
+    if sys.platform == "win32" and directory_name.endswith(" "):
+        pytest.skip("Windows does not support directory names with trailing spaces")
+    for name in (directory_name, "nested"):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "drop.txt").touch()
+    (tmp_path / directory_name / ".gitignore").write_text("/drop.txt\n")
+    parser = GitignoreParser(str(tmp_path))
+    assert parser.should_ignore(f"{directory_name}/drop.txt")
+    assert not parser.should_ignore("nested/drop.txt")
+    _assert_linear_equivalence(parser, tmp_path)
+
+
+def test_discovery_prune_spec(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    for name in ("build/sub", "outside"):
+        directory = tmp_path / name
+        directory.mkdir(parents=True)
+        (directory / ".gitignore").write_text("*.tmp\n")
+    unpruned = GitignoreParser(str(tmp_path))
+    assert len(unpruned.ignore_specs) == 2
+    assert unpruned.should_ignore("build/sub/drop.tmp")
+    scandir = os.scandir
+    entered = []
+
+    def record_scan(path):
+        entered.append(Path(path))
+        return scandir(path)
+
+    monkeypatch.setattr(os, "scandir", record_scan)
+    parser = GitignoreParser(str(tmp_path), prune_spec=PathSpec.from_lines("gitwildmatch", ["build/"]))
+    assert [Path(spec.file_path).relative_to(tmp_path).as_posix() for spec in parser.ignore_specs] == ["outside/.gitignore"]
+    assert tmp_path / "build" not in entered
+    assert tmp_path / "build/sub" not in entered
+    assert parser.should_ignore("outside/drop.tmp")
+
+
+def test_discovery_wildcard_prune_spec(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    for name in ("rounds/one/evidence/deep", "rounds/two/source"):
+        directory = tmp_path / name
+        directory.mkdir(parents=True)
+        (directory / ".gitignore").write_text("*.tmp\n")
+    scandir = os.scandir
+    entered = []
+    should_ignore = GitignoreParser.should_ignore
+    checked = []
+
+    def record_scan(path):
+        entered.append(Path(path))
+        return scandir(path)
+
+    def record_check(parser, path):
+        checked.append(Path(path).as_posix())
+        return should_ignore(parser, path)
+
+    monkeypatch.setattr(os, "scandir", record_scan)
+    monkeypatch.setattr(GitignoreParser, "should_ignore", record_check)
+    parser = GitignoreParser(str(tmp_path), prune_spec=PathSpec.from_lines("gitwildmatch", ["rounds/*/evidence/"]))
+    assert tmp_path / "rounds/one/evidence" not in entered
+    assert tmp_path / "rounds/one/evidence/deep" not in entered
+    assert tmp_path / "rounds/two" in entered
+    assert tmp_path / "rounds/two/source" in entered
+    assert "rounds/one/evidence" not in checked
+    assert [Path(spec.file_path).relative_to(tmp_path).as_posix() for spec in parser.ignore_specs] == ["rounds/two/source/.gitignore"]
+
+
+def test_discovery_matches_cost(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    depth = 3
+    directories = [tmp_path]
+    level = [tmp_path]
+    for _ in range(depth):
+        level = [parent / f"d{i}" for parent in level for i in range(4)]
+        for directory in level:
+            directory.mkdir()
+        directories.extend(level)
+    for directory in directories:
+        (directory / ".gitignore").write_text("*.ignored\n")
+    matches = GitignoreSpec.matches
+    calls = 0
+
+    def count_matches(spec: GitignoreSpec, path: str) -> bool:
+        nonlocal calls
+        calls += 1
+        return matches(spec, path)
+
+    monkeypatch.setattr(GitignoreSpec, "matches", count_matches)
+    parser = GitignoreParser(str(tmp_path))
+    assert len(parser.ignore_specs) == len(directories) == 85
+    assert calls <= len(directories) * (depth + 1)
+    assert calls < len(directories) * len(parser.ignore_specs)
+
+
+def test_reload_rebuilds_lookup(tmp_path: Path):
+    (tmp_path / "nested").mkdir()
+    root_ignore = tmp_path / ".gitignore"
+    nested_ignore = tmp_path / "nested/.gitignore"
+    root_ignore.write_text("*.old\n")
+    nested_ignore.write_text("*.nested\n")
+    for name in ("file.old", "file.nested", "file.new"):
+        (tmp_path / "nested" / name).touch()
+    parser = GitignoreParser(str(tmp_path))
+    public_specs = parser.get_ignore_specs()
+    _assert_linear_equivalence(parser, tmp_path)
+    root_ignore.unlink()
+    nested_ignore.write_text("*.new\n")
+    parser.reload()
+    assert parser.get_ignore_specs() is public_specs
+    assert len(public_specs) == 1
+    assert not parser.should_ignore("nested/file.old")
+    assert not parser.should_ignore("nested/file.nested")
+    assert parser.should_ignore("nested/file.new")
+    _assert_linear_equivalence(parser, tmp_path)
+
+
+def test_public_ignore_specs_mutation_rebuilds_lookup(tmp_path: Path):
+    (tmp_path / "nested").mkdir()
+    (tmp_path / ".gitignore").write_text("*.old\n")
+    parser = GitignoreParser(str(tmp_path))
+    public_specs = parser.get_ignore_specs()
+    assert parser.should_ignore("nested/file.old")
+    public_specs.clear()
+    assert not parser.should_ignore("nested/file.old")
+    public_specs.append(GitignoreSpec(str(tmp_path / "nested/.gitignore"), ["nested/**/*.new"]))
+    assert parser.get_ignore_specs() is public_specs
+    assert parser.should_ignore("nested/file.new")
+    assert not parser.should_ignore("file.new")
+
+
 class TestGitignoreParser:
     """Test class for GitignoreParser functionality."""
 
@@ -201,6 +397,9 @@ temp/
 
         assert parser.repo_root == str(self.repo_path.absolute())
         assert len(parser.get_ignore_specs()) == 4
+
+    def test_fixture_lookup_equivalence(self):
+        _assert_linear_equivalence(GitignoreParser(str(self.repo_path)), self.repo_path)
 
     def test_find_gitignore_files(self):
         """Test finding all gitignore files in repository, including deeply nested ones."""
@@ -920,3 +1119,101 @@ class TestGitignoreParserPermissionError:
         finally:
             # Restore permissions so teardown can clean up
             os.chmod(unreadable, old_mode)
+
+
+class TestWriteFileAtomicSymlinks:
+    """``write_file_atomic`` replaces ``open(path, "w")`` at its call sites, so it has to agree
+    with it about symlinks: a plain write follows the link and updates its target, whereas a bare
+    ``os.replace`` onto the link path would swap the link itself out for a regular file and leave
+    the target holding stale content (issue #1958 asks for symlink behaviour to be preserved
+    before source files use this).
+    """
+
+    @staticmethod
+    def _symlink_or_skip(link: Path, target: Path) -> None:
+        """Windows needs developer mode or admin rights to create a symlink; skip there rather
+        than fail, matching how ``test_memories_manager.py`` handles the same limitation.
+        """
+        try:
+            link.symlink_to(target)
+        except OSError as e:
+            pytest.skip(f"cannot create symlinks on this platform/permissions: {e}")
+
+    def test_writes_through_a_symlink_instead_of_replacing_it(self, tmp_path):
+        target = tmp_path / "real.txt"
+        target.write_text("old", encoding="utf-8")
+        link = tmp_path / "link.txt"
+        self._symlink_or_skip(link, target)
+
+        write_file_atomic(str(link), "new", encoding="utf-8")
+
+        assert link.is_symlink(), "the symlink must survive the write, not be replaced by a regular file"
+        assert target.read_text(encoding="utf-8") == "new", "the content must reach the link's target"
+
+    def test_writes_through_a_symlink_pointing_outside_its_directory(self, tmp_path):
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        target = outside / "real.txt"
+        target.write_text("old", encoding="utf-8")
+        inside = tmp_path / "inside"
+        inside.mkdir()
+        link = inside / "link.txt"
+        self._symlink_or_skip(link, target)
+
+        write_file_atomic(str(link), "new", encoding="utf-8")
+
+        assert link.is_symlink()
+        assert target.read_text(encoding="utf-8") == "new"
+        assert list(inside.iterdir()) == [link], "no temp file may be left beside the link"
+
+    def test_broken_symlink_creates_its_target(self, tmp_path):
+        """``open(path, "w")`` on a dangling link creates the target; this must do the same."""
+        target = tmp_path / "missing.txt"
+        link = tmp_path / "link.txt"
+        self._symlink_or_skip(link, target)
+
+        write_file_atomic(str(link), "new", encoding="utf-8")
+
+        assert link.is_symlink()
+        assert target.read_text(encoding="utf-8") == "new"
+
+    def test_writes_through_a_symlinked_parent_directory(self, tmp_path):
+        """The path is resolved in full, so a symlinked *directory* on the way to the file is
+        followed too, and the temporary file is created in the destination's real directory (it has
+        to be on the same filesystem as the destination for the rename to be atomic).
+        """
+        real_dir = tmp_path / "real_dir"
+        real_dir.mkdir()
+        target = real_dir / "file.txt"
+        target.write_text("old", encoding="utf-8")
+        link_dir = tmp_path / "link_dir"
+        self._symlink_or_skip(link_dir, real_dir)
+
+        write_file_atomic(str(link_dir / "file.txt"), "new", encoding="utf-8")
+
+        assert link_dir.is_symlink(), "the directory symlink must survive"
+        assert target.read_text(encoding="utf-8") == "new"
+        assert list(real_dir.iterdir()) == [target], "no temp file may be left in the real directory"
+
+    def test_non_ascii_filename_round_trips(self, tmp_path):
+        target = tmp_path / "測試檔案.txt"
+        try:
+            target.write_text("old", encoding="utf-8")
+        except (OSError, UnicodeError) as e:
+            pytest.skip(f"cannot create non-ASCII filenames on this filesystem: {e}")
+
+        write_file_atomic(str(target), "new", encoding="utf-8")
+
+        assert target.read_text(encoding="utf-8") == "new"
+        assert list(tmp_path.iterdir()) == [target]
+
+    def test_regular_file_is_written_in_place(self, tmp_path):
+        """Control: the symlink handling must not change the ordinary case."""
+        target = tmp_path / "plain.txt"
+        target.write_text("old", encoding="utf-8")
+
+        write_file_atomic(str(target), "new", encoding="utf-8")
+
+        assert not target.is_symlink()
+        assert target.read_text(encoding="utf-8") == "new"
+        assert list(tmp_path.iterdir()) == [target]

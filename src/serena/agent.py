@@ -1,6 +1,7 @@
 """
 The Serena Model Context Protocol (MCP) Server
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import json
 import multiprocessing
@@ -16,7 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from logging import Logger
-from typing import TYPE_CHECKING, Optional, TypeVar
+from typing import TYPE_CHECKING, Optional, TypeVar, cast
 
 import requests
 import webview
@@ -30,10 +31,11 @@ from serena import serena_version
 from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import (
-    LanguageBackend,
+    AgentInterface,
     ModeSelectionDefinition,
     ModeSelectionDefinitionWithAddedModes,
     ModeSelectionDefinitionWithBaseModes,
+    NamedApiInclusionDefinition,
     NamedToolInclusionDefinition,
     RegisteredProject,
     SerenaConfig,
@@ -41,19 +43,30 @@ from serena.config.serena_config import (
     ToolInclusionDefinition,
 )
 from serena.dashboard import SerenaDashboardAPI, SerenaDashboardTrayManager, SerenaDashboardViewer, open_url_in_browser
-from serena.jetbrains import launch_coordinator as jetbrains_launch_coordinator
+from serena.language_backend import BuiltinLanguageBackend, LanguageBackend
 from serena.ls_manager import LanguageServerManager
 from serena.memories.memory_manager import MemoryManager
 from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
+from serena.repl.api.cfg_api import ConfigApi
+from serena.repl.api.edit_api import EditApi
+from serena.repl.api.ext_api import ExternalProjectsApi
+from serena.repl.api.fs_api import FsApi
+from serena.repl.api.mem_api import MemoryApi
+from serena.repl.api.shell_api import ShellApi
+from serena.repl.facade import ApiScope, Facade
+from serena.repl.repl import SerenaRepl
+from serena.session import SerenaSession, SessionRegistry
 from serena.task_executor import TaskExecutor
 from serena.tools import (
     ActivateProjectTool,
     GetCurrentConfigTool,
+    InitialInstructionsTool,
     OnboardingTool,
     OpenDashboardTool,
     ReadMemoryTool,
     ReplaceContentTool,
+    SerenaReplTool,
     Tool,
     ToolMarker,
     ToolRegistry,
@@ -61,7 +74,7 @@ from serena.tools import (
 from serena.util.gui import system_has_usable_display
 from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
-from solidlsp.ls_config import LanguageServerId
+from solidlsp.ls_config import LanguageServerIdLike
 from solidlsp.util import subprocess_util
 from solidlsp.util.subprocess_util import terminate_process_tree_with_kill_fallback
 
@@ -426,7 +439,7 @@ class DashboardManager:
             fallback_mode = self.Mode.from_platform()
             log.warning(
                 f"Dashboard interface mode '{mode.value}' is not supported on the current platform; "
-                "falling back to '{fallback_mode.value}'."
+                f"falling back to '{fallback_mode.value}'."
             )
             mode = fallback_mode
 
@@ -566,9 +579,12 @@ class SerenaAgent:
         self._gui_log_viewer: Optional["GuiLogViewer"] = None
         self._dashboard_manager: DashboardManager | None = None
         self._project_prompt_status = ProjectPromptProvisionStatus()
+        self._session_registry = SessionRegistry()
         self._session_mode_selection_definition = modes
         self.version = serena_version()
         self._config_changed_callbacks: list[Callable[[], None]] = []
+        self._repl: SerenaRepl | None = None
+        self._prompt_params: SerenaAgent.PromptParams | None = None
 
         # obtain serena configuration using the decoupled factory function
         self.serena_config = serena_config or SerenaConfig.from_config_file()
@@ -644,14 +660,19 @@ class SerenaAgent:
 
         # determine the effective language backend for this session.
         # If a startup project is provided and has a per-project override, use it; otherwise use the global config.
-        # Since we don't want to change the toolset after startup, the language backend cannot be changed within a running Serena session
+        # With the tool interface, the backend cannot change within a session (the toolset depends on it and is fixed);
+        # with the REPL interface, it may change upon project activation (see _activate_project).
         self._language_backend = self.serena_config.determine_language_backend(
             project_config=registered_project_to_activate.project_config if registered_project_to_activate is not None else None,
             log_choice=True,
         )
 
-        # create the tool names mapping for prompts
-        self._prompt_tool_names_mapping = self._create_prompt_tool_names_mapping(self._language_backend)
+        # determine the effective agent interface for this session (project configuration > global configuration).
+        # Like the language backend, it is fixed for the session, since the set of exposed tools cannot change after startup.
+        self._agent_interface = self.serena_config.determine_agent_interface(
+            project_config=registered_project_to_activate.project_config if registered_project_to_activate is not None else None,
+            log_choice=True,
+        )
 
         # create executor for starting the language server and running tools in another thread
         # This executor is used to achieve linear task execution
@@ -675,8 +696,14 @@ class SerenaAgent:
                 self._project_activation_error = str(e)
         self._update_active_modes()
 
+        # determine whether we are operating in a single-project session, i.e. the project that was activated at startup
+        # (if any) is the only project that will be worked with throughout the session (no project switching)
+        self._is_single_project = self._context.single_project and self._active_project is not None
+
         # determine the base toolset defining the set of exposed tools (which e.g. the MCP shall see),
-        self._base_toolset = self._create_base_toolset(self.serena_config, self._context, self._active_modes, self._active_project)
+        self._base_toolset = self._create_base_toolset(
+            self.serena_config, self._context, self._active_modes, self._active_project, self._agent_interface, self._is_single_project
+        )
         self._exposed_tools = self._base_toolset.to_available_tools(self._all_tools)
         log.info(f"Number of exposed tools: {len(self._exposed_tools)}. Exposed tools: {self._exposed_tools.tool_names}")
 
@@ -728,13 +755,22 @@ class SerenaAgent:
             "os": platform.system(),
             "dashboard": int(self.serena_config.web_dashboard),
             "version": self.version,
-            "backend": self._language_backend.value,
+            "backend": self._language_backend.get_key(),
             "context": self._context.name,
         }
         try:
             requests.get("https://oraios-software.de/serena_usage.php", params=params, timeout=1)
         except Exception as e:
             log.debug(f"Failed to send usage info: {e}")
+
+    @staticmethod
+    def _is_dashboard_openable(serena_config: SerenaConfig) -> bool:
+        """
+        :param serena_config: the configuration
+        :return: whether the web dashboard is available and opening it is a meaningful operation
+            (i.e. it is enabled and not opened automatically)
+        """
+        return serena_config.web_dashboard and not serena_config.web_dashboard_open_on_launch and not serena_config.gui_log_window
 
     @classmethod
     def _create_base_toolset(
@@ -743,10 +779,12 @@ class SerenaAgent:
         context: SerenaAgentContext,
         modes: ActiveModes,
         project: Project | None,
+        agent_interface: AgentInterface,
+        is_single_project: bool,
     ) -> ToolSet:
         """
         Determines the base toolset defining the set of exposed tools (which e.g. the MCP shall see).
-        It depends on ...
+        In REPL mode, the toolset is fixed. Otherwise, it depends on ...
            * dashboard availability/opening on launch
            * Serena config
            * the context (which is fixed for the session)
@@ -754,9 +792,16 @@ class SerenaAgent:
            * the optional tools enabled by initial dynamic modes
            * single-project mode reductions (if applicable)
         """
+        # when in REPL mode, the toolset is fixed and does not depend on the configuration, context, modes or project
+        if agent_interface.is_repl():
+            tool_classes: list[type[Tool]] = [SerenaReplTool, InitialInstructionsTool]
+            if not is_single_project:
+                tool_classes.append(ActivateProjectTool)
+            return ToolSet({tool_class.get_name_from_cls() for tool_class in tool_classes})
+
         # determine whether to include the OpenDashboardTool based on the Serena configuration
         tool_inclusion_definitions: list[ToolInclusionDefinition] = []
-        if serena_config.web_dashboard and not serena_config.web_dashboard_open_on_launch and not serena_config.gui_log_window:
+        if cls._is_dashboard_openable(serena_config):
             tool_inclusion_definitions.append(
                 NamedToolInclusionDefinition(name="OpenDashboard", included_optional_tools=[OpenDashboardTool.get_name_from_cls()])
             )
@@ -764,10 +809,6 @@ class SerenaAgent:
         # consider Serena configuration and the active context
         tool_inclusion_definitions.append(serena_config)
         tool_inclusion_definitions.append(context)
-
-        # determine whether we are operating in a single-project context
-        # (i.e. the project that is activated at startup is the only project that will be worked with throughout the session)
-        is_single_project = context.single_project and project is not None
 
         # consider modes
         # * base modes: These cannot be changed, so they are fully applied
@@ -819,6 +860,17 @@ class SerenaAgent:
 
     def get_language_backend(self) -> LanguageBackend:
         return self._language_backend
+
+    def is_single_project(self) -> bool:
+        """
+        :return: whether this is a single-project session, i.e. the project activated at startup is the only project
+            that will be worked with throughout the session (no project switching); requires a single-project context
+            and a project at startup
+        """
+        return self._is_single_project
+
+    def get_agent_interface(self) -> AgentInterface:
+        return self._agent_interface
 
     def get_current_tasks(self) -> list[TaskExecutor.TaskInfo]:
         """
@@ -938,27 +990,97 @@ class SerenaAgent:
         """
         return self._active_modes
 
-    @staticmethod
-    def _create_prompt_tool_names_mapping(language_backend: LanguageBackend) -> dict[str, str]:
+    @dataclass
+    class PromptParams:
         """
-        Creates a mapping from tool names to new tool names, which take into consideration
-
-           * legacy tool names, where the name was changed and
-           * LSP tools which are functionally replaced by other tools due to the active language backend
-             (e.g. "find_symbol" being replaced by "jet_brains_find_symbol" in JetBrains mode).
-
-        The mapping is intended to be used for the generation of prompts, such that prompts can
-        refer to tool names as `{{ tool_names["find_symbol"] }}`, and the mapping will ensure that
-        the correct tool name is used in the prompt based on the active language backend.
-
-        :return: the mapping from tool names to new tool names
+        Holds parameters for prompt rendering
         """
-        result = dict(ToolSet.LEGACY_TOOL_NAME_MAPPING)
-        class_replacements = language_backend.get_lsp_tool_class_replacements()
-        for tool_class in ToolRegistry().get_all_tool_classes():
-            new_tool_class: type[Tool] = class_replacements.get(tool_class, tool_class)
-            result[tool_class.get_name_from_cls()] = new_tool_class.get_name_from_cls()
-        return result
+
+        available_tools: set[str]
+        """
+        available tool names or, in REPL mode, the names of the raw facade methods (without facade name prefix) and 
+        the names of the corresponding tools
+        """
+        available_markers: set[str]
+        """
+        names of the ToolMarkers (class names) that the available tools inherit from
+        """
+        tool_names_mapping: dict[str, str]
+        """
+        mapping from standard tool names to currently used and replacement tool/API method names.
+        In particular, this maps 
+          * legacy tool names to current tool names
+          * LSP tool names to their backend- and interface-specific counterparts 
+            (e.g. "find_symbol" to "jet_brains_find_symbol" in JetBrains mode, "find_symbol" to the corresponding API method name
+            when using the REPL interface). 
+        """
+
+        def get_function_name(self, tool_class: type[Tool]) -> str:
+            """
+            :param tool_class: the tool for which to get the function name
+            :return: the function name to use for this tool in prompts, which may be different from the tool's standard name
+                (e.g. when using a different language backend or when using the REPL interface)
+            """
+            tool_name = tool_class.get_name_from_cls()
+            return self.tool_names_mapping.get(tool_name, tool_name)
+
+    def _get_prompt_params(self) -> PromptParams:
+        """
+        :return: parameters for prompt rendering depending on the current agent interface, language backend and active tools/methods
+        """
+        if self._prompt_params is not None:
+            return self._prompt_params
+
+        if self._agent_interface == AgentInterface.TOOLS:
+            # available tool names are simply the exposed tools
+            available_tool_names = set(self._exposed_tools.tool_names)
+            available_tool_marker_names = set(self._exposed_tools.tool_marker_names)
+
+            tool_name_mapping = dict(ToolSet.LEGACY_TOOL_NAME_MAPPING)
+            class_replacements = self._language_backend.get_lsp_tool_class_replacements()
+            for tool_class in ToolRegistry().get_all_tool_classes():
+                new_tool_class: type[Tool] = class_replacements.get(tool_class, tool_class)
+                tool_name_mapping[tool_class.get_name_from_cls()] = new_tool_class.get_name_from_cls()
+
+        elif self._agent_interface == AgentInterface.REPL:
+            # available tool names include both the names of the facade methods and the names of the corresponding tools
+            repl = self.get_repl()
+            enabled_methods = repl.entrypoint.get_enabled_methods()
+            corresponding_tool_classes = [m.info.corresponding_tool for m in enabled_methods if m.info.corresponding_tool is not None]
+            available_tools = AvailableTools(
+                self._exposed_tools.tools + [self._all_tools[tool_class] for tool_class in corresponding_tool_classes]
+            )
+            available_tool_names = set(available_tools.tool_names).union({m.info.name for m in enabled_methods})
+            available_tool_marker_names = set(available_tools.tool_marker_names)
+
+            tool_class_replacements = self._language_backend.get_lsp_tool_class_replacements()
+            methods_by_tool_class = {m.info.corresponding_tool: m for m in enabled_methods if m.info.corresponding_tool is not None}
+
+            def get_name(tool_class: type[Tool]) -> str:
+                # if there is a corresponding method in the API, return its qualified name (as used in REPL code)
+                method = methods_by_tool_class.get(tool_class)
+                if method is not None:
+                    return method.qualified_name
+                # if there is a corresponding method for the replacement class, return its qualified name
+                replacement_class = tool_class_replacements.get(tool_class)
+                if replacement_class is not None:
+                    replacement_method = methods_by_tool_class.get(replacement_class)
+                    if replacement_method is not None:
+                        return replacement_method.qualified_name
+                # otherwise, keep the tool's name
+                return tool_class.get_name_from_cls()
+
+            tool_name_mapping = {}
+            for legacy_name, new_name in ToolSet.LEGACY_TOOL_NAME_MAPPING.items():
+                tool_name_mapping[legacy_name] = get_name(ToolRegistry().get_tool_class_by_name(new_name))
+            for tool_class in ToolRegistry().get_all_tool_classes():
+                tool_name_mapping[tool_class.get_name_from_cls()] = get_name(tool_class)
+        else:
+            raise ValueError()
+
+        return self.PromptParams(
+            available_tools=available_tool_names, available_markers=available_tool_marker_names, tool_names_mapping=tool_name_mapping
+        )
 
     @staticmethod
     def _format_prompt_tag(text: str, tag: str, tag_name_attr: str | None = None) -> str:
@@ -985,10 +1107,11 @@ class SerenaAgent:
                 return ""
 
         template = JinjaTemplate(prompt_template)
+        prompt_params = self._get_prompt_params()
         text = template.render(
-            available_tools=self._exposed_tools.tool_names,
-            available_markers=self._exposed_tools.tool_marker_names,
-            tool_names=self._prompt_tool_names_mapping,
+            available_tools=prompt_params.available_tools,
+            available_markers=prompt_params.available_markers,
+            tool_names=prompt_params.tool_names_mapping,
             embed_memory=embed_memory,
         )
 
@@ -1020,18 +1143,33 @@ class SerenaAgent:
         else:
             return self._create_global_memory_manager()
 
-    def create_system_prompt(self, session_id: str = "global") -> str:
+    def create_session(self) -> SerenaSession:
+        """
+        :return: a new client session (with a random id)
+        """
+        return self._session_registry.create_session()
+
+    def get_session(self, session_id: str) -> SerenaSession:
+        """
+        :param session_id: the session id (as supplied by the LLM)
+        :return: the session, which is created if it is unknown
+        """
+        return self._session_registry.get_session(session_id)
+
+    def create_system_prompt(self) -> str:
         """
         Returns the 'Serena Instructions Manual', i.e. Serena's system prompt.
+        The prompt also establishes a new Serena session (see `SerenaSession`), stating its id for use with tools
+        which require it (e.g. the REPL tool and project activation tool).
 
-        :param session_id: the client session ID for the case where this is run from a tool; "global" for the connection time case
         :return: the prompt
         """
-        available_tools = self._active_tools
-        available_markers = available_tools.tool_marker_names
+        # establish a Serena session
+        serena_session = self.create_session()
+        session_id = serena_session.session_id
+
         global_memories = self._create_global_memory_manager().list_global_memories()
         global_memories_str = dict_string(global_memories.to_dict()) if len(global_memories) > 0 else ""
-        log.info("Generating system prompt with available_tools=(see active tools), available_markers=%s", available_markers)
 
         # determine modes for which prompts must (still) be provided, excluding modes that were already provided in a
         # previously provided project activation message (if any)
@@ -1042,13 +1180,14 @@ class SerenaAgent:
                     relevant_modes.append(mode)
         self._project_prompt_status.mark_mode_prompts_as_provided(session_id)
 
+        prompt_params = self._get_prompt_params()
         system_prompt = self.prompt_factory.create_system_prompt(
             context_system_prompt=self._render_prompt(self._context.prompt, tag="context"),
             mode_system_prompts=[self._render_prompt(mode.prompt, tag="mode", tag_name_attr=mode.name) for mode in relevant_modes],
-            available_tools=available_tools.tool_names,
-            available_markers=available_markers,
+            available_tools=prompt_params.available_tools,
+            available_markers=prompt_params.available_markers,
             global_memories_list=global_memories_str,
-            tool_names=self._prompt_tool_names_mapping,
+            tool_names=prompt_params.tool_names_mapping,
         )
 
         # provide the project activation message if it hasn't yet been provided
@@ -1056,6 +1195,12 @@ class SerenaAgent:
             system_prompt += "\n\n" + self._format_prompt_tag(self.get_project_activation_message(session_id), tag="active-project")
         elif self._project_activation_error:
             system_prompt += f"\n\nNo project is active ({self._project_activation_error})."
+
+        # inform about the session id
+        system_prompt += "\n\n" + self._format_prompt_tag(
+            f"Your Serena session id is `{session_id}`. Pass it as the `session_id` parameter to tools which require it.",
+            tag="session",
+        )
 
         return self._format_prompt_tag(system_prompt, tag="serena")
 
@@ -1066,6 +1211,8 @@ class SerenaAgent:
         """
         proj = self._active_project
         assert proj is not None, "A project must be active before calling this."
+
+        prompt_params = self._get_prompt_params()
 
         # Note: The activation message is always returned in full, even if it was already provided in the current session,
         #   because some clients (e.g. Claude Desktop) will use the same session across multiple chats.
@@ -1080,22 +1227,20 @@ class SerenaAgent:
             msg = f"Created and activated a new project with name '{proj.project_name}' at {proj.project_root}.\n"
         else:
             msg = f"The project with name '{proj.project_name}' at {proj.project_root} is activated.\n"
-        if self._language_backend == LanguageBackend.LSP:
-            language_servers_str = ", ".join([ls.value for ls in proj.project_config.language_servers])
-            msg += f"Active language servers: {language_servers_str}.\n"
+        msg += self._language_backend.get_project_activation_statement(proj)
         msg += f"File encoding: {proj.project_config.encoding}.\n"
 
         # add list of memories (if memories are enabled)
-        include_memories = self._active_tools.contains_tool_class(ReadMemoryTool)
+        include_memories = self.is_tool_function_available(ReadMemoryTool)
         if include_memories:
             project_memories = proj.memory_manager.list_project_memories()
             if project_memories:
                 msg += (
                     f"{json.dumps(project_memories.to_dict())}\n"
-                    + f"Use the `{ReadMemoryTool.get_name_from_cls()}` tool to read these memories later if they are relevant to the task.\n"
+                    + f"Use `{prompt_params.get_function_name(ReadMemoryTool)}` to read these memories later if they are relevant to the task.\n"
                 )
-            elif self._active_tools.contains_tool_class(OnboardingTool):
-                msg += f"Onboarding has not been performed yet. Ask the user whether to perform onboarding via the `{OnboardingTool.get_name_from_cls()}` tool.\n"
+            elif self.is_tool_function_available(OnboardingTool):
+                msg += f"Onboarding has not been performed yet. Ask the user whether to perform onboarding and if so, call `{prompt_params.get_function_name(OnboardingTool)}`.\n"
 
         # add prompts for modes that were dynamically activated by the project
         modes_with_prompts = self._project_prompt_status.get_modes_with_prompts_to_be_provided_for_project_activation(session_id)
@@ -1104,9 +1249,14 @@ class SerenaAgent:
                 msg += self._render_prompt(mode.prompt, tag="mode", tag_name_attr=mode.name) + "\n"
         self._project_prompt_status.mark_mode_prompts_as_provided(session_id)
 
-        # add project-specific prompt
+        # add the project's prompt (if any)
         if proj.project_config.initial_prompt:
             msg += "\n" + self._render_prompt(proj.project_config.initial_prompt, tag="project-instructions")
+
+        # when the REPL is active, add information on available facades if the agent is not in single-project mode
+        # (for single-project mode where the facades can't change, they are provided in the tool's description)
+        if self._active_tools.contains_tool_class(SerenaReplTool) and not self.is_single_project():
+            msg += f"\n\nAvailable facades for the `{SerenaReplTool.get_name_from_cls()}` tool:\n" + self.get_repl().entrypoint.overview()
 
         self._project_prompt_status.mark_project_activation_message_as_provided(session_id)
 
@@ -1132,21 +1282,30 @@ class SerenaAgent:
 
     def _update_active_tools(self) -> None:
         """
-        Updates the active tools based on the active modes and the active project.
+        Updates the active tools (and the REPL, which depends on the same configuration) based on the active modes
+        and the active project. Must be called whenever the active modes or the active project change.
         The base tool set already takes the Serena configuration and the context into account
         (as well as many other aspects, such as JetBrains mode).
         """
-        # apply modes
-        tool_set = self._base_toolset.apply(*self._active_modes.get_modes())
+        if self._agent_interface.is_repl():
+            # the REPL toolset is fixed; tool inclusion/exclusion definitions do not apply
+            tool_set = self._base_toolset
+        else:
+            # apply modes
+            tool_set = self._base_toolset.apply(*self._active_modes.get_modes())
 
-        # apply active project configuration (if any)
-        if self._active_project is not None:
-            tool_set = tool_set.apply(self._active_project.project_config)
-            if self._active_project.project_config.read_only:
-                tool_set = tool_set.without_editing_tools()
+            # apply active project configuration (if any)
+            if self._active_project is not None:
+                tool_set = tool_set.apply(self._active_project.project_config)
+                if self._active_project.project_config.read_only:
+                    tool_set = tool_set.without_editing_tools()
 
         self._active_tools = tool_set.to_available_tools(self._all_tools)
         log.info(f"Active tools ({len(self._active_tools)}): {', '.join(self._active_tools.tool_names)}")
+
+        # reset members that depend on the active tools, so that they are re-created on demand with the new active tools
+        self._repl = None
+        self._prompt_params = None
 
         # check if a tool was activated that is not in the exposed tool set and issue a warning if so
         active_tools_not_exposed = set(self._active_tools.tool_names) - set(self._exposed_tools.tool_names)
@@ -1156,6 +1315,41 @@ class SerenaAgent:
                 f"{active_tools_not_exposed}\n"
                 "Consider adjusting your configuration to include these tools if you want to use them."
             )
+
+    def create_default_facade_list(self, api_scope: ApiScope) -> list[Facade]:
+        """
+        :return: the default list of facades provided by Serena itself, not including any language backend-specific facades
+        """
+        return [
+            Facade.from_api(ConfigApi(self), api_scope),
+            Facade.from_api(FsApi(self), api_scope),
+            Facade.from_api(EditApi(self), api_scope),
+            Facade.from_api(MemoryApi(self), api_scope),
+            Facade.from_api(ShellApi(self), api_scope),
+            Facade.from_api(ExternalProjectsApi(self), api_scope, is_optional=True),
+        ]
+
+    def get_repl(self) -> SerenaRepl:
+        """
+        :return: the REPL instance for this agent, creating it if necessary
+        """
+        if self._repl is None:
+            # determine API scope
+            api_scope = ApiScope()
+            api_scope.process(self.serena_config)
+            api_scope.process(self._context)
+            for mode in self._active_modes.get_modes():
+                api_scope.process(mode)
+            if self._active_project:
+                api_scope.process(self._active_project.project_config)
+                if self._active_project.project_config.read_only:
+                    api_scope.exclude_editing()
+            if not self._is_dashboard_openable(self.serena_config):
+                api_scope.process(NamedApiInclusionDefinition(name="Dashboard", excluded_apis=["cfg.open_dashboard"]))
+
+            facades = self.create_default_facade_list(api_scope) + self._language_backend.create_facades(self, api_scope)
+            self._repl = SerenaRepl(facades, api_scope)
+        return self._repl
 
     def issue_task(
         self, task: Callable[[], T], name: str | None = None, logged: bool = True, timeout: float | None = None
@@ -1210,7 +1404,7 @@ class SerenaAgent:
         """
         :return: whether this agent uses language server-based code analysis
         """
-        return self._language_backend == LanguageBackend.LSP
+        return self._language_backend == BuiltinLanguageBackend.LSP
 
     def _activate_project(self, project: Project, update_active_modes: bool = True, update_active_tools: bool = True) -> bool:
         """
@@ -1224,15 +1418,22 @@ class SerenaAgent:
 
         self._project_activation_error = None
 
-        # check if the project requires a different language backend than the one initialized at startup
+        # handle the case where the project requires a different language backend than the current one.
+        # With the tool interface, the backend cannot change, since the set of exposed tools depends on it and is fixed
+        # for the session. With the REPL interface, the backend can be switched, as all backend-dependent state
+        # (background modes, REPL facades, prompt parameters, the project's language backend initialisation) is
+        # recomputed upon activation.
         project_backend = project.project_config.language_backend
         if project_backend is not None and project_backend != self._language_backend:
-            raise ValueError(
-                f"Cannot activate project '{project.project_name}': it requires the {project_backend.value} backend, "
-                f"but this session was initialized with {self._language_backend.value}. "
-                f"Workarounds: (1) Use project activation at startup via the --project flag, "
-                f"(2) Configure one MCP server per backend in your client."
-            )
+            if self._agent_interface.is_tools():
+                raise ValueError(
+                    f"Cannot activate project '{project.project_name}': it requires the {project_backend} backend, "
+                    f"but this session was initialized with {self._language_backend}. "
+                    f"Workarounds: (1) Use project activation at startup via the --project flag, "
+                    f"(2) Configure one MCP server per backend in your client, (3) use the REPL interface."
+                )
+            log.info(f"Switching language backend from {self._language_backend} to {project_backend} for project '{project.project_name}'")
+            self._language_backend = project_backend
 
         # shut down the previously active project to release its language server processes
         if self._active_project is not None:
@@ -1256,7 +1457,7 @@ class SerenaAgent:
 
         def init_project_services() -> None:
             self._run_project_activation_command(project)
-            self._init_active_project_language_backend()
+            self._language_backend.init_active_project(self)
 
         # initialise the project's language backend in the background
         self.issue_task(init_project_services)
@@ -1312,28 +1513,6 @@ class SerenaAgent:
         except Exception:
             log.exception(f"Unexpected error running activation_command for project '{project.project_name}'")
 
-    def _init_active_project_language_backend(self) -> None:
-        """
-        Initialises the active project's language backend
-        """
-        project = self._active_project
-        assert project is not None
-
-        # for LSP mode, start the language server manager
-        if self.get_language_backend().is_lsp():
-            with LogTime("Language server initialization", logger=log):
-                self.reset_language_server_manager()
-
-        # for JetBrains mode, search for plugin server and spawn IDE (if not found and launch command provided)
-        elif self.get_language_backend().is_jetbrains():
-            client = jetbrains_launch_coordinator.find_plugin_server(project)
-            if client is not None:
-                log.info("Found Serena JetBrains Plugin server: %s", client)
-            else:
-                log.info("Serena JetBrains Plugin server not found for project %s", project.project_name)
-                if self.serena_config.jetbrains_launch_command:
-                    jetbrains_launch_coordinator.launch_and_wait_for_plugin_server(project, self.serena_config.jetbrains_launch_command)
-
     def activate_project_from_path_or_name(
         self, project_root_or_name: str, update_active_modes: bool = True, update_active_tools: bool = True
     ) -> bool:
@@ -1366,19 +1545,27 @@ class SerenaAgent:
         """
         return self._active_tools.tool_names
 
-    def tool_is_active(self, tool_name: str) -> bool:
+    def get_active_tools(self) -> AvailableTools:
         """
-        :param tool_class: the name of the tool to check
-        :return: True if the tool is active, False otherwise
+        :return: the set of active tools
         """
-        return self._active_tools.contains_tool_name(tool_name)
+        return self._active_tools
 
-    def tool_is_exposed(self, tool_name: str) -> bool:
+    def is_tool_function_available(self, tool_class: type[Tool]) -> bool:
         """
-        :param tool_name: the name of the tool to check
-        :return: True if the tool is in the exposed tool set, False otherwise
+        Checks whether the functionality offered by a tool is available - either through the tool
+        itself being enabled or through the corresponding function being exposed in the REPL.
+
+        :param tool_class: the tool class
+        :return: whether the function is available
         """
-        return self._exposed_tools.contains_tool_name(tool_name)
+        is_active_tool = self._active_tools.contains_tool_class(tool_class)
+        if self._agent_interface == AgentInterface.TOOLS:
+            return is_active_tool
+        elif self._agent_interface == AgentInterface.REPL:
+            return is_active_tool or self.get_repl().entrypoint.is_tool_function_available(tool_class)
+        else:
+            raise NotImplementedError
 
     def get_current_config_overview(self) -> str:
         """
@@ -1391,12 +1578,13 @@ class SerenaAgent:
             result_str += f"Active project: {self._active_project.project_name}\n"
         else:
             result_str += "No active project\n"
-        result_str += f"Language backend: {self._language_backend.value}"
+        result_str += f"Agent interface: {self._agent_interface.value}\n"
+        result_str += f"Language backend: {self._language_backend.get_key()}"
         if self._active_project and self._active_project.project_config.language_backend is not None:
             result_str += " (project override)"
-        result_str += f" (global default: {self.serena_config.language_backend.value})\n"
-        if self._language_backend.is_lsp() and self._active_project:
-            result_str += f"Language server status: {self._active_project.get_language_server_manager_status()}\n"
+        result_str += f" (global default: {self.serena_config.language_backend.get_key()})\n"
+        if self._active_project:
+            result_str += self._language_backend.get_config_overview_statement(self._active_project)
         result_str += "Available projects:\n" + "\n".join(list(self.serena_config.project_names)) + "\n"
         result_str += f"Active context: {self._context.name}\n"
 
@@ -1436,7 +1624,7 @@ class SerenaAgent:
         """
         self.get_active_project_or_raise().create_language_server_manager()
 
-    def add_language_server(self, ls_id: LanguageServerId) -> None:
+    def add_language_server(self, ls_id: LanguageServerIdLike) -> None:
         """
         Adds a new language server to the active project, spawning the respective language server and updating the project configuration.
         The addition is scheduled via the agent's task executor and executed synchronously, i.e. the method returns
@@ -1444,19 +1632,19 @@ class SerenaAgent:
 
         :param ls_id: the language server to add
         """
-        self.execute_task(lambda: self.get_active_project_or_raise().add_language_server(ls_id), name=f"AddLanguage:{ls_id.value}")
+        self.execute_task(lambda: self.get_active_project_or_raise().add_language_server(ls_id), name=f"AddLanguage:{ls_id.get_key()}")
 
-    def remove_language_server(self, ls_id: LanguageServerId) -> None:
+    def remove_language_server(self, ls_id: LanguageServerIdLike) -> None:
         """
         Removes a language server from the active project, shutting down the respective server and updating the project configuration.
         The removal is scheduled via the agent's task executor and executed asynchronously.
 
         :param ls_id: the language to remove
         """
-        self.issue_task(lambda: self.get_active_project_or_raise().remove_language_server(ls_id), name=f"RemoveLanguage:{ls_id.value}")
+        self.issue_task(lambda: self.get_active_project_or_raise().remove_language_server(ls_id), name=f"RemoveLanguage:{ls_id.get_key()}")
 
     def get_tool(self, tool_class: type[TTool]) -> TTool:
-        return self._all_tools[tool_class]
+        return cast(TTool, self._all_tools[tool_class])
 
     def print_tool_overview(self) -> None:
         ToolRegistry().print_tool_overview(self._active_tools.tools)
@@ -1498,7 +1686,7 @@ class SerenaAgent:
         tool_class = ToolRegistry().get_tool_class_by_name(tool_name)
         return self.get_tool(tool_class)
 
-    def get_active_language_server_ids(self) -> list[LanguageServerId]:
+    def get_active_language_server_ids(self) -> list[LanguageServerIdLike]:
         ls_manager = self.get_language_server_manager()
         if ls_manager is None:
             return []

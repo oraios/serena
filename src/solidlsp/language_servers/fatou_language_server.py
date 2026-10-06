@@ -1,4 +1,5 @@
 """Julia language server integration using Fatou."""
+# SPDX-License-Identifier: MIT
 
 import logging
 import threading

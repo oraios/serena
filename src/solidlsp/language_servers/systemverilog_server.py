@@ -1,6 +1,7 @@
 """
 SystemVerilog language server using verible-verilog-ls.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

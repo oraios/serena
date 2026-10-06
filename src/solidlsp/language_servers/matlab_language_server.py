@@ -29,6 +29,7 @@ The MATLAB language server provides:
     - Function signature help (signatureHelpProvider)
     - Symbol rename (renameProvider)
 """
+# SPDX-License-Identifier: MIT
 
 import glob
 import logging

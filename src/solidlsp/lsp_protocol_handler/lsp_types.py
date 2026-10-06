@@ -8,6 +8,7 @@
 """
 This file provides the Python types corresponding to the Typescript types defined in the language server protocol.
 """
+# SPDX-License-Identifier: MIT
 
 from enum import Enum, IntEnum, IntFlag
 from typing import Any, Literal, NotRequired, Union

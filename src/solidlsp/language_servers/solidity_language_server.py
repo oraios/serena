@@ -2,6 +2,7 @@
 Provides Solidity-specific instantiation of the LanguageServer class using
 the Nomic Foundation Solidity Language Server (@nomicfoundation/solidity-language-server).
 """
+# SPDX-License-Identifier: MIT
 
 import glob
 import logging

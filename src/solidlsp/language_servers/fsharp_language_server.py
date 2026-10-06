@@ -1,6 +1,7 @@
 """
 Provides F# specific instantiation of the LanguageServer class.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

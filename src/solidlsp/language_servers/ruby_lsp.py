@@ -7,6 +7,7 @@ You can pass the following entries in ``ls_specific_settings["ruby"]``:
       Serena when no project-local or global ruby-lsp is already available
       (default: the bundled Serena version).
 """
+# SPDX-License-Identifier: MIT
 
 import json
 import logging

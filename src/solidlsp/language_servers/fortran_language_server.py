@@ -1,6 +1,7 @@
 """
 Fortran Language Server implementation using fortls.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import re
