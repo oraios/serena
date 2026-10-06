@@ -63,6 +63,7 @@ To implement a new language server using the DependencyProvider pattern:
 **Implementation Pointers:**
   - Override `create_launch_command_env` if the launch command needs environment variables to be set (defaults to `{}` in the base implementation)
   - When calling subprocesses, e.g. to install dependencies, do not use `subprocess.run` directly; instead, use the `subprocess_run` helper function from `solidlsp.util.subprocess_util`
+  - **Do not use `assert` for runtime validations:** Python strips `assert` statements when run with `-O` (`python -O`). Environment checks (e.g. `node` or `npm` presence in `PATH`), directory/file verifications (e.g. SDK paths), and LSP capability handshake validations must use explicit `raise` statements (e.g., `SolidLSPException`, `FileNotFoundError`, or `RuntimeError`) rather than `assert` to avoid leaving the server half-initialized or failing silently.
 
 You should look at at least one existing implementation of each base class to understand how they work.
 

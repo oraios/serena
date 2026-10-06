@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterator
 from typing import TypeVar
 
 from serena.util.file_system import find_all_non_ignored_files
-from solidlsp.ls_config import LanguageServerId
+from solidlsp.ls_config import LanguageServerId, LanguageServerIdLike
 
 T = TypeVar("T")
 
@@ -38,8 +38,8 @@ def iter_subclasses(
 
 
 def compute_language_server_support_composition(
-    repo_path: str, ls_ids: list[LanguageServerId] | None = None
-) -> dict[LanguageServerId, float]:
+    repo_path: str, ls_ids: list[LanguageServerIdLike] | None = None
+) -> dict[LanguageServerIdLike, float]:
     """
     Determine the composition of a repository in terms of the language servers that can be used to analyze it.
 
@@ -64,7 +64,7 @@ def compute_language_server_support_composition(
     matchers = {lang: lang.get_source_fn_matcher() for lang in ls_ids}
 
     # count files per language in a single pass over the files
-    ls_file_counts: dict[LanguageServerId, int] = {}
+    ls_file_counts: dict[LanguageServerIdLike, int] = {}
     recognised_files = 0
     for file_path in all_files:
         # Use just the filename for matching, not the full path

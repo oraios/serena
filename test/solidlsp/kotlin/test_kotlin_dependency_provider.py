@@ -1,5 +1,6 @@
 """Tests for Kotlin Language Server dependency resolution and installation."""
 
+import os
 from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import patch
@@ -298,6 +299,32 @@ class TestKotlinDependencyProvider:
             assert second.storage_dir == str(tmp_path / "project-cache")
         finally:
             second.release_storage_lock()
+
+    def test_fallback_storage_dir_is_removed_on_release(self, tmp_path: Path) -> None:
+        """The second instance's fallback directory (oraios/serena#1966) must not survive its
+        own release, or every lock collision leaks a multi-MB IntelliJ index directory forever.
+        """
+        first = _make_provider(tmp_path)
+        second = _make_provider(tmp_path)
+        try:
+            assert os.path.isdir(second.storage_dir)
+            second.release_storage_lock()
+            assert not os.path.exists(second.storage_dir)
+        finally:
+            first.release_storage_lock()
+
+    def test_primary_storage_dir_survives_release(self, tmp_path: Path) -> None:
+        """The deterministic per-project directory must persist after release: it is the
+        index cache a restarted single instance is meant to reuse.
+        """
+        provider = _make_provider(tmp_path)
+        os.makedirs(provider.storage_dir, exist_ok=True)
+        index_marker = Path(provider.storage_dir) / "index-marker"
+        index_marker.write_text("kotlin lsp index data", encoding="utf-8")
+
+        provider.release_storage_lock()
+
+        assert index_marker.exists()
 
     def test_concurrent_instances_get_different_system_path_arguments(self, tmp_path: Path) -> None:
         launcher = "/path/to/intellij-server"
