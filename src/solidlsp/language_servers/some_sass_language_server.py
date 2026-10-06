@@ -20,6 +20,7 @@ Caveats:
       ``SOMESASS_CSS_FEATURES`` below for the full set.
     * Language is registered as experimental.
 """
+# SPDX-License-Identifier: MIT
 
 from __future__ import annotations
 

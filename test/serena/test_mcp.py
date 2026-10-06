@@ -1,11 +1,14 @@
 """Tests for the mcp.py module in serena."""
 
 import pytest
-from mcp.server.fastmcp.tools.base import Tool as MCPTool
+from mcp.server.mcpserver import Context
+from mcp.server.mcpserver.tools.base import Tool as MCPTool
 
 from serena.agent import Tool, ToolRegistry
 from serena.config.context_mode import SerenaAgentContext
 from serena.mcp import SerenaMCPFactory
+from serena.repl.facade import ApiScope
+from serena.repl.repl import SerenaRepl
 
 make_tool = SerenaMCPFactory.make_mcp_tool
 
@@ -19,6 +22,14 @@ class MockAgent:
     @staticmethod
     def get_context() -> SerenaAgentContext:
         return SerenaAgentContext.load_default()
+
+    @staticmethod
+    def get_repl() -> SerenaRepl:
+        return SerenaRepl([], ApiScope())
+
+    @staticmethod
+    def is_single_project() -> bool:
+        return False
 
 
 class BaseMockTool(Tool):
@@ -44,6 +55,7 @@ class BasicTool(BaseMockTool):
         self,
         log_call: bool = True,
         catch_exceptions: bool = True,
+        mcp_ctx: Context | None = None,
         **kwargs,
     ) -> str:
         """Mock implementation of apply_ex."""

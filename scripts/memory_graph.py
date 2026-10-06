@@ -1,4 +1,5 @@
 """Generates a GraphML file of the memory reference structure for a given project."""
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import argparse
 import xml.etree.ElementTree as ET

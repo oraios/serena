@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+
 from typing import TYPE_CHECKING, Any, Union
 
 from solidlsp.lsp_protocol_handler import lsp_types

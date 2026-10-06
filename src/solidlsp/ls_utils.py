@@ -1,7 +1,9 @@
 """
 This file contains various utility functions like I/O operations, handling paths, etc.
 """
+# SPDX-License-Identifier: MIT
 
+import bisect
 import gzip
 import hashlib
 import logging
@@ -14,6 +16,7 @@ import tempfile
 import uuid
 import zipfile
 from collections.abc import Sequence
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path, PurePath
 from typing import Literal, cast
@@ -178,6 +181,70 @@ class TextStepper:
         return lines
 
 
+@dataclass
+class TextCoordinates:
+    """
+    Represents a position in a text as a pair of 0-based line and column numbers.
+    """
+
+    line: int
+    """the 0-based line number"""
+
+    col: int
+    """the 0-based column number"""
+
+
+class TextCoordinateProvider:
+    """
+    Accelerates multiple computations of line/column coordinates in a given text by precomputing the text's line start indices.
+    """
+
+    def __init__(self, text: str):
+        """
+        :param text: the text in which character indices are to be located
+        """
+        self._text = text
+        self._line_starts = self._compute_line_starts()
+
+    def compute_coordinates(self, index: int) -> TextCoordinates:
+        r"""
+        Returns the line/column coordinates corresponding to the given character index.
+
+        An index pointing at the "\n" of a "\r\n" sequence denotes the beginning of the following line
+        (column 0), in the same way as a cursor insertion position between "\r" and "\n" does.
+
+        :param index: the 0-based index in the text; must not exceed the text length
+        :return: the coordinates corresponding to the index
+        :raises InvalidTextLocationError: if the index is negative or greater than the text length
+        """
+        # determine the line containing the index, which is the last line whose start does not exceed the index
+        if index < 0 or index > len(self._text):
+            raise InvalidTextLocationError(f"{index=}")
+        line_num = bisect.bisect_right(self._line_starts, index) - 1
+        line_start = self._line_starts[line_num]
+
+        # an index pointing at the "\n" of a "\r\n" pair maps to the beginning of the following line
+        if index > 0 and self._text[index - 1] == "\r" and self._text[index : index + 1] == "\n":
+            return TextCoordinates(line=line_num + 1, col=0)
+
+        return TextCoordinates(line=line_num, col=index - line_start)
+
+    def _compute_line_starts(self) -> list[int]:
+        """
+        Computes the character offsets at which the lines of the text begin, using a TextStepper to process
+        the text line by line.
+
+        :return: a list where entry i is the 0-based character offset at which line i starts;
+            entry 0 is always 0
+        """
+        line_starts = [0]
+        text_stepper = TextStepper(self._text)
+        while text_stepper.step_line():
+            if text_stepper.is_newline:
+                line_starts.append(text_stepper.line_start_idx)
+        return line_starts
+
+
 class TextUtils:
     """
     Utilities for text operations.
@@ -237,23 +304,6 @@ class TextUtils:
         return text_stepper.line_start_idx + col
 
     @staticmethod
-    def _get_updated_position_from_line_and_column_and_edit(l: int, c: int, text_to_be_inserted: str) -> tuple[int, int]:
-        """
-        :param l: the 0-based line number before the edit
-        :param c: the 0-based column number before the edit
-        :param text_to_be_inserted: the text that was inserted at the given position
-        :return: the updated 0-based line and column numbers after the edit (end of insertion)
-        """
-        text_stepper = TextStepper(text_to_be_inserted)
-        text_stepper.process_all()
-        if text_stepper.line > 0:
-            l += text_stepper.line
-            c = text_stepper.col
-        else:
-            c += text_stepper.col
-        return l, c
-
-    @staticmethod
     def delete_text_between_positions(text: str, start_line: int, start_col: int, end_line: int, end_col: int) -> tuple[str, str]:
         """
         Deletes the text between the given start and end positions.
@@ -289,14 +339,18 @@ class TextUtils:
     @staticmethod
     def insert_text_at_position(text: str, line: int, col: int, text_to_be_inserted: str) -> tuple[str, int, int]:
         """
-        Inserts the given text at the given position and returns the
+        Inserts the given text at the given position.
 
         :param text: the original text
         :param line: the 0-based line number where the text should be inserted
-        :param col: the 0-based column number where the text should be inserted
+        :param col: the 0-based column number where the text should be inserted; a column pointing
+            beyond the end of the text is clamped to its end
         :param text_to_be_inserted: the text to be inserted
         :return: a tuple containing the modified text, the updated line number, and the updated column number
-            (position after the inserted text)
+            (position after the inserted text). As everywhere in this class, columns are offsets into
+            the Python string (code points), not UTF-16 code units.
+        :raises InvalidTextLocationError: if the given line does not exist in the text (other than the
+            position one line past the last line, which is handled as an append)
         """
         try:
             change_index = TextUtils.get_index_from_line_col(text, line, col)
@@ -306,16 +360,20 @@ class TextUtils:
             num_lines_in_text = text_stepper.line + 1
             max_line = num_lines_in_text - 1
             if line == max_line + 1 and col == 0:  # trying to insert at new line after full text
-                # insert at end, adding missing newline and adjusting insertion position
-                # to the actual end coordinates of the text
+                # insert at end, adding the missing newline
                 change_index = len(text)
                 text_to_be_inserted = "\n" + text_to_be_inserted
-                line = text_stepper.line
-                col = text_stepper.col
             else:
                 raise
+        # apply the insertion, clamping a column that points beyond the end of the text
+        # (the slicing clamps implicitly; making it explicit lets the position use the same index)
+        change_index = min(change_index, len(text))
         new_text = text[:change_index] + text_to_be_inserted + text[change_index:]
-        new_l, new_c = TextUtils._get_updated_position_from_line_and_column_and_edit(line, col, text_to_be_inserted)
+
+        # determine the end position from the resulting text, because the insertion can merge with
+        # an adjacent character into a single newline sequence (a "\n" inserted directly after an
+        # existing "\r" forms one "\r\n"), which stepping the inserted text alone cannot observe
+        new_l, new_c = TextUtils.get_line_col_from_index(new_text, change_index + len(text_to_be_inserted))
         return new_text, new_l, new_c
 
     @staticmethod
@@ -657,6 +715,8 @@ class PlatformId(str, Enum):
     LINUX_arm64 = "linux-arm64"
     LINUX_MUSL_x64 = "linux-musl-x64"
     LINUX_MUSL_arm64 = "linux-musl-arm64"
+    FREEBSD_x64 = "freebsd-x64"
+    FREEBSD_arm64 = "freebsd-arm64"
 
     def is_windows(self) -> bool:
         return self.value.startswith("win")
@@ -686,10 +746,11 @@ class PlatformUtils:
         bitness = platform.architecture()[0]
         if system == "Windows" and machine == "":
             machine = cls._determine_windows_machine_type()
-        system_map = {"Windows": "win", "Darwin": "osx", "Linux": "linux"}
+        system_map = {"Windows": "win", "Darwin": "osx", "Linux": "linux", "FreeBSD": "freebsd"}
         machine_map = {
             "AMD64": "x64",
             "x86_64": "x64",
+            "amd64": "x64",
             "i386": "x86",
             "i686": "x86",
             "aarch64": "arm64",
@@ -703,7 +764,10 @@ class PlatformUtils:
                 if libc != "glibc":
                     # Format: linux-musl-arch (e.g., linux-musl-arm64)
                     platform_id = f"{system_map[system]}-{libc}-{machine_map[machine]}"
-            return PlatformId(platform_id)
+            try:
+                return PlatformId(platform_id)
+            except ValueError:
+                raise SolidLSPException(f"Unknown platform: {system=}, {machine=}, {bitness=}") from None
         else:
             raise SolidLSPException(f"Unknown platform: {system=}, {machine=}, {bitness=}")
 

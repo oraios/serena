@@ -27,6 +27,7 @@ https://github.com/MaskRay/ccls/wiki/Build
 Official documentation:
 https://github.com/MaskRay/ccls
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import threading

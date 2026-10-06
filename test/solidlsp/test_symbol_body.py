@@ -181,7 +181,7 @@ def test_document_symbol_cache_version_bump_invalidates_pre_fix_cache(tmp_path: 
     read back under the current version, so a stale-shaped entry is never handed back to callers.
     """
     cache_file = tmp_path / "document_symbols.pkl"
-    pre_fix_version = 4  # DOCUMENT_SYMBOL_CACHE_VERSION before this fix bumped it
+    pre_fix_version = 5  # DOCUMENT_SYMBOL_CACHE_VERSION before this fix bumped it
     assert pre_fix_version != SolidLanguageServer.DOCUMENT_SYMBOL_CACHE_VERSION
 
     save_cache(str(cache_file), pre_fix_version, {"some/file.py": ("content-hash", "pre-fix cache entry")})

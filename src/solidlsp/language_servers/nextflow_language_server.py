@@ -13,6 +13,7 @@ You can configure the following options in ls_specific_settings (in serena_confi
         jvm_options: ['-Xmx2G']                      # JVM options for the language server process
         exclude_patterns: ['work', '.nextflow']      # workspace paths the language server shall ignore
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

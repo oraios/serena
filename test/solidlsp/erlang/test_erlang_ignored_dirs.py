@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from solidlsp import SolidLanguageServer
+from solidlsp.language_servers.erlang_language_server import ErlangLanguageServer
 from solidlsp.ls_config import LanguageServerId
 from test.conftest import language_server_tests_enabled, start_ls_context
 
@@ -146,6 +147,8 @@ def test_symbol_tree_excludes_build_dirs(language_server: SolidLanguageServer):
 @pytest.mark.parametrize("language_server", [LanguageServerId.ERLANG], indirect=True)
 def test_ignore_compiled_files(language_server: SolidLanguageServer):
     """Test that compiled Erlang files are ignored."""
+    assert isinstance(language_server, ErlangLanguageServer)
+
     # Test that beam files are ignored
     assert language_server.is_ignored_filename("module.beam"), "BEAM files should be ignored"
     assert language_server.is_ignored_filename("app.beam"), "BEAM files should be ignored"
@@ -164,6 +167,7 @@ def test_rebar_directories_ignored(language_server: SolidLanguageServer):
     assert language_server.is_ignored_dirname(".rebar3"), "rebar3 cache should be ignored"
 
     # Test that rebar.lock and rebar.config are not ignored (they are configuration files)
+    assert isinstance(language_server, ErlangLanguageServer)
     assert not language_server.is_ignored_filename("rebar.config"), "rebar.config should not be ignored"
     assert not language_server.is_ignored_filename("rebar.lock"), "rebar.lock should not be ignored"
 

@@ -1,6 +1,7 @@
 """
 Provides a standalone BasedPyright language server integration for Python.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import re

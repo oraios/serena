@@ -1,6 +1,7 @@
 """
 Provides Crystal specific instantiation of the LanguageServer class using Crystalline.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import shutil

@@ -2,6 +2,7 @@
 Provides Svelte-specific instantiation of the LanguageServer class using
 ``svelte-language-server`` from Svelte Language Tools.
 """
+# SPDX-License-Identifier: MIT
 
 from __future__ import annotations
 
@@ -97,12 +98,6 @@ class SvelteTypeScriptServer(TypeScriptLanguageServer):
         # store as instance state, not class attr, to avoid races across parallel instantiations
         self._explicit_ts_ls_executable = ts_ls_executable_path
         super().__init__(config, repository_root_path, solidlsp_settings)
-
-    @classmethod
-    @override
-    def get_language_server_id(cls) -> LanguageServerId:
-        """Return TYPESCRIPT; companion uses the TypeScript LS infrastructure."""
-        return LanguageServerId.TYPESCRIPT
 
     @override
     def get_source_fn_matcher(self) -> FilenameMatcher:

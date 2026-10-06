@@ -125,6 +125,7 @@ class TestAngularLanguageServerBasics:
         # +1 puts the cursor inside the identifier rather than on its leading boundary.
         refs = language_server.request_references(src_path, coords.line, coords.col + 1)
         ref_paths = {r.get("relativePath", "") for r in refs}
+        ref_paths = {p for p in ref_paths if p}  # filter out any empty relativePath entries
         assert any(p.endswith("app.component.html") for p in ref_paths), (
             f"Expected references for setName to include its template callsite in app.component.html, got: {ref_paths}"
         )
