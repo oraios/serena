@@ -1,0 +1,50 @@
+"""The root query type: entry point for all read operations."""
+type Query {
+  """Look up a single user by id."""
+  user(id: ID!): User
+  """List every post in the system."""
+  posts: [Post!]!
+  """Search users by (partial) name."""
+  searchUsers(name: String!): [User!]!
+}
+
+"""The root mutation type: entry point for all write operations."""
+type Mutation {
+  """Create a new user."""
+  createUser(input: CreateUserInput!): User!
+  """Publish a new post authored by an existing user."""
+  createPost(authorId: ID!, title: String!): Post!
+}
+
+"""A registered user of the application."""
+type User {
+  id: ID!
+  name: String!
+  email: String!
+  role: Role!
+  """Every post authored by this user."""
+  posts: [Post!]!
+}
+
+"""A piece of content authored by a User."""
+type Post {
+  id: ID!
+  title: String!
+  body: String
+  published: Boolean!
+  author: User!
+}
+
+"""Permission level granted to a User."""
+enum Role {
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+"""Input payload for creating a User."""
+input CreateUserInput {
+  name: String!
+  email: String!
+  role: Role = VIEWER
+}

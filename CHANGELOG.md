@@ -161,6 +161,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     JetBrains Runtime (`jbr/bin/java` and native libs), whose launcher failed to exec it
     with a permission error. Executable bits are now restored for every extracted file (#2100)
   - Add Astro language server support via `@astrojs/language-server` with a companion TypeScript language server (`@astrojs/ts-plugin`) for cross-file code intelligence (#2085)
+  - Add GraphQL language server support (experimental) via `graphql-language-service-cli` (`graphql-lsp`) for
+    `.graphql`/`.gql` files. Document symbols, hover and cross-file go-to-definition require a graphql-config file
+    (`.graphqlrc.yml` / `graphql.config.*`) at the repository root; without one, Serena logs an actionable message
+    instead of waiting out the startup timeout. Find-references is unsupported (not implemented by the upstream server)
   - Fix: Dart analysis server no longer receives rootUri/rootPath, which added the monorepo root as an extra analysis root and could pin a CPU core at idle (#2045)
   - Fix: The C# language server opened every `.csproj` found anywhere under the repository root,
     without consulting the project's ignore settings. On repositories that vendor third-party or

@@ -348,6 +348,17 @@ class LanguageServerId(Enum):
     experimental and must be explicitly specified via ``languages: [deno]`` in project.yml;
     do not also enable typescript for the same files. Requires the ``deno`` CLI on PATH.
     """
+    GRAPHQL = "graphql"
+    """GraphQL language server (experimental) using graphql-language-service-cli
+    (https://github.com/graphql/graphql-language-service). Supports *.graphql and *.gql files.
+    Must be explicitly specified in project.yml. Requires Node.js and npm.
+    Requires a graphql-config file (.graphqlrc.yml / graphql.config.{yml,yaml,json}) at the
+    repository root that points at the schema. If the server cannot use one -- there is none, or
+    it fails to load -- its caches never initialize and *all* features return empty results,
+    including document symbols for a single self-contained file, not just cross-file navigation.
+    A config that loads but whose schema does not fully resolve is a milder, separate case: the
+    caches do come up and document symbols work, while the schema-backed features are degraded.
+    """
 
     @classmethod
     def iter_all(
@@ -394,6 +405,7 @@ class LanguageServerId(Enum):
             self.SCSS,
             self.ANGULAR,
             self.DENO,
+            self.GRAPHQL,
         }
 
     def is_superset_language(self) -> bool:
@@ -694,6 +706,8 @@ class LanguageServerId(Enum):
                         for base_pattern in ["ts", "js"]:
                             path_patterns.append(f".{prefix}{base_pattern}{postfix}")
                 return FilenameMatcher(*path_patterns)
+            case self.GRAPHQL:
+                return FilenameMatcher(".graphql", ".gql")
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
@@ -1005,6 +1019,10 @@ class LanguageServerId(Enum):
                 from solidlsp.language_servers.deno_language_server import DenoLanguageServer
 
                 return DenoLanguageServer
+            case self.GRAPHQL:
+                from solidlsp.language_servers.graphql_language_server import GraphQLLanguageServer
+
+                return GraphQLLanguageServer
             case _:
                 raise ValueError(f"Unhandled language: {self}")
 
