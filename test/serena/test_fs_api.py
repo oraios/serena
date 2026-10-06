@@ -54,7 +54,7 @@ def test_create_text_file(api: FsApi, project: Project) -> None:
     result = api.create_text_file("sub/new.txt", "changed\n")
     assert "Overwrote" in result
 
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError, match="outside the project root"):
         api.create_text_file("../outside.txt", "nope")
 
 

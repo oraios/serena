@@ -6,7 +6,7 @@ You can configure the following options in ls_specific_settings (in serena_confi
     ls_specific_settings:
       kotlin:
         ls_path: '/path/to/bin/intellij-server'  # Custom path to Kotlin Language Server executable
-        kotlin_lsp_version: '262.9593.0'  # Kotlin Language Server version (default: current bundled version)
+        kotlin_lsp_version: '263.4702.0'  # Kotlin Language Server version (default: current bundled version)
         jvm_options: '-Xmx2G'  # JVM options for Kotlin Language Server (default: -Xmx2G)
 
 Example configuration for large projects:
@@ -14,12 +14,20 @@ Example configuration for large projects:
     ls_specific_settings:
       kotlin:
         jvm_options: '-Xmx4G -XX:+UseG1GC'
+
+IntelliJ system directory:
+    KLS is built on IntelliJ's platform, which by default creates a new ~52 MB
+    idea-system<random>/ directory in /tmp for each instance. These directories
+    are never cleaned up, which can exhaust RAM on tmpfs systems after many runs.
+    Serena redirects idea.system.path to <ls_resources_dir>/kotlin_language_server/system/,
+    making it a bounded per-project cache that persists across sessions (faster restarts).
 """
 # SPDX-License-Identifier: MIT
 
 import logging
 import os
 import pathlib
+import shutil
 import stat
 import threading
 from dataclasses import dataclass
@@ -50,7 +58,7 @@ KOTLIN_LSP_ALLOWED_HOSTS = ("download-cdn.jetbrains.com",)
 #   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
 # NOTE: After changing either pinned version, run scripts/update_downloaded_dependency_hashes.py.
 INITIAL_KOTLIN_LSP_VERSION = "261.13587.0"
-DEFAULT_KOTLIN_LSP_VERSION = "262.9593.0"
+DEFAULT_KOTLIN_LSP_VERSION = "263.4702.0"
 
 # Versions before this one use kotlin-lsp-{version}-{platform}.zip and a kotlin-lsp script.
 # Starting with 262.4739.0, JetBrains publishes kotlin-server archives with platform-specific
@@ -120,6 +128,7 @@ class KotlinLanguageServer(SolidLanguageServer):
         def __init__(self, custom_settings: SolidLSPSettings.CustomLSSettings, ls_resources_dir: str, project_cache_dir: str):
             super().__init__(custom_settings, ls_resources_dir)
             self._storage_lock: FileLock | None = None
+            self._is_fallback_storage_dir = False
             self.storage_dir = self._claim_storage_dir(project_cache_dir)
 
         def _claim_storage_dir(self, project_cache_dir: str) -> str:
@@ -129,7 +138,8 @@ class KotlinLanguageServer(SolidLanguageServer):
             single Serena instance keeps reusing its index across restarts (the primary use case, which must
             not regress). If another live Serena instance already holds that directory (concurrent sessions
             on the same project, see oraios/serena#1966), falls back to a directory unique to this process
-            instead of two Kotlin LSP processes contending for the same index.
+            instead of two Kotlin LSP processes contending for the same index. That fallback directory is
+            this instance's alone, so it is removed once the instance releases it (see release_storage_lock).
             """
             lock = FileLock(f"{project_cache_dir}.lock")
             try:
@@ -137,6 +147,7 @@ class KotlinLanguageServer(SolidLanguageServer):
             except Timeout:
                 instance_dir = f"{project_cache_dir}-instance-{os.getpid()}"
                 os.makedirs(instance_dir, exist_ok=True)
+                self._is_fallback_storage_dir = True
                 log.info(
                     "Kotlin LSP storage directory %s is in use by another Serena instance; using %s for this instance",
                     project_cache_dir,
@@ -147,6 +158,9 @@ class KotlinLanguageServer(SolidLanguageServer):
             return project_cache_dir
 
         def release_storage_lock(self) -> None:
+            if self._is_fallback_storage_dir:
+                shutil.rmtree(self.storage_dir, ignore_errors=True)
+                self._is_fallback_storage_dir = False
             if self._storage_lock is not None:
                 self._storage_lock.release()
                 self._storage_lock = None
@@ -272,7 +286,18 @@ class KotlinLanguageServer(SolidLanguageServer):
             else:
                 jvm_options = DEFAULT_KOTLIN_JVM_OPTIONS
 
-            env["JAVA_TOOL_OPTIONS"] = jvm_options
+            # Redirect IntelliJ's system directory to a stable path under ls_resources_dir.
+            # Without this, each KLS instance creates a new ~52 MB /tmp/idea-system<random>/ directory
+            # that is never removed on shutdown. On tmpfs systems this causes unbounded RAM consumption
+            # (e.g. 329 stale directories totalling 30 GiB after repeated test runs).
+            # Using a fixed path makes it a bounded per-project cache and preserves the IntelliJ index
+            # across sessions for faster restarts.
+            system_dir = os.path.join(self._ls_resources_dir, "system")
+            os.makedirs(system_dir, exist_ok=True)
+            idea_system_path_opt = f"-Didea.system.path={system_dir}"
+            jvm_options_full = f"{jvm_options} {idea_system_path_opt}".strip() if jvm_options else idea_system_path_opt
+
+            env["JAVA_TOOL_OPTIONS"] = jvm_options_full
             return env
 
     @override

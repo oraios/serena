@@ -3,6 +3,7 @@ This file contains various utility functions like I/O operations, handling paths
 """
 # SPDX-License-Identifier: MIT
 
+import bisect
 import gzip
 import hashlib
 import logging
@@ -15,6 +16,7 @@ import tempfile
 import uuid
 import zipfile
 from collections.abc import Sequence
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path, PurePath
 from typing import Literal, cast
@@ -179,6 +181,70 @@ class TextStepper:
         return lines
 
 
+@dataclass
+class TextCoordinates:
+    """
+    Represents a position in a text as a pair of 0-based line and column numbers.
+    """
+
+    line: int
+    """the 0-based line number"""
+
+    col: int
+    """the 0-based column number"""
+
+
+class TextCoordinateProvider:
+    """
+    Accelerates multiple computations of line/column coordinates in a given text by precomputing the text's line start indices.
+    """
+
+    def __init__(self, text: str):
+        """
+        :param text: the text in which character indices are to be located
+        """
+        self._text = text
+        self._line_starts = self._compute_line_starts()
+
+    def compute_coordinates(self, index: int) -> TextCoordinates:
+        r"""
+        Returns the line/column coordinates corresponding to the given character index.
+
+        An index pointing at the "\n" of a "\r\n" sequence denotes the beginning of the following line
+        (column 0), in the same way as a cursor insertion position between "\r" and "\n" does.
+
+        :param index: the 0-based index in the text; must not exceed the text length
+        :return: the coordinates corresponding to the index
+        :raises InvalidTextLocationError: if the index is negative or greater than the text length
+        """
+        # determine the line containing the index, which is the last line whose start does not exceed the index
+        if index < 0 or index > len(self._text):
+            raise InvalidTextLocationError(f"{index=}")
+        line_num = bisect.bisect_right(self._line_starts, index) - 1
+        line_start = self._line_starts[line_num]
+
+        # an index pointing at the "\n" of a "\r\n" pair maps to the beginning of the following line
+        if index > 0 and self._text[index - 1] == "\r" and self._text[index : index + 1] == "\n":
+            return TextCoordinates(line=line_num + 1, col=0)
+
+        return TextCoordinates(line=line_num, col=index - line_start)
+
+    def _compute_line_starts(self) -> list[int]:
+        """
+        Computes the character offsets at which the lines of the text begin, using a TextStepper to process
+        the text line by line.
+
+        :return: a list where entry i is the 0-based character offset at which line i starts;
+            entry 0 is always 0
+        """
+        line_starts = [0]
+        text_stepper = TextStepper(self._text)
+        while text_stepper.step_line():
+            if text_stepper.is_newline:
+                line_starts.append(text_stepper.line_start_idx)
+        return line_starts
+
+
 class TextUtils:
     """
     Utilities for text operations.
@@ -266,6 +332,9 @@ class TextUtils:
             else:
                 raise
 
+        if del_start_idx > del_end_idx:
+            raise ValueError(f"Start position ({start_line=}, {start_col=}) is after end position ({end_line=}, {end_col=})")
+
         deleted_text = text[del_start_idx:del_end_idx]
         new_text = text[:del_start_idx] + text[del_end_idx:]
         return new_text, deleted_text
@@ -334,6 +403,36 @@ class TextUtils:
         """
         text_stepper = TextStepper(text)
         return text_stepper.process_all_gather_lines(with_ends=with_ends)
+
+    @staticmethod
+    def line_slice_indices(start_line: int, end_line: int | None, num_lines: int) -> tuple[int, int]:
+        """
+        Computes line slice indices from the given start and end lines.
+
+        :param start_line: the 0-based index of the first line to include, negative values count from the end of the text
+        :param end_line: the 0-based index of the last line to include, negative values count from the end of the text;
+            if None, the slice extends to the end of the text
+        :param num_lines: the total number of lines in the text
+        :return: normalised index pair for slicing (always positive, with the end index exclusive)
+        """
+
+        def normalize_line_idx(idx: int, to_inclusive_end: bool = False) -> int:
+            if idx < 0:
+                idx += num_lines
+            if to_inclusive_end:
+                if idx < 0:
+                    return 0
+                else:
+                    return idx + 1
+            else:
+                return max(0, idx)
+
+        start_idx = normalize_line_idx(start_line)
+        if end_line is None:
+            return start_idx, num_lines
+        else:
+            end_idx = normalize_line_idx(end_line, to_inclusive_end=True)
+            return start_idx, end_idx
 
 
 class PathUtils:

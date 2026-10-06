@@ -23,7 +23,7 @@ from solidlsp.settings import SolidLSPSettings
 
 from .solidlsp.clojure import is_clojure_cli_available
 from .solidlsp.elixir import EXPERT_UNAVAILABLE
-from .solidlsp.erlang import ERLANG_LS_UNAVAILABLE
+from .solidlsp.erlang import ERLANG_UNAVAILABLE
 
 PYTEST_LOG_LEVEL = logging.DEBUG
 
@@ -313,6 +313,7 @@ _LANGUAGE_PYTEST_MARKERS: dict[LanguageServerId, list[MarkDecorator | Mark]] = {
     LanguageServerId.ANGULAR: [pytest.mark.angular],
     LanguageServerId.HTML: [pytest.mark.html],
     LanguageServerId.SCSS: [pytest.mark.scss],
+    LanguageServerId.ASTRO: [pytest.mark.astro],
 }
 
 
@@ -465,7 +466,7 @@ def _determine_disabled_language_servers() -> list[LanguageServerId]:
         result.append(LanguageServerId.SYSTEMVERILOG)
     if not _is_matlab_available():
         result.append(LanguageServerId.MATLAB)
-    if ERLANG_LS_UNAVAILABLE:  # no Erlang-OTP / no rebar3 / Windows -- see test/solidlsp/erlang
+    if ERLANG_UNAVAILABLE:  # no Erlang/OTP / no rebar3 / unsupported platform -- see test/solidlsp/erlang
         result.append(LanguageServerId.ERLANG)
     if EXPERT_UNAVAILABLE:  # Elixir not installed -- see test/solidlsp/elixir
         result.append(LanguageServerId.ELIXIR)
