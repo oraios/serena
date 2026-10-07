@@ -36,6 +36,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: `TextUtils.insert_text_at_position` returned a wrong position when the inserted text merged
     with an adjacent character into a single newline sequence (e.g. a `\n` inserted directly after an
     existing `\r`); the position is now determined from the resulting text
+  - Fix: `search_for_pattern` reported "no matches" for a regular expression that does not compile,
+    because the compilation happened inside the per-file error handling that exists to skip
+    unreadable files; an invalid pattern is now rejected up front, as `search_text` documents and
+    as the replacement tools already do
   - Fix: process-tree cleanup signaled descendant language-server processes without waiting for them,
     which could leave grandchildren as zombies; cleanup now waits for the discovered descendants (#1464)
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)

@@ -325,7 +325,17 @@ def search_files(
     :param paths_exclude_glob: optional glob pattern to exclude files from the list
     :param multiline: whether to apply multi-line matching, enabling the flags re.DOTALL and re.MULTILINE (default: True)
     :return: list of MatchedConsecutiveLines objects
+    :raises ValueError: if the pattern is not a valid regular expression
     """
+    # Validate the pattern once, before the per-file processing below: a pattern that does not
+    # compile is a defect in the request, not a per-file read failure, so it must not be turned
+    # into the empty result that reads like "the pattern occurs nowhere" (see `search_text`,
+    # which documents this error, and the replacement tools, which let it surface).
+    try:
+        re.compile(pattern, (re.MULTILINE | re.DOTALL) if multiline else 0)
+    except re.error as e:
+        raise ValueError(f"Invalid regular expression {pattern!r}: {e}") from e
+
     # apply glob filter
     file_collection = file_collection.filter_glob(paths_include_glob=paths_include_glob, paths_exclude_glob=paths_exclude_glob)
     log.info(f"Processing {len(file_collection)} files.")

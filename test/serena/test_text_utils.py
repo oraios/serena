@@ -538,6 +538,24 @@ class TestSearchFiles:
         assert result.lines[2].line_content == "Line after 1", "Incorrect 'after' context line"
         assert result.lines[2].match_type == LineType.AFTER_MATCH
 
+    def test_search_files_rejects_an_invalid_pattern(self):
+        """A pattern that does not compile is an error in the request, not a per-file read failure.
+
+        The per-file error handling exists to skip files that cannot be read (e.g. binaries); it
+        must not turn a malformed regular expression into an empty result, which is
+        indistinguishable from "the pattern occurs nowhere in the project" for the caller.
+        """
+
+        def unreadable_mock_reader(file_path: str) -> str:
+            raise UnicodeDecodeError("utf-8", b"\x00", 0, 1, "simulated undecodable file")
+
+        with pytest.raises(ValueError, match="Invalid regular expression"):
+            search_files(MockFileCollection(["a.py"]), pattern="foo(")
+
+        # a file that genuinely cannot be read is still skipped rather than failing the search
+        results = search_files(MockFileCollection(["a.bin"], unreadable_mock_reader), pattern="match")
+        assert results == []
+
 
 class TestGlobMatch:
     """Test the glob_match function directly."""
