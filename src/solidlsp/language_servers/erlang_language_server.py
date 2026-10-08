@@ -199,6 +199,18 @@ class ErlangLanguageServer(SolidLanguageServer):
         """
         return {
             "capabilities": {
+                "general": {
+                    "staleRequestSupport": {
+                        "cancel": True,
+                        "retryOnContentModified": [
+                            "textDocument/documentSymbol",
+                            "textDocument/definition",
+                            "textDocument/references",
+                            "textDocument/hover",
+                            "workspace/symbol",
+                        ],
+                    },
+                },
                 "textDocument": {
                     "synchronization": {"didSave": True},
                     "completion": {"dynamicRegistration": True},
@@ -206,7 +218,7 @@ class ErlangLanguageServer(SolidLanguageServer):
                     "references": {"dynamicRegistration": True},
                     "documentSymbol": {"dynamicRegistration": True},
                     "hover": {"dynamicRegistration": True},
-                }
+                },
             },
         }
 
