@@ -3,6 +3,7 @@ include:
 
 services:
   serena:
+    image: serena:dev
     pull_policy: build
     build:
       context: .
