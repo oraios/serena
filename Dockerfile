@@ -3,6 +3,7 @@ FROM rust:1.94-slim AS rust
 FROM ghcr.io/astral-sh/uv:0.11.7 AS uv
 
 FROM python:3.11-slim AS base
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     SERENA_HOME=/home/serena/.serena
@@ -17,6 +18,11 @@ RUN useradd --create-home --shell /usr/sbin/nologin serena \
     && mkdir -p "/workspace" \
     && chown -R serena:serena "/workspace" \
     && chown -R serena:serena /home/serena
+
+EXPOSE 9121 24282
+
+ENTRYPOINT ["serena"]
+CMD ["start-mcp-server", "--transport", "stdio", "--project", "/workspace"]
 
 FROM base AS builder
 
@@ -59,11 +65,6 @@ COPY . /workspaces/serena/
 
 RUN uv sync
 
-ENV PATH="/workspaces/serena/.venv/bin:${PATH}"
-
-ENTRYPOINT ["serena"]
-CMD ["start-mcp-server", "--transport", "stdio", "--project", "./"]
-
 FROM base AS prod
 
 WORKDIR /workspace
@@ -74,8 +75,3 @@ RUN pip install --no-cache-dir /tmp/*.whl \
     && rm -f /tmp/*.whl
 
 USER serena
-
-EXPOSE 9121 24282
-
-ENTRYPOINT ["serena"]
-CMD ["start-mcp-server", "--transport", "stdio", "--project", "./"]
