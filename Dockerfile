@@ -19,7 +19,7 @@ RUN useradd --create-home --shell /usr/sbin/nologin serena \
     && chown -R serena:serena "/workspace" \
     && chown -R serena:serena /home/serena
 
-EXPOSE 9121 24282
+EXPOSE 24282
 
 ENTRYPOINT ["serena"]
 CMD ["start-mcp-server", "--transport", "stdio", "--project", "/workspace"]
