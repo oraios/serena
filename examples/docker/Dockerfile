@@ -2,7 +2,7 @@ FROM ghcr.io/opentofu/opentofu:minimal AS tofu
 
 FROM node:22.22-slim AS node
 
-FROM serena:latest
+FROM ghcr.io/oraios/serena:latest
 
 USER root
 
