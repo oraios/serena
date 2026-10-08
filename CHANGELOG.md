@@ -229,6 +229,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Nixd could return a transient empty hover response while initial analysis was completing;
     retry the request within a bounded interval and exercise Nix hover coverage against a supported
     nixpkgs-backed selector (#1040)
+  - Add the experimental Rust-based EmmyLua Analyzer backend as `lua_emmylua`, with managed
+    cross-platform downloads and SHA-256 verification; the default `lua` backend remains unchanged
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: `DartLanguageServer._start_server` discarded both `$/analyzerStatus` and
     `experimental/serverStatus`, the two notifications the Dart analysis server sends to report

@@ -27,5 +27,11 @@
   "https://download-cdn.jetbrains.com/language-server/kotlin-server/263.4702.0/kotlin-server-263.4702.0.tar.gz": "1e11d2e5fefbf9ea215ad8dd6be95f2222897cd086e8cb7a661a52084a590405",
   "https://download-cdn.jetbrains.com/language-server/kotlin-server/263.4702.0/kotlin-server-263.4702.0-aarch64.tar.gz": "ec7cb254a6662a07fff9f10e4365226afab6c40008f8a974c10ac5e785d6510f",
   "https://download-cdn.jetbrains.com/language-server/kotlin-server/263.4702.0/kotlin-server-263.4702.0.sit": "62ab735947b1c855b505f64f5db8fbd7ff0b52a35ab1897938c6dbfc7b24c8a3",
-  "https://download-cdn.jetbrains.com/language-server/kotlin-server/263.4702.0/kotlin-server-263.4702.0-aarch64.sit": "95da3fc6d3b9092c7616345044a05edb85e5408dc648d081e4e433595c892bec"
+  "https://download-cdn.jetbrains.com/language-server/kotlin-server/263.4702.0/kotlin-server-263.4702.0-aarch64.sit": "95da3fc6d3b9092c7616345044a05edb85e5408dc648d081e4e433595c892bec",
+  "https://github.com/EmmyLuaLs/emmylua-analyzer-rust/releases/download/0.25.1/emmylua_ls-linux-x64-glibc.2.17.tar.gz": "9731ec340b1b40916555dcb31c1c539beee9fa184997962c9af250c42b316950",
+  "https://github.com/EmmyLuaLs/emmylua-analyzer-rust/releases/download/0.25.1/emmylua_ls-linux-aarch64-glibc.2.17.tar.gz": "210535be13c31ceefcdd0f8451eb4c0d3d430887fc2c382eaf82484a9187220d",
+  "https://github.com/EmmyLuaLs/emmylua-analyzer-rust/releases/download/0.25.1/emmylua_ls-darwin-x64.tar.gz": "abc9cbe2e8d28624e0d441fa55055b1196f73251b034356d717b0e58b562f182",
+  "https://github.com/EmmyLuaLs/emmylua-analyzer-rust/releases/download/0.25.1/emmylua_ls-darwin-arm64.tar.gz": "335023043cbc9ad683a13b24eb79f709a370215daf53673276b9a9663df96504",
+  "https://github.com/EmmyLuaLs/emmylua-analyzer-rust/releases/download/0.25.1/emmylua_ls-win32-x64.zip": "82efa133287f67be09e1a624d8efecd8063832ec2b9bf9279c37afc5f42118bd",
+  "https://github.com/EmmyLuaLs/emmylua-analyzer-rust/releases/download/0.25.1/emmylua_ls-win32-arm64.zip": "f6f335f01fccca6f000a6240fb78c6fbab069230b1bb4347361ef3f64550390a"
 }
