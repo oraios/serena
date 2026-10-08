@@ -137,6 +137,9 @@ class ErlangLanguageServer(SolidLanguageServer):
         )
 
         self.set_request_timeout(120.0)
+        # ELP begins loading a project at the first didOpen, after the initialization settling sleep.
+        # Allow up to five seconds of retry delays for that first read; other servers keep their default.
+        self.server.set_content_modified_max_attempts(26)
 
     @override
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:

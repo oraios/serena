@@ -85,6 +85,14 @@ def test_content_modified_gives_up_after_max_attempts() -> None:
     assert server.sent_payload_count == max_attempts
 
 
+def test_content_modified_respects_configured_attempt_limit() -> None:
+    server = _ScriptedServer([_content_modified() for _ in range(5)])
+    server.set_content_modified_max_attempts(5)
+    with pytest.raises(SolidLSPException):
+        server.send_request("textDocument/hover")
+    assert server.sent_payload_count == 5
+
+
 def test_other_lsp_errors_are_not_retried() -> None:
     server = _ScriptedServer([Request.Result(error=LSPError(LSPErrorCodes.RequestFailed, "boom"))])
     with pytest.raises(SolidLSPException):
@@ -141,7 +149,7 @@ class _InitializingScriptedServer(_ScriptedServer):
 )
 def test_erlang_read_request_recovers_while_elp_is_loading(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, method: str) -> None:
     server = _InitializingScriptedServer(
-        [Request.Result(payload={"capabilities": {}}), _content_modified(), _content_modified(), Request.Result(payload=[])],
+        [Request.Result(payload={"capabilities": {}}), *[_content_modified() for _ in range(4)], Request.Result(payload=[])],
         retry_methods=(),
     )
     monkeypatch.setattr(ErlangLanguageServer, "_check_erlang_installation", staticmethod(lambda: True))
@@ -154,4 +162,4 @@ def test_erlang_read_request_recovers_while_elp_is_loading(tmp_path: Path, monke
     language_server.start()
 
     assert language_server.server.send_request(method, {}) == []
-    assert server.sent_payload_count == 4
+    assert server.sent_payload_count == 6
