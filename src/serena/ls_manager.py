@@ -37,6 +37,7 @@ class LanguageServerFactory:
         ls_timeout: float | None = None,
         ls_specific_settings: dict | None = None,
         trace_lsp_communication: bool = False,
+        is_project_trusted: bool = True,
     ):
         self.project_root = project_root
         self.project_config = project_config
@@ -46,6 +47,7 @@ class LanguageServerFactory:
         self.ls_timeout = ls_timeout
         self.ls_specific_settings = ls_specific_settings
         self.trace_lsp_communication = trace_lsp_communication
+        self.is_project_trusted = is_project_trusted
 
     def create_language_server(self, ls_id: LanguageServerIdLike) -> SolidLanguageServer:
         ls_config = LanguageServerConfig(
@@ -55,6 +57,7 @@ class LanguageServerFactory:
             ignored_paths=self.ignored_patterns,
             trace_lsp_communication=self.trace_lsp_communication,
             encoding=self.encoding,
+            is_project_trusted=self.is_project_trusted,
         )
 
         log.info(f"Creating language server instance for {self.project_root}, language={ls_id}.")

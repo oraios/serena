@@ -1178,6 +1178,15 @@ class LanguageServerConfig:
     """
     encoding: str = "utf-8"
     """File encoding to use when reading source files"""
+    is_project_trusted: bool = True
+    """
+    whether the repository being analysed is trusted, i.e. whether input supplied by the repository itself
+    may influence the language server beyond having its code read and analysed. In particular, an untrusted
+    repository must not be able to have code from its own dependency tree (e.g. a `node_modules` directory)
+    executed as part of the language server.
+    The default retains the historical behaviour; applications embedding SolidLSP are expected to pass the
+    trust status they have determined for the project.
+    """
 
     @classmethod
     def from_dict(cls, env: dict) -> Self:

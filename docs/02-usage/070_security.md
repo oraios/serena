@@ -95,6 +95,13 @@ The settings that require trust are annotated accordingly in the project configu
   which a language server is acquired.
   Without trust gating, a repository could thereby silently circumvent the supply chain protections described
   below (version pinning, host restrictions) and cause attacker-controlled code to be downloaded and executed.
+- The TypeScript language server loads `node_modules/typescript/lib/tsserver.js` from the project if the project
+  provides it, in preference to the TypeScript version installed by Serena.
+  Without trust gating, opening a repository would execute JavaScript taken from that repository.
+  For an untrusted project, tsserver is therefore pinned to Serena's own TypeScript installation.
+  If there is no such installation, because the language server's launch command was provided via
+  `ls_path`/`ls_base_cmd`, the language server refuses to start rather than falling back to the project's
+  copy: trust the project or drop the override to resolve it.
 
 Note that the effective set of trusted paths depends on the age of your configuration: installations predating
 the introduction of this setting retain a pattern that trusts all projects, ensuring that existing workflows are

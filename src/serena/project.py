@@ -526,9 +526,10 @@ class Project(ToStringMixin):
 
             log.info(f"Creating language server manager for {self.project_root}")
             self._language_server_manager_init_error = None
+            is_trusted = self.is_trusted()
             ls_specific_settings = dict(self.serena_config.ls_specific_settings)
             if self.project_config.ls_specific_settings:
-                if self.is_trusted():
+                if is_trusted:
                     ls_specific_settings.update(self.project_config.ls_specific_settings)
                 else:
                     log.warning(
@@ -544,6 +545,7 @@ class Project(ToStringMixin):
                 ls_timeout=ls_timeout,
                 ls_specific_settings=ls_specific_settings,
                 trace_lsp_communication=self.serena_config.trace_lsp_communication,
+                is_project_trusted=is_trusted,
             )
             self.language_server_manager = LanguageServerManager.from_languages(self.project_config.language_servers, factory, self)
             return self.language_server_manager
