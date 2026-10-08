@@ -33,7 +33,8 @@ COPY --from=uv /uv /uvx /bin/
 COPY pyproject.toml README.md uv.lock ./
 COPY src ./src
 
-RUN uv build
+RUN uv build --wheel \
+    && uv export --locked --no-dev --no-emit-project -o requirements.txt
 
 FROM base AS dev
 SHELL ["/bin/bash", "-c"]
@@ -59,6 +60,9 @@ ENV CARGO_HOME=/usr/local/cargo \
     RUSTUP_HOME=/usr/local/rustup \
     PATH="/usr/local/cargo/bin:${PATH}"
 
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
+    PATH="/opt/venv/bin:${PATH}"
+
 WORKDIR /workspaces/serena
 
 COPY . /workspaces/serena/
@@ -69,9 +73,10 @@ FROM base AS prod
 
 WORKDIR /workspace
 
-COPY --from=builder /build/dist/*.whl /tmp/
+COPY --from=builder /build/requirements.txt /build/dist/*.whl /tmp/
 
-RUN pip install --no-cache-dir /tmp/*.whl \
-    && rm -f /tmp/*.whl
+RUN pip install --no-cache-dir -r /tmp/requirements.txt \
+    && pip install --no-cache-dir --no-deps /tmp/*.whl \
+    && rm -f /tmp/*.whl /tmp/requirements.txt
 
 USER serena
