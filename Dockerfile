@@ -29,22 +29,6 @@ COPY src ./src
 
 RUN uv build
 
-FROM base AS prod
-
-WORKDIR /workspace
-
-COPY --from=builder /build/dist/*.whl /tmp/
-
-RUN pip install --no-cache-dir /tmp/*.whl \
-    && rm -f /tmp/*.whl
-
-USER serena
-
-EXPOSE 9121 24282
-
-ENTRYPOINT ["serena"]
-CMD ["start-mcp-server", "--transport", "stdio", "--project", "./"]
-
 FROM base AS dev
 SHELL ["/bin/bash", "-c"]
 
@@ -76,6 +60,22 @@ COPY . /workspaces/serena/
 RUN uv sync
 
 ENV PATH="/workspaces/serena/.venv/bin:${PATH}"
+
+ENTRYPOINT ["serena"]
+CMD ["start-mcp-server", "--transport", "stdio", "--project", "./"]
+
+FROM base AS prod
+
+WORKDIR /workspace
+
+COPY --from=builder /build/dist/*.whl /tmp/
+
+RUN pip install --no-cache-dir /tmp/*.whl \
+    && rm -f /tmp/*.whl
+
+USER serena
+
+EXPOSE 9121 24282
 
 ENTRYPOINT ["serena"]
 CMD ["start-mcp-server", "--transport", "stdio", "--project", "./"]
