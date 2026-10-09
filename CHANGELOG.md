@@ -74,6 +74,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     failure now surfaces as `LanguageServerTerminatedException`, the signal the restart path acts
     on, both for a broken pipe and for a stdin that shutdown had already closed (#2004)
 
+* Language Servers:
+  - Scala: terminate Bloop build-server daemons that Metals self-daemonized and that survived
+    `stop()` as orphans re-parented to PID 1 (#1816)
+
 * CLI:
   - Add `download-ls-dependencies` to prefetch runtime dependencies of the given language servers
     for environments with restricted network access (#664)

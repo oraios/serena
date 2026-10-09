@@ -11,6 +11,7 @@ import threading
 import time
 from enum import Enum
 
+import psutil
 from overrides import override
 
 from solidlsp.initialize_params import DefaultInitializeParamsBuilder, InitializeParamsBuilder
@@ -483,6 +484,9 @@ class ScalaLanguageServer(SolidLanguageServer):
             indexing_start_grace: 15
             # How long Metals must report nothing for its work to count as finished
             indexing_quiet_period: 3
+            # Terminate Bloop daemons this session spawned when Metals stops (default: true).
+            # Set false if another Metals client on the machine is expected to keep using Bloop.
+            terminate_bloop_on_stop: true
 
     Indexing:
         Metals reports its import, indexing and compilation as LSP work-done progress, and
@@ -564,6 +568,82 @@ class ScalaLanguageServer(SolidLanguageServer):
     @override
     def _create_initialize_params_builder(self) -> InitializeParamsBuilder:
         return ScalaInitializeParamsBuilder(self, self._build_roots)
+
+    @override
+    def stop(self, shutdown_timeout: float = 2.0) -> None:
+        """
+        Stops Metals and terminates Bloop build-server daemons it spawned in this session.
+
+        Bloop self-daemonizes (``bloop.BloopServer daemon:...``) and is re-parented to PID 1
+        after Metals exits, so it is invisible to the process-tree cleanup that stops Metals
+        itself and keeps consuming RAM (oraios/serena#1816). Snapshot those children before
+        shutdown; any that are still alive afterwards are terminated.
+
+        Only processes that were descendants of *this* Serena process are considered, so a
+        Bloop daemon started by another client (e.g. VS Code Metals) is left alone. If Bloop
+        is shared by two Serena sessions that both started under this process tree, stopping
+        one session will stop the shared daemon — prefer one Bloop per machine or a single
+        long-lived Metals host in that setup.
+        """
+        terminate_bloop = bool((self._custom_settings or {}).get("terminate_bloop_on_stop", True))
+        bloop_pids = self._discover_bloop_descendant_pids() if terminate_bloop else set()
+        super().stop(shutdown_timeout=shutdown_timeout)
+        if bloop_pids:
+            self._terminate_orphaned_bloop_processes(bloop_pids)
+
+    def _discover_bloop_descendant_pids(self) -> set[int]:
+        """
+        Collect PIDs of Bloop server processes that are descendants of the current process tree.
+        """
+        pids: set[int] = set()
+        try:
+            for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+                cmdline = proc.info.get("cmdline") or []
+                if not any("bloop.BloopServer" in part for part in cmdline):
+                    continue
+                # only descendants of this process (Metals' children/grandchildren)
+                try:
+                    parents = {p.pid for p in proc.parents()}
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+                if os.getpid() in parents:
+                    pids.add(proc.info["pid"])
+        except Exception as e:
+            log.warning(f"Could not enumerate Bloop processes before shutdown: {e}")
+        if pids:
+            log.info(f"Discovered Bloop daemon process(es) under this session: {sorted(pids)}")
+        return pids
+
+    def _terminate_orphaned_bloop_processes(self, pids: set[int], terminate_timeout: float = 3.0) -> None:
+        """
+        Terminate previously discovered Bloop processes that survived Metals shutdown.
+        """
+        for pid in sorted(pids):
+            try:
+                proc = psutil.Process(pid)
+            except psutil.NoSuchProcess:
+                continue
+            try:
+                cmdline = " ".join(proc.cmdline() or [])
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                cmdline = ""
+            if "bloop.BloopServer" not in cmdline:
+                continue
+            log.info(f"Terminating orphaned Bloop daemon pid={pid}")
+            try:
+                proc.terminate()
+            except psutil.NoSuchProcess:
+                continue
+            try:
+                proc.wait(timeout=terminate_timeout)
+            except psutil.TimeoutExpired:
+                log.warning(f"Bloop daemon pid={pid} did not exit in {terminate_timeout}s; killing")
+                try:
+                    proc.kill()
+                except psutil.NoSuchProcess:
+                    pass
+            except psutil.NoSuchProcess:
+                pass
 
     def _check_metals_db_status(self, build_root_path: str, solidlsp_settings: SolidLSPSettings) -> None:
         """
