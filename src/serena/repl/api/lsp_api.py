@@ -212,6 +212,54 @@ class LspSymbolsOverviewRenderer(LspSymbolCollectionRenderer):
         return self._limit_length(result, shortened_result_factories=shortened_results)
 
 
+class LspDirectorySymbolOverview(RepresentableViaRenderer):
+    """
+    The symbol overview for all analyzable files in a directory, as a mapping from file paths to top-level symbols.
+    """
+
+    path_to_symbols: dict[str, list[LanguageServerSymbol]]
+
+    def __init__(self, path_to_symbols: dict[str, list[LanguageServerSymbol]], renderer: "LspDirectorySymbolOverviewRenderer"):
+        """
+        :param path_to_symbols: the mapping from file paths to the files' top-level symbols
+        :param renderer: the renderer to use for representing the overview
+        """
+        super().__init__(renderer)
+        self.path_to_symbols_ = path_to_symbols
+
+
+class LspDirectorySymbolOverviewRenderer(Renderer[LspDirectorySymbolOverview]):
+    """
+    Renders a directory's symbol overview as a mapping from file paths to (optionally grouped) symbol dicts,
+    falling back to the number of analyzed files if the length limit is exceeded.
+    """
+
+    def __init__(
+        self,
+        agent: "SerenaAgent",
+        max_answer_chars: int,
+        relative_path: str,
+        output_params: SymbolOutputParams,
+        grouper: SymbolDictGrouper,
+    ):
+        super().__init__(agent, max_answer_chars)
+        self._symbol_dicts_renderer = LspSymbolCollectionRenderer(agent, max_answer_chars, output_params)
+        self._grouper = grouper
+        self._relative_path = relative_path
+
+    def render(self, obj: LspDirectorySymbolOverview) -> str:
+        per_file_result = {
+            path: self._grouper.group(self._symbol_dicts_renderer.symbol_dicts_(symbols, {}))
+            for path, symbols in obj.path_to_symbols_.items()
+        }
+        result = self._to_json(per_file_result)
+
+        def make_file_counts() -> str:
+            return f"Analyzed {len(obj.path_to_symbols_)} files in directory {self._relative_path}"
+
+        return self._limit_length(result, shortened_result_factories=[make_file_counts])
+
+
 class LspReferenceCollection(RepresentableViaRenderer):
     """
     The references to a symbol (`ReferenceInLanguageServerSymbol`).
@@ -393,17 +441,28 @@ class LspApi(FacadeApi):
     # read operations
 
     @facade_method(uses_project_server=True, corresponding_tool=GetSymbolsOverviewTool)
-    def get_symbols_overview(self, relative_path: str, depth: int = -1, max_answer_chars: int = -1) -> LspSymbolCollection:
+    def get_symbols_overview(
+        self, relative_path: str, depth: int = -1, max_answer_chars: int = -1, max_files: int = 20
+    ) -> LspSymbolCollection | LspDirectorySymbolOverview:
         """
-        Gets an overview of the symbols defined in the given file (classes, methods, fields, functions, etc.)
+        Gets an overview of the symbols defined in the given file or directory (classes, methods, fields, functions, etc.)
 
         Returns STRUCTURE only, without bodies. This is the cheap, structure-first way to learn what a file
         contains: it costs far less context than reading the whole file.
+        When given a directory path, returns the top-level symbols for every analyzable file in the directory.
 
-        :param relative_path: the relative path to the file to get the overview of
-        :param depth: depth up to which descendants shall be retrieved.
-            Default (-1) results in a language specific choice: 1 for java and kotlin and 0 for other languages
-        :return: the top-level symbols of the file
+        :param relative_path: the relative path to the file or directory to get the overview of
+        :param depth: depth up to which descendants of top-level symbols shall be retrieved
+            (e.g. 1 retrieves immediate children). Default (-1) results in a language specific
+            choice: 1 for java and kotlin and 0 for other languages.
+        :param max_answer_chars: if the overview is longer than this number of characters,
+            no content will be returned. -1 means the default value from the config will be used.
+            Don't adjust unless there is really no other way to get the content required for the task.
+        :param max_files: only used when relative_path is a directory. If the directory contains more
+            analyzable files than this limit, a ValueError is raised instead of returning a partial
+            overview — narrow the path to a subdirectory, or learn the layout from memories first.
+            Default 20. Don't increase unless you really need a broad sweep and accept the token cost.
+        :return: the top-level symbols of the file; for directories, a mapping from file paths to top-level symbols
         """
         # Note: file system sync not required (relevant file is opened in the language server explicitly)
         if depth == -1:
@@ -411,12 +470,13 @@ class LspApi(FacadeApi):
 
         symbol_retriever = self._create_symbol_retriever()
 
-        # the symbol overview is capable of working with both files and directories, but we require a file
         file_path = os.path.join(self._get_project().project_root, relative_path)
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File or directory {relative_path} does not exist in the project.")
         if os.path.isdir(file_path):
-            raise ValueError(f"Expected a file path, but got a directory path: {relative_path}. ")
+            return self._get_directory_symbols_overview(
+                symbol_retriever, relative_path, depth=depth, max_answer_chars=max_answer_chars, max_files=max_files
+            )
         if not symbol_retriever.can_analyze_file(relative_path):
             raise ValueError(
                 f"Cannot extract symbols from file {relative_path}. "
@@ -435,6 +495,58 @@ class LspApi(FacadeApi):
         )
         renderer = LspSymbolsOverviewRenderer(self._agent, max_answer_chars, output_params, grouper=self.overview_grouper_)
         return LspSymbolCollection(symbols, renderer)
+
+    def _get_directory_symbols_overview(
+        self,
+        symbol_retriever: LanguageServerSymbolRetriever,
+        relative_path: str,
+        depth: int,
+        max_answer_chars: int,
+        max_files: int,
+    ) -> LspDirectorySymbolOverview:
+        """
+        :param symbol_retriever: the symbol retriever to use
+        :param relative_path: the relative path to the directory to get the overview of
+        :return: a per-file mapping of top-level symbols for every analyzable file in the directory
+        """
+        # Pre-count the files the directory walk would analyze, applying the same ignore rules as
+        # request_full_symbol_tree, so that max_files bounds the language-server work (one
+        # document-symbol request per file) rather than only the size of the returned JSON.
+        lang_server = symbol_retriever.get_language_server(relative_path)
+        counted_files: list[str] = []
+        for root, dirs, files in os.walk(os.path.join(self._get_project().project_root, relative_path)):
+            rel_root = os.path.relpath(root, self._get_project().project_root)
+            dirs[:] = [d for d in dirs if not lang_server.is_ignored_path(os.path.join(rel_root, d))]
+            for file_name in files:
+                rel_file_path = os.path.join(rel_root, file_name)
+                if not lang_server.is_ignored_path(rel_file_path):
+                    counted_files.append(rel_file_path)
+
+        total_files = len(counted_files)
+        if total_files > max_files:
+            sample = counted_files[:5]
+            raise ValueError(
+                f"Directory {relative_path} contains {total_files} analyzable files, which exceeds "
+                f"max_files={max_files}. Narrow the path to a more specific subdirectory, or learn the "
+                f"repository layout from memories before asking for a broad overview. "
+                f"Sample files found: {sample}"
+            )
+
+        path_to_symbols = symbol_retriever.get_symbol_overview(relative_path)
+
+        output_params = SymbolOutputParams(
+            name_path=False,
+            name=True,
+            depth=depth,
+            kind=True,
+            relative_path=False,
+            location=False,
+            child_inclusion_predicate=_is_not_low_level,
+        )
+        renderer = LspDirectorySymbolOverviewRenderer(
+            self._agent, max_answer_chars, relative_path, output_params, grouper=self.overview_grouper_
+        )
+        return LspDirectorySymbolOverview(path_to_symbols, renderer)
 
     @facade_method(uses_project_server=True, corresponding_tool=FindSymbolTool)
     def find_symbol(
