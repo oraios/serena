@@ -1,3 +1,4 @@
+import logging as std_logging
 import os
 import platform
 import re
@@ -35,6 +36,37 @@ log = logging.getLogger(__name__)
 def pytest_configure(config: pytest.Config) -> None:
     if os.getenv("PYCHARM_HOSTED") == "1":
         config.option.patch_pycharm_diff = True
+
+
+@pytest.fixture(autouse=True)
+def _restore_root_logging() -> Iterator[None]:
+    """
+    Restore the root logger's handlers around every test.
+
+    Serena's CLI configures process-wide logging: `serena.cli` calls `logging.configure` (which
+    drops the handlers already installed, pytest's own capture handlers included) and attaches its
+    own stderr and file handlers to the root logger. Tests that invoke those commands in-process
+    through click's runner leave that state behind, and the leaked stderr handler is bound to the
+    capture stream pytest closes once the test ends. Every later record in the session then fails
+    inside the stale handler with `ValueError: I/O operation on closed file.`: the records are lost,
+    and the logging machinery prints a `--- Logging error ---` block whenever stderr happens to be
+    live, which is why CI output carried tracebacks that no test was responsible for.
+    """
+    root = std_logging.getLogger()
+    saved_handlers = list(root.handlers)
+    saved_level = root.level
+    yield
+    for handler in list(root.handlers):
+        if handler not in saved_handlers:
+            root.removeHandler(handler)
+            try:
+                handler.close()
+            except Exception:
+                pass
+    for handler in saved_handlers:
+        if handler not in root.handlers:
+            root.addHandler(handler)
+    root.setLevel(saved_level)
 
 
 @pytest.fixture(scope="session")
