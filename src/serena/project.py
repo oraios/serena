@@ -227,7 +227,8 @@ class Project(ToStringMixin):
         self, relative_path: str | Path, ignore_non_source_files: bool = True, is_file: bool | None = None
     ) -> bool:
         """
-        Determine whether a path should be ignored based on file type and ignore patterns.
+        Determine whether a path should be ignored based on file type, ignore patterns and on whether
+        it leaves the project root through a symlink.
         Returns False for non-existent paths since they cannot be matched by ignore patterns.
 
         :param relative_path: Relative path to check
@@ -257,6 +258,10 @@ class Project(ToStringMixin):
                 # non-source files are ignored
                 if not self.language_backend.is_source_file(abs_path, self):
                     return True
+
+        # a path that leaves the project root through a symlink is not part of the project's file set
+        if self._is_symlink_escaping_project_root(relative_path):
+            return True
 
         is_dir = None if is_file is None else not is_file
         return match_path(str(relative_path), self._ignore_spec, root_path=self.project_root, is_dir=is_dir)
@@ -294,15 +299,47 @@ class Project(ToStringMixin):
         :return: a function that takes a path and returns True if the path should be ignored, False otherwise.
         """
         if not skip_ignored_paths or self.is_ignored_path(base_path):
-            return lambda _: False
+            # ignoring is switched off, but paths that leave the project root through a symlink
+            # are excluded irrespective of the ignore settings
+            return self._is_symlink_escaping_project_root
         return lambda p: self.is_ignored_path(p, is_file=is_file)
+
+    def _is_symlink_escaping_project_root(self, path: str | Path) -> bool:
+        """
+        Checks whether the given path refers to a location outside the project root through a symlink
+        in a way that is not sanctioned by the project's trust.
+
+        :param path: the path to check, absolute or relative to the project root
+        :return: True if the path resolves outside the project root and the project is not trusted
+        """
+        if self.is_trusted():
+            return False
+
+        if not os.path.isabs(path):
+            path = os.path.join(self.project_root, path)
+
+        # resolve symlinks to determine the location the path actually refers to
+        resolved_path = os.path.realpath(path)
+        resolved_root = os.path.realpath(self.project_root)
+
+        try:
+            escapes = os.path.commonpath([resolved_root, resolved_path]) != resolved_root
+        except ValueError:
+            # occurs, in particular, if paths are on different drives on Windows
+            escapes = True
+
+        if escapes:
+            log.debug(f"Path {path} resolves outside the project root {self.project_root} and the project is not trusted")
+        return escapes
 
     def is_path_in_project(self, path: str | Path) -> bool:
         """
         Checks if the given (absolute or relative) path is inside the project directory.
 
-        Note: This is intended to catch cases where ".." segments would lead outside of the project directory,
-        but we intentionally allow symlinks, as the assumption is that they point to relevant project files.
+        Containment is decided on the lexically normalized path, which catches ".." segments, as well as on
+        the path with symlinks resolved: a path that is inside the project only lexically but resolves
+        outside of it through a symlink is accepted for trusted projects only, so that a symlink supplied
+        by the repository cannot redirect file access outside the project root.
         """
         if not os.path.isabs(path):
             path = os.path.join(self.project_root, path)
@@ -311,10 +348,13 @@ class Project(ToStringMixin):
         path = os.path.normpath(path)
 
         try:
-            return os.path.commonpath([self.project_root, path]) == self.project_root
+            if os.path.commonpath([self.project_root, path]) != self.project_root:
+                return False
         except ValueError:
             # occurs, in particular, if paths are on different drives on Windows
             return False
+
+        return not self._is_symlink_escaping_project_root(path)
 
     def relative_path_exists(self, relative_path: str, require_file: bool = False) -> bool:
         """

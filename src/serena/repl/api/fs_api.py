@@ -211,10 +211,11 @@ class FsApi(FacadeApi):
         """
         project = self._get_project()
         project_root = Path(project.project_root)
+        # the destination is resolved up front, so that the path which is validated is the path which is written
         abs_path = (project_root / relative_path).resolve()
         will_overwrite_existing = abs_path.exists()
 
-        # validate the destination path
+        # validate the destination path; the validation resolves symlinks, thus covering abs_path
         project.validate_relative_path(relative_path)
 
         # write the file

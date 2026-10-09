@@ -74,6 +74,13 @@ Status of the `main` branch. Changes prior to the next official version change w
     failure now surfaces as `LanguageServerTerminatedException`, the signal the restart path acts
     on, both for a broken pipe and for a stdin that shutdown had already closed (#2004)
 
+* Security:
+  - Fix: file tools could be redirected outside the project root through a symlink contained in the
+    project, bypassing the path-confinement check; symlink targets outside the project root are now
+    followed for trusted projects only (#2144)
+  - Fix: the line-based and symbol-level editing tools did not apply the path-confinement check at
+    all and now validate the file path like the other file tools (#2144)
+
 * CLI:
   - Add `download-ls-dependencies` to prefetch runtime dependencies of the given language servers
     for environments with restricted network access (#664)
