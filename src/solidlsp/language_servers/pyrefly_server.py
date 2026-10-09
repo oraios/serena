@@ -5,7 +5,9 @@ You can pass the following entries in ``ls_specific_settings["python_pyrefly"]``
     - ls_path: Override the executable used to start ``pyrefly``.
     - pyrefly_version: Override the pinned ``pyrefly`` version used with ``uvx`` / ``uv x``
       (default: the bundled Serena version).
-    - indexing_mode: Override pyrefly's LSP indexing mode (e.g. ``lazy-blocking``).
+    - indexing_mode: Override pyrefly's LSP indexing mode (e.g. ``lazy-blocking``). ``workspace/willRenameFiles``
+      (the ``rename_file`` tool) needs ``lazy-blocking``: in the default lazy-non-blocking mode pyrefly may answer
+      before its reverse-dependency graph is built and miss importers of the renamed module.
     - workspace_indexing_limit: Override pyrefly's workspace indexing limit.
 """
 # SPDX-License-Identifier: MIT
@@ -183,6 +185,7 @@ class PyreflyLanguageServer(SolidLanguageServer):
                 },
                 "workspace": {
                     "workspaceEdit": {"documentChanges": True},
+                    "fileOperations": {"willRename": True, "didRename": True},
                     "configuration": True,
                     "workspaceFolders": True,
                     "didChangeConfiguration": {"dynamicRegistration": True},
