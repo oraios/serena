@@ -7,6 +7,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from copy import copy
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal, cast
 
 import pytest
@@ -1068,6 +1069,39 @@ class TestSerenaAgent:
                 relative_path=case.relative_path,
                 containing_symbol_name_path=case.containing_symbol_name_path,
             )
+
+    @pytest.mark.parametrize(
+        "serena_agent",
+        [pytest.param(LanguageServerId.PYTHON, marks=get_pytest_markers(LanguageServerId.PYTHON), id="python_stdlib")],
+        indirect=["serena_agent"],
+    )
+    def test_find_declaration_outside_the_project(self, serena_agent: SerenaAgent) -> None:
+        """
+        A definition in the standard library (typeshed, outside the repository and its workspace folders) is answered
+        read-only by its absolute path and marked external, instead of failing on the workspace check.
+        """
+        tool = serena_agent.get_tool(FindDeclarationTool)
+        result = tool.apply(
+            regex=r"os\.path\.(exists)\(config_path\)",
+            relative_path=os.path.join("scripts", "run_app.py"),
+            include_body=True,
+        )
+        defining_symbol = json.loads(result)
+        assert defining_symbol["external"] is True, defining_symbol
+        assert os.path.isabs(defining_symbol["relative_path"]) and defining_symbol["relative_path"].endswith(".pyi"), defining_symbol
+        assert self._symbol_matches_expected_name(defining_symbol, "exists"), defining_symbol
+        assert "def exists(" in defining_symbol["body"], defining_symbol
+
+        # the external file is read-only: the absolute path the answer carries must not reach the editing tools as a
+        # project path, which would write outside the project (the code editor joins a relative path to the root,
+        # and joining an absolute one leaves it absolute)
+        external_path = defining_symbol["relative_path"]
+        contents_before = Path(external_path).read_text(encoding="utf-8")
+        with pytest.raises(ValueError, match="absolute"):
+            serena_agent.get_tool(ReplaceSymbolBodyTool).apply(
+                name_path=defining_symbol["name_path"], relative_path=external_path, body="def exists(path): ..."
+            )
+        assert Path(external_path).read_text(encoding="utf-8") == contents_before
 
     @pytest.mark.parametrize("serena_agent,diagnostic_case", DIAGNOSTIC_CASES, indirect=["serena_agent"])
     def test_get_diagnostics_for_file(self, serena_agent: SerenaAgent, diagnostic_case: DiagnosticCase) -> None:
