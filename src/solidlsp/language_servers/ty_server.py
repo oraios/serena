@@ -90,6 +90,7 @@ class TyLanguageServer(SolidLanguageServer):
                     },
                     "implementation": {"dynamicRegistration": True, "linkSupport": True},
                     "publishDiagnostics": {"relatedInformation": True},
+                    "typeHierarchy": {"dynamicRegistration": True},
                 },
             },
         }
