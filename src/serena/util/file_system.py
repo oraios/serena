@@ -193,6 +193,9 @@ def walk_dir_entries(
     Variant of os.walk which yields os.DirEntry objects instead of strings.
     This allows for more efficient file system access, as it avoids additional stat calls.
 
+    The directories contained in the result are exactly those that are descended into, i.e. ignored
+    directories and (unless `followlinks` is set) symbolic links to directories are not contained.
+
     :param top: the root directory to start walking from
     :param topdown: if True, yield the directory before its subdirectories; if False, yield the subdirectories before the directory
     :param onerror: a function to call with an OSError instance if an error occurs while accessing a directory
@@ -218,15 +221,16 @@ def walk_dir_entries(
         except OSError:
             is_dir = False
 
-        (dirs if is_dir else files).append(entry)
+        if not is_dir:
+            files.append(entry)
+        elif (followlinks or not entry.is_symlink()) and not is_ignored_dir(entry):
+            dirs.append(entry)
 
     if topdown:
         yield top, dirs, files
 
     for entry in dirs:
-        if followlinks or not entry.is_symlink():
-            if not is_ignored_dir(entry):
-                yield from walk_dir_entries(entry.path, topdown, onerror, followlinks, is_ignored_dir=is_ignored_dir)
+        yield from walk_dir_entries(entry.path, topdown, onerror, followlinks, is_ignored_dir=is_ignored_dir)
 
     if not topdown:
         yield top, dirs, files
