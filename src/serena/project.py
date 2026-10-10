@@ -20,7 +20,7 @@ from serena.language_backend import LanguageBackend
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from serena.memories.memory_manager import MemoryManager
 from serena.util.file_proxy import FileCollection, FileProxy
-from serena.util.file_system import GitignoreParser, match_path, scan_directory
+from serena.util.file_system import GitignoreParser, dir_entry_from_path, match_path, walk_dir_entries
 from serena.util.text_utils import MatchedConsecutiveLines, search_files
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerIdLike
@@ -80,10 +80,18 @@ class Project(ToStringMixin):
 
     def _gather_ignorespec(self) -> None:
         with LogTime(f"Gathering ignore spec for project {self.project_config.project_name}", logger=log):
+            # gather ignored paths from the global configuration, project configuration, and gitignore files
             try:
-                # gather ignored paths from the global configuration, project configuration, and gitignore files
-                global_ignored_paths = self.serena_config.ignored_paths
-                ignored_patterns = list(global_ignored_paths) + list(self.project_config.ignored_paths)
+                # extend the ignored paths from the global config with ".git" to ensure that .git folders (anywhere in the project)
+                # are always ignored
+                global_ignored_paths = [".git"] + self.serena_config.ignored_paths
+
+                # Only configured paths need separator normalization; gitignore patterns already use POSIX syntax and escapes.
+                configured_patterns = [
+                    pattern.replace(os.path.sep, "/") for pattern in [*global_ignored_paths, *self.project_config.ignored_paths]
+                ]
+
+                ignored_patterns = list(configured_patterns)
                 if len(global_ignored_paths) > 0:
                     log.info(f"Using {len(global_ignored_paths)} ignored paths from the global configuration.")
                     log.debug(f"Global ignored paths: {list(global_ignored_paths)}")
@@ -92,21 +100,24 @@ class Project(ToStringMixin):
                     log.debug(f"Project ignored paths: {self.project_config.ignored_paths}")
                 log.debug(f"Combined ignored patterns: {ignored_patterns}")
                 if self.project_config.ignore_all_files_in_gitignore:
-                    gitignore_parser = GitignoreParser(self.project_root)
+                    # Directories excluded by the configured patterns are never entered by the .gitignore
+                    # discovery walk (the configured patterns have the final say, see below, so nested
+                    # .gitignore rules under such a directory could never change a verdict anyway).
+                    prune_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, configured_patterns)
+                    gitignore_parser = GitignoreParser(self.project_root, prune_spec=prune_spec)
                     for spec in gitignore_parser.get_ignore_specs():
                         log.debug(f"Adding {len(spec.patterns)} patterns from {spec.file_path} to the ignored paths.")
                         ignored_patterns.extend(spec.patterns)
+                    # Explicit configuration has the final say, in its configured order: re-appending it after
+                    # the .gitignore patterns means neither a .gitignore negation can re-include a configured
+                    # exclusion nor a .gitignore rule can narrow a configured re-inclusion. This is what keeps
+                    # discovery pruning (by configuration) and the final verdict consistent by construction.
+                    ignored_patterns.extend(configured_patterns)
                 self.__ignored_patterns = ignored_patterns
 
                 # Set up the pathspec matcher for the ignored paths
-                # for all absolute paths in ignored_paths, convert them to relative paths
-                processed_patterns = []
-                for pattern in ignored_patterns:
-                    # Normalize separators (pathspec expects forward slashes)
-                    pattern = pattern.replace(os.path.sep, "/")
-                    processed_patterns.append(pattern)
-                log.debug(f"Processing {len(processed_patterns)} ignored paths")
-                self.__ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, processed_patterns)
+                log.debug(f"Processing {len(ignored_patterns)} ignored paths")
+                self.__ignore_spec = pathspec.PathSpec.from_lines(pathspec.patterns.GitWildMatchPattern, ignored_patterns)
             except Exception as e:
                 log.error(f"Error while gathering ignore spec for project {self.project_config.project_name}: {e}", exc_info=e)
 
@@ -183,7 +194,7 @@ class Project(ToStringMixin):
     def _ignore_spec(self) -> pathspec.PathSpec:
         """
         :return: the pathspec matcher for the paths that were configured to be ignored,
-            either explicitly or implicitly through .gitignore files.
+            either explicitly or implicitly through .gitignore files, with explicit configuration taking precedence.
         """
         if not self._ignore_spec_available.is_set():
             log.info("Waiting for ignore spec to become available ...")
@@ -247,13 +258,6 @@ class Project(ToStringMixin):
                 if not self.language_backend.is_source_file(abs_path, self):
                     return True
 
-        # Create normalized path for consistent handling
-        rel_path = Path(relative_path)
-
-        # always ignore paths inside .git
-        if len(rel_path.parts) > 0 and ".git" in rel_path.parts:
-            return True
-
         is_dir = None if is_file is None else not is_file
         return match_path(str(relative_path), self._ignore_spec, root_path=self.project_root, is_dir=is_dir)
 
@@ -267,10 +271,9 @@ class Project(ToStringMixin):
         :param is_file: whether the path exists and is a file, for callers that already know;
             see :meth:`_is_ignored_relative_path`. `None` determines it from the filesystem.
         """
-        path = Path(path)
-        if path.is_absolute():
+        if os.path.isabs(path):
             try:
-                relative_path = path.relative_to(self.project_root)
+                relative_path = os.path.relpath(path, start=self.project_root)
             except ValueError:
                 # If the path is not relative to the project root, we consider it as an absolute path outside the project
                 # (which we ignore)
@@ -281,9 +284,9 @@ class Project(ToStringMixin):
 
         return self._is_ignored_relative_path(str(relative_path), ignore_non_source_files=ignore_non_source_files, is_file=is_file)
 
-    def get_is_ignored_path_fn(self, base_path: str, skip_ignored_paths: bool) -> Callable[[str], bool]:
+    def get_is_ignored_path_fn(self, base_path: str, skip_ignored_paths: bool, is_file: bool) -> Callable[[str], bool]:
         """
-        Returns a function for checking whether a path should be ignored during a traversal of the given base path.
+        Returns a function for checking whether a file should be ignored during a traversal of the given base path.
 
         :param base_path: the relative base path representing the starting point of the traversal.
             If the path is itself ignored, then the returned function will not consider ignored paths.
@@ -292,7 +295,7 @@ class Project(ToStringMixin):
         """
         if not skip_ignored_paths or self.is_ignored_path(base_path):
             return lambda _: False
-        return self.is_ignored_path
+        return lambda p: self.is_ignored_path(p, is_file=is_file)
 
     def is_path_in_project(self, path: str | Path) -> bool:
         """
@@ -347,44 +350,112 @@ class Project(ToStringMixin):
             if self.is_ignored_path(relative_path):
                 raise ValueError(f"Path {relative_path} is ignored")
 
-    def gather_source_files(self, relative_path: str = "") -> list[str]:
-        """Retrieves relative paths of all source files, optionally limited to the given path
+    class ProjectFile(ToStringMixin):
+        def __init__(self, dir_entry: os.DirEntry, rel_path: str):
+            self.dir_entry = dir_entry
+            """
+            the directory entry which can be used to retrieve metadata
+            """
+            self.rel_path = rel_path
+            """
+            the path relative to the project root
+            """
+
+        @staticmethod
+        def from_abs_path(abs_path: str, project: "Project") -> "Project.ProjectFile":
+            rel_path = os.path.relpath(abs_path, start=project.project_root)
+            dir_entry = dir_entry_from_path(abs_path)
+            return Project.ProjectFile(dir_entry, rel_path)
+
+        def _tostring_includes(self) -> list[str]:
+            return ["rel_path"]
+
+    def gather_source_files(self, relative_path: str = "") -> list[ProjectFile]:
+        """
+        Retrieves all (non-ignored) project source files, optionally limited to the given path.
+        The limitation to source files depends on the language backend and its identification of
+        source files.
 
         :param relative_path: if provided, restrict search to this path
+        :return: list of project files
         """
-        rel_file_paths = []
+        return self.gather_project_files(relative_path=relative_path, code_files_only=True)
+
+    def gather_project_files(
+        self, relative_path: str = "", code_files_only: bool = False, skip_ignored_files: bool = True
+    ) -> list[ProjectFile]:
+        """
+        Retrieves all (non-ignored) project files, optionally limited to the given path
+
+        :param relative_path: if provided, restrict search to this path
+        :param code_files_only: whether to ignore files that are not source files.
+            The identification of source files depends on the language backend.
+        :return: list of project files
+        """
         start_path = os.path.join(self.project_root, relative_path)
         if not os.path.exists(start_path):
-            raise FileNotFoundError(f"Relative path {start_path} not found.")
-        if os.path.isfile(start_path):
-            return [relative_path]
-        else:
-            # os.walk hands back directories and files separately, so `is_file` is already known here and
-            # does not have to be re-derived from the filesystem for every one of them.
-            for root, dirs, files in os.walk(start_path, followlinks=True):
-                # prevent recursion into ignored directories
-                dirs[:] = [d for d in dirs if not self.is_ignored_path(os.path.join(root, d), is_file=False)]
+            raise FileNotFoundError(f"Root directory {start_path} not found.")
 
-                # collect non-ignored files
-                for file in files:
-                    abs_file_path = os.path.join(root, file)
+        if os.path.isfile(start_path):
+            if not self.is_ignored_path(start_path, ignore_non_source_files=code_files_only, is_file=True):
+                return [self.ProjectFile.from_abs_path(start_path, self)]
+            else:
+                return []
+        else:
+            # we can only apply the ignore rules if the start path is not itself ignored
+            # (if the root is ignored, we return all files under it, since the caller explicitly requested them)
+            can_apply_ignore_rules = not self.is_ignored_path(start_path)
+
+            if skip_ignored_files and can_apply_ignore_rules:
+
+                def is_ignored_dir(d: os.DirEntry) -> bool:
                     try:
-                        if not self.is_ignored_path(abs_file_path, ignore_non_source_files=True, is_file=True):
-                            try:
-                                rel_file_path = os.path.relpath(abs_file_path, start=self.project_root)
-                            except Exception:
-                                log.warning(
-                                    "Ignoring path '%s' because it appears to be outside of the project root (%s)",
-                                    abs_file_path,
-                                    self.project_root,
-                                )
-                                continue
-                            rel_file_paths.append(rel_file_path)
+                        rel_path = os.path.relpath(d.path, start=self.project_root)
+                    except ValueError:
+                        log.warning(
+                            "Ignoring directory '%s' because it appears to be outside of the project root (%s)", d.path, self.project_root
+                        )
+                        return True
+                    return self._is_ignored_relative_path(rel_path, is_file=False)
+
+                def is_ignored_file(rel_path: str, abs_path: str) -> bool:
+                    return self._is_ignored_relative_path(rel_path, ignore_non_source_files=code_files_only, is_file=True)
+            else:
+
+                def is_ignored_dir(d: os.DirEntry) -> bool:
+                    return False
+
+                language_backend = self.language_backend
+
+                def is_ignored_file(rel_path: str, abs_path: str) -> bool:
+                    if code_files_only:
+                        return not language_backend.is_source_file(abs_path, self)
+                    else:
+                        return False
+
+            # collect non-ignored files
+            result = []
+            for root, dirs, files in walk_dir_entries(start_path, followlinks=True, is_ignored_dir=is_ignored_dir):
+                for file in files:
+                    abs_file_path = file.path
+                    try:
+                        try:
+                            rel_file_path = os.path.relpath(abs_file_path, start=self.project_root)
+                        except Exception:
+                            log.warning(
+                                "Ignoring file '%s' because it appears to be outside of the project root (%s)",
+                                abs_file_path,
+                                self.project_root,
+                            )
+                            continue
+                        if not is_ignored_file(rel_file_path, abs_file_path):
+                            result.append(self.ProjectFile(file, rel_file_path))
                     except FileNotFoundError:
                         log.warning(
                             f"File {abs_file_path} not found (possibly due it being a symlink), skipping it in request_parsed_files",
                         )
-            return rel_file_paths
+
+            return result
 
     def create_file_collection(self, relative_path: str, *, code_files_only: bool, skip_ignored_files: bool) -> FileCollection:
         """
@@ -399,28 +470,11 @@ class Project(ToStringMixin):
             # single external path: create appropriate proxy
             file_collection = FileCollection([FileProxy.from_project_relative_path(self, relative_path)])
         else:
-            # path is a local project path
-            abs_path = os.path.join(self.project_root, relative_path)
-            if not os.path.exists(abs_path):
-                raise FileNotFoundError(f"Relative path {relative_path} does not exist.")
+            project_files = self.gather_project_files(
+                relative_path=relative_path, code_files_only=code_files_only, skip_ignored_files=skip_ignored_files
+            )
+            file_collection = FileCollection.from_project_files(project_files, self)
 
-            if code_files_only:
-                relative_file_paths = self.gather_source_files(relative_path=relative_path)
-                file_collection = FileCollection.from_local_project_paths(relative_file_paths, self)
-            else:
-                abs_path = os.path.join(self.project_root, relative_path)
-                if os.path.isfile(abs_path):
-                    rel_paths_to_search = [relative_path]
-                else:
-                    is_ignored_path_fn = self.get_is_ignored_path_fn(base_path=relative_path, skip_ignored_paths=skip_ignored_files)
-                    _dirs, rel_paths_to_search = scan_directory(
-                        path=abs_path,
-                        recursive=True,
-                        is_ignored_dir=is_ignored_path_fn,
-                        is_ignored_file=is_ignored_path_fn,
-                        relative_to=self.project_root,
-                    )
-                file_collection = FileCollection.from_local_project_paths(rel_paths_to_search, self)
         return file_collection
 
     def search_project_files_for_pattern(
@@ -450,15 +504,6 @@ class Project(ToStringMixin):
         :return: list of matches
         """
         file_collection = self.create_file_collection(relative_path, code_files_only=code_files_only, skip_ignored_files=skip_ignored_files)
-        return search_files(
-            file_collection,
-            pattern,
-            context_lines_before=context_lines_before,
-            context_lines_after=context_lines_after,
-            paths_include_glob=paths_include_glob,
-            paths_exclude_glob=paths_exclude_glob,
-            multiline=multiline,
-        )
         return search_files(
             file_collection,
             pattern,

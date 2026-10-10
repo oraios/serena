@@ -17,15 +17,18 @@ No language markers: these use a local test double and run in catch-all.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import pytest
 
 from solidlsp import ls_process
-from solidlsp.ls_config import LanguageServerId
+from solidlsp.language_servers.erlang_language_server import ErlangLanguageServer
+from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_process import LanguageServerInterface, Request
 from solidlsp.lsp_protocol_handler.lsp_types import LSPErrorCodes
 from solidlsp.lsp_protocol_handler.server import LSPError
+from solidlsp.settings import SolidLSPSettings
 
 
 @pytest.fixture(autouse=True)
@@ -82,6 +85,14 @@ def test_content_modified_gives_up_after_max_attempts() -> None:
     assert server.sent_payload_count == max_attempts
 
 
+def test_content_modified_respects_configured_attempt_limit() -> None:
+    server = _ScriptedServer([_content_modified() for _ in range(5)])
+    server.set_content_modified_max_attempts(5)
+    with pytest.raises(SolidLSPException):
+        server.send_request("textDocument/hover")
+    assert server.sent_payload_count == 5
+
+
 def test_other_lsp_errors_are_not_retried() -> None:
     server = _ScriptedServer([Request.Result(error=LSPError(LSPErrorCodes.RequestFailed, "boom"))])
     with pytest.raises(SolidLSPException):
@@ -116,3 +127,39 @@ def test_content_modified_retry_methods_default_to_empty() -> None:
     with pytest.raises(SolidLSPException):
         server.send_request("textDocument/hover")
     assert server.sent_payload_count == 1
+
+
+class _InitializingScriptedServer(_ScriptedServer):
+    """Scripted transport that accepts initialization notifications."""
+
+    def _send_payload(self, payload: dict) -> None:
+        if "id" in payload:
+            super()._send_payload(payload)
+
+
+@pytest.mark.parametrize(
+    "method",
+    [
+        "textDocument/documentSymbol",
+        "textDocument/definition",
+        "textDocument/references",
+        "textDocument/hover",
+        "workspace/symbol",
+    ],
+)
+def test_erlang_read_request_recovers_while_elp_is_loading(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, method: str) -> None:
+    server = _InitializingScriptedServer(
+        [Request.Result(payload={"capabilities": {}}), *[_content_modified() for _ in range(4)], Request.Result(payload=[])],
+        retry_methods=(),
+    )
+    monkeypatch.setattr(ErlangLanguageServer, "_check_erlang_installation", staticmethod(lambda: True))
+    monkeypatch.setattr(ErlangLanguageServer, "_create_language_server_interface", lambda _self, _logging_fn: server)
+    language_server = ErlangLanguageServer(
+        LanguageServerConfig(LanguageServerId.ERLANG),
+        str(tmp_path),
+        SolidLSPSettings(solidlsp_dir=str(tmp_path / "solidlsp"), project_data_path=str(tmp_path / "project-data")),
+    )
+    language_server.start()
+
+    assert language_server.server.send_request(method, {}) == []
+    assert server.sent_payload_count == 6

@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Iterator, Sequence
 from logging import Logger
@@ -39,11 +40,12 @@ from serena.constants import (
     SERENAS_OWN_MODE_YAMLS_DIR,
 )
 from serena.language_backend import BuiltinLanguageBackend, LanguageBackendRegistry
+from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.tools import ActivateProjectTool
 from serena.util.cli_util import AutoRegisteringGroup
 from serena.util.logging import MemoryLogHandler
-from solidlsp.ls_config import LanguageServerId, LanguageServerIdLike
+from solidlsp.ls_config import LanguageServerIdLike, LanguageServerRegistry
 from solidlsp.ls_types import SymbolKind
 from solidlsp.util.subprocess_util import subprocess_kwargs
 
@@ -124,6 +126,24 @@ def _open_in_editor(path: str) -> None:
             subprocess.run(["xdg-open", path], check=False, **run_kwargs)
     except Exception as e:
         print(f"Failed to open {path}: {e}")
+
+
+def _download_ls_dependencies(ls_id: LanguageServerIdLike, ls_specific_settings: dict, repository_root_path: str) -> None:
+    """Download dependencies for one language server without starting it."""
+    from solidlsp import SolidLanguageServer
+    from solidlsp.ls_config import LanguageServerConfig
+    from solidlsp.settings import SolidLSPSettings
+
+    language_server = SolidLanguageServer.create(
+        LanguageServerConfig(ls_id=ls_id),
+        repository_root_path,
+        solidlsp_settings=SolidLSPSettings(
+            solidlsp_dir=SerenaPaths().serena_user_home_dir,
+            project_data_path=os.path.join(repository_root_path, ".solidlsp"),
+            ls_specific_settings=ls_specific_settings,
+        ),
+    )
+    language_server.install_dependencies()
 
 
 class ProjectType(click.ParamType):
@@ -231,6 +251,52 @@ class TopLevelCommands(AutoRegisteringGroup):
         else:
             click.echo(f"\nFailed to set up Serena for {client}.\n")
             raise SystemExit(1)
+
+    @staticmethod
+    @click.command(
+        "download-ls-dependencies",
+        help="Download language-server dependencies ahead of time for environments with restricted network access.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument("language_servers", type=str, nargs=-1, required=True)
+    def download_ls_dependencies(language_servers: tuple[str, ...]) -> None:
+        """Download dependencies without starting any language server."""
+        logging.configure(level=logging.INFO)
+
+        # resolve the language server names
+        registry = LanguageServerRegistry.get_instance()
+        ls_ids: list[LanguageServerIdLike] = []
+        for name in language_servers:
+            try:
+                ls_ids.append(registry.resolve(name.lower()))
+            except ValueError as exc:
+                raise click.UsageError(f"Unknown language server '{name}'. Supported: {', '.join(registry.get_keys())}") from exc
+
+        # load the user's language server settings, if a configuration exists
+        try:
+            ls_specific_settings = dict(SerenaConfig.from_config_file(generate_if_missing=False).ls_specific_settings)
+        except FileNotFoundError:
+            ls_specific_settings = {}
+
+        # download the dependencies, continuing with the remaining language servers upon failure
+        failures: list[tuple[LanguageServerIdLike, Exception]] = []
+        with tempfile.TemporaryDirectory() as temp_dir:
+            for index, ls_id in enumerate(ls_ids, start=1):
+                click.echo(f"[{index}/{len(ls_ids)}] Downloading dependencies for '{ls_id.get_key()}' ...")
+                try:
+                    _download_ls_dependencies(ls_id, ls_specific_settings, temp_dir)
+                except Exception as exc:
+                    log.exception("Failed to download dependencies for '%s'", ls_id.get_key())
+                    failures.append((ls_id, exc))
+
+        # report the outcome
+        if failures:
+            click.echo(f"Failed to download dependencies for {len(failures)} of {len(ls_ids)} language server(s):", err=True)
+            for ls_id, exc in failures:
+                click.echo(f"  {ls_id.get_key()}: {exc}", err=True)
+            raise click.exceptions.Exit(1)
+
+        click.echo(f"Successfully downloaded dependencies for {len(ls_ids)} language server(s).")
 
     @staticmethod
     @click.command("start-mcp-server", help="Starts the Serena MCP server.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
@@ -720,14 +786,15 @@ class ProjectCommands(AutoRegisteringGroup):
         if os.path.exists(yml_path):
             raise FileExistsError(f"Project file {yml_path} already exists.")
 
-        languages: list[LanguageServerId] = []
+        languages: list[LanguageServerIdLike] = []
         if language:
+            registry = LanguageServerRegistry.get_instance()
             for lang in language:
+                ls_key = lang.lower()
                 try:
-                    languages.append(LanguageServerId(lang.lower()))
+                    languages.append(registry.resolve(ls_key))
                 except ValueError:
-                    all_langs = [l.value for l in LanguageServerId]
-                    raise ValueError(f"Unknown language '{lang}'. Supported: {all_langs}")
+                    raise ValueError(f"Unknown language '{lang}'. Supported: {registry.get_keys()}")
 
         generated_conf = ProjectConfig.autogenerate(
             project_root=project_path,
@@ -852,15 +919,17 @@ class ProjectCommands(AutoRegisteringGroup):
             files_failed = []
             language_file_counts: dict[LanguageServerIdLike, int] = collections.defaultdict(lambda: 0)
             last_save_time = time.monotonic()
-            for i, f in enumerate(tqdm(files, desc="Indexing")):
+            for i, project_file in enumerate(tqdm(files, desc="Indexing")):
+                project_file: Project.ProjectFile
+                rel_path = project_file.rel_path
                 try:
-                    ls = ls_mgr.get_language_server(f)
-                    ls.request_document_symbols(f)
+                    ls = ls_mgr.get_language_server(rel_path)
+                    ls.request_document_symbols(rel_path)
                     language_file_counts[ls.ls_id] += 1
                 except Exception as e:
-                    log.error(f"Failed to index {f}, continuing.")
+                    log.error(f"Failed to index {rel_path}, continuing.")
                     collected_exceptions.append(e)
-                    files_failed.append(f)
+                    files_failed.append(rel_path)
                 now = time.monotonic()
                 if now - last_save_time >= 30:
                     ls_mgr.save_all_caches()
@@ -901,7 +970,7 @@ class ProjectCommands(AutoRegisteringGroup):
         if os.path.isabs(path):
             path = os.path.relpath(path, start=proj.project_root)
         is_ignored = proj.is_ignored_path(path)
-        click.echo(f"Path '{path}' IS {'ignored' if is_ignored else 'IS NOT ignored'} by the project configuration.")
+        click.echo(f"Path '{path}' {'IS' if is_ignored else 'IS NOT'} ignored by the project configuration.")
 
     @staticmethod
     @click.command(
@@ -995,30 +1064,30 @@ class ProjectCommands(AutoRegisteringGroup):
                 # Find first non-empty file that can be analyzed
                 log.info("Searching for analyzable files...")
                 files = proj.gather_source_files()
-                target_file = None
+                target_rel_path = None
 
-                for file_path in files:
+                for source_file in files:
                     try:
-                        full_path = os.path.join(project_path, file_path)
+                        full_path = source_file.dir_entry.path
                         if os.path.getsize(full_path) > 1000:
-                            target_file = file_path
-                            log.info("Found analyzable file: %s", target_file)
+                            target_rel_path = source_file.rel_path
+                            log.info("Found analyzable file: %s", target_rel_path)
                             break
                     except (OSError, FileNotFoundError):
                         continue
 
-                if not target_file:
+                if not target_rel_path:
                     raise ProjectCommands._HealthCheckFailure("No analyzable files found")
 
                 api = LspApi(agent)
 
                 # Test 1: symbols overview
-                log.info("Testing get_symbols_overview on file: %s", target_file)
-                overview = agent.execute_task(lambda: api.get_symbols_overview(target_file))
+                log.info("Testing get_symbols_overview on file: %s", target_rel_path)
+                overview = agent.execute_task(lambda: api.get_symbols_overview(target_rel_path))
                 log.info(f"get_symbols_overview returned: {overview.represent()}")
 
                 if len(overview) == 0:
-                    raise ProjectCommands._HealthCheckFailure(f"No symbols found in target file {target_file}")
+                    raise ProjectCommands._HealthCheckFailure(f"No symbols found in target file {target_rel_path}")
 
                 # Extract suitable symbol (prefer class or function over variables)
                 preferred_kinds = {SymbolKind.Class, SymbolKind.Function, SymbolKind.Method, SymbolKind.Constructor}
@@ -1036,7 +1105,7 @@ class ProjectCommands(AutoRegisteringGroup):
                 log.info("Testing find_symbol for symbol: %s", symbol_name)
                 with LspApi.find_symbol_dict_grouper_.disabled_context():
                     find_symbol_result = agent.execute_task(
-                        lambda: api.find_symbol(symbol_name, relative_path=target_file, include_body=True).represent()
+                        lambda: api.find_symbol(symbol_name, relative_path=target_rel_path, include_body=True).represent()
                     )
                 find_symbol_data = json.loads(find_symbol_result)
                 log.info("find_symbol found %d matches for symbol %s", len(find_symbol_data), symbol_name)
@@ -1048,7 +1117,7 @@ class ProjectCommands(AutoRegisteringGroup):
                 try:
                     with LspApi.references_grouper_.disabled_context():
                         find_refs_result = agent.execute_task(
-                            lambda: api.find_referencing_symbols(symbol_name, relative_path=target_file).represent()
+                            lambda: api.find_referencing_symbols(symbol_name, relative_path=target_rel_path).represent()
                         )
                         find_refs_data = json.loads(find_refs_result)
                         log.info("find_referencing_symbols found %d references for symbol %s", len(find_refs_data), symbol_name)

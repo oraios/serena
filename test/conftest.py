@@ -23,7 +23,7 @@ from solidlsp.settings import SolidLSPSettings
 
 from .solidlsp.clojure import is_clojure_cli_available
 from .solidlsp.elixir import EXPERT_UNAVAILABLE
-from .solidlsp.erlang import ERLANG_LS_UNAVAILABLE
+from .solidlsp.erlang import ERLANG_UNAVAILABLE
 
 PYTEST_LOG_LEVEL = logging.DEBUG
 
@@ -53,6 +53,7 @@ _LANGUAGE_REPO_ALIASES: dict[LanguageServerId, LanguageServerId] = {
     LanguageServerId.PHP_PHPACTOR: LanguageServerId.PHP,
     LanguageServerId.PHP_PHPANTOM: LanguageServerId.PHP,
     LanguageServerId.JULIA_FATOU: LanguageServerId.JULIA,
+    LanguageServerId.LUA_EMMYLUA: LanguageServerId.LUA,
     LanguageServerId.PYTHON_JEDI: LanguageServerId.PYTHON,
     LanguageServerId.PYTHON_BASEDPYRIGHT: LanguageServerId.PYTHON,
     LanguageServerId.PYTHON_TY: LanguageServerId.PYTHON,
@@ -217,7 +218,7 @@ def project(request: LanguageParamRequest, repo_root_override: str | None = None
 
     Example:
     ```
-    @pytest.mark.parametrize("project", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("project", [LanguageServerId.PYTHON], indirect=True)
     def test_python_project(project: Project) -> None:
         # Use the Python project to test something
         pass
@@ -296,6 +297,7 @@ _LANGUAGE_PYTEST_MARKERS: dict[LanguageServerId, list[MarkDecorator | Mark]] = {
     LanguageServerId.JULIA_FATOU: [pytest.mark.julia],
     LanguageServerId.LEAN4: [pytest.mark.lean4],
     LanguageServerId.LATEX: [pytest.mark.latex],
+    LanguageServerId.LUA_EMMYLUA: [pytest.mark.lua],
     LanguageServerId.MSL: [pytest.mark.msl],
     LanguageServerId.PHP: [pytest.mark.php],
     LanguageServerId.PHP_PHPACTOR: [pytest.mark.php],
@@ -313,6 +315,7 @@ _LANGUAGE_PYTEST_MARKERS: dict[LanguageServerId, list[MarkDecorator | Mark]] = {
     LanguageServerId.ANGULAR: [pytest.mark.angular],
     LanguageServerId.HTML: [pytest.mark.html],
     LanguageServerId.SCSS: [pytest.mark.scss],
+    LanguageServerId.ASTRO: [pytest.mark.astro],
 }
 
 
@@ -465,7 +468,7 @@ def _determine_disabled_language_servers() -> list[LanguageServerId]:
         result.append(LanguageServerId.SYSTEMVERILOG)
     if not _is_matlab_available():
         result.append(LanguageServerId.MATLAB)
-    if ERLANG_LS_UNAVAILABLE:  # no Erlang-OTP / no rebar3 / Windows -- see test/solidlsp/erlang
+    if ERLANG_UNAVAILABLE:  # no Erlang/OTP / no rebar3 / unsupported platform -- see test/solidlsp/erlang
         result.append(LanguageServerId.ERLANG)
     if EXPERT_UNAVAILABLE:  # Elixir not installed -- see test/solidlsp/elixir
         result.append(LanguageServerId.ELIXIR)

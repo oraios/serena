@@ -181,6 +181,7 @@ class LanguageServerInterface(ABC):
         `general.staleRequestSupport.retryOnContentModified`) that it will reissue; see
         `set_content_modified_retry_methods`.
         """
+        self._content_modified_max_attempts = _CONTENT_MODIFIED_MAX_ATTEMPTS
 
     def set_request_timeout(self, timeout: float | None) -> None:
         """
@@ -200,6 +201,12 @@ class LanguageServerInterface(ABC):
         :param methods: LSP method names (e.g. ``"textDocument/hover"``) eligible for retry.
         """
         self._content_modified_retry_methods = frozenset(methods)
+
+    def set_content_modified_max_attempts(self, max_attempts: int) -> None:
+        """Set the bounded attempt count for declared stale requests, including the first attempt."""
+        if max_attempts < 1:
+            raise ValueError("ContentModified max_attempts must be at least 1")
+        self._content_modified_max_attempts = max_attempts
 
     @abstractmethod
     def is_running(self) -> bool:
@@ -373,11 +380,11 @@ class LanguageServerInterface(ABC):
             return result.payload
 
         if method in self._content_modified_retry_methods:
-            for attempt in range(2, _CONTENT_MODIFIED_MAX_ATTEMPTS + 1):
+            for attempt in range(2, self._content_modified_max_attempts + 1):
                 is_content_modified = isinstance(result.error, LSPError) and result.error.code == LSPErrorCodes.ContentModified
                 if not is_content_modified:
                     break
-                log.info("Request %s got ContentModified (-32801); retrying (%d/%d)", method, attempt, _CONTENT_MODIFIED_MAX_ATTEMPTS)
+                log.info("Request %s got ContentModified (-32801); retrying (%d/%d)", method, attempt, self._content_modified_max_attempts)
                 time.sleep(_CONTENT_MODIFIED_RETRY_DELAY)
                 result = self._send_request_once(method, params)
                 if not result.is_error():
@@ -653,7 +660,12 @@ class StdioLanguageServer(LanguageServerInterface):
             log.info("Language server stderr reader thread has terminated")
 
     def _send_payload(self, payload: StringDict) -> None:
-        if not self._process or not self._process.stdin:
+        # Read the process and its stdin once: `_stop` closes stdin, waits for the process to
+        # terminate and only then nulls `_process`, so a second read could see a different state
+        # than the one that was checked.
+        process = self._process
+        stdin = process.stdin if process else None
+        if not stdin:
             return
         self._trace("solidlsp", "ls", payload)
         msg = create_message(payload)
@@ -661,11 +673,16 @@ class StdioLanguageServer(LanguageServerInterface):
         # Use lock to prevent concurrent writes to stdin that cause buffer corruption
         with self._stdin_lock:
             try:
-                self._process.stdin.writelines(msg)
-                self._process.stdin.flush()
-            except (BrokenPipeError, ConnectionResetError, OSError) as e:
-                # Log the error but don't raise to prevent cascading failures
+                stdin.writelines(msg)
+                stdin.flush()
+            except (BrokenPipeError, ConnectionResetError, OSError, ValueError) as e:
+                # The server is gone; a pipe that broke raises OSError, a stdin which `_stop`
+                # already closed raises ValueError. Either way fail fast with
+                # LanguageServerTerminatedException (the restart path's signal) instead of
+                # stranding the just-registered request until its timeout (#2004).
+                # Mirrors TCPLanguageServer.
                 log.error(f"Failed to write to stdin: {e}")
+                self._cancel_pending_requests(LanguageServerTerminatedException("Stdio send error", self.ls_id, cause=e))
                 return
 
 

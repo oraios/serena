@@ -67,8 +67,8 @@ class FileCollection:
         return iter(self._file_proxies)
 
     @classmethod
-    def from_local_project_paths(cls, relative_paths: list[str], project: "Project") -> Self:
-        return cls([LocalProjectFileProxy(path, project) for path in relative_paths])
+    def from_project_files(cls, files: list["Project.ProjectFile"], project: "Project") -> Self:
+        return cls([LocalProjectFileProxy(f.rel_path, project) for f in files])
 
     def filter_glob(self, paths_include_glob: str | None = None, paths_exclude_glob: str | None = None) -> "FileCollection":
         """

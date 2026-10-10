@@ -107,7 +107,7 @@ class FindFileTool(Tool, FsApiMixin):
     Finds files in the given relative paths
     """
 
-    def apply(self, file_mask: str, relative_path: str) -> str:
+    def apply(self, file_mask: str, relative_path: str, skip_ignored_files: bool = False) -> str:
         """
         Finds files matching the given file mask within the given relative path
 
@@ -116,7 +116,7 @@ class FindFileTool(Tool, FsApiMixin):
         :param skip_ignored_files: whether to skip ignored files/directories
         :return: a JSON object with the list of matching files
         """
-        return self._to_json({"files": self._api().find_file(file_mask, relative_path)})
+        return self._to_json({"files": self._api().find_file(file_mask, relative_path, skip_ignored_files=skip_ignored_files)})
 
 
 class ReplaceContentTool(EditingToolWithDiagnostics, EditApiMixin):

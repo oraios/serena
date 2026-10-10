@@ -165,15 +165,20 @@ class TestProjectCreate:
 class TestProjectIndex:
     """Tests for 'project index' command."""
 
-    def test_index_auto_creates_project_with_files(self, cli_runner, temp_project_dir_with_python_file):
-        """Test that index command auto-creates project.yml if it doesn't exist (with source files)."""
+    def test_index_succeeds_and_auto_creates_project(self, cli_runner, temp_project_dir_with_python_file):
+        """Test that index command on Python project succeeds and auto-creates project.yml if it doesn't exist (with source files)."""
         result = cli_runner.invoke(ProjectCommands.index, [temp_project_dir_with_python_file, "--log-level", "ERROR", "--timeout", "5"])
+
         # Should succeed and perform indexing
         assert result.exit_code == 0, f"Command failed: {result.output}"
         assert "Auto-creating" in result.output or "Indexing" in result.output
 
+        # Verify no file-specific errors occurred during indexing
+        assert "Failed" not in result.output
+
         # Verify project.yml was auto-created
         yml_path = os.path.join(temp_project_dir_with_python_file, ".serena", "project.yml")
+
         assert os.path.exists(yml_path), "project.yml should be auto-created"
 
     def test_index_with_explicit_language(self, cli_runner, temp_project_dir):
