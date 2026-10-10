@@ -87,6 +87,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)
   
 * Tools:
+  - Fix: `replace_in_files` now rejects occurrence IDs from a preview when the file content or matched
+    range has changed, preventing an outdated selection from silently replacing a different match
   - Fix: `$!N` backreferences in regex-mode replacements expanded to the literal template text
     (e.g. `EA_INPUT$!1(...)`) when the referenced group existed but did not participate in the
     match (e.g. a group inside an optional construct that was skipped); unmatched groups now expand
