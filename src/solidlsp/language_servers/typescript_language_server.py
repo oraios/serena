@@ -625,12 +625,12 @@ class TypeScriptLanguageServer(SolidLanguageServer):
 
     @override
     def _document_symbols_cache_fingerprint(self) -> Hashable:
-        # bump whenever request_document_symbols's post-processing below changes what it returns,
+        # bump whenever _build_document_symbols_from_raw_symbols below changes what it returns,
         # so a pre-existing on-disk cache from before this override existed gets invalidated
-        return 2
+        return 3
 
     @override
-    def request_document_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer | None = None) -> DocumentSymbols:
+    def _build_document_symbols_from_raw_symbols(self, relative_file_path: str, file_buffer: LSPFileBuffer) -> DocumentSymbols:
         # Override to extend single `const`/`let`/`var` declaration ranges on both ends: a leading
         # `export` and the declaration keyword, and a trailing statement-terminating semicolon.
         # tsserver excludes both from such ranges (unlike `function`/`class` declarations, whose
@@ -641,7 +641,8 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         # itself a full statement) produces a harmless but incorrect double semicolon. See
         # _extend_ts_symbol_range_to_include_leading_keyword and
         # _extend_ts_symbol_range_to_include_trailing_semicolon.
-        document_symbols = super().request_document_symbols(relative_file_path, file_buffer=file_buffer)
+        # IMPORTANT: Update _document_symbols_cache_fingerprint() when changing this method.
+        document_symbols = super()._build_document_symbols_from_raw_symbols(relative_file_path, file_buffer=file_buffer)
         if not document_symbols.root_symbols:
             return document_symbols
 
@@ -651,7 +652,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             body_factory = SymbolBodyFactory(file_data)
 
             # extend ranges recursively, operating on copies so the cached symbols are not mutated;
-            # see Gopls.request_document_symbols for why child `parent` back-pointers are left aimed
+            # see Gopls._build_document_symbols_from_raw_symbols for why child `parent` back-pointers are left aimed
             # at the original (un-extended) nodes
             def extend_symbol_and_children(symbol: ls_types.UnifiedSymbolInformation) -> ls_types.UnifiedSymbolInformation:
                 extended = self._extend_ts_symbol_range_to_include_leading_keyword(symbol, file_lines, body_factory)
