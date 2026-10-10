@@ -130,6 +130,21 @@ class TestPathsOutsideProjectRootAreRefused:
 
         assert api.find_file("secret.py", ".") == []
 
+    def test_traversal_ignores_links_entirely(self, untrusted_project: Project) -> None:
+        # in an untrusted project, links are not part of the project's file set at all,
+        # including links whose target is inside the project
+        api = FsApi(_agent(untrusted_project))
+
+        listing = api.list_dir(".", recursive=True)
+        assert "inner_link.txt" not in listing.files
+        assert "innocent.txt" not in listing.files
+        assert api.find_file("*.txt", ".") == ["real.txt"]
+        assert [m.source_file_path for m in api.search_for_pattern("in-project content").matches] == ["real.txt"]
+
+    def test_discovery_refuses_to_enter_a_linked_directory(self, untrusted_project: Project) -> None:
+        with pytest.raises(ValueError, match="outside the project root"):
+            untrusted_project.gather_project_files("linked_dir")
+
     def test_editing_tools_are_refused(self, untrusted_project: Project, outside_dir: Path) -> None:
         api = _edit_api(untrusted_project)
 
@@ -180,3 +195,11 @@ class TestTrustedProjectsKeepSymlinkAccess:
         api = FsApi(_agent(trusted_project))
         assert len(api.search_for_pattern("external")) > 0
         assert "linked_dir" in api.list_dir(".", recursive=True).dirs
+
+    def test_traversal_reports_links_inside_the_project(self, trusted_project: Project) -> None:
+        # for a trusted project, a link is just another file, whether or not it stays inside the project
+        api = FsApi(_agent(trusted_project))
+
+        listing = api.list_dir(".", recursive=True)
+        assert "inner_link.txt" in listing.files
+        assert "innocent.txt" in listing.files

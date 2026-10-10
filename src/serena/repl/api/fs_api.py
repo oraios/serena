@@ -3,14 +3,12 @@
 The implementation of operations on the project's files.
 """
 
-import os
 from collections import defaultdict
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from serena.tools import CreateTextFileTool, FindFileTool, ListDirTool, ReadFileTool, SearchForPatternTool
-from serena.util.file_system import scan_directory
 from serena.util.text_utils import MatchedConsecutiveLines
 from solidlsp.ls_utils import TextUtils
 
@@ -243,14 +241,8 @@ class FsApi(FacadeApi):
             raise FileNotFoundError(f"Directory not found: {relative_path} (check if the path is correct relative to the project root)")
         project.validate_relative_path(relative_path)
 
-        dirs, files = scan_directory(
-            os.path.join(project.project_root, relative_path),
-            relative_to=project.project_root,
-            recursive=recursive,
-            is_ignored_dir=project.get_is_ignored_path_fn(relative_path, skip_ignored_files, is_file=False),
-            is_ignored_file=project.get_is_ignored_path_fn(relative_path, skip_ignored_files, is_file=True),
-        )
-        return DirectoryListing(dirs, files, DirectoryListingRenderer(self._agent, max_answer_chars))
+        scan_result = project.scan_directory(relative_path, recursive=recursive, skip_ignored_paths=skip_ignored_files)
+        return DirectoryListing(scan_result.directories, scan_result.files, DirectoryListingRenderer(self._agent, max_answer_chars))
 
     @facade_method(corresponding_tool=FindFileTool)
     def find_file(self, file_mask: str, relative_path: str, skip_ignored_files: bool = False) -> list[str]:
@@ -265,22 +257,13 @@ class FsApi(FacadeApi):
         project = self._get_project()
         project.validate_relative_path(relative_path)
 
-        is_ignored_file_base_fn = project.get_is_ignored_path_fn(relative_path, skip_ignored_paths=skip_ignored_files, is_file=True)
-
-        # find the files by ignoring everything that doesn't match
-        def is_ignored_file(abs_path: str) -> bool:
-            if is_ignored_file_base_fn(abs_path):
-                return True
-            return not fnmatch(os.path.basename(abs_path), file_mask)
-
-        _dirs, files = scan_directory(
-            path=os.path.join(project.project_root, relative_path),
+        scan_result = project.scan_directory(
+            relative_path,
             recursive=True,
-            is_ignored_dir=project.get_is_ignored_path_fn(relative_path, skip_ignored_paths=skip_ignored_files, is_file=False),
-            is_ignored_file=is_ignored_file,
-            relative_to=project.project_root,
+            skip_ignored_paths=skip_ignored_files,
+            is_matching_file_name=lambda name: fnmatch(name, file_mask),
         )
-        return files
+        return scan_result.files
 
     @facade_method(corresponding_tool=SearchForPatternTool)
     def search_for_pattern(

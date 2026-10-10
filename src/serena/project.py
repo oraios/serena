@@ -20,7 +20,7 @@ from serena.language_backend import LanguageBackend
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
 from serena.memories.memory_manager import MemoryManager
 from serena.util.file_proxy import FileCollection, FileProxy
-from serena.util.file_system import GitignoreParser, dir_entry_from_path, match_path, walk_dir_entries
+from serena.util.file_system import GitignoreParser, ScanResult, dir_entry_from_path, match_path, walk_dir_entries
 from serena.util.text_utils import MatchedConsecutiveLines, search_files
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerIdLike
@@ -29,6 +29,10 @@ if TYPE_CHECKING:
     from serena.agent import SerenaAgent
 
 log = logging.getLogger(__name__)
+
+
+def _log_scan_error(error: OSError) -> None:
+    log.debug(f"Skipping directory {error.filename} which cannot be scanned", exc_info=error)
 
 
 class Project(ToStringMixin):
@@ -62,6 +66,7 @@ class Project(ToStringMixin):
         self._language_server_manager_init_error: Exception | None = None
         self.is_newly_created = is_newly_created
         self._agent: Optional["SerenaAgent"] = None
+        self._resolved_project_root_cache: str | None = None
 
         # create .gitignore file in the project's Serena data folder if not yet present
         serena_data_gitignore_path = os.path.join(self._serena_data_folder, ".gitignore")
@@ -227,8 +232,7 @@ class Project(ToStringMixin):
         self, relative_path: str | Path, ignore_non_source_files: bool = True, is_file: bool | None = None
     ) -> bool:
         """
-        Determine whether a path should be ignored based on file type, ignore patterns and on whether
-        it leaves the project root through a symlink.
+        Determine whether a path should be ignored based on file type and ignore patterns.
         Returns False for non-existent paths since they cannot be matched by ignore patterns.
 
         :param relative_path: Relative path to check
@@ -259,10 +263,6 @@ class Project(ToStringMixin):
                 if not self.language_backend.is_source_file(abs_path, self):
                     return True
 
-        # a path that leaves the project root through a symlink is not part of the project's file set
-        if self._is_symlink_escaping_project_root(relative_path):
-            return True
-
         is_dir = None if is_file is None else not is_file
         return match_path(str(relative_path), self._ignore_spec, root_path=self.project_root, is_dir=is_dir)
 
@@ -289,20 +289,60 @@ class Project(ToStringMixin):
 
         return self._is_ignored_relative_path(str(relative_path), ignore_non_source_files=ignore_non_source_files, is_file=is_file)
 
-    def get_is_ignored_path_fn(self, base_path: str, skip_ignored_paths: bool, is_file: bool) -> Callable[[str], bool]:
+    def scan_directory(
+        self,
+        relative_path: str = "",
+        *,
+        recursive: bool = False,
+        skip_ignored_paths: bool = False,
+        is_matching_file_name: Callable[[str], bool] | None = None,
+    ) -> ScanResult:
         """
-        Returns a function for checking whether a file should be ignored during a traversal of the given base path.
+        Scans the directory at the given path, returning the directories and files it contains
+        as paths relative to the project root.
 
-        :param base_path: the relative base path representing the starting point of the traversal.
-            If the path is itself ignored, then the returned function will not consider ignored paths.
-        :param skip_ignored_paths: whether to skip ignored (sub-)paths
-        :return: a function that takes a path and returns True if the path should be ignored, False otherwise.
+        In an untrusted project, symbolic links are ignored entirely: they are neither followed nor
+        contained in the result, so that a link cannot lead the scan outside of the project root.
+
+        :param relative_path: the path of the directory to scan, relative to the project root
+        :param recursive: whether to scan subdirectories recursively
+        :param skip_ignored_paths: whether to skip paths that are ignored according to the project's
+            ignore settings; has no effect if the given path is itself ignored
+        :param is_matching_file_name: an optional additional filter; if given, only files whose name
+            (the last path component) it accepts are contained in the result
+        :return: the directories and files found by the scan
         """
-        if not skip_ignored_paths or self.is_ignored_path(base_path):
-            # ignoring is switched off, but paths that leave the project root through a symlink
-            # are excluded irrespective of the ignore settings
-            return self._is_symlink_escaping_project_root
-        return lambda p: self.is_ignored_path(p, is_file=is_file)
+        abs_path = os.path.join(self.project_root, relative_path)
+        if not self.is_path_in_project(abs_path):
+            raise ValueError(f"Path {relative_path} points outside the project root ({self.project_root})")
+
+        follow_links = self.is_trusted()
+        # ignore rules can only be applied if the start path is not itself ignored
+        # (if it is, we return everything below it, since the caller explicitly requested it)
+        apply_ignore_rules = skip_ignored_paths and not self.is_ignored_path(abs_path)
+
+        def is_ignored_dir(entry: os.DirEntry) -> bool:
+            # links to directories are already excluded by the walk when links are not followed
+            return apply_ignore_rules and self.is_ignored_path(entry.path, is_file=False)
+
+        def is_ignored_file(entry: os.DirEntry) -> bool:
+            if not follow_links and entry.is_symlink():
+                return True
+            if apply_ignore_rules and self.is_ignored_path(entry.path, is_file=True):
+                return True
+            return is_matching_file_name is not None and not is_matching_file_name(entry.name)
+
+        directories: list[str] = []
+        files: list[str] = []
+        for _root, dir_entries, file_entries in walk_dir_entries(
+            abs_path, followlinks=follow_links, is_ignored_dir=is_ignored_dir, onerror=_log_scan_error
+        ):
+            directories.extend(os.path.relpath(entry.path, start=self.project_root) for entry in dir_entries)
+            for entry in file_entries:
+                if not is_ignored_file(entry):
+                    files.append(os.path.relpath(entry.path, start=self.project_root))
+
+        return ScanResult(directories, files)
 
     def _is_symlink_escaping_project_root(self, path: str | Path) -> bool:
         """
@@ -320,10 +360,9 @@ class Project(ToStringMixin):
 
         # resolve symlinks to determine the location the path actually refers to
         resolved_path = os.path.realpath(path)
-        resolved_root = os.path.realpath(self.project_root)
 
         try:
-            escapes = os.path.commonpath([resolved_root, resolved_path]) != resolved_root
+            escapes = os.path.commonpath([self._resolved_project_root, resolved_path]) != self._resolved_project_root
         except ValueError:
             # occurs, in particular, if paths are on different drives on Windows
             escapes = True
@@ -331,6 +370,16 @@ class Project(ToStringMixin):
         if escapes:
             log.debug(f"Path {path} resolves outside the project root {self.project_root} and the project is not trusted")
         return escapes
+
+    @property
+    def _resolved_project_root(self) -> str:
+        """
+        :return: the project root with all symlinks resolved; cached, since the root does not change
+            while the project is loaded
+        """
+        if self._resolved_project_root_cache is None:
+            self._resolved_project_root_cache = os.path.realpath(self.project_root)
+        return self._resolved_project_root_cache
 
     def is_path_in_project(self, path: str | Path) -> bool:
         """
@@ -427,14 +476,23 @@ class Project(ToStringMixin):
         """
         Retrieves all (non-ignored) project files, optionally limited to the given path
 
+        In an untrusted project, symbolic links are ignored entirely: they are neither followed nor
+        contained in the result, so that a link cannot lead the discovery outside of the project root.
+
         :param relative_path: if provided, restrict search to this path
         :param code_files_only: whether to ignore files that are not source files.
             The identification of source files depends on the language backend.
         :return: list of project files
         """
         start_path = os.path.join(self.project_root, relative_path)
+        if not self.is_path_in_project(start_path):
+            raise ValueError(f"Path {relative_path} points outside the project root ({self.project_root})")
         if not os.path.exists(start_path):
             raise FileNotFoundError(f"Root directory {start_path} not found.")
+
+        # in an untrusted project, links are not part of the project's file set, since they may
+        # point outside of the project root
+        follow_links = self.is_trusted()
 
         if os.path.isfile(start_path):
             if not self.is_ignored_path(start_path, ignore_non_source_files=code_files_only, is_file=True):
@@ -475,8 +533,10 @@ class Project(ToStringMixin):
 
             # collect non-ignored files
             result = []
-            for root, dirs, files in walk_dir_entries(start_path, followlinks=True, is_ignored_dir=is_ignored_dir):
+            for root, dirs, files in walk_dir_entries(start_path, followlinks=follow_links, is_ignored_dir=is_ignored_dir):
                 for file in files:
+                    if not follow_links and file.is_symlink():
+                        continue
                     abs_file_path = file.path
                     try:
                         try:

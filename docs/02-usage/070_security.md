@@ -99,6 +99,9 @@ The settings that require trust are annotated accordingly in the project configu
   Without trust gating, a repository could redirect Serena's file tools to arbitrary locations outside the
   project root (e.g. `~/.ssh/id_rsa`) by committing such a symlink, without the user requesting anything
   beyond working in the project.
+  In an untrusted project, Serena therefore ignores symbolic links entirely: they are neither followed when
+  the project's files are enumerated, nor accepted as a path when a file is requested explicitly.
+  A symlink to a location inside the project root remains accessible for trusted projects only.
 
 Note that the effective set of trusted paths depends on the age of your configuration: installations predating
 the introduction of this setting retain a pattern that trusts all projects, ensuring that existing workflows are
