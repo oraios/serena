@@ -672,7 +672,7 @@ class TestMultiFileContentReplacer:
             assert o.matched_text == "old_pkg"
             assert o.replacement == "new_pkg"
             assert MultiFileContentReplacer.OCCURRENCE_ID_REGEX.match(o.occurrence_id)
-        # ids are content-anchored: same matched text at the same index yields the same id across calls
+        # unchanged file contents yield the same ids across calls
         again = replacer.find_occurrences(self.FILES, "old_pkg", "new_pkg")
         assert [o.occurrence_id for o in again] == [o.occurrence_id for o in occurrences]
 
