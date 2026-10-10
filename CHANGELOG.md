@@ -151,6 +151,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Document safer Codex hook defaults, timeouts, status messages, event mappings and troubleshooting guidance.
   - Add DSH (DeepSeek Harness) as a Claude-compatible `serena-hooks` client, including activate, remind,
     cleanup and auto-approve commands (#1869)
+  - Fix: `remind` did not count searches and source-file reads which Claude Code (2.1.117+ native builds),
+    CodeBuddy and ZCode run via their `Bash` tool; shell commands are now classified for these clients too,
+    including compound commands such as `cd repo && rg foo` (#1845)
 
 * Dashboard:
   - Fix: DashboardManager's unsupported-mode fallback warning logged the literal text
