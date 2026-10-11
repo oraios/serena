@@ -48,7 +48,7 @@ The file allows you to configure ...
   * the set of built-in language servers and explicitly registered external adapters for which servers are spawned
     (not relevant when using the JetBrains plugin). External adapter IDs become available after their Python package is installed;
     see [External Language Server Adapters](../03-special-guides/external_language_server_registration.md).
-    The [Dashboard](060_dashboard) can dynamically add or remove built-in language servers and installed, registered external
+    The [Dashboard](060_dashboard.md) can dynamically add or remove built-in language servers and installed, registered external
     adapters while Serena is running. It does not install adapter packages or offer unregistered adapter IDs.
   * the [language backend](per-project-language-backend) to use for this project (overriding the global setting)
   * the encoding used in source files
@@ -130,7 +130,7 @@ agent is instructed to read it before writing any project-specific memories.
 
 For more information on this, including the target memory layout, the `mem:` reference
 convention, the `serena memories` CLI subcommands, and how to manage or disable these
-features, see [Memories & Onboarding](045_memories).
+features, see [Memories & Onboarding](045_memories.md).
 
 
 ## Preparing Your Project

@@ -29,9 +29,9 @@ To test the installation and initialise Serena, run one of the following command
   * `serena init`  
     if you intend to use the default language intelligence backend (language servers)
   * `serena init -b JetBrains`  
-    if you intend to use the JetBrains backend (which uses the [JetBrains plugin](025_jetbrains_plugin))
+    if you intend to use the JetBrains backend (which uses the [JetBrains plugin](025_jetbrains_plugin.md))
 
-Note that you can switch backends at any time via Serena's [configuration](050_configuration). 
+Note that you can switch backends at any time via Serena's [configuration](050_configuration.md). 
 
 ## Updating Serena
 
@@ -40,7 +40,7 @@ To update Serena to the latest version, run:
     uv tool upgrade serena-agent
 
 :::{tip}
-To keep informed about updates, make sure you regularly open [Serena's Dashboard](060_dashboard),
+To keep informed about updates, make sure you regularly open [Serena's Dashboard](060_dashboard.md),
 where we will announce releases along with the new features and improvements they bring.
 :::
 

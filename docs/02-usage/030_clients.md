@@ -18,7 +18,7 @@ Find concrete examples for popular clients below.
 
 Depending on your needs, you might want to further customize Serena's behaviour by
 * [adding command-line arguments](mcp-args)
-* [adjusting configuration](050_configuration).
+* [adjusting configuration](050_configuration.md).
 
 **Mode of Operation**.
 Note that some clients have a per-workspace MCP configuration (e.g, VSCode and Claude Code),

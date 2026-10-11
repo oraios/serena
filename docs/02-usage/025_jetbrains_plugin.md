@@ -179,7 +179,7 @@ Keeping your project in the Windows file system and accessing it via `/mnt/` in 
 **Special Network Setup**.
 If you are using a special setup where Serena and the IDE are running on different machines,
 make sure Serena can communicate with the JetBrains plugin.
-You can configure `jetbrains_plugin_server_address` in your [serena_config.yml](050_configuration) and
+You can configure `jetbrains_plugin_server_address` in your [serena_config.yml](050_configuration.md) and
 configure the listen address of the JetBrains plugin in the IDE via Settings / Tools / Serena
 (e.g. set it to 0.0.0.0 to listen on all interfaces, but be aware of the security implications of doing so).
 

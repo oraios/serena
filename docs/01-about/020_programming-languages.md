@@ -57,8 +57,8 @@ Some languages require additional installations or setup steps, as noted.
 * **C/C++**  
   (by default, uses the clangd language server (language `cpp`) but we also support ccls (language `cpp_ccls`);
   for best results, provide a `compile_commands.json` at the repository root;
-  see the [C/C++ Setup Guide](../03-special-guides/cpp_setup) for details;
-  for Unreal Engine 5 projects, see the [Unreal Engine Setup Guide](../03-special-guides/unreal_engine_setup_guide_for_serena).)
+  see the [C/C++ Setup Guide](../03-special-guides/cpp_setup.md) for details;
+  for Unreal Engine 5 projects, see the [Unreal Engine Setup Guide](../03-special-guides/unreal_engine_setup_guide_for_serena.md).)
 * **Clojure**
 * **Crystal**  
   (requires [Crystalline](https://github.com/elbywan/crystalline) language server to be installed and available on PATH;
@@ -79,14 +79,14 @@ Some languages require additional installations or setup steps, as noted.
 * **GDScript** (Godot Engine)  
   (requires the Godot editor to be running with its built-in LSP enabled — default on port 6008;
   Serena connects over TCP and does not launch Godot itself;
-  see the [GDScript Setup Guide](../03-special-guides/godot_gdscript_setup_guide_for_serena) for details)
+  see the [GDScript Setup Guide](../03-special-guides/godot_gdscript_setup_guide_for_serena.md) for details)
 * **Gleam**  
   (requires the [Gleam compiler](https://gleam.run) on PATH; the language server is bundled with the compiler and started via `gleam lsp`)
 * **Go**  
   (requires installation of `gopls`)
 * **Groovy**  
   (requires a local groovy-language-server.jar, configured via `ls_jar_path` in `ls_specific_settings`;
-  see the [Groovy Setup Guide](../03-special-guides/groovy_setup_guide_for_serena) for details)
+  see the [Groovy Setup Guide](../03-special-guides/groovy_setup_guide_for_serena.md) for details)
 * **Haskell**  
   (automatically locates HLS via ghcup, stack, or system PATH; supports Stack and Cabal projects)
 * **Haxe**
@@ -165,7 +165,7 @@ Some languages require additional installations or setup steps, as noted.
 * **Rust**  
   (requires [rustup](https://rustup.rs/) - uses rust-analyzer from your toolchain)
 * **Scala**  
-  (uses Metals LSP, which imports the build on first use — see the [setup guide](../03-special-guides/scala_setup_guide_for_serena))
+  (uses Metals LSP, which imports the build on first use — see the [setup guide](../03-special-guides/scala_setup_guide_for_serena.md))
 * **SCSS / Sass / CSS**
   (experimental; requires Node.js + npm; uses [some-sass-language-server](https://github.com/wkillerud/some-sass) to handle
   `.scss`, `.sass`, and `.css`)
@@ -225,7 +225,7 @@ When using the plugin, Serena connects to an instance of your JetBrains IDE via 
 work in a JetBrains IDE, this means Serena seamlessly integrates with the IDE instance you typically have open anyway,
 requiring no additional setup or configuration beyond the plugin itself.
 
-* See the [JetBrains Plugin documentation](../02-usage/025_jetbrains_plugin) for a high-level overview of its benefits and usage details.
+* See the [JetBrains Plugin documentation](../02-usage/025_jetbrains_plugin.md) for a high-level overview of its benefits and usage details.
 * See the [Features](025_features) section for a detailed comparison of the capabilities provided by the JetBrains Plugin vs. language servers.
 
 ```{raw} html
