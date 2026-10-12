@@ -2,3 +2,8 @@
 # The Haxe language server cannot properly parse/index files with CRLF endings, causing it to fail on Windows without this.
 *.hxml text eol=lf
 *.hx text eol=lf
+
+# Force LF line endings for Lua files across platforms.
+# emmylua_ls does not find cross-file references into a file whose on-disk line endings (CRLF) differ from the LF text
+# Serena sends when opening it, which made the Lua tests fail on Windows runners that check out files with CRLF.
+*.lua text eol=lf

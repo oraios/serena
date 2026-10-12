@@ -1,14 +1,15 @@
 """
 Tools which provide access to Serena's functionality through Python code execution
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 from sensai.util.string import dict_string
 
-# SPDX-License-Identifier: GPL-3.0-or-later
+from serena.tools import ToolMarkerCanEdit
 from serena.tools.tools_base import Tool, ToolMarkerBeta, ToolMarkerOptional
 
 
-class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
+class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta, ToolMarkerCanEdit):
     """
     Executes Python code which accesses Serena's functionality programmatically.
     """
