@@ -141,10 +141,8 @@ def test_default_ignored_directories(language_server: SolidLanguageServer):
     assert not language_server.is_ignored_dirname("priv"), "priv should not be ignored"
 
 
-@pytest.mark.xfail(
-    reason="Expert 0.1.0 bug: document_symbols may return nil for some files (flaky)",
-    raises=Exception,
-)
+# Fixed in Expert 0.1.10 (previously flaky with Expert 0.1.0-rc.6 because
+# document_symbols could return nil for some files; see expert-lsp/expert#903 discussion).
 @pytest.mark.parametrize("language_server", [LanguageServerId.ELIXIR], indirect=True)
 def test_symbol_tree_excludes_build_dirs(language_server: SolidLanguageServer):
     """Test that symbol tree excludes build and dependency directories."""

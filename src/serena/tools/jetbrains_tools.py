@@ -371,8 +371,8 @@ class JetBrainsRenameTool(Tool, ToolMarkerSymbolicEdit, ToolMarkerOptional, JetB
             Otherwise, the path to the directory or file to rename.
         :param new_name: the new name
         :param name_path: the name path of the symbol to rename or None if renaming a file or directory.
-        :param rename_in_comments: whether to also rename occurrences in comments. Default True.
-        :param rename_in_text_occurrences: whether to also rename occurrences in text. Default True.
+        :param rename_in_comments: whether to also rename occurrences in comments. Default False.
+        :param rename_in_text_occurrences: whether to also rename occurrences in text. Default False.
         :return: a status message
         """
         return self._api().rename(relative_path, new_name, name_path, rename_in_comments, rename_in_text_occurrences).represent()
