@@ -580,6 +580,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
 
     @override
     def _wait_for_cross_file_references_if_needed(self) -> None:
+        # checked before the latch: a crash observed after the first query's wait would otherwise
+        # never be raised, and the query would return an empty result as if it were complete
+        self._raise_if_crashed()
+
         timeout = self._get_indexing_timeout()
         if not self._has_waited_for_cross_file_references:
             start_grace = self._get_indexing_start_grace()

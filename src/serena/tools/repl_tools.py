@@ -1,13 +1,15 @@
 """
 Tools which provide access to Serena's functionality through Python code execution
 """
-
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from sensai.util.string import dict_string
+
+from serena.tools import ToolMarkerCanEdit
 from serena.tools.tools_base import Tool, ToolMarkerBeta, ToolMarkerOptional
 
 
-class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
+class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta, ToolMarkerCanEdit):
     """
     Executes Python code which accesses Serena's functionality programmatically.
     """
@@ -19,6 +21,10 @@ class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
         else:
             docs += "\n\nAvailable facades are provided at project activation"
         return docs
+
+    def _format_tool_params(self, params: dict) -> str:
+        code = params.pop("code", "")
+        return dict_string(params) + "\n" + code
 
     def apply(self, session_id: str, code: str) -> str:
         """
@@ -34,8 +40,9 @@ class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
         calls).
 
         The code is executed like a notebook cell: if its last statement is an expression, the expression's value is
-        the result. Results are rendered in a form suitable for you; lists are rendered element-wise,
+        the result. Results of facade methods are rendered in a form optimised for you; lists are rendered element-wise,
         strings are passed through unchanged.
+        You cannot use `print` or other output functions to return content; only use the last expression to return content.
 
         Output size: methods with a `max_answer_chars` parameter limit the size of the rendered result (-1 uses the
         configured default). If the limit is exceeded, a shortened result (or no content) is rendered instead;

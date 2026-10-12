@@ -30,8 +30,9 @@ class MemoryLogHandler(logging.Handler):
         super().__init__(level=level)
         self.setFormatter(logging.Formatter(SERENA_LOG_FORMAT))
         self._log_buffer = LogBuffer(max_messages=max_messages)
-        self._log_queue: queue.Queue[str] = queue.Queue()
+        self._log_queue: queue.Queue[str | None] = queue.Queue()
         self._stop_event = threading.Event()
+        self._state_lock = threading.Lock()
         self._emit_callbacks: list[Callable[[str], None]] = []
 
         # start background thread to process logs
@@ -47,21 +48,31 @@ class MemoryLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         msg = self.format(record)
-        self._log_queue.put_nowait(msg)
+        with self._state_lock:
+            if not self._stop_event.is_set():
+                self._log_queue.put_nowait(msg)
+
+    def close(self) -> None:
+        with self._state_lock:
+            if not self._stop_event.is_set():
+                self._stop_event.set()
+                self._log_queue.put_nowait(None)
+        super().close()
 
     def _process_queue(self) -> None:
-        while not self._stop_event.is_set():
+        while True:
+            msg = self._log_queue.get()
             try:
-                msg = self._log_queue.get(timeout=1)
+                if msg is None:  # None is explicitly inserted in close() to signal the thread to exit
+                    return
                 self._log_buffer.append(msg)
                 for callback in self._emit_callbacks:
                     try:
                         callback(msg)
                     except:
                         pass
+            finally:
                 self._log_queue.task_done()
-            except queue.Empty:
-                continue
 
     def get_log_messages(self, from_idx: int = 0) -> LogMessages:
         return self._log_buffer.get_log_messages(from_idx=from_idx)

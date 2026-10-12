@@ -9,10 +9,20 @@ The following types of contributions can be submitted directly via pull requests
   * small bug fixes
   * documentation improvements
 
-For other changes, please open an issue first to discuss your ideas with the maintainers.
+For other changes, always open an issue first to discuss your ideas with the maintainers and do not submit a PR 
+until a solution has been agreed upon.
 
-Do not submit pull requests for beta features (unless they are trivial bug fixes); instead, provide feedback via issues or discussions.
+Fixes to "problems" in the code that are uncovered by AI via theoretical code analysis or by applying components
+in a way that does not reflect their actual usage in Serena are not considered valuable contributions.
+Problems being fixed must be real problems that have either been observed in practice or that can indeed be expected
+to occur in practice.
+
+Do not work on beta features (unless they are trivial bug fixes); instead, provide feedback via issues or discussions.
 At present, the Serena REPL is a beta feature.
+
+### Adding Support for a New Language Server
+
+See the corresponding [memory](.serena/memories/adding_new_language_support_guide.md).
 
 ## Licensing and Contributor License Agreement (CLA)
 
@@ -38,19 +48,23 @@ When adding new source files, include the SPDX identifier that matches the compo
 `# SPDX-License-Identifier: GPL-3.0-or-later` for Serena application code and
 `# SPDX-License-Identifier: MIT` for SolidLSP.
 
+## Submitting Pull Requests
+
 When submitting a PR, ensure a well-defined scope.
 Every PR should cover a single logical change or a set of closely related changes.
 
-### Adding Support for a New Language Server
-
-See the corresponding [memory](.serena/memories/adding_new_language_support_guide.md).
-
-## Submitting Pull Requests
-
-Before submitting a PR, be sure to document your relevant changes (i.e. new features, fixes) in `CHANGELOG.md`;
-documentation changes should not be included.
+Before submitting a PR, be sure to document your relevant changes (i.e. new features, fixes) in `CHANGELOG.md`.
 Use a concise style and add your change to the appropriate section
 ("Language Servers", "Tools", "JetBrains", "CLI", "Memories", "Dashboard", "Hooks", "General", "Security").
+The change log is for users to understand how the changes affect them; technical details belong in the 
+commit message/PR description.
+No changelog entry for documentation changes or fixes for problems weren't present in the last release.
+
+If you are using AI to generate your contribution, it is expected that you add value by reviewing it carefully
+and/or testing it in practice before submitting it.
+
+Submission limit: No more than 3 PRs per contributor can be open simultaneously. If you try to open additional PRs, 
+you will get a permission error (which, unfortunately, does not explain this limit).
 
 ## Python Environment Setup
 
@@ -64,7 +78,7 @@ You can install a virtual environment with the required as follows
 
 ## Local Installation as Tool
 
-To install Serena as a local tool, run
+To install Serena from the local source, run
 
 ```shell
 uv tool install --reinstall -p 3.13 .

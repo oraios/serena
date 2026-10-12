@@ -76,9 +76,13 @@ class VueTypeScriptServer(TypeScriptLanguageServer):
         ext = os.path.splitext(relative_file_path)[1].lower()
         if ext == ".vue":
             return "vue"
-        elif ext in (".ts", ".tsx", ".mts", ".cts"):
+        elif ext == ".tsx":
+            return "typescriptreact"
+        elif ext == ".jsx":
+            return "javascriptreact"
+        elif ext in (".ts", ".mts", ".cts"):
             return "typescript"
-        elif ext in (".js", ".jsx", ".mjs", ".cjs"):
+        elif ext in (".js", ".mjs", ".cjs"):
             return "javascript"
         else:
             return "typescript"
@@ -233,9 +237,13 @@ class VueLanguageServer(SolidLanguageServer):
         ext = os.path.splitext(relative_file_path)[1].lower()
         if ext == ".vue":
             return "vue"
-        elif ext in (".ts", ".tsx", ".mts", ".cts"):
+        elif ext == ".tsx":
+            return "typescriptreact"
+        elif ext == ".jsx":
+            return "javascriptreact"
+        elif ext in (".ts", ".mts", ".cts"):
             return "typescript"
-        elif ext in (".js", ".jsx", ".mjs", ".cjs"):
+        elif ext in (".js", ".mjs", ".cjs"):
             return "javascript"
         else:
             return "vue"
@@ -251,7 +259,7 @@ class VueLanguageServer(SolidLanguageServer):
         for vue_file in repo_path.rglob("*.vue"):
             try:
                 relative_path = str(vue_file.relative_to(repo_path))
-                if "node_modules" not in relative_path and not relative_path.startswith("."):
+                if not relative_path.startswith(".") and not self.is_ignored_path(relative_path):
                     vue_files.append(relative_path)
             except Exception as e:
                 log.debug(f"Error processing Vue file {vue_file}: {e}")

@@ -551,7 +551,7 @@ class ApiScope:
             return False
         facade_scope = self._get_facade_scope(facade_name)
         # A method that would be disabled because the facade it is part of is not included
-        # or the method itself is optional must be explicitly included in order to be enabled.
+        # or a method that itself is optional must be explicitly included in order to be enabled.
         if not facade_scope.is_facade_included(is_facade_optional) or method_info.optional:
             return method_info.name in facade_scope.method_inclusions
         # A method that is not optional and whose facade is included is enabled unless it is explicitly excluded.
@@ -647,6 +647,18 @@ class Facade:
     @property
     def description(self) -> str:
         return self._description
+
+    def set_name(self, name: str):
+        """
+        :param name: the new name of the facade
+        """
+        object.__setattr__(self, "_name", name)
+
+    def set_description(self, description: str):
+        """
+        :param description: the new description of the facade
+        """
+        object.__setattr__(self, "_description", description)
 
     @property
     def enabled_method_names(self) -> list[str]:
