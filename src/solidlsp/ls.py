@@ -146,6 +146,11 @@ class LSPFileBuffer:
             current_contents = self.contents
             if self._read_file_modified_date != self._read_file_modified_date_passed_to_ls:
                 self._read_file_modified_date_passed_to_ls = self._read_file_modified_date
+                # A VersionedTextDocumentIdentifier's version must increase after each change,
+                # like the range-based didChange notifications sent for edits do. Reusing the
+                # previous number makes diagnostics/resolve data for the old and the new text
+                # indistinguishable to servers that key on it (rust-analyzer, pyright).
+                self.version += 1
                 self.language_server.server.notify.did_change_text_document(
                     {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
                         LSPConstants.TEXT_DOCUMENT: {
@@ -615,6 +620,16 @@ class SolidLanguageServer(ABC):
         if self._dependency_provider is None:
             self._dependency_provider = self._create_dependency_provider()
         return self._dependency_provider
+
+    def install_dependencies(self) -> None:
+        """
+        Installs the runtime dependencies whose installation is deferred until the language server is launched.
+
+        The remaining dependencies are installed upon instantiation of the language server.
+        Language servers created with a fixed launch command have no dependency provider and thus nothing to install here.
+        """
+        if self._dependency_provider is not None:
+            self._dependency_provider.install_dependencies()
 
     def _create_process_launch_info(self) -> ProcessLaunchInfo:
         dependency_provider = self._get_dependency_provider()
@@ -1936,7 +1951,7 @@ class SolidLanguageServer(ABC):
               (see :class:`serena.symbol.NamePathMatcher`). A symbol whose name contains it cannot be
               addressed by any tool taking an exact name path, not even via the name path that is
               reported for the symbol itself. Language servers that identify symbols in such a way
-              (e.g. Erlang LS, which reports functions as `name/arity`) must substitute another
+              (e.g. Erlang language servers, which may report functions as `name/arity`) must substitute another
               character here.
 
         :param symbol: the symbol
@@ -2124,7 +2139,7 @@ class SolidLanguageServer(ABC):
 
             result = []
             try:
-                contained_dir_or_file_names = os.listdir(abs_dir_path)
+                contained_dir_or_file_entries = os.scandir(abs_dir_path)
             except OSError:
                 return []
 
@@ -2142,14 +2157,13 @@ class SolidLanguageServer(ABC):
             )
             result.append(package_symbol)
 
-            for contained_dir_or_file_name in contained_dir_or_file_names:
-                contained_dir_or_file_abs_path = os.path.join(abs_dir_path, contained_dir_or_file_name)
+            for contained_dir_or_file_entry in contained_dir_or_file_entries:
+                contained_dir_or_file_name = contained_dir_or_file_entry.name
+                contained_dir_or_file_abs_path = contained_dir_or_file_entry.path
 
                 # obtain relative path
                 try:
-                    contained_dir_or_file_rel_path = str(
-                        Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path)
-                    )
+                    contained_dir_or_file_rel_path = os.path.relpath(contained_dir_or_file_abs_path, self.repository_root_path)
                 except ValueError as e:
                     # Typically happens when the path is not under the repository root (e.g., symlink pointing outside)
                     log.warning(
@@ -2164,13 +2178,13 @@ class SolidLanguageServer(ABC):
                     log.debug("Skipping item: %s (because it should be ignored)", contained_dir_or_file_rel_path)
                     continue
 
-                if os.path.isdir(contained_dir_or_file_abs_path):
+                if contained_dir_or_file_entry.is_dir():
                     child_symbols = process_directory(contained_dir_or_file_abs_path)
                     package_symbol["children"].extend(child_symbols)
                     for child in child_symbols:
                         child["parent"] = package_symbol
 
-                elif os.path.isfile(contained_dir_or_file_abs_path):
+                elif contained_dir_or_file_entry.is_file():
                     with self._open_file_context(contained_dir_or_file_rel_path, open_in_ls=False) as file_data:
                         document_symbols = self.request_document_symbols(contained_dir_or_file_rel_path, file_data)
 
@@ -2533,11 +2547,18 @@ class SolidLanguageServer(ABC):
                 # This is neither really safe nor elegant, but if we don't do it,
                 # there is no way to distinguish between definitions and imports as import is not a symbol-type
                 # and we get the type referenced symbol resulting from imports...
+                # An import symbol is located at the reference itself, whereas a same-named symbol whose body
+                # merely contains the reference (e.g. a caller) is not an import.
+                selection_start = containing_symbol["selectionRange"]["start"]
+                selection_end = containing_symbol["selectionRange"]["end"]
                 if (
                     not include_imports
                     and incoming_symbol is not None
                     and containing_symbol["name"] == incoming_symbol["name"]
                     and containing_symbol["kind"] == incoming_symbol["kind"]
+                    and (selection_start["line"], selection_start["character"])
+                    <= (ref_line, ref_col)
+                    <= (selection_end["line"], selection_end["character"])
                 ):
                     log.debug(
                         f"Found import of referenced symbol {incoming_symbol['name']}"
