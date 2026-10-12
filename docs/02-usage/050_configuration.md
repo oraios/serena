@@ -575,7 +575,17 @@ Supported settings:
 
 | Setting | Default | Description |
 |---|---|---|
-| `expert_version` | `v0.1.0-rc.6` | Override the Expert version Serena downloads when it does not use an `expert` executable already found in PATH. |
+| `expert_version` | `v0.1.10` | Override the Expert version Serena downloads when it does not use an `expert` executable already found in PATH. |
+
+#### Erlang
+
+Serena uses the [Erlang Language Platform](https://github.com/WhatsApp/erlang-language-platform) (ELP) for Erlang support. Serena downloads the pinned official release asset for the current platform.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed download | Override the ELP executable path. |
 
 #### Elm
 
@@ -763,8 +773,13 @@ The following settings are supported for the Java language server:
 | `maven_user_settings` | `~/.m2/settings.xml` | Path to Maven `settings.xml` |
 | `gradle_user_home` | `~/.gradle` | Path to Gradle user home directory |
 | `gradle_wrapper_enabled` | `false` | Use the project's Gradle wrapper (`gradlew`) instead of the bundled Gradle distribution. Enable this for projects with custom plugins or repositories. |
+| `maven_import_enabled` | `true` | Whether JDTLS imports Maven projects. Disable on Gradle-only repositories to skip `pom.xml` detection work. |
+| `gradle_import_enabled` | `true` | Whether JDTLS imports Gradle projects. Disable on Maven-only repositories to skip Gradle detection work. |
+| `update_build_configuration` | `interactive` | What JDTLS does after `pom.xml` / `build.gradle` changes: `disabled`, `interactive`, or `automatic`. Prefer `automatic` for headless agents that cannot answer a prompt. |
+| `autobuild_enabled` | `true` | Whether JDTLS rebuilds after edits. Disable on very large repositories to reduce background CPU. |
 | `gradle_java_home` | `null` | Path to the JDK used by Gradle. When unset, Gradle uses `JAVA_HOME` if `use_system_java_home` is enabled and `JAVA_HOME` is set; otherwise it falls back to Serena's bundled JRE. |
 | `use_system_java_home` | `false` | Use the system's `JAVA_HOME` environment variable for JDTLS itself and, when `gradle_java_home` is unset, Gradle import. Enable this if your project requires a specific JDK vendor or version for Gradle's JDK checks. |
+| `custom_jre_path` | `null` | Path to an executable JDK 21+ Java launcher used only for JDTLS instead of Serena's bundled JRE. Serena queries the JVM for its real `java.home`, so symlinked launchers are supported. This does not replace `gradle_java_home` or entries in `runtimes`; configure those independently when needed. |
 | `runtimes` | `[]` | Extra JRE/JDK entries registered with JDT-LS via `java.configuration.runtimes`. Use this when a project's source/target level exceeds the JDK JDT-LS itself runs on (currently JDK 21 in default vscode-java VSIX mode). Each entry is a mapping with required `name` (e.g. `JavaSE-25`, matching the `JavaSE-NN` container the build tool requests) and `path` (JDK/JRE home directory; must exist), plus optional `default`, `sources`, and `javadoc` (passed through to JDT-LS). Entries extend rather than replace the bundled `JavaSE-21` runtime; an entry that reuses the `JavaSE-21` name overrides the bundled one. Changing this setting invalidates the JDTLS workspace hash so a fresh import is performed. |
 | `gradle_version` | `8.14.2` | (vscode-java mode only) Override the Gradle distribution version Serena downloads by default. |
 | `vscode_java_version` | `1.54.0-923` | (vscode-java mode only) Override the bundled `vscode-java` runtime bundle version Serena downloads by default. |
@@ -864,6 +879,27 @@ Supported settings:
 |---|---|---|
 | `lua_language_server_version` | `3.15.0` | Override the bundled `lua-language-server` version Serena downloads when it cannot use an existing installation from PATH or common install locations. |
 
+#### EmmyLua Analyzer
+
+The experimental Rust-based EmmyLua Analyzer backend is selected explicitly with `language: lua_emmylua`. Serena uses the `emmylua_ls` executable configured via `ls_path`; if none is configured, it downloads the pinned release for the current platform and verifies its SHA-256 checksum.
+
+Supported settings under `ls_specific_settings.lua_emmylua`:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed download | Override the `emmylua_ls` executable path. |
+| `emmylua_ls_version` | `0.25.1` | Select the EmmyLua Analyzer release to download. The default release is checksum-verified; custom release versions should be used only when the release asset is trusted. |
+
+Example:
+
+```yaml
+languages:
+  - name: lua_emmylua
+ls_specific_settings:
+  lua_emmylua:
+    ls_path: /opt/emmylua_ls
+```
+
 
 #### Luau
 
@@ -948,6 +984,11 @@ The JSON document contains the settings object directly, without an outer `nixd`
 Serena loads this file once when creating the language server, uses it as nixd's `initializationOptions`, and serves the same effective
 settings through LSP `workspace/configuration` requests. Existing `initializationOptions` configured under `ls_specific_settings.nix`
 remain top-level overrides and are reflected in both paths. Restart Serena after changing the JSON file.
+
+For the first request after opening a file, nixd can briefly return an empty hover while its initial analysis is completing.
+Serena retries that response up to five times with a 100 ms delay between attempts before returning `null`. This bounded
+retry prevents a transient startup response from immediately making hover unavailable; unsupported positions still return
+`null` after the same bounded retry interval.
 
 
 #### Pascal (`pasls`)
@@ -1064,6 +1105,25 @@ Supported settings:
 | `phpactor_version` | `2025.12.21.1` | Override the Phpactor PHAR version Serena downloads when `ls_path` is not set. |
 | `ignore_vendor` | `true` | Ignore directories named `vendor` while indexing the project. |
 
+#### PHP (`Devsense`)
+
+Serena provides the experimental `php_devsense` language key for the standalone [Devsense PHP Language Server](https://www.npmjs.com/package/devsense-php-ls).
+Serena requires `node` and `npm`, installs the pinned npm package, and launches its matching platform-specific binary.
+This avoids depending on npm's platform-specific `.bin` shim. Basic language-server features are available without a
+license; premium features can be activated with the `DEVSENSE_PHP_LS_LICENSE` environment variable. The Devsense
+package requires visible attribution, so keep this documentation link when redistributing or packaging the integration.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed npm install | Override the `devsense-php-ls` executable path; on Windows use the `.exe` binary or a working launcher. |
+| `devsense_php_ls_version` | `1.0.19197` | Override the pinned npm package version used by the managed install. |
+| `npm_registry` | `null` | Override the npm registry used for the managed install. |
+| `ignore_vendor` | `true` | Ignore directories named `vendor` while indexing the project. |
+| `php_version` | unset | Forward the PHP version as `initializationOptions["php.version"]`. |
+| `file_filter` | unset | Additional file extensions (with leading dot) to treat as PHP sources, added to `.php` / `.phtml`. |
+
 #### PowerShell
 
 Serena uses PowerShell Editor Services for PowerShell support.
@@ -1154,7 +1214,7 @@ Supported settings:
 
 | Setting | Default | Description |
 |---|---|---|
-| `metals_version` | `1.6.4` | Override the Metals version Serena bootstraps. |
+| `metals_version` | `1.6.8` | Override the Metals version Serena bootstraps. |
 | `client_name` | `Serena` | Client identifier sent to Metals. |
 | `on_stale_lock` | `auto-clean` | How Serena handles stale Metals H2 database locks. Supported values: `auto-clean`, `warn`, `fail`. |
 | `log_multi_instance_notice` | `true` | Log a notice when another Metals instance is detected. |
