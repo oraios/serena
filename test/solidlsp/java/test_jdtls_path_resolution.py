@@ -769,3 +769,87 @@ class TestConfiguredRuntimesInitializeSettings:
 
         with pytest.raises(ValueError, match="requires at least a 'name' and a 'path' key"):
             server._create_base_initialize_params()
+
+
+class TestCustomJrePath:
+    def _make_provider(self, tmp_path: Path, settings: dict[str, object]) -> EclipseJDTLS.DependencyProvider:
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        provider = object.__new__(EclipseJDTLS.DependencyProvider)
+        provider._custom_settings = SolidLSPSettings.CustomLSSettings(settings)
+        provider._solidlsp_settings = SolidLSPSettings(solidlsp_dir=str(tmp_path / "solidlsp"))
+        provider._repository_root_path = str(repo)
+        provider.runtime_dependency_paths = _make_runtime_dependency_paths(tmp_path / "runtime")
+        return provider
+
+    def test_custom_jre_replaces_bundled_executable_in_launch_command(self, tmp_path: Path) -> None:
+        custom_jre = tmp_path / "custom-jdk" / "bin" / _JAVA_EXE_NAME
+        custom_jre.parent.mkdir(parents=True)
+        custom_jre.touch()
+        custom_jre.chmod(0o755)
+        provider = self._make_provider(tmp_path, {"custom_jre_path": str(custom_jre)})
+
+        with patch.object(provider, "_inspect_java", return_value=(str(custom_jre.parent.parent), JDTLS_MIN_JDK_VERSION)):
+            command = provider.create_launch_command()
+
+        assert command[0] == str(custom_jre)
+        assert command[0] != provider.runtime_dependency_paths.jre_path
+
+    def test_custom_jre_sets_matching_java_home(self, tmp_path: Path) -> None:
+        custom_jre = tmp_path / "custom-jdk" / "bin" / _JAVA_EXE_NAME
+        custom_jre.parent.mkdir(parents=True)
+        custom_jre.touch()
+        custom_jre.chmod(0o755)
+        provider = self._make_provider(tmp_path, {"custom_jre_path": str(custom_jre)})
+
+        with patch.object(provider, "_inspect_java", return_value=(str(custom_jre.parent.parent), JDTLS_MIN_JDK_VERSION)):
+            assert provider.create_launch_command_env() == {
+                "syntaxserver": "false",
+                "JAVA_HOME": str(custom_jre.parent.parent),
+            }
+
+    @pytest.mark.skipif(platform.system() == "Windows", reason="creating symlinks requires elevated privileges on some Windows runners")
+    def test_custom_jre_uses_jvm_home_for_symlinked_locator(self, tmp_path: Path) -> None:
+        real_jre = tmp_path / "real-jdk" / "bin" / _JAVA_EXE_NAME
+        real_jre.parent.mkdir(parents=True)
+        real_jre.touch()
+        real_jre.chmod(0o755)
+        locator = tmp_path / "usr" / "bin" / _JAVA_EXE_NAME
+        locator.parent.mkdir(parents=True)
+        locator.symlink_to(real_jre)
+        provider = self._make_provider(tmp_path, {"custom_jre_path": str(locator)})
+
+        with patch.object(provider, "_inspect_java", return_value=(str(real_jre.parent.parent), JDTLS_MIN_JDK_VERSION)):
+            assert provider._resolve_jre_path() == str(real_jre)
+            assert provider.create_launch_command_env() == {
+                "syntaxserver": "false",
+                "JAVA_HOME": str(real_jre.parent.parent),
+            }
+
+    @pytest.mark.skipif(platform.system() == "Windows", reason="execute permission is not separately enforced by Windows os.access")
+    def test_custom_jre_path_must_be_executable(self, tmp_path: Path) -> None:
+        custom_jre = tmp_path / "custom-jdk" / "bin" / _JAVA_EXE_NAME
+        custom_jre.parent.mkdir(parents=True)
+        custom_jre.touch()
+        custom_jre.chmod(0o644)
+        provider = self._make_provider(tmp_path, {"custom_jre_path": str(custom_jre)})
+
+        with pytest.raises(SolidLSPException, match="custom_jre_path=.*not executable"):
+            provider.create_launch_command_env()
+
+    def test_custom_jre_path_rejects_old_jdk(self, tmp_path: Path) -> None:
+        custom_jre = tmp_path / "custom-jdk" / "bin" / _JAVA_EXE_NAME
+        custom_jre.parent.mkdir(parents=True)
+        custom_jre.touch()
+        custom_jre.chmod(0o755)
+        provider = self._make_provider(tmp_path, {"custom_jre_path": str(custom_jre)})
+
+        with patch.object(provider, "_inspect_java", return_value=(str(custom_jre.parent.parent), JDTLS_MIN_JDK_VERSION - 1)):
+            with pytest.raises(SolidLSPException, match="requires JDK"):
+                provider.create_launch_command_env()
+
+    def test_custom_jre_path_must_be_a_file(self, tmp_path: Path) -> None:
+        provider = self._make_provider(tmp_path, {"custom_jre_path": str(tmp_path / "missing" / _JAVA_EXE_NAME)})
+
+        with pytest.raises(SolidLSPException, match="does not exist or is not executable"):
+            provider.create_launch_command_env()
