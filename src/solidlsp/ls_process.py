@@ -181,6 +181,7 @@ class LanguageServerInterface(ABC):
         `general.staleRequestSupport.retryOnContentModified`) that it will reissue; see
         `set_content_modified_retry_methods`.
         """
+        self._content_modified_max_attempts = _CONTENT_MODIFIED_MAX_ATTEMPTS
 
     def set_request_timeout(self, timeout: float | None) -> None:
         """
@@ -200,6 +201,12 @@ class LanguageServerInterface(ABC):
         :param methods: LSP method names (e.g. ``"textDocument/hover"``) eligible for retry.
         """
         self._content_modified_retry_methods = frozenset(methods)
+
+    def set_content_modified_max_attempts(self, max_attempts: int) -> None:
+        """Set the bounded attempt count for declared stale requests, including the first attempt."""
+        if max_attempts < 1:
+            raise ValueError("ContentModified max_attempts must be at least 1")
+        self._content_modified_max_attempts = max_attempts
 
     @abstractmethod
     def is_running(self) -> bool:
@@ -373,11 +380,11 @@ class LanguageServerInterface(ABC):
             return result.payload
 
         if method in self._content_modified_retry_methods:
-            for attempt in range(2, _CONTENT_MODIFIED_MAX_ATTEMPTS + 1):
+            for attempt in range(2, self._content_modified_max_attempts + 1):
                 is_content_modified = isinstance(result.error, LSPError) and result.error.code == LSPErrorCodes.ContentModified
                 if not is_content_modified:
                     break
-                log.info("Request %s got ContentModified (-32801); retrying (%d/%d)", method, attempt, _CONTENT_MODIFIED_MAX_ATTEMPTS)
+                log.info("Request %s got ContentModified (-32801); retrying (%d/%d)", method, attempt, self._content_modified_max_attempts)
                 time.sleep(_CONTENT_MODIFIED_RETRY_DELAY)
                 result = self._send_request_once(method, params)
                 if not result.is_error():

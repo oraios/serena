@@ -20,16 +20,32 @@ Serena is configured using a multi-layered approach:
 
 The global configuration file allows you to change general settings and defaults that will apply to all projects unless overridden.
 
+### Accessing the Configuration File
+
+The configuration file is auto-created when you first run Serena. It is stored in your user directory:
+* Linux/macOS/Git-Bash: `~/.serena/serena_config.yml`
+* Windows (CMD/PowerShell): `%USERPROFILE%\.serena\serena_config.yml`
+
+You can access it
+* through [Serena's dashboard](060_dashboard) while Serena is running (use the respective button)
+* directly, using your favourite text editor
+* using the command
+
+  ```shell
+  serena config edit
+  ```
+
 ### Settings
 
 Some of the configurable settings include:
+  * the agent interface to use (tools or REPL, [see below](agent-interfaces))
   * the language backend to use by default (i.e., the JetBrains plugin or language servers);
     this can also be [overridden per project](per-project-language-backend)
   * UI settings affecting the [Serena Dashboard and GUI tool](060_dashboard.md)
   * the set of tools or REPL API functions to enable/disable by default
   * the set of [modes](modes) to use by default
   * tool execution parameters (timeout, max. answer length)
-  * global ignore rules
+  * global ignore rules for project files and folders
   * logging settings
   * the set of trusted project paths
   * advanced settings specific to individual language servers (see [below](ls-specific-settings))
@@ -41,23 +57,8 @@ Some of the settings it contains can, however, be *extended* or *overridden* in 
 For detailed information on the parameters and possible settings, see the
 [template file](https://github.com/oraios/serena/blob/main/src/serena/resources/serena_config.template.yml).
 
-### Accessing the Configuration File
-
-The configuration file is auto-created when you first run Serena. It is stored in your user directory:
-  * Linux/macOS/Git-Bash: `~/.serena/serena_config.yml`
-  * Windows (CMD/PowerShell): `%USERPROFILE%\.serena\serena_config.yml`
-
-You can access it
-  * through [Serena's dashboard](060_dashboard) while Serena is running (use the respective button) 
-  * directly, using your favourite text editor
-  * using the command
-
-    ```shell
-    serena config edit
-    ```
-    
 (agent-interfaces)=
-### Agent Interfaces
+#### Agent Interfaces
 
 Serena provides its functionality to the agent (LLM) through one of two interfaces
 (see [Tools and APIs](../01-about/035_tools) for the operations they offer):
@@ -86,6 +87,31 @@ Restricting the operations available in the REPL is a means of steering the agen
 the Python code that is executed can, in principle, do anything the Serena process can do.
 See [Security](070_security) for isolation options.
 ```
+
+(trusted-projects-config)=
+#### Trusted Projects
+
+The setting `trusted_project_path_patterns` configures the set of project root paths that are considered trusted,
+enabling additional features.
+
+Limitations applied to untrusted projects:
+
+- Some [project settings](project-config) are ignored for untrusted projects:
+  - `activation_command` is a shell command that is to be run whenever the project is activated.
+  - `ls_specific_settings` defines project-specific language server settings, which can change, in particular,
+    how language servers are started for the project.
+- Following of symbolic links in project directories is not supported in untrusted projects (links are fully ignored).
+
+```{note}
+The term "trusted" implies only that one trusts the project enough to enable the additional features listed above.
+An "untrusted" project is not sandboxed, strongly restricted or otherwise contained.
+See our [security documentation](trusted-projects) for details.
+```
+
+The default set of trusted paths depends on the age of your configuration: Installations predating
+the introduction of this setting retain a pattern that trusts all projects, ensuring that existing workflows are
+not broken, whereas newly created configurations trust no project by default.
+The applicable value can be inspected in the dashboard.
 
 ## Modes and Contexts
 
@@ -773,6 +799,10 @@ The following settings are supported for the Java language server:
 | `maven_user_settings` | `~/.m2/settings.xml` | Path to Maven `settings.xml` |
 | `gradle_user_home` | `~/.gradle` | Path to Gradle user home directory |
 | `gradle_wrapper_enabled` | `false` | Use the project's Gradle wrapper (`gradlew`) instead of the bundled Gradle distribution. Enable this for projects with custom plugins or repositories. |
+| `maven_import_enabled` | `true` | Whether JDTLS imports Maven projects. Disable on Gradle-only repositories to skip `pom.xml` detection work. |
+| `gradle_import_enabled` | `true` | Whether JDTLS imports Gradle projects. Disable on Maven-only repositories to skip Gradle detection work. |
+| `update_build_configuration` | `interactive` | What JDTLS does after `pom.xml` / `build.gradle` changes: `disabled`, `interactive`, or `automatic`. Prefer `automatic` for headless agents that cannot answer a prompt. |
+| `autobuild_enabled` | `true` | Whether JDTLS rebuilds after edits. Disable on very large repositories to reduce background CPU. |
 | `gradle_java_home` | `null` | Path to the JDK used by Gradle. When unset, Gradle uses `JAVA_HOME` if `use_system_java_home` is enabled and `JAVA_HOME` is set; otherwise it falls back to Serena's bundled JRE. |
 | `use_system_java_home` | `false` | Use the system's `JAVA_HOME` environment variable for JDTLS itself and, when `gradle_java_home` is unset, Gradle import. Enable this if your project requires a specific JDK vendor or version for Gradle's JDK checks. |
 | `custom_jre_path` | `null` | Path to an executable JDK 21+ Java launcher used only for JDTLS instead of Serena's bundled JRE. Serena queries the JVM for its real `java.home`, so symlinked launchers are supported. This does not replace `gradle_java_home` or entries in `runtimes`; configure those independently when needed. |
@@ -874,6 +904,27 @@ Supported settings:
 | Setting | Default | Description |
 |---|---|---|
 | `lua_language_server_version` | `3.15.0` | Override the bundled `lua-language-server` version Serena downloads when it cannot use an existing installation from PATH or common install locations. |
+
+#### EmmyLua Analyzer
+
+The experimental Rust-based EmmyLua Analyzer backend is selected explicitly with `language: lua_emmylua`. Serena uses the `emmylua_ls` executable configured via `ls_path`; if none is configured, it downloads the pinned release for the current platform and verifies its SHA-256 checksum.
+
+Supported settings under `ls_specific_settings.lua_emmylua`:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed download | Override the `emmylua_ls` executable path. |
+| `emmylua_ls_version` | `0.25.1` | Select the EmmyLua Analyzer release to download. The default release is checksum-verified; custom release versions should be used only when the release asset is trusted. |
+
+Example:
+
+```yaml
+languages:
+  - name: lua_emmylua
+ls_specific_settings:
+  lua_emmylua:
+    ls_path: /opt/emmylua_ls
+```
 
 
 #### Luau

@@ -19,6 +19,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add `auth_secret` to `serena_config.yml` for authenticating communication between Serena components
     and services. When missing, null, or empty, a random UUID is generated and persisted; existing values
     are preserved
+  - Improve speed of file system operations, particularly enumeration of all source files of a project,
+    which is particularly relevant for file system refresh operations when using the LSP backend.
   - Fix: MCP server now reports Serena's version instead of the installed MCP SDK version (#1889)
   - Fix: importing Serena no longer loads the `anthropic` package unless the Anthropic token counter is
     actually used; the unconditional import added seconds to CLI/MCP startup on some machines (#2012)
@@ -36,9 +38,17 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: `TextUtils.insert_text_at_position` returned a wrong position when the inserted text merged
     with an adjacent character into a single newline sequence (e.g. a `\n` inserted directly after an
     existing `\r`); the position is now determined from the resulting text
+  - Fix: `search_for_pattern` reported "no matches" for a regular expression that does not compile,
+    because the compilation happened inside the per-file error handling that exists to skip
+    unreadable files; an invalid pattern is now rejected up front, as `search_text` documents and
+    as the replacement tools already do
   - Fix: process-tree cleanup signaled descendant language-server processes without waiting for them,
     which could leave grandchildren as zombies; cleanup now waits for the discovered descendants (#1464)
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
+  - Fix: a tsserver crash was only surfaced by the first cross-file query of a TypeScript language
+    server instance; later queries skipped the check together with the indexing wait and returned
+    an empty result as if the symbol had no references. Every cross-file query now raises
+    `TypeScriptServerCrashedError` once a crash has been observed
   - Fix: `MultiFileContentReplacer` accounted for the exclusivity of the match end in neither
     `ReplacementOccurrence.end_line` nor the region rendered by `render_occurrence_diff`, so a
     replacement whose pattern consumed a line break reported the match as ending on the following
@@ -64,7 +74,20 @@ Status of the `main` branch. Changes prior to the next official version change w
     failure now surfaces as `LanguageServerTerminatedException`, the signal the restart path acts
     on, both for a broken pipe and for a stdin that shutdown had already closed (#2004)
 
+* Security:
+  - Behaviour change: Following symbolic links is no longer possible for untrusted projects.
+    In an untrusted project, symbolic links are now ignored entirely: they are neither followed when 
+    the project's files are enumerated nor accepted as a path when a file is requested; trusted projects 
+    keep following links as before (#2144)
+  - Fix: the line-based and symbol-level editing tools did not apply the path-confinement check at
+    all and now validate the file path like the other file tools (#2144)
+
 * CLI:
+  - Fix: `project index` crashed while writing `.serena/logs/indexing.txt` when a failed file's path or
+    error contained characters outside the locale encoding (e.g. CJK names on Windows); the log is now
+    written as UTF-8
+  - Add `download-ls-dependencies` to prefetch runtime dependencies of the given language servers
+    for environments with restricted network access (#664)
   - Fix: `project health-check` reported `Health check passed - All tools working correctly` and
     exited 0 even when `FindReferencingSymbolsTool` had raised, because that failure was logged as
     a warning while the verdict checked `FindSymbolTool` only. A reference-search failure now fails
@@ -72,8 +95,11 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add `project remove`, which unregisters a project from the project list in `serena_config.yml`,
     addressed either by name or by path. Only the registry entry is removed; the project's own files,
     including its project configuration, are left untouched (#2029)
-
+  - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)
+  
 * Tools:
+  - Fix: `replace_in_files` now rejects occurrence IDs from a preview when the file content or matched
+    range has changed, preventing an outdated selection from silently replacing a different match
   - Fix: `$!N` backreferences in regex-mode replacements expanded to the literal template text
     (e.g. `EA_INPUT$!1(...)`) when the referenced group existed but did not participate in the
     match (e.g. a group inside an optional construct that was skipped); unmatched groups now expand
@@ -143,6 +169,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     not written yet. Serena now waits for the indexing progress Phpactor reports, bounded by the new
     `indexing_timeout` and `indexing_start_grace` settings, and keeps the index in the project's
     cache directory, keyed by the indexed extensions so that widening `file_filter` reindexes
+  - Fix: Vue companion TypeScript indexing now respects project ignore patterns and ignored
+    directory names, avoiding opening ignored release snapshots, vendored components and build output
+  - Add: configurable JDTLS Maven/Gradle import, `updateBuildConfiguration`, and autobuild settings under `ls_specific_settings.java` (#1976)
   - Fix: Angular, Vue and Svelte language servers opened `.tsx`/`.jsx` files with `typescript`/`javascript`
     language IDs, so JSX symbol ranges truncated at multi-line expressions (same class of bug as the
     typescript-language-server fix; `typescriptreact`/`javascriptreact` are now used). Regression tests
@@ -169,8 +198,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     sample C# projects, this loads projects the server cannot restore on every start, and their
     restore failures bury the diagnostics of the projects the user actually works on. Project
     discovery now skips `.csproj` files matched by the project's ignore patterns
-  - Kotlin: update the managed Kotlin LSP from `262.9593.0` to `263.4702.0`; the `262.9593.0` build
-    has expired and fails on startup with "This build of intellij-server has expired" (#2008)
+  - Kotlin: 
+    - Downgrade back to the initially used version 261.13587.0 of the language server,
+      because all newer builds keep expiring after a short period of time.
+    - Update download URLs to use download.jetbrains.com instead of download-cdn #2152
   - Fix: Godot's GDScript parser can report a symbol's end column one column past the
     line-end convention every other language server follows (closing a node's range from
     the next lookahead token instead of the last consumed one, when that lookahead is a
@@ -223,8 +254,6 @@ Status of the `main` branch. Changes prior to the next official version change w
     already started (#1949)
   - Add: Installed Python packages can provide generic external language-server adapters through the
     `serena.language_servers` entry-point group for explicit use in `project.yml`
-  - Add experimental Devsense PHP Language Server support through the `php_devsense` language key and
-    pinned npm-managed `devsense-php-ls` installation (#710)
   - Add `java.custom_jre_path` to launch JDTLS with a validated external Java executable when the bundled
     JRE is too old for the installed JDTLS or project (#1469)
   - Fix: Nixd hover requests could return an empty first response while initial analysis was completing;
@@ -233,6 +262,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Nixd could return a transient empty hover response while initial analysis was completing;
     retry the request within a bounded interval and exercise Nix hover coverage against a supported
     nixpkgs-backed selector (#1040)
+  - Add the experimental Rust-based EmmyLua Analyzer backend as `lua_emmylua`, with managed
+    cross-platform downloads and SHA-256 verification; the default `lua` backend remains unchanged
   - Fix: Dart's `$/analyzerStatus` notifications were logged as unhandled-method warnings during analysis (#1855)
   - Fix: `DartLanguageServer._start_server` discarded both `$/analyzerStatus` and
     `experimental/serverStatus`, the two notifications the Dart analysis server sends to report
@@ -250,6 +281,22 @@ Status of the `main` branch. Changes prior to the next official version change w
     indicate it was incomplete. Serena now declares work-done progress support and waits for the work
     Metals reports, bounded by the new `indexing_timeout`, `indexing_start_grace` and
     `indexing_quiet_period` settings
+  - Fix: the Angular language server waited for ngserver's `projectLoadingFinish` after `initialized`,
+    but ngserver loads the project lazily, on the first document open — so the notification could not
+    arrive, every startup burned the full wait, and the first symbol query of a session ran against an
+    unresolved project, silently returning incomplete cross-file references. Serena now opens one `.ts`
+    file to trigger the load before waiting (skipped for projects without a `tsconfig.json`, where
+    ngserver loads nothing)
+  - The Angular language server now supports `additional_workspace_folders`: the extra folders are
+    activated at startup and the companion TypeScript server is given the same workspace folders,
+    ignore patterns and encoding as the main server, so cross-package queries reach code outside the
+    app. `.ts` references are now the union of what ngserver reports (template usages) and what the
+    companion reports (callers in another project — an extra workspace folder, or a second
+    `tsconfig.json` in a monorepo); neither is complete on its own
+  - Fix: Angular post-edit diagnostics for `.ts` files waited out the 2.5s publish timeout on every
+    edited file, because ngserver never publishes for an ordinary TypeScript error (it publishes for
+    `.html` templates, and for a `.ts` file whose inline template has an error); they are now read
+    from the companion TypeScript server, which publishes for both
   - Fix: a `tsserver` crash mid-indexing (e.g. a V8 heap OOM) sent the same `$/progress` "end"
     event as a normal completion, so `find_referencing_symbols` and other cross-file queries
     silently returned an empty result instead of surfacing the crash. The crash is now detected
@@ -285,9 +332,6 @@ Status of the `main` branch. Changes prior to the next official version change w
     symbol (e.g. `a.run` calling `b.run` in Gleam) whenever the language server listed them after the
     target's declaration, mistaking them for imports; a referencing symbol is now only treated as an
     import if the reference lies within its name (#2133)
-
-CLI:
-  - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)
 
 * Dependencies:
   - Fix: declare `click` as a direct dependency; all three console scripts (`serena`, `serena-agent`,

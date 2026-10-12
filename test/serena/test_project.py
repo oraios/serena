@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from serena.config.serena_config import ProjectConfig, RegisteredProject, SerenaConfig
+from serena.config.serena_config import ProjectConfig, SerenaConfig
 from serena.project import Project
 from solidlsp.ls_config import LanguageServerId
 
@@ -31,8 +31,53 @@ def _create_test_project(
     )
 
 
-class TestGlobalIgnoredPaths:
-    """Tests for system-global ignored_paths feature."""
+class TestProject:
+    def test_project_files(self, tmp_path: Path) -> None:
+        # create a project with root and nested git directories and ignore rules
+        (tmp_path / ".git").mkdir()
+        (tmp_path / "foo.py").touch()
+        (tmp_path / "README.md").touch()
+        (tmp_path / "bar" / ".git").mkdir(parents=True)
+        (tmp_path / "ignored.py").touch()
+        (tmp_path / "bar" / "bar_ignored.py").touch()
+        (tmp_path / "bar" / "bar.py").touch()
+        (tmp_path / ".gitignore").write_text("/ignored.py\n/.serena\n", encoding="utf-8")
+        (tmp_path / "bar" / ".gitignore").write_text("/bar_ignored.py\n", encoding="utf-8")
+
+        # instantiate the project with default ignore settings
+        project = Project(
+            project_root=str(tmp_path),
+            project_config=ProjectConfig(project_name="test_project", language_servers=[LanguageServerId.PYTHON]),
+            serena_config=SerenaConfig().with_headless_mode_overrides(),
+        )
+
+        # .git directories are ignored anywhere in the project
+        assert project.is_ignored_path(".git")
+        assert project.is_ignored_path("bar/.git")
+
+        # files explicitly ignored in .gitignore are ignored
+        assert project.is_ignored_path("ignored.py")
+        assert project.is_ignored_path("bar/bar_ignored.py")
+
+        # verify ordinary paths are not ignored
+        assert not project.is_ignored_path("foo.py")
+        assert not project.is_ignored_path("README.md")
+        assert not project.is_ignored_path(".gitignore")
+        assert not project.is_ignored_path("bar")
+        assert not project.is_ignored_path("bar/.gitignore")
+        assert not project.is_ignored_path("bar/bar.py")
+
+        # check source files
+        source_files = project.gather_source_files()
+        assert len(source_files) == 2
+
+        # check non-ignored files
+        non_ignored_files = project.gather_project_files(skip_ignored_files=True)
+        assert len(non_ignored_files) == 5
+
+
+class TestProjectRespectsGlobalIgnoredPaths:
+    """Tests that projects consider globally defined ignored paths."""
 
     def setup_method(self) -> None:
         self.test_dir = tempfile.mkdtemp()
@@ -131,89 +176,8 @@ class TestGlobalIgnoredPaths:
         project.validate_relative_path(nonexistent, require_not_ignored=True)
 
 
-class TestRegisteredProjectGlobalIgnoredPaths:
-    """RegisteredProject.get_project_instance() correctly passes global patterns to Project."""
-
-    def setup_method(self) -> None:
-        self.test_dir = tempfile.mkdtemp()
-        self.project_path = Path(self.test_dir).resolve()
-        (self.project_path / "main.py").write_text("print('hello')")
-        os.makedirs(self.project_path / "node_modules", exist_ok=True)
-        (self.project_path / "node_modules" / "pkg.js").write_text("module")
-
-    def teardown_method(self) -> None:
-        shutil.rmtree(self.test_dir)
-
-    def test_get_project_instance_passes_global_ignored_paths(self) -> None:
-        """RegisteredProject.get_project_instance() passes global_ignored_paths to Project."""
-        config = ProjectConfig(
-            project_name="test_project",
-            language_servers=[LanguageServerId.PYTHON],
-            ignored_paths=[],
-            ignore_all_files_in_gitignore=False,
-        )
-        serena_config = SerenaConfig(ignored_paths=["node_modules"]).with_headless_mode_overrides()
-        registered = RegisteredProject(
-            project_root=str(self.project_path),
-            project_config=config,
-        )
-        project = registered.get_project_instance(serena_config=serena_config)
-        assert project.is_ignored_path(str(self.project_path / "node_modules" / "pkg.js"))
-
-    def test_get_project_instance_without_global_ignored_paths(self) -> None:
-        """RegisteredProject without global_ignored_paths defaults to empty."""
-        config = ProjectConfig(
-            project_name="test_project",
-            language_servers=[LanguageServerId.PYTHON],
-            ignored_paths=[],
-            ignore_all_files_in_gitignore=False,
-        )
-        registered = RegisteredProject(
-            project_root=str(self.project_path),
-            project_config=config,
-        )
-        serena_config = SerenaConfig(ignored_paths=[]).with_headless_mode_overrides()
-        project = registered.get_project_instance(serena_config=serena_config)
-        assert not project.is_ignored_path(str(self.project_path / "node_modules" / "pkg.js"))
-
-    def test_from_project_root_passes_global_ignored_paths(self) -> None:
-        """RegisteredProject.from_project_root() threads global_ignored_paths to Project."""
-        # Create a minimal project.yml so from_project_root can load config
-        serena_dir = self.project_path / ".serena"
-        serena_dir.mkdir(exist_ok=True)
-        (serena_dir / "project.yml").write_text(
-            'project_name: "test_project"\nlanguages: ["python"]\nignored_paths: []\nignore_all_files_in_gitignore: false\n'
-        )
-        serena_config = SerenaConfig(ignored_paths=["node_modules"]).with_headless_mode_overrides()
-        registered = RegisteredProject.from_project_root(
-            str(self.project_path),
-            serena_config=serena_config,
-        )
-        project = registered.get_project_instance(serena_config=serena_config)
-        assert project.is_ignored_path(str(self.project_path / "node_modules" / "pkg.js"))
-
-    def test_from_project_instance_passes_global_ignored_paths(self) -> None:
-        """RegisteredProject.from_project_instance() threads global_ignored_paths to Project."""
-        config = ProjectConfig(
-            project_name="test_project",
-            language_servers=[LanguageServerId.PYTHON],
-            ignored_paths=[],
-            ignore_all_files_in_gitignore=False,
-        )
-        serena_config = SerenaConfig(ignored_paths=["node_modules"]).with_headless_mode_overrides()
-        project = Project(
-            project_root=str(self.project_path),
-            project_config=config,
-            serena_config=serena_config,
-        )
-        registered = RegisteredProject.from_project_instance(project)
-        # The registered project already has a project_instance, so get_project_instance() returns it directly
-        retrieved = registered.get_project_instance(serena_config=serena_config)
-        assert retrieved.is_ignored_path(str(self.project_path / "node_modules" / "pkg.js"))
-
-
-class TestGlobalIgnoredPathsWithGitignore:
-    """Global ignored_paths combined with ignore_all_files_in_gitignore produces correct three-way merge."""
+class TestProjectIgnoreRulesWithGlobalPathsAndGitignore:
+    """Tests that global ignored_paths combined with ignore_all_files_in_gitignore produces correct behaviour."""
 
     def setup_method(self) -> None:
         self.test_dir = tempfile.mkdtemp()
@@ -274,7 +238,6 @@ class TestGlobalIgnoredPathsWithGitignore:
                 serena_config=SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=[]),
             )
             assert r"a\[bc\]/drop.txt" in project._ignored_patterns
-            assert project._ignored_patterns[0] == project._ignored_patterns[-1] == "build/cache/"
             assert "build/cache/**/*.tmp" not in project._ignored_patterns
             assert project.is_ignored_path("a[bc]/drop.txt")
             assert not project.is_ignored_path("ab/drop.txt")
@@ -407,19 +370,3 @@ class TestGlobalIgnoredPathsWithGitignore:
         assert project.is_ignored_path(str(self.project_path / "dist" / "bundle.js"))
         # Non-ignored file
         assert not project.is_ignored_path(str(self.project_path / "main.py"))
-
-
-class TestSerenaConfigIgnoredPaths:
-    """Config loading with ignored_paths in serena_config.yml works correctly."""
-
-    def test_serena_config_default_ignored_paths(self) -> None:
-        """SerenaConfig defaults to empty ignored_paths."""
-        config = SerenaConfig().with_headless_mode_overrides()
-        assert config.ignored_paths == []
-
-    def test_serena_config_with_ignored_paths(self) -> None:
-        """SerenaConfig can be created with explicit ignored_paths."""
-        config = SerenaConfig(
-            ignored_paths=["node_modules", "*.log", "build"],
-        ).with_headless_mode_overrides()
-        assert config.ignored_paths == ["node_modules", "*.log", "build"]

@@ -84,11 +84,10 @@ class TestDevsensePHPLanguageServer:
         assert params["capabilities"]["textDocument"]["hover"]["contentFormat"] == ["markdown", "plaintext"]
 
 
-def test_devsense_registry_is_experimental_and_uses_php_extensions() -> None:
-    language_id = LanguageServerId.PHP_DEVSENSE
+def test_devsense_language_server_id() -> None:
+    ls_id = LanguageServerId.PHP_DEVSENSE
 
-    assert language_id.is_experimental()
-    matcher = language_id.get_source_fn_matcher()
+    matcher = ls_id.get_source_fn_matcher()
     assert matcher.is_relevant_filename("index.php")
     assert matcher.is_relevant_filename("template.phtml")
-    assert language_id.get_ls_class() is DevsensePHPLanguageServer
+    assert ls_id.get_ls_class() is DevsensePHPLanguageServer

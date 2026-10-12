@@ -1,3 +1,4 @@
+import logging as std_logging
 import os
 import platform
 import re
@@ -37,6 +38,37 @@ def pytest_configure(config: pytest.Config) -> None:
         config.option.patch_pycharm_diff = True
 
 
+@pytest.fixture(autouse=True)
+def _restore_root_logging() -> Iterator[None]:
+    """
+    Restore the root logger's handlers around every test.
+
+    Serena's CLI configures process-wide logging: `serena.cli` calls `logging.configure` (which
+    drops the handlers already installed, pytest's own capture handlers included) and attaches its
+    own stderr and file handlers to the root logger. Tests that invoke those commands in-process
+    through click's runner leave that state behind, and the leaked stderr handler is bound to the
+    capture stream pytest closes once the test ends. Every later record in the session then fails
+    inside the stale handler with `ValueError: I/O operation on closed file.`: the records are lost,
+    and the logging machinery prints a `--- Logging error ---` block whenever stderr happens to be
+    live, which is why CI output carried tracebacks that no test was responsible for.
+    """
+    root = std_logging.getLogger()
+    saved_handlers = list(root.handlers)
+    saved_level = root.level
+    yield
+    for handler in list(root.handlers):
+        if handler not in saved_handlers:
+            root.removeHandler(handler)
+            try:
+                handler.close()
+            except Exception:
+                pass
+    for handler in saved_handlers:
+        if handler not in root.handlers:
+            root.addHandler(handler)
+    root.setLevel(saved_level)
+
+
 @pytest.fixture(scope="session")
 def resources_dir() -> Path:
     """Path to the test resources directory."""
@@ -53,6 +85,7 @@ _LANGUAGE_REPO_ALIASES: dict[LanguageServerId, LanguageServerId] = {
     LanguageServerId.PHP_PHPACTOR: LanguageServerId.PHP,
     LanguageServerId.PHP_PHPANTOM: LanguageServerId.PHP,
     LanguageServerId.JULIA_FATOU: LanguageServerId.JULIA,
+    LanguageServerId.LUA_EMMYLUA: LanguageServerId.LUA,
     LanguageServerId.PYTHON_JEDI: LanguageServerId.PYTHON,
     LanguageServerId.PYTHON_BASEDPYRIGHT: LanguageServerId.PYTHON,
     LanguageServerId.PYTHON_TY: LanguageServerId.PYTHON,
@@ -217,7 +250,7 @@ def project(request: LanguageParamRequest, repo_root_override: str | None = None
 
     Example:
     ```
-    @pytest.mark.parametrize("project", [Language.PYTHON], indirect=True)
+    @pytest.mark.parametrize("project", [LanguageServerId.PYTHON], indirect=True)
     def test_python_project(project: Project) -> None:
         # Use the Python project to test something
         pass
@@ -296,6 +329,7 @@ _LANGUAGE_PYTEST_MARKERS: dict[LanguageServerId, list[MarkDecorator | Mark]] = {
     LanguageServerId.JULIA_FATOU: [pytest.mark.julia],
     LanguageServerId.LEAN4: [pytest.mark.lean4],
     LanguageServerId.LATEX: [pytest.mark.latex],
+    LanguageServerId.LUA_EMMYLUA: [pytest.mark.lua],
     LanguageServerId.MSL: [pytest.mark.msl],
     LanguageServerId.PHP: [pytest.mark.php],
     LanguageServerId.PHP_PHPACTOR: [pytest.mark.php],

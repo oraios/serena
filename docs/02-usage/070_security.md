@@ -82,24 +82,7 @@ The question to ask is therefore not "is this project safe to work on because it
 "do I trust this repository enough to grant it the additional capabilities?".
 If a repository is not trustworthy, [sandboxing](sandboxing) is the answer, not the trust configuration.
 
-### Trust-Gated Features
-
-The set of trust-gated features is subject to change and can be expected to grow.
-The settings that require trust are annotated accordingly in the project configuration (see
-[configuration](050_configuration)); the two following current examples illustrate the principle:
-
-- `activation_command` is a shell command that a project can request to be run whenever it is activated.
-  Without trust gating, merely opening a repository in Serena would execute code chosen by its author,
-  before the user has issued a single request.
-- `ls_specific_settings` can, among other things, override the package version and the package registry from
-  which a language server is acquired.
-  Without trust gating, a repository could thereby silently circumvent the supply chain protections described
-  below (version pinning, host restrictions) and cause attacker-controlled code to be downloaded and executed.
-
-Note that the effective set of trusted paths depends on the age of your configuration: installations predating
-the introduction of this setting retain a pattern that trusts all projects, ensuring that existing workflows are
-not broken, whereas newly created configurations trust no project by default.
-The applicable value can be inspected in the dashboard.
+For the list of trust-gated features, see the [configuration page](trusted-projects-config).
 
 (repl-security)=
 ## The REPL Interface

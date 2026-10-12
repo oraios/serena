@@ -115,6 +115,9 @@ Some languages require additional installations or setup steps, as noted.
   (requires `lean` and `lake` installed via [elan](https://github.com/leanprover/elan); uses the built-in Lean 4 LSP;
   the project must be a Lake project with `lake build` run before use)
 * **Lua**
+  (by default, uses `lua-language-server`; the experimental Rust-based [EmmyLua Analyzer](https://github.com/EmmyLuaLs/emmylua-analyzer-rust)
+  can be selected with language `lua_emmylua`; Serena manages a verified download unless `ls_path` is set;
+  references from other files are not found if the file defining the symbol uses CRLF line endings)
 * **Luau**
 * **Markdown**  
   (must explicitly enable language `markdown`, primarily useful for documentation-heavy projects)
@@ -198,6 +201,20 @@ Some languages require additional installations or setup steps, as noted.
 Additional language servers can easily be supported by providing an adapter implementation;
 see our [contribution guide](https://github.com/oraios/serena/blob/main/CONTRIBUTING.md).
 If you need to support a custom language server which is not yet publicly available, you have the option to [register an external language server](external-ls-registration).
+
+### Downloading Language Server Dependencies Ahead of Time
+
+Language server dependencies are normally downloaded when a project using the respective language is first activated.
+In environments with restricted network access, dependencies can instead be downloaded during a container or machine build:
+
+```shell
+serena download-ls-dependencies python typescript
+```
+
+Language servers that require an external toolchain, such as Go or Java, can only be prepared
+when that toolchain is installed; failures are reported and the command exits non-zero after attempting the remaining servers.
+
+The downloaded dependencies are tied to the Serena version that installed them, so repeat the command after upgrading Serena.
 
 ## The Serena JetBrains Plugin
 
