@@ -2139,7 +2139,7 @@ class SolidLanguageServer(ABC):
 
             result = []
             try:
-                contained_dir_or_file_names = os.listdir(abs_dir_path)
+                contained_dir_or_file_entries = os.scandir(abs_dir_path)
             except OSError:
                 return []
 
@@ -2157,14 +2157,13 @@ class SolidLanguageServer(ABC):
             )
             result.append(package_symbol)
 
-            for contained_dir_or_file_name in contained_dir_or_file_names:
-                contained_dir_or_file_abs_path = os.path.join(abs_dir_path, contained_dir_or_file_name)
+            for contained_dir_or_file_entry in contained_dir_or_file_entries:
+                contained_dir_or_file_name = contained_dir_or_file_entry.name
+                contained_dir_or_file_abs_path = contained_dir_or_file_entry.path
 
                 # obtain relative path
                 try:
-                    contained_dir_or_file_rel_path = str(
-                        Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path)
-                    )
+                    contained_dir_or_file_rel_path = os.path.relpath(contained_dir_or_file_abs_path, self.repository_root_path)
                 except ValueError as e:
                     # Typically happens when the path is not under the repository root (e.g., symlink pointing outside)
                     log.warning(
@@ -2179,13 +2178,13 @@ class SolidLanguageServer(ABC):
                     log.debug("Skipping item: %s (because it should be ignored)", contained_dir_or_file_rel_path)
                     continue
 
-                if os.path.isdir(contained_dir_or_file_abs_path):
+                if contained_dir_or_file_entry.is_dir():
                     child_symbols = process_directory(contained_dir_or_file_abs_path)
                     package_symbol["children"].extend(child_symbols)
                     for child in child_symbols:
                         child["parent"] = package_symbol
 
-                elif os.path.isfile(contained_dir_or_file_abs_path):
+                elif contained_dir_or_file_entry.is_file():
                     with self._open_file_context(contained_dir_or_file_rel_path, open_in_ls=False) as file_data:
                         document_symbols = self.request_document_symbols(contained_dir_or_file_rel_path, file_data)
 

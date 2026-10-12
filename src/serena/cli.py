@@ -40,6 +40,7 @@ from serena.constants import (
     SERENAS_OWN_MODE_YAMLS_DIR,
 )
 from serena.language_backend import BuiltinLanguageBackend, LanguageBackendRegistry
+from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.tools import ActivateProjectTool
 from serena.util.cli_util import AutoRegisteringGroup
@@ -918,15 +919,17 @@ class ProjectCommands(AutoRegisteringGroup):
             files_failed = []
             language_file_counts: dict[LanguageServerIdLike, int] = collections.defaultdict(lambda: 0)
             last_save_time = time.monotonic()
-            for i, f in enumerate(tqdm(files, desc="Indexing")):
+            for i, project_file in enumerate(tqdm(files, desc="Indexing")):
+                project_file: Project.ProjectFile
+                rel_path = project_file.rel_path
                 try:
-                    ls = ls_mgr.get_language_server(f)
-                    ls.request_document_symbols(f)
+                    ls = ls_mgr.get_language_server(rel_path)
+                    ls.request_document_symbols(rel_path)
                     language_file_counts[ls.ls_id] += 1
                 except Exception as e:
-                    log.error(f"Failed to index {f}, continuing.")
+                    log.error(f"Failed to index {rel_path}, continuing.")
                     collected_exceptions.append(e)
-                    files_failed.append(f)
+                    files_failed.append(rel_path)
                 now = time.monotonic()
                 if now - last_save_time >= 30:
                     ls_mgr.save_all_caches()
@@ -937,7 +940,7 @@ class ProjectCommands(AutoRegisteringGroup):
 
             if len(files_failed) > 0:
                 os.makedirs(os.path.dirname(log_file), exist_ok=True)
-                with open(log_file, "w") as f:
+                with open(log_file, "w", encoding="utf-8") as f:
                     for file, exception in zip(files_failed, collected_exceptions, strict=True):
                         f.write(f"{file}\n")
                         f.write(f"{exception}\n")
@@ -1061,30 +1064,30 @@ class ProjectCommands(AutoRegisteringGroup):
                 # Find first non-empty file that can be analyzed
                 log.info("Searching for analyzable files...")
                 files = proj.gather_source_files()
-                target_file = None
+                target_rel_path = None
 
-                for file_path in files:
+                for source_file in files:
                     try:
-                        full_path = os.path.join(project_path, file_path)
+                        full_path = source_file.dir_entry.path
                         if os.path.getsize(full_path) > 1000:
-                            target_file = file_path
-                            log.info("Found analyzable file: %s", target_file)
+                            target_rel_path = source_file.rel_path
+                            log.info("Found analyzable file: %s", target_rel_path)
                             break
                     except (OSError, FileNotFoundError):
                         continue
 
-                if not target_file:
+                if not target_rel_path:
                     raise ProjectCommands._HealthCheckFailure("No analyzable files found")
 
                 api = LspApi(agent)
 
                 # Test 1: symbols overview
-                log.info("Testing get_symbols_overview on file: %s", target_file)
-                overview = agent.execute_task(lambda: api.get_symbols_overview(target_file))
+                log.info("Testing get_symbols_overview on file: %s", target_rel_path)
+                overview = agent.execute_task(lambda: api.get_symbols_overview(target_rel_path))
                 log.info(f"get_symbols_overview returned: {overview.represent()}")
 
                 if len(overview) == 0:
-                    raise ProjectCommands._HealthCheckFailure(f"No symbols found in target file {target_file}")
+                    raise ProjectCommands._HealthCheckFailure(f"No symbols found in target file {target_rel_path}")
 
                 # Extract suitable symbol (prefer class or function over variables)
                 preferred_kinds = {SymbolKind.Class, SymbolKind.Function, SymbolKind.Method, SymbolKind.Constructor}
@@ -1102,7 +1105,7 @@ class ProjectCommands(AutoRegisteringGroup):
                 log.info("Testing find_symbol for symbol: %s", symbol_name)
                 with LspApi.find_symbol_dict_grouper_.disabled_context():
                     find_symbol_result = agent.execute_task(
-                        lambda: api.find_symbol(symbol_name, relative_path=target_file, include_body=True).represent()
+                        lambda: api.find_symbol(symbol_name, relative_path=target_rel_path, include_body=True).represent()
                     )
                 find_symbol_data = json.loads(find_symbol_result)
                 log.info("find_symbol found %d matches for symbol %s", len(find_symbol_data), symbol_name)
@@ -1114,7 +1117,7 @@ class ProjectCommands(AutoRegisteringGroup):
                 try:
                     with LspApi.references_grouper_.disabled_context():
                         find_refs_result = agent.execute_task(
-                            lambda: api.find_referencing_symbols(symbol_name, relative_path=target_file).represent()
+                            lambda: api.find_referencing_symbols(symbol_name, relative_path=target_rel_path).represent()
                         )
                         find_refs_data = json.loads(find_refs_result)
                         log.info("find_referencing_symbols found %d references for symbol %s", len(find_refs_data), symbol_name)

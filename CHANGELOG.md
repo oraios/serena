@@ -19,6 +19,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add `auth_secret` to `serena_config.yml` for authenticating communication between Serena components
     and services. When missing, null, or empty, a random UUID is generated and persisted; existing values
     are preserved
+  - Improve speed of file system operations, particularly enumeration of all source files of a project,
+    which is particularly relevant for file system refresh operations when using the LSP backend.
   - Fix: MCP server now reports Serena's version instead of the installed MCP SDK version (#1889)
   - Fix: importing Serena no longer loads the `anthropic` package unless the Anthropic token counter is
     actually used; the unconditional import added seconds to CLI/MCP startup on some machines (#2012)
@@ -36,6 +38,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: `TextUtils.insert_text_at_position` returned a wrong position when the inserted text merged
     with an adjacent character into a single newline sequence (e.g. a `\n` inserted directly after an
     existing `\r`); the position is now determined from the resulting text
+  - Fix: `search_for_pattern` reported "no matches" for a regular expression that does not compile,
+    because the compilation happened inside the per-file error handling that exists to skip
+    unreadable files; an invalid pattern is now rejected up front, as `search_text` documents and
+    as the replacement tools already do
   - Fix: process-tree cleanup signaled descendant language-server processes without waiting for them,
     which could leave grandchildren as zombies; cleanup now waits for the discovered descendants (#1464)
   - Fix: `read_only` restriction in project definition was not applied to base tool set when in single-project context (#1938)
@@ -69,6 +75,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     on, both for a broken pipe and for a stdin that shutdown had already closed (#2004)
 
 * Security:
+  - Behaviour change: Following symbolic links is no longer possible for untrusted projects.
+    In an untrusted project, symbolic links are now ignored entirely: they are neither followed when 
+    the project's files are enumerated nor accepted as a path when a file is requested; trusted projects 
+    keep following links as before (#2144)
+  - Fix: the line-based and symbol-level editing tools did not apply the path-confinement check at
+    all and now validate the file path like the other file tools (#2144)
   - Fix: typescript-language-server loaded `node_modules/typescript/lib/tsserver.js` from the project
     whenever the project provided one, so merely opening an untrusted repository executed JavaScript
     supplied by that repository. tsserver is now pinned to the TypeScript installation managed by
@@ -76,6 +88,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     trust-gated feature (#2129)
 
 * CLI:
+  - Fix: `project index` crashed while writing `.serena/logs/indexing.txt` when a failed file's path or
+    error contained characters outside the locale encoding (e.g. CJK names on Windows); the log is now
+    written as UTF-8
   - Add `download-ls-dependencies` to prefetch runtime dependencies of the given language servers
     for environments with restricted network access (#664)
   - Fix: `project health-check` reported `Health check passed - All tools working correctly` and
@@ -88,6 +103,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)
   
 * Tools:
+  - Fix: `replace_in_files` now rejects occurrence IDs from a preview when the file content or matched
+    range has changed, preventing an outdated selection from silently replacing a different match
   - Fix: `$!N` backreferences in regex-mode replacements expanded to the literal template text
     (e.g. `EA_INPUT$!1(...)`) when the referenced group existed but did not participate in the
     match (e.g. a group inside an optional construct that was skipped); unmatched groups now expand
@@ -149,6 +166,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     thread (#2038)
 
 * Language Servers:
+  - Fix: Vue companion TypeScript indexing now respects project ignore patterns and ignored
+    directory names, avoiding opening ignored release snapshots, vendored components and build output
   - Add: configurable JDTLS Maven/Gradle import, `updateBuildConfiguration`, and autobuild settings under `ls_specific_settings.java` (#1976)
   - Fix: Angular, Vue and Svelte language servers opened `.tsx`/`.jsx` files with `typescript`/`javascript`
     language IDs, so JSX symbol ranges truncated at multi-line expressions (same class of bug as the
