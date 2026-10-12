@@ -80,7 +80,9 @@ This convention has two practical consequences:
 
 - **Renames keep references intact.** When you rename or move a memory with the `rename_memory`
   tool, Serena rewrites every `` `mem:OLD_NAME` `` occurrence across all memories to point to
-  the new name. References that do not use the `mem:` prefix will not be updated automatically.
+  the new name, except in memories matched by `read_only_memory_patterns`, which the agent cannot
+  write; `serena memories check` reports such a reference as stale.
+  References that do not use the `mem:` prefix will not be updated automatically.
 - **Integrity checks** (see [below](memory-cli)) report any `` `mem:NAME` `` whose target does
   not resolve to an existing memory, and propose similarly-named candidates as likely intended
   targets.

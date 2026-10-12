@@ -231,13 +231,37 @@ class CodeEditor(Generic[TSymbol], ABC):
         :param start_line: the 0-based index of the first line to delete (inclusive)
         :param end_line: the 0-based index of the last line to delete (inclusive)
         """
-        start_col = 0
-        end_line_for_delete = end_line + 1
-        end_col = 0
         with self.edited_file_context(relative_path) as edited_file:
-            start_pos = PositionInFile(line=start_line, col=start_col)
-            end_pos = PositionInFile(line=end_line_for_delete, col=end_col)
-            edited_file.delete_text_between_positions(start_pos, end_pos)
+            self._delete_line_range(edited_file, start_line, end_line)
+
+    def replace_lines(self, relative_path: str, start_line: int, end_line: int, content: str) -> None:
+        """
+        Replaces a range of lines in the given file, writing the file once.
+
+        Deleting the range and inserting the replacement as two separate operations
+        would persist the deletion even if the insertion failed, leaving the file
+        without the lines the caller asked to replace.
+
+        :param relative_path: the relative path of the file in which to replace the lines
+        :param start_line: the 0-based index of the first line to replace (inclusive)
+        :param end_line: the 0-based index of the last line to replace (inclusive)
+        :param content: the content to insert in place of the range
+        """
+        with self.edited_file_context(relative_path) as edited_file:
+            self._delete_line_range(edited_file, start_line, end_line)
+            edited_file.insert_text_at_position(PositionInFile(line=start_line, col=0), content)
+
+    def _delete_line_range(self, edited_file: "CodeEditor.EditedFile", start_line: int, end_line: int) -> None:
+        """
+        Deletes the given inclusive line range from an open edited file.
+
+        :param edited_file: the open file to delete from
+        :param start_line: the 0-based index of the first line to delete (inclusive)
+        :param end_line: the 0-based index of the last line to delete (inclusive)
+        """
+        start_pos = PositionInFile(line=start_line, col=0)
+        end_pos = PositionInFile(line=end_line + 1, col=0)
+        edited_file.delete_text_between_positions(start_pos, end_pos)
 
     def delete_symbol(self, name_path: str, relative_file_path: str) -> None:
         """

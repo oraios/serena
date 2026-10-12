@@ -526,6 +526,13 @@ FIND_SYMBOL_REFERENCES_CASES = [
     FindSymbolCase(
         ls_id=LanguageServerId.LATEX, id="latex_methods_section", symbol_name="Methods", expected_kind="Module", expected_file="main.tex"
     ).to_pytest_param(),
+    FindSymbolCase(
+        ls_id=LanguageServerId.ASTRO,
+        id="astro_props_interface",
+        symbol_name="Props",
+        expected_kind="Interface",
+        expected_file=os.path.join("src", "components", "Card.astro"),
+    ).to_pytest_param(),
 ]
 
 FIND_REFERENCE_CASES = [
@@ -796,6 +803,7 @@ def serena_config():
         LanguageServerId.LEAN4,
         LanguageServerId.MSL,
         LanguageServerId.LATEX,
+        LanguageServerId.ASTRO,
     ]:
         repo_path = get_repo_path(language)
         if repo_path.exists():
@@ -1278,7 +1286,7 @@ class TestSerenaAgent:
 
             listing = tool.apply(needle=needle, repl=repl, mode="literal", relative_path=relative_path, dry_run=True)
             assert "DRY RUN" in listing
-            occurrence_ids = re.findall(r"\[([^\[\]]+:\d+@[0-9a-f]{6})\]", listing)
+            occurrence_ids = re.findall(r"\[([^\[\]]+:\d+@[0-9a-f]+)\]", listing)
             assert len(occurrence_ids) == original_content.count(needle)
             assert read_project_file(serena_agent.get_active_project(), relative_path) == original_content
 
@@ -1305,7 +1313,7 @@ class TestSerenaAgent:
             original_content = read_project_file(serena_agent.get_active_project(), relative_path)
             with pytest.raises(ValueError, match="NO changes were applied") as exc_info:
                 tool.apply(needle=needle, repl="X", mode="literal", relative_path=relative_path, expected_count=1)
-            assert re.search(r"\[[^\[\]]+:\d+@[0-9a-f]{6}\]", str(exc_info.value))  # the listing with ids is included
+            assert re.search(r"\[[^\[\]]+:\d+@[0-9a-f]+\]", str(exc_info.value))  # the listing with ids is included
             assert read_project_file(serena_agent.get_active_project(), relative_path) == original_content
 
     @pytest.mark.parametrize(

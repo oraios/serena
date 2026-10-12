@@ -58,7 +58,7 @@ class AnthropicTokenCount(TokenCountEstimator):
     See https://docs.anthropic.com/en/docs/build-with-claude/token-counting
     """
 
-    def __init__(self, model_name: str = "claude-sonnet-4-20250514", api_key: str | None = None):
+    def __init__(self, model_name: str, api_key: str | None = None):
         import anthropic
 
         self._model_name = model_name
@@ -109,7 +109,7 @@ class RegisteredTokenCountEstimator(Enum):
             case RegisteredTokenCountEstimator.TIKTOKEN_GPT4O:
                 return TiktokenCountEstimator(model_name="gpt-4o")
             case RegisteredTokenCountEstimator.ANTHROPIC_CLAUDE_SONNET_4:
-                return AnthropicTokenCount(model_name="claude-sonnet-4-20250514")
+                return AnthropicTokenCount(model_name="claude-sonnet-4-6")
             case RegisteredTokenCountEstimator.CHAR_COUNT:
                 return CharCountEstimator(avg_chars_per_token=4)
             case _:

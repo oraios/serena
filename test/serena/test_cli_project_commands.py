@@ -165,15 +165,20 @@ class TestProjectCreate:
 class TestProjectIndex:
     """Tests for 'project index' command."""
 
-    def test_index_auto_creates_project_with_files(self, cli_runner, temp_project_dir_with_python_file):
-        """Test that index command auto-creates project.yml if it doesn't exist (with source files)."""
+    def test_index_succeeds_and_auto_creates_project(self, cli_runner, temp_project_dir_with_python_file):
+        """Test that index command on Python project succeeds and auto-creates project.yml if it doesn't exist (with source files)."""
         result = cli_runner.invoke(ProjectCommands.index, [temp_project_dir_with_python_file, "--log-level", "ERROR", "--timeout", "5"])
+
         # Should succeed and perform indexing
         assert result.exit_code == 0, f"Command failed: {result.output}"
         assert "Auto-creating" in result.output or "Indexing" in result.output
 
+        # Verify no file-specific errors occurred during indexing
+        assert "Failed" not in result.output
+
         # Verify project.yml was auto-created
         yml_path = os.path.join(temp_project_dir_with_python_file, ".serena", "project.yml")
+
         assert os.path.exists(yml_path), "project.yml should be auto-created"
 
     def test_index_with_explicit_language(self, cli_runner, temp_project_dir):
@@ -238,6 +243,25 @@ class TestProjectIndex:
             # Use ignore_errors to handle lingering file locks on Windows
             shutil.rmtree(dir1, ignore_errors=True)
             shutil.rmtree(dir2, ignore_errors=True)
+
+    def test_index_failure_log_is_written_as_utf8(self, cli_runner, temp_project_dir, monkeypatch):
+        """The failed-files log must not depend on the locale encoding (e.g. cp1252 on Windows)."""
+        from solidlsp.ls import SolidLanguageServer
+
+        with open(os.path.join(temp_project_dir, "数据.py"), "w", encoding="utf-8") as f:
+            f.write("def hello():\n    pass\n")
+
+        def fail(self, relative_file_path, file_buffer=None):
+            raise RuntimeError(f"cannot index {relative_file_path}")
+
+        monkeypatch.setattr(SolidLanguageServer, "request_document_symbols", fail)
+        result = cli_runner.invoke(
+            ProjectCommands.index, [temp_project_dir, "--language", "python", "--log-level", "ERROR", "--timeout", "5"]
+        )
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+        log_file = os.path.join(temp_project_dir, ".serena", "logs", "indexing.txt")
+        with open(log_file, encoding="utf-8") as f:
+            assert "数据.py" in f.read()
 
 
 class TestProjectCreateHelper:

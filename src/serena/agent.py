@@ -439,7 +439,7 @@ class DashboardManager:
             fallback_mode = self.Mode.from_platform()
             log.warning(
                 f"Dashboard interface mode '{mode.value}' is not supported on the current platform; "
-                "falling back to '{fallback_mode.value}'."
+                f"falling back to '{fallback_mode.value}'."
             )
             mode = fallback_mode
 
@@ -757,6 +757,7 @@ class SerenaAgent:
             "version": self.version,
             "backend": self._language_backend.get_key(),
             "context": self._context.name,
+            "agent_interface": self._agent_interface.value,
         }
         try:
             requests.get("https://oraios-software.de/serena_usage.php", params=params, timeout=1)

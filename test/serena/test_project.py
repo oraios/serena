@@ -1,0 +1,372 @@
+import os
+import shutil
+import sys
+import tempfile
+from pathlib import Path
+
+import pytest
+
+from serena.config.serena_config import ProjectConfig, SerenaConfig
+from serena.project import Project
+from solidlsp.ls_config import LanguageServerId
+
+
+def _create_test_project(
+    project_root: Path,
+    project_ignored_paths: list[str] | None = None,
+    global_ignored_paths: list[str] | None = None,
+) -> Project:
+    """Helper to create a Project with the given ignored paths configuration."""
+    config = ProjectConfig(
+        project_name="test_project",
+        language_servers=[LanguageServerId.PYTHON],
+        ignored_paths=project_ignored_paths or [],
+        ignore_all_files_in_gitignore=False,
+    )
+    serena_config = SerenaConfig(ignored_paths=global_ignored_paths).with_headless_mode_overrides()
+    return Project(
+        project_root=str(project_root),
+        project_config=config,
+        serena_config=serena_config,
+    )
+
+
+class TestProject:
+    def test_project_files(self, tmp_path: Path) -> None:
+        # create a project with root and nested git directories and ignore rules
+        (tmp_path / ".git").mkdir()
+        (tmp_path / "foo.py").touch()
+        (tmp_path / "README.md").touch()
+        (tmp_path / "bar" / ".git").mkdir(parents=True)
+        (tmp_path / "ignored.py").touch()
+        (tmp_path / "bar" / "bar_ignored.py").touch()
+        (tmp_path / "bar" / "bar.py").touch()
+        (tmp_path / ".gitignore").write_text("/ignored.py\n/.serena\n", encoding="utf-8")
+        (tmp_path / "bar" / ".gitignore").write_text("/bar_ignored.py\n", encoding="utf-8")
+
+        # instantiate the project with default ignore settings
+        project = Project(
+            project_root=str(tmp_path),
+            project_config=ProjectConfig(project_name="test_project", language_servers=[LanguageServerId.PYTHON]),
+            serena_config=SerenaConfig().with_headless_mode_overrides(),
+        )
+
+        # .git directories are ignored anywhere in the project
+        assert project.is_ignored_path(".git")
+        assert project.is_ignored_path("bar/.git")
+
+        # files explicitly ignored in .gitignore are ignored
+        assert project.is_ignored_path("ignored.py")
+        assert project.is_ignored_path("bar/bar_ignored.py")
+
+        # verify ordinary paths are not ignored
+        assert not project.is_ignored_path("foo.py")
+        assert not project.is_ignored_path("README.md")
+        assert not project.is_ignored_path(".gitignore")
+        assert not project.is_ignored_path("bar")
+        assert not project.is_ignored_path("bar/.gitignore")
+        assert not project.is_ignored_path("bar/bar.py")
+
+        # check source files
+        source_files = project.gather_source_files()
+        assert len(source_files) == 2
+
+        # check non-ignored files
+        non_ignored_files = project.gather_project_files(skip_ignored_files=True)
+        assert len(non_ignored_files) == 5
+
+
+class TestProjectRespectsGlobalIgnoredPaths:
+    """Tests that projects consider globally defined ignored paths."""
+
+    def setup_method(self) -> None:
+        self.test_dir = tempfile.mkdtemp()
+        self.project_path = Path(self.test_dir)
+        # Create some test files and directories
+        (self.project_path / "main.py").write_text("print('hello')")
+        os.makedirs(self.project_path / "node_modules" / "pkg", exist_ok=True)
+        (self.project_path / "node_modules" / "pkg" / "index.js").write_text("module.exports = {}")
+        os.makedirs(self.project_path / "build", exist_ok=True)
+        (self.project_path / "build" / "output.js").write_text("compiled")
+        os.makedirs(self.project_path / "src", exist_ok=True)
+        (self.project_path / "src" / "app.py").write_text("def app(): pass")
+        (self.project_path / "debug.log").write_text("log data")
+
+    def teardown_method(self) -> None:
+        shutil.rmtree(self.test_dir)
+
+    def test_global_ignored_paths_are_applied(self) -> None:
+        """Global ignored_paths from SerenaConfig are respected by Project.is_ignored_path()."""
+        project = _create_test_project(
+            self.project_path,
+            global_ignored_paths=["node_modules"],
+        )
+        assert project.is_ignored_path(str(self.project_path / "node_modules" / "pkg" / "index.js"))
+        assert not project.is_ignored_path(str(self.project_path / "src" / "app.py"))
+
+    def test_additive_merge_of_global_and_project_patterns(self) -> None:
+        """Global + project patterns are merged additively (both applied)."""
+        project = _create_test_project(
+            self.project_path,
+            project_ignored_paths=["build"],
+            global_ignored_paths=["node_modules"],
+        )
+        # Global pattern should be applied
+        assert project.is_ignored_path(str(self.project_path / "node_modules" / "pkg" / "index.js"))
+        # Project pattern should also be applied
+        assert project.is_ignored_path(str(self.project_path / "build" / "output.js"))
+        # Non-ignored files should not be affected
+        assert not project.is_ignored_path(str(self.project_path / "src" / "app.py"))
+
+    def test_empty_global_ignored_paths_has_no_effect(self) -> None:
+        """Empty global ignored_paths (default) has no effect on existing behavior."""
+        project = _create_test_project(
+            self.project_path,
+            project_ignored_paths=["build"],
+            global_ignored_paths=[],
+        )
+        # Project pattern still works
+        assert project.is_ignored_path(str(self.project_path / "build" / "output.js"))
+        # Non-ignored files still accessible
+        assert not project.is_ignored_path(str(self.project_path / "node_modules" / "pkg" / "index.js"))
+
+    def test_duplicate_patterns_across_global_and_project(self) -> None:
+        """Duplicate patterns across global and project do not cause errors."""
+        project = _create_test_project(
+            self.project_path,
+            project_ignored_paths=["node_modules", "build"],
+            global_ignored_paths=["node_modules", "build"],
+        )
+        assert project.is_ignored_path(str(self.project_path / "node_modules" / "pkg" / "index.js"))
+        assert project.is_ignored_path(str(self.project_path / "build" / "output.js"))
+        assert not project.is_ignored_path(str(self.project_path / "src" / "app.py"))
+
+    def test_glob_patterns_in_global_ignored_paths(self) -> None:
+        """Global ignored_paths support gitignore-style glob patterns."""
+        project = _create_test_project(
+            self.project_path,
+            global_ignored_paths=["*.log"],
+        )
+        assert project.is_ignored_path(str(self.project_path / "debug.log"))
+        assert not project.is_ignored_path(str(self.project_path / "main.py"))
+
+    def test_nonexistent_path_not_ignored(self) -> None:
+        """Non-existent paths should return False (not ignored), not raise FileNotFoundError."""
+        project = _create_test_project(self.project_path)
+        nonexistent = str(self.project_path / "src" / "new_file.py")
+        assert not os.path.exists(nonexistent)
+        assert not project.is_ignored_path(nonexistent)
+
+    def test_nonexistent_path_with_ignore_patterns(self) -> None:
+        """Non-existent paths matching ignore patterns still return False (cannot check)."""
+        project = _create_test_project(
+            self.project_path,
+            global_ignored_paths=["*.log"],
+        )
+        nonexistent = str(self.project_path / "nonexistent.log")
+        assert not os.path.exists(nonexistent)
+        # Should not raise, should not match the *.log pattern
+        assert not project.is_ignored_path(nonexistent)
+
+    def test_validate_relative_path_allows_nonexistent(self) -> None:
+        """validate_relative_path with require_not_ignored should not raise for non-existent paths."""
+        project = _create_test_project(self.project_path)
+        nonexistent = "src/new_file.py"
+        # Should not raise
+        project.validate_relative_path(nonexistent, require_not_ignored=True)
+
+
+class TestProjectIgnoreRulesWithGlobalPathsAndGitignore:
+    """Tests that global ignored_paths combined with ignore_all_files_in_gitignore produces correct behaviour."""
+
+    def setup_method(self) -> None:
+        self.test_dir = tempfile.mkdtemp()
+        self.project_path = Path(self.test_dir).resolve()
+        # Create test files
+        (self.project_path / "main.py").write_text("print('hello')")
+        os.makedirs(self.project_path / "node_modules", exist_ok=True)
+        (self.project_path / "node_modules" / "pkg.js").write_text("module")
+        os.makedirs(self.project_path / "dist", exist_ok=True)
+        (self.project_path / "dist" / "bundle.js").write_text("bundled")
+        os.makedirs(self.project_path / "build", exist_ok=True)
+        (self.project_path / "build" / "output.js").write_text("compiled")
+        # Create .gitignore that ignores dist/
+        (self.project_path / ".gitignore").write_text("dist/\n")
+
+    def teardown_method(self) -> None:
+        shutil.rmtree(self.test_dir)
+
+    @pytest.mark.parametrize("directory_name", [" nested", "nested ", " nested "])
+    def test_whitespace_gitignore_directory_combined_spec(self, directory_name: str) -> None:
+        if sys.platform == "win32" and directory_name.endswith(" "):
+            pytest.skip("Windows does not support directory names with trailing spaces")
+        for name in (directory_name, "nested"):
+            (self.project_path / name).mkdir()
+            (self.project_path / name / "drop.txt").touch()
+        (self.project_path / directory_name / ".gitignore").write_text("/drop.txt\n")
+        project = Project(
+            project_root=str(self.project_path),
+            project_config=ProjectConfig(
+                project_name="test_project",
+                language_servers=[LanguageServerId.PYTHON],
+                ignored_paths=[],
+                ignore_all_files_in_gitignore=True,
+            ),
+            serena_config=SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=[]),
+        )
+        assert project.is_ignored_path(f"{directory_name}/drop.txt")
+        assert not project.is_ignored_path("nested/drop.txt")
+
+    def test_windows_separator_preserves_gitignore_escapes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        for name in ("a[bc]", "ab", "build/cache"):
+            (self.project_path / name).mkdir(parents=True)
+            (self.project_path / name / "drop.txt").touch()
+        (self.project_path / "a[bc]/.gitignore").write_text("/drop.txt\n")
+        (self.project_path / "build/cache/.gitignore").write_text("*.tmp\n")
+        # Pre-create the data directory before the separator patch also affects pathlib.
+        (self.project_path / ".serena/memories").mkdir(parents=True)
+        with monkeypatch.context() as separator_patch:
+            separator_patch.setattr(os.path, "sep", "\\")
+            project = Project(
+                project_root=str(self.project_path),
+                project_config=ProjectConfig(
+                    project_name="test_project",
+                    language_servers=[LanguageServerId.PYTHON],
+                    ignored_paths=["build\\cache\\"],
+                    ignore_all_files_in_gitignore=True,
+                ),
+                serena_config=SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=[]),
+            )
+            assert r"a\[bc\]/drop.txt" in project._ignored_patterns
+            assert "build/cache/**/*.tmp" not in project._ignored_patterns
+            assert project.is_ignored_path("a[bc]/drop.txt")
+            assert not project.is_ignored_path("ab/drop.txt")
+            assert project.is_ignored_path("build/cache/drop.txt")
+
+    @pytest.mark.parametrize("configuration", ["global", "project"])
+    def test_configured_exclusion_overrides_root_negation(self, monkeypatch: pytest.MonkeyPatch, configuration: str) -> None:
+        (self.project_path / ".gitignore").write_text("!build/\n")
+        (self.project_path / "build/.gitignore").write_text("*.tmp\n")
+        for name in ("drop.tmp", "keep.txt"):
+            (self.project_path / "build" / name).touch()
+        scandir = os.scandir
+        entered = []
+
+        def record_scan(path):
+            entered.append(Path(path))
+            return scandir(path)
+
+        monkeypatch.setattr(os, "scandir", record_scan)
+        project = Project(
+            project_root=str(self.project_path),
+            project_config=ProjectConfig(
+                project_name="test_project",
+                language_servers=[LanguageServerId.PYTHON],
+                ignored_paths=["build/"] if configuration == "project" else [],
+                ignore_all_files_in_gitignore=True,
+            ),
+            serena_config=SerenaConfig(
+                gui_log_window=False, web_dashboard=False, ignored_paths=["build/"] if configuration == "global" else []
+            ),
+        )
+        assert project.is_ignored_path("build/")
+        assert project.is_ignored_path("build/drop.tmp")
+        assert project.is_ignored_path("build/keep.txt")
+        assert self.project_path / "build" not in entered
+
+    @pytest.mark.parametrize("configuration", ["global", "project"])
+    def test_configured_patterns_have_the_final_say(self, monkeypatch: pytest.MonkeyPatch, configuration: str) -> None:
+        """Configured ignored_paths are applied after every .gitignore pattern, in their own order:
+        a configured re-inclusion cannot be narrowed by a nested .gitignore, and the excluded parent is
+        pruned from discovery (its nested rules could never change a verdict).
+        """
+        (self.project_path / "build/keep").mkdir()
+        (self.project_path / "build/keep/.gitignore").write_text("*.tmp\n")
+        (self.project_path / "build/keep/a.tmp").touch()
+        (self.project_path / "build/keep/readme.md").touch()
+        (self.project_path / "build/other.txt").touch()
+        configured = ["build/", "!build/keep/"]
+        scandir = os.scandir
+        entered = []
+
+        def record_scan(path):
+            entered.append(Path(path))
+            return scandir(path)
+
+        monkeypatch.setattr(os, "scandir", record_scan)
+        project = Project(
+            project_root=str(self.project_path),
+            project_config=ProjectConfig(
+                project_name="test_project",
+                language_servers=[LanguageServerId.PYTHON],
+                ignored_paths=configured if configuration == "project" else [],
+                ignore_all_files_in_gitignore=True,
+            ),
+            serena_config=SerenaConfig(
+                gui_log_window=False, web_dashboard=False, ignored_paths=configured if configuration == "global" else []
+            ),
+        )
+        assert project._ignored_patterns[-2:] == configured
+        assert "build/keep/**/*.tmp" not in project._ignored_patterns
+        assert self.project_path / "build" not in entered
+        assert self.project_path / "build/keep" not in entered
+        assert project.is_ignored_path("build/")
+        assert project.is_ignored_path("build/other.txt")
+        assert not project.is_ignored_path("build/keep/readme.md")
+        assert not project.is_ignored_path("build/keep/a.tmp")
+
+    def test_configured_directories_prune_nested_negations(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An excluded parent cannot be reopened by a nested gitignore negation."""
+        for directory in ("build", "node_modules"):
+            (self.project_path / directory / ".gitignore").write_text("!keep.txt\n")
+            (self.project_path / directory / "keep.txt").touch()
+        (self.project_path / "outside").mkdir()
+        (self.project_path / "outside/.gitignore").write_text("*.tmp\n")
+        (self.project_path / "outside/drop.tmp").touch()
+        scandir = os.scandir
+        entered = []
+
+        def record_scan(path):
+            entered.append(Path(path))
+            return scandir(path)
+
+        monkeypatch.setattr(os, "scandir", record_scan)
+        project = Project(
+            project_root=str(self.project_path),
+            project_config=ProjectConfig(
+                project_name="test_project",
+                language_servers=[LanguageServerId.PYTHON],
+                ignored_paths=["build/"],
+                ignore_all_files_in_gitignore=True,
+            ),
+            serena_config=SerenaConfig(gui_log_window=False, web_dashboard=False, ignored_paths=["node_modules/"]),
+        )
+        assert project.is_ignored_path("build/keep.txt")
+        assert project.is_ignored_path("node_modules/keep.txt")
+        assert self.project_path / "build" not in entered
+        assert self.project_path / "node_modules" not in entered
+        assert project.is_ignored_path("outside/drop.tmp")
+        assert not project.is_ignored_path("main.py")
+
+    def test_three_way_merge_global_project_and_gitignore(self) -> None:
+        """Global patterns, project patterns, and .gitignore patterns are all applied together."""
+        config = ProjectConfig(
+            project_name="test_project",
+            language_servers=[LanguageServerId.PYTHON],
+            ignored_paths=["build"],
+            ignore_all_files_in_gitignore=True,
+        )
+        serena_config = SerenaConfig(ignored_paths=["node_modules"]).with_headless_mode_overrides()
+        project = Project(
+            project_root=str(self.project_path),
+            project_config=config,
+            serena_config=serena_config,
+        )
+        # Global pattern: node_modules
+        assert project.is_ignored_path(str(self.project_path / "node_modules" / "pkg.js"))
+        # Project pattern: build
+        assert project.is_ignored_path(str(self.project_path / "build" / "output.js"))
+        # Gitignore pattern: dist/
+        assert project.is_ignored_path(str(self.project_path / "dist" / "bundle.js"))
+        # Non-ignored file
+        assert not project.is_ignored_path(str(self.project_path / "main.py"))
