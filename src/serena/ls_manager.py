@@ -320,9 +320,10 @@ class LanguageServerFileChangeNotifier:
             running yet, or on the first call, which only establishes the baseline).
         """
         current: dict[str, float] = {}
-        for rel_path in self._project.gather_source_files():
+        for source_file in self._project.gather_source_files():
             try:
-                current[rel_path] = os.stat(os.path.join(self._project.project_root, rel_path)).st_mtime
+                stat = source_file.dir_entry.stat()
+                current[source_file.rel_path] = stat.st_mtime
             except OSError:
                 continue
 

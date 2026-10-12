@@ -54,7 +54,12 @@ def compute_language_server_support_composition(
         (denominator = files matched by at least one language server)
     """
     if ls_ids is None:
-        ls_ids = list(LanguageServerId.iter_all(include_experimental=False))
+        # By default, we consider only robust non-experimental language servers and actual programming languages
+        # (to avoid auto-detecting e.g. markdown as the primary language).
+        # And for each language, we consider only the primary language server (not secondary ones) to avoid double-counting files.
+        ls_ids = list(
+            LanguageServerId.iter_all(include_experimental=False, include_secondary=False, include_non_programming_languages=False)
+        )
 
     all_files = find_all_non_ignored_files(repo_path)
 

@@ -76,9 +76,13 @@ class VueTypeScriptServer(TypeScriptLanguageServer):
         ext = os.path.splitext(relative_file_path)[1].lower()
         if ext == ".vue":
             return "vue"
-        elif ext in (".ts", ".tsx", ".mts", ".cts"):
+        elif ext == ".tsx":
+            return "typescriptreact"
+        elif ext == ".jsx":
+            return "javascriptreact"
+        elif ext in (".ts", ".mts", ".cts"):
             return "typescript"
-        elif ext in (".js", ".jsx", ".mjs", ".cjs"):
+        elif ext in (".js", ".mjs", ".cjs"):
             return "javascript"
         else:
             return "typescript"
@@ -233,9 +237,13 @@ class VueLanguageServer(SolidLanguageServer):
         ext = os.path.splitext(relative_file_path)[1].lower()
         if ext == ".vue":
             return "vue"
-        elif ext in (".ts", ".tsx", ".mts", ".cts"):
+        elif ext == ".tsx":
+            return "typescriptreact"
+        elif ext == ".jsx":
+            return "javascriptreact"
+        elif ext in (".ts", ".mts", ".cts"):
             return "typescript"
-        elif ext in (".js", ".jsx", ".mjs", ".cjs"):
+        elif ext in (".js", ".mjs", ".cjs"):
             return "javascript"
         else:
             return "vue"

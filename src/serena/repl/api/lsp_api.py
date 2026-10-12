@@ -746,6 +746,7 @@ class LspApi(FacadeApi):
         :param new_name: the new name for the symbol
         :return: a result summary indicating success or failure
         """
+        self._get_project().validate_relative_path(relative_path)
         self._get_project().ls_sync_file_system_changes()
         return self._create_ls_code_editor().rename_symbol(name_path, relative_path=relative_path, new_name=new_name)
 
@@ -759,6 +760,7 @@ class LspApi(FacadeApi):
         :param relative_path: the relative path to the file containing the symbol to delete
         :return: a success message, or a message listing the references preventing deletion
         """
+        self._get_project().validate_relative_path(relative_path)
         self._get_project().ls_sync_file_system_changes()
 
         symbol_retriever = self._create_symbol_retriever()
