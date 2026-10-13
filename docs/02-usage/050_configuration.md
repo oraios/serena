@@ -20,16 +20,32 @@ Serena is configured using a multi-layered approach:
 
 The global configuration file allows you to change general settings and defaults that will apply to all projects unless overridden.
 
+### Accessing the Configuration File
+
+The configuration file is auto-created when you first run Serena. It is stored in your user directory:
+* Linux/macOS/Git-Bash: `~/.serena/serena_config.yml`
+* Windows (CMD/PowerShell): `%USERPROFILE%\.serena\serena_config.yml`
+
+You can access it
+* through [Serena's dashboard](060_dashboard) while Serena is running (use the respective button)
+* directly, using your favourite text editor
+* using the command
+
+  ```shell
+  serena config edit
+  ```
+
 ### Settings
 
 Some of the configurable settings include:
+  * the agent interface to use (tools or REPL, [see below](agent-interfaces))
   * the language backend to use by default (i.e., the JetBrains plugin or language servers);
     this can also be [overridden per project](per-project-language-backend)
   * UI settings affecting the [Serena Dashboard and GUI tool](060_dashboard.md)
   * the set of tools or REPL API functions to enable/disable by default
   * the set of [modes](modes) to use by default
   * tool execution parameters (timeout, max. answer length)
-  * global ignore rules
+  * global ignore rules for project files and folders
   * logging settings
   * the set of trusted project paths
   * advanced settings specific to individual language servers (see [below](ls-specific-settings))
@@ -41,23 +57,8 @@ Some of the settings it contains can, however, be *extended* or *overridden* in 
 For detailed information on the parameters and possible settings, see the
 [template file](https://github.com/oraios/serena/blob/main/src/serena/resources/serena_config.template.yml).
 
-### Accessing the Configuration File
-
-The configuration file is auto-created when you first run Serena. It is stored in your user directory:
-  * Linux/macOS/Git-Bash: `~/.serena/serena_config.yml`
-  * Windows (CMD/PowerShell): `%USERPROFILE%\.serena\serena_config.yml`
-
-You can access it
-  * through [Serena's dashboard](060_dashboard) while Serena is running (use the respective button) 
-  * directly, using your favourite text editor
-  * using the command
-
-    ```shell
-    serena config edit
-    ```
-    
 (agent-interfaces)=
-### Agent Interfaces
+#### Agent Interfaces
 
 Serena provides its functionality to the agent (LLM) through one of two interfaces
 (see [Tools and APIs](../01-about/035_tools) for the operations they offer):
@@ -86,6 +87,31 @@ Restricting the operations available in the REPL is a means of steering the agen
 the Python code that is executed can, in principle, do anything the Serena process can do.
 See [Security](070_security) for isolation options.
 ```
+
+(trusted-projects-config)=
+#### Trusted Projects
+
+The setting `trusted_project_path_patterns` configures the set of project root paths that are considered trusted,
+enabling additional features.
+
+Limitations applied to untrusted projects:
+
+- Some [project settings](project-config) are ignored for untrusted projects:
+  - `activation_command` is a shell command that is to be run whenever the project is activated.
+  - `ls_specific_settings` defines project-specific language server settings, which can change, in particular,
+    how language servers are started for the project.
+- Following of symbolic links in project directories is not supported in untrusted projects (links are fully ignored).
+
+```{note}
+The term "trusted" implies only that one trusts the project enough to enable the additional features listed above.
+An "untrusted" project is not sandboxed, strongly restricted or otherwise contained.
+See our [security documentation](trusted-projects) for details.
+```
+
+The default set of trusted paths depends on the age of your configuration: Installations predating
+the introduction of this setting retain a pattern that trusts all projects, ensuring that existing workflows are
+not broken, whereas newly created configurations trust no project by default.
+The applicable value can be inspected in the dashboard.
 
 ## Modes and Contexts
 

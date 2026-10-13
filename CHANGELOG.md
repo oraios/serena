@@ -19,8 +19,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add `auth_secret` to `serena_config.yml` for authenticating communication between Serena components
     and services. When missing, null, or empty, a random UUID is generated and persisted; existing values
     are preserved
+  - Fix: Tiktoken usage counting now treats special-token literals in tool input and output as ordinary text
   - Improve speed of file system operations, particularly enumeration of all source files of a project,
     which is particularly relevant for file system refresh operations when using the LSP backend.
+  - Fix: Repeated comments in `serena_config.yml` 
   - Fix: MCP server now reports Serena's version instead of the installed MCP SDK version (#1889)
   - Fix: importing Serena no longer loads the `anthropic` package unless the Anthropic token counter is
     actually used; the unconditional import added seconds to CLI/MCP startup on some machines (#2012)
@@ -74,7 +76,18 @@ Status of the `main` branch. Changes prior to the next official version change w
     failure now surfaces as `LanguageServerTerminatedException`, the signal the restart path acts
     on, both for a broken pipe and for a stdin that shutdown had already closed (#2004)
 
+* Security:
+  - Behaviour change: Following symbolic links is no longer possible for untrusted projects.
+    In an untrusted project, symbolic links are now ignored entirely: they are neither followed when 
+    the project's files are enumerated nor accepted as a path when a file is requested; trusted projects 
+    keep following links as before (#2144)
+  - Fix: the line-based and symbol-level editing tools did not apply the path-confinement check at
+    all and now validate the file path like the other file tools (#2144)
+
 * CLI:
+  - Fix: `project index` crashed while writing `.serena/logs/indexing.txt` when a failed file's path or
+    error contained characters outside the locale encoding (e.g. CJK names on Windows); the log is now
+    written as UTF-8
   - Add `download-ls-dependencies` to prefetch runtime dependencies of the given language servers
     for environments with restricted network access (#664)
   - Fix: `project health-check` reported `Health check passed - All tools working correctly` and
@@ -87,6 +100,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix `project index-file` command not using only the relevant language server to index the given file (#1965)
   
 * Tools:
+  - Fix: `replace_in_files` now rejects occurrence IDs from a preview when the file content or matched
+    range has changed, preventing an outdated selection from silently replacing a different match
   - Fix: `$!N` backreferences in regex-mode replacements expanded to the literal template text
     (e.g. `EA_INPUT$!1(...)`) when the referenced group existed but did not participate in the
     match (e.g. a group inside an optional construct that was skipped); unmatched groups now expand
@@ -148,6 +163,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     thread (#2038)
 
 * Language Servers:
+  - Fix: Vue companion TypeScript indexing now respects project ignore patterns and ignored
+    directory names, avoiding opening ignored release snapshots, vendored components and build output
   - Add: configurable JDTLS Maven/Gradle import, `updateBuildConfiguration`, and autobuild settings under `ls_specific_settings.java` (#1976)
   - Fix: Angular, Vue and Svelte language servers opened `.tsx`/`.jsx` files with `typescript`/`javascript`
     language IDs, so JSX symbol ranges truncated at multi-line expressions (same class of bug as the
@@ -175,8 +192,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     sample C# projects, this loads projects the server cannot restore on every start, and their
     restore failures bury the diagnostics of the projects the user actually works on. Project
     discovery now skips `.csproj` files matched by the project's ignore patterns
-  - Kotlin: update the managed Kotlin LSP from `262.9593.0` to `263.4702.0`; the `262.9593.0` build
-    has expired and fails on startup with "This build of intellij-server has expired" (#2008)
+  - Kotlin: 
+    - Downgrade back to the initially used version 261.13587.0 of the language server,
+      because all newer builds keep expiring after a short period of time.
+    - Update download URLs to use download.jetbrains.com instead of download-cdn #2152
   - Fix: Godot's GDScript parser can report a symbol's end column one column past the
     line-end convention every other language server follows (closing a node's range from
     the next lookahead token instead of the last consumed one, when that lookahead is a
