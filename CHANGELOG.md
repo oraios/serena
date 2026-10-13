@@ -9,6 +9,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     Serena unless the project is trusted; loading the project's own TypeScript has become a
     trust-gated feature (#2129)
 
+* General:
+  - Fix: the MCP registry manifest (`server.json`) declared Serena's own CLI arguments as runtime
+    arguments, so clients installing Serena from the MCP registry generated a launch command with a
+    stray package spec, and project auto-activation failed
+
 # v2.0.0 (2026-10-13)
 
 * Licensing:

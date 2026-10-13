@@ -3,7 +3,7 @@
   "name": "io.github.oraios/serena",
   "title": "Serena MCP: the IDE for your agent",
   "description": "A powerful toolkit for coding, providing semantic retrieval and editing capabilities.",
-  "version": "1.5.3",
+  "version": "2.0.0",
   "repository": {
     "source": "github",
     "url": "https://github.com/oraios/serena"
@@ -12,7 +12,7 @@
     {
       "registryType": "pypi",
       "identifier": "serena-agent",
-      "version": "1.5.3",
+      "version": "2.0.0",
       "transport": {
         "type": "stdio"
       },
@@ -23,7 +23,9 @@
           "name": "-p",
           "value": "3.13",
           "type": "named"
-        },
+        }
+      ],
+      "packageArguments": [
         {
           "type": "positional",
           "value": "start-mcp-server"
