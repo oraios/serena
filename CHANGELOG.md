@@ -2,6 +2,10 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Dashboard:
+  - Change the default value of `web_dashboard_open_on_launch` to false on systems that support
+    tray-based access to the dashboard.
+
 # v2.0.0 (2026-10-13)
 
 * Licensing:
