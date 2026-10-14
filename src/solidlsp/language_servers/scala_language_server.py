@@ -593,14 +593,17 @@ class ScalaLanguageServer(SolidLanguageServer):
 
     @staticmethod
     def _is_bloop_server(process: psutil.Process) -> bool:
+        """
+        :return: whether the given process runs the Bloop build server
+        """
         return any("bloop.BloopServer" in part for part in process.cmdline() or [])
 
     def _discover_bloop_descendants(self) -> list[psutil.Process]:
         """
         Collect the Bloop server processes that are descendants of the current process.
 
-        The process objects are kept (rather than bare PIDs) because psutil identifies a process by
-        PID and creation time, which prevents signalling an unrelated process that reuses the PID.
+        The result holds process objects rather than PIDs, as psutil identifies a process by PID and
+        creation time and thereby refuses to signal an unrelated process which has reused the PID.
         """
         daemons: list[psutil.Process] = []
         try:
