@@ -66,6 +66,8 @@ Serena provides its functionality to the agent (LLM) through one of two interfac
 * **tools**: every operation is a separate tool of the MCP server.
 * **REPL** (new in Serena v2): a single tool executes Python code, through which the agent accesses the operations
   programmatically, being able to combine several of them in one call.
+  This interface has several [advantages](https://oraios.github.io/serena/01-about/035_tools.html#repl-advantages)
+  over the classical tool interface.
 
 The interface is selected via the `agent_interface` setting in the global configuration.
 It can be overridden in the project configuration or via the `--agent-interface` command-line option,
