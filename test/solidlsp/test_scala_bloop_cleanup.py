@@ -26,6 +26,7 @@ def _make_ls(terminate_bloop_on_stop: bool) -> ScalaLanguageServer:
 
 def _make_process(pid: int, ancestor_pids: list[int], cmdline: list[str] = BLOOP_CMDLINE) -> MagicMock:
     process = MagicMock()
+    process.pid = pid
     process.info = {"pid": pid, "name": "java", "cmdline": cmdline}
     process.cmdline.return_value = cmdline
     process.parents.return_value = [SimpleNamespace(pid=ancestor_pid) for ancestor_pid in ancestor_pids]
@@ -37,7 +38,6 @@ def _running_processes(processes: dict[int, MagicMock], events: list[str]) -> It
     """Makes the given processes the ones running on the machine while the Metals shutdown is recorded in ``events``."""
     with (
         patch(f"{MODULE}.psutil.process_iter", side_effect=lambda attrs: iter(processes.values())),
-        patch(f"{MODULE}.psutil.Process", side_effect=lambda pid: processes[pid]),
         patch(f"{MODULE}.os.getpid", return_value=OUR_PID),
         patch("solidlsp.ls.SolidLanguageServer.stop", side_effect=lambda **kwargs: events.append("metals stopped")),
     ):
