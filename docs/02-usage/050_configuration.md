@@ -1252,6 +1252,7 @@ Supported settings:
 | `indexing_timeout` | `180` | How long to wait, in seconds, for Metals to finish importing, indexing and compiling before the first cross-file query. On expiry the query proceeds and a warning names what was still outstanding. |
 | `indexing_start_grace` | `15` | How long to wait, in seconds, for Metals to report any work at all. A server that reports none within this window is taken to have nothing to do. |
 | `indexing_quiet_period` | `3` | How long, in seconds, Metals must report nothing for its work to count as finished. Metals hands off between its phases rather than overlapping them, so it reports nothing for a moment in between; a shorter period risks mistaking that gap for completion. |
+| `terminate_bloop_on_stop` | `false` | Terminate the Bloop build-server daemons that this session started once Metals has stopped. Bloop daemonizes itself and would otherwise keep running as an orphan. It is opt-in because Bloop shares one server per user: another Metals client (e.g. VS Code) may be connected to a daemon that this session started, and stopping it would interrupt that client. |
 
 #### SCSS / Sass / CSS
 
