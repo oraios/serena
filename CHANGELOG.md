@@ -2,6 +2,13 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Security:
+  - Fix: typescript-language-server loaded `node_modules/typescript/lib/tsserver.js` from the project
+    whenever the project provided one, so merely opening an untrusted repository executed JavaScript
+    supplied by that repository. tsserver is now pinned to the TypeScript installation managed by
+    Serena unless the project is trusted; loading the project's own TypeScript has become a
+    trust-gated feature (#2129)
+
 # v2.0.0 (2026-10-13)
 
 * Licensing:
@@ -87,11 +94,6 @@ Status of the `main` branch. Changes prior to the next official version change w
     keep following links as before (#2144)
   - Fix: the line-based and symbol-level editing tools did not apply the path-confinement check at
     all and now validate the file path like the other file tools (#2144)
-  - Fix: typescript-language-server loaded `node_modules/typescript/lib/tsserver.js` from the project
-    whenever the project provided one, so merely opening an untrusted repository executed JavaScript
-    supplied by that repository. tsserver is now pinned to the TypeScript installation managed by
-    Serena unless the project is trusted; loading the project's own TypeScript has become a
-    trust-gated feature (#2129)
 
 * CLI:
   - Fix: `project index` crashed while writing `.serena/logs/indexing.txt` when a failed file's path or
