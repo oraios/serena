@@ -2,6 +2,10 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Language Servers:
+  - Scala: add opt-in setting `terminate_bloop_on_stop` to terminate the Bloop build-server daemons
+    that Metals leaves running after shutdown (#1816)
+
 # v2.0.0 (2026-10-13)
 
 * Licensing:
