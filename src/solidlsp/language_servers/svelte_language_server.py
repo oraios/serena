@@ -326,13 +326,13 @@ class SvelteLanguageServer(SolidLanguageServer):
         return os.path.join(self._get_install_dir(), "node_modules", "typescript-svelte-plugin")
 
     def _find_all_svelte_files(self) -> list[str]:
-        """:return: relative paths of all .svelte files in the repo (excluding node_modules and dot-dirs)."""
+        """:return: relative paths of all .svelte files in the repo (excluding node_modules, dot-dirs and ignored paths)."""
         svelte_files = []
         repo = pathlib.Path(self.repo_path)
         for svelte_file in repo.rglob("*.svelte"):
             try:
                 relative = str(svelte_file.relative_to(repo))
-                if "node_modules" not in relative and not relative.startswith("."):
+                if "node_modules" not in relative and not relative.startswith(".") and not self.is_ignored_path(relative):
                     svelte_files.append(relative)
             except Exception as exc:
                 log.debug("Error processing svelte file %s: %s", svelte_file, exc)

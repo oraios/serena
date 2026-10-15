@@ -9,6 +9,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     Serena unless the project is trusted; loading the project's own TypeScript has become a
     trust-gated feature (#2129)
 
+* Language Servers:
+  - Fix: Svelte and Astro companion TypeScript indexing now respects project ignore patterns and ignored
+    directory names (as Vue does since #2125), so ignored build output such as a `svelte-package` `dist/`
+    folder is no longer opened and pinned on the companion TS server
+
 # v2.0.0 (2026-10-13)
 
 * Licensing:
