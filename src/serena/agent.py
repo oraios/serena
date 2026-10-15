@@ -416,6 +416,12 @@ class DashboardManager:
             else:
                 return True
 
+        def provides_ui_for_opening_dashboard(self) -> bool:
+            """
+            :return: whether the mode provides a visible user interface through which the user can open the dashboard
+            """
+            return self in {DashboardManager.Mode.WEBVIEW, DashboardManager.Mode.TRAY_MANAGER}
+
     def __init__(
         self,
         port: int,

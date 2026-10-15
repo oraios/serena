@@ -2,6 +2,15 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Fix: the MCP registry manifest (`server.json`) declared Serena's own CLI arguments as runtime
+    arguments, so clients installing Serena from the MCP registry generated a launch command with a
+    stray package spec, and project auto-activation failed
+
+* Dashboard:
+  - Change the default value of `web_dashboard_open_on_launch` to false on systems that support
+    tray-based access to the dashboard.
+
 * Security:
   - Fix: typescript-language-server loaded `node_modules/typescript/lib/tsserver.js` from the project
     whenever the project provided one, so merely opening an untrusted repository executed JavaScript
@@ -9,10 +18,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     Serena unless the project is trusted; loading the project's own TypeScript has become a
     trust-gated feature (#2129)
 
-* General:
-  - Fix: the MCP registry manifest (`server.json`) declared Serena's own CLI arguments as runtime
-    arguments, so clients installing Serena from the MCP registry generated a launch command with a
-    stray package spec, and project auto-activation failed
+* Language Servers:
+  - Fix: the Intelephense settings `maxMemory` and `maxFileSize` had no effect, because they were passed
+    as initialization options, which Intelephense does not read; `maxMemory` now limits the heap of the
+    server process, and `maxFileSize` is passed as `intelephense.files.maxSize`
 
 # v2.0.0 (2026-10-13)
 
