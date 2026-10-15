@@ -13,6 +13,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: the Intelephense settings `maxMemory` and `maxFileSize` had no effect, because they were passed
     as initialization options, which Intelephense does not read; `maxMemory` now limits the heap of the
     server process, and `maxFileSize` is passed as `intelephense.files.maxSize`
+  - Fix: Intelephense indexed all PHP files below the project root, including directories matched by
+    the ignored paths (`ignored_paths`, `.gitignore`); such directories are now excluded from its index,
+    except for `vendor` directories, which are needed to resolve the types used in the project (#450)
 
 # v2.0.0 (2026-10-13)
 
