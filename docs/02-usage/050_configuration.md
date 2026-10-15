@@ -103,6 +103,8 @@ Limitations applied to untrusted projects:
   - `ls_specific_settings` defines project-specific language server settings, which can change, in particular,
     how language servers are started for the project.
 - Following of symbolic links in project directories is not supported in untrusted projects (links are fully ignored).
+- Project-local language server installations (e.g. a TypeScript LS installation in `node_modules`) will only be used
+  for trusted projects, while untrusted projects will use Serena's managed installation.
 
 ```{note}
 The term "trusted" implies only that one trusts the project enough to enable the additional features listed above.
@@ -1105,8 +1107,8 @@ Supported settings:
 | `intelephense_version` | `1.14.4` | Override the npm package version Serena installs when `ls_path` is not set. |
 | `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
 | `ignore_vendor` | `true` | Ignore directories named `vendor` while indexing the project. |
-| `maxFileSize` | unset | Forwarded as `intelephense.files.maxSize` in `initializationOptions`. |
-| `maxMemory` | unset | Forwarded as `intelephense.maxMemory` in `initializationOptions`. |
+| `maxFileSize` | unset | Maximum size (in bytes) of files Intelephense indexes; sets `intelephense.files.maxSize`. |
+| `maxMemory` | unset | Maximum heap size (in MB) of the Intelephense process; applied as Node.js option `--max-old-space-size`. |
 | `file_filter` | unset | Additional file extensions (with leading dot) to treat as PHP sources, e.g. `[".module", ".install"]`; added to the defaults `.php` / `.phtml` (#1710). |
 
 Example configuration making Drupal source files visible to the symbol tools:
