@@ -1107,8 +1107,8 @@ Supported settings:
 | `intelephense_version` | `1.14.4` | Override the npm package version Serena installs when `ls_path` is not set. |
 | `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
 | `ignore_vendor` | `true` | Ignore directories named `vendor` while indexing the project. |
-| `maxFileSize` | unset | Forwarded as `intelephense.files.maxSize` in `initializationOptions`. |
-| `maxMemory` | unset | Forwarded as `intelephense.maxMemory` in `initializationOptions`. |
+| `maxFileSize` | unset | Maximum size (in bytes) of files Intelephense indexes; sets `intelephense.files.maxSize`. |
+| `maxMemory` | unset | Maximum heap size (in MB) of the Intelephense process; applied as Node.js option `--max-old-space-size`. |
 | `file_filter` | unset | Additional file extensions (with leading dot) to treat as PHP sources, e.g. `[".module", ".install"]`; added to the defaults `.php` / `.phtml` (#1710). |
 
 Example configuration making Drupal source files visible to the symbol tools:
