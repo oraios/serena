@@ -1029,8 +1029,17 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
 
         :param config_file_path: the path where the configuration file should be generated
         """
+        from serena.agent import DashboardManager
+
         log.info(f"Auto-generating Serena configuration file in {config_file_path}")
         loaded_commented_yaml = load_yaml(SERENA_CONFIG_TEMPLATE_FILE)
+
+        # update default settings depending on platform:
+        # set dashboard opening behaviour depending on whether a UI for accessing the dashboard is available
+        web_dashboard_open_key = "web_dashboard_open_on_launch"
+        if web_dashboard_open_key in loaded_commented_yaml:
+            loaded_commented_yaml[web_dashboard_open_key] = not DashboardManager.Mode.from_platform().provides_ui_for_opening_dashboard()
+
         save_yaml(config_file_path, loaded_commented_yaml)
 
     @classmethod
