@@ -9,6 +9,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     Serena unless the project is trusted; loading the project's own TypeScript has become a
     trust-gated feature (#2129)
 
+* Language Servers:
+  - F#: startup now waits for FsAutoComplete to report its workspace load as finished
+    (`fsharp/notifyWorkspace`, kind `workspaceLoad`) instead of returning as soon as
+    `initialized` has been sent, so requests are no longer answered from a project graph
+    that is still loading (#1209)
+
 # v2.0.0 (2026-10-13)
 
 * Licensing:
