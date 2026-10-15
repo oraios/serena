@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from types import SimpleNamespace
 
+from serena.agent import DashboardManager
 from serena.dashboard import SerenaDashboardAPI
 from solidlsp.ls_config import LanguageServerId
 
@@ -51,3 +52,15 @@ def test_available_languages_exclude_project_languages():
     assert LanguageServerId.MARKDOWN.value not in available
     # ensure experimental languages remain available for selection
     assert LanguageServerId.ANSIBLE.value in available
+
+
+def test_dashboard_manager_uses_advertised_host_for_dashboard_url():
+    dashboard = DashboardManager(
+        port=24283,
+        host_listen_address="127.0.0.1",
+        advertised_host="serena.localhost",
+        open_dashboard_on_launch=False,
+        mode_str="browser",
+    )
+
+    assert dashboard.url == "http://serena.localhost:24283/dashboard/index.html"
