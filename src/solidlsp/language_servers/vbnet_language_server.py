@@ -13,11 +13,12 @@ from typing import Any, cast
 from overrides import override
 
 from serena.util.dotnet import DotNETUtil
+from solidlsp.dependency_provider import DownloadedDependency, DownloadedDependencyHashDatabase
 from solidlsp.ls import LanguageServerDependencyProvider, LSPFileBuffer, RawDocumentSymbol, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_types import Hover
-from solidlsp.ls_utils import FileUtils, PathUtils
+from solidlsp.ls_utils import PathUtils
 from solidlsp.lsp_protocol_handler.lsp_types import InitializeResult
 from solidlsp.settings import SolidLSPSettings
 
@@ -27,6 +28,8 @@ log = logging.getLogger(__name__)
 
 _VBNET_VERSION = "v1.1.0"
 _VBNET_BASE_URL = f"https://github.com/LaunchCG/roslyn-vbnet-languageserver/releases/download/{_VBNET_VERSION}"
+# NOTE: after bumping _VBNET_VERSION, re-run scripts/update_downloaded_dependency_hashes.py
+_VBNET_ALLOWED_HOSTS = ("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com")
 
 _RUNTIME_DEPENDENCIES = [
     RuntimeDependency(
@@ -244,6 +247,28 @@ class VBNetLanguageServer(SolidLanguageServer):
             self._repository_root_path = repository_root_path
             self._dotnet_path, self._language_server_path = self._ensure_server_installed()
 
+        @classmethod
+        def _create_dep_language_server(cls, runtime_dep: RuntimeDependency) -> DownloadedDependency:
+            """
+            :param runtime_dep: the language server runtime dependency (one of `_RUNTIME_DEPENDENCIES`, possibly overridden
+                by the user). Only the stock release URLs have pinned hashes; user-overridden URLs cannot be verified by design.
+            """
+            if runtime_dep.url is None:
+                raise SolidLSPException(f"No URL specified for package {runtime_dep.package_name} version {runtime_dep.package_version}")
+            is_stock_url = runtime_dep.url.startswith(f"{_VBNET_BASE_URL}/")
+            return DownloadedDependency(
+                url=runtime_dep.url,
+                archive_type=runtime_dep.archive_type or "zip",
+                allowed_hosts=_VBNET_ALLOWED_HOSTS if is_stock_url else runtime_dep.allowed_hosts,
+                verified=is_stock_url,
+            )
+
+        @classmethod
+        def update_dep_hashes(cls) -> None:
+            with DownloadedDependencyHashDatabase.get_instance().update_context() as db:
+                for runtime_dep in _RUNTIME_DEPENDENCIES:
+                    db.update(cls._create_dep_language_server(runtime_dep))
+
         def create_launch_command(self) -> list[str]:
             solution_or_project = find_solution_or_project_file(self._repository_root_path)
 
@@ -283,7 +308,8 @@ class VBNetLanguageServer(SolidLanguageServer):
             package_version = lang_server_dep.package_version
 
             server_dir = Path(self._ls_resources_dir) / f"{package_name}.{package_version}"
-            assert lang_server_dep.binary_name is not None
+            if lang_server_dep.binary_name is None:
+                raise SolidLSPException(f"No binary name specified for package {package_name} version {package_version}")
             dll_dir = server_dir / lang_server_dep.extract_path if lang_server_dep.extract_path else server_dir
             server_dll = dll_dir / lang_server_dep.binary_name
 
@@ -291,13 +317,8 @@ class VBNetLanguageServer(SolidLanguageServer):
                 log.info(f"Using cached VB.NET Language Server from {server_dll}")
                 return str(server_dll)
 
-            url = lang_server_dep.url
-            if url is None:
-                raise SolidLSPException(f"No URL specified for package {package_name} version {package_version}")
-
             log.info(f"Downloading {package_name} version {package_version} from GitHub...")
-            archive_type = lang_server_dep.archive_type or "zip"
-            FileUtils.download_and_extract_archive(url, str(server_dir), archive_type)
+            self._create_dep_language_server(lang_server_dep).download_to(server_dir)
 
             if not server_dll.exists():
                 raise SolidLSPException("VB.NET Language Server DLL not found after extraction")

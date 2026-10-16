@@ -7,6 +7,7 @@ from solidlsp.language_servers.emmylua_ls import EmmyLuaLanguageServer
 from solidlsp.language_servers.erlang_language_server import ErlangLanguageServer
 from solidlsp.language_servers.kotlin_language_server import KotlinLanguageServer
 from solidlsp.language_servers.nextflow_language_server import NextflowLanguageServer
+from solidlsp.language_servers.vbnet_language_server import VBNetLanguageServer
 
 if __name__ == "__main__":
     logging.configure()
@@ -15,3 +16,4 @@ if __name__ == "__main__":
     ErlangLanguageServer.DependencyProvider.update_dep_hashes()
     NextflowLanguageServer.DependencyProvider.update_dep_hashes()
     KotlinLanguageServer.DependencyProvider.update_dep_hashes()
+    VBNetLanguageServer.DependencyProvider.update_dep_hashes()
