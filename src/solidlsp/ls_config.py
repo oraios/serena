@@ -409,6 +409,7 @@ class LanguageServerId(Enum):
             self.VUE,  # superset of TypeScript/JavaScript
             self.SVELTE,  # superset of TypeScript/JavaScript
             self.ASTRO,  # superset of TypeScript/JavaScript
+            self.VBNET,  # also matches .cs so mixed VB/C# solutions share one Roslyn instance; C# takes precedence on ties
             self.ANGULAR,  # superset of TypeScript/JavaScript
         }
 
