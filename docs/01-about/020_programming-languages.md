@@ -188,6 +188,9 @@ Some languages require additional installations or setup steps, as noted.
   globals, which the plain TypeScript language server does not; overlaps `typescript` on file extensions,
   so it is not auto-detected and must be set as the language explicitly — do not also enable `typescript`
   for the same files)
+* **VB.NET**  
+  (uses the community Roslyn-based [roslyn-vbnet-languageserver](https://github.com/LaunchCG/roslyn-vbnet-languageserver) (language `vbnet`), requiring [.NET v10+](https://dotnet.microsoft.com/en-us/download/dotnet) and, on Windows, `pwsh` ([PowerShell 7+](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows?view=powershell-7.5));
+  also handles `.cs` files so mixed VB.NET/C# solutions share one language server instance; for pure C# projects, `csharp` takes precedence)
 * **Vue**
   (3.x with TypeScript; requires Node.js v18+ and npm; supports .vue Single File Components with monorepo detection)
 * **Wolfram Language**
