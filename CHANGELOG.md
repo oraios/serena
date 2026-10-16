@@ -27,6 +27,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     trust-gated feature (#2129)
 
 * Language Servers:
+  - Add VB.NET language server support (via the Roslyn-based `Microsoft.CodeAnalysis.LanguageServer`,
+    also shared with the C# language server)
   - Fix: the Intelephense settings `maxMemory` and `maxFileSize` had no effect, because they were passed
     as initialization options, which Intelephense does not read; `maxMemory` now limits the heap of the
     server process, and `maxFileSize` is passed as `intelephense.files.maxSize`

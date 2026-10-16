@@ -123,6 +123,7 @@ class LanguageServerId(Enum):
     """
 
     CSHARP = "csharp"
+    VBNET = "vbnet"
     PYTHON = "python"
     RUST = "rust"
     JAVA = "java"
@@ -408,6 +409,7 @@ class LanguageServerId(Enum):
             self.VUE,  # superset of TypeScript/JavaScript
             self.SVELTE,  # superset of TypeScript/JavaScript
             self.ASTRO,  # superset of TypeScript/JavaScript
+            self.VBNET,  # also matches .cs so mixed VB/C# solutions share one Roslyn instance; C# takes precedence on ties
             self.ANGULAR,  # superset of TypeScript/JavaScript
         }
 
@@ -460,6 +462,8 @@ class LanguageServerId(Enum):
                 return FilenameMatcher(*path_patterns)
             case self.CSHARP | self.CSHARP_OMNISHARP:
                 return FilenameMatcher(".cs")
+            case self.VBNET:
+                return FilenameMatcher(".vb", ".cs")
             case self.RUST:
                 return FilenameMatcher(".rs")
             case self.GO:
@@ -738,6 +742,10 @@ class LanguageServerId(Enum):
                 from solidlsp.language_servers.csharp_language_server import CSharpLanguageServer
 
                 return CSharpLanguageServer
+            case self.VBNET:
+                from solidlsp.language_servers.vbnet_language_server import VBNetLanguageServer
+
+                return VBNetLanguageServer
             case self.CSHARP_OMNISHARP:
                 from solidlsp.language_servers.omnisharp import OmniSharp
 
