@@ -20,7 +20,7 @@ from typing import Any, Self, Union, cast
 
 import pathspec
 from sensai.util.helper import mark_used
-from sensai.util.pickle import getstate, load_pickle
+from sensai.util.pickle import getstate
 from sensai.util.string import ToStringMixin
 
 from serena.util.file_system import match_path
@@ -59,6 +59,7 @@ from solidlsp.lsp_protocol_handler.server import (
 )
 from solidlsp.settings import SolidLSPSettings
 from solidlsp.util.cache import load_cache, save_cache
+from solidlsp.util.pickle_util import SafePickleLoader
 
 RawDocumentSymbol = Union[DocumentSymbol, SymbolInformation]
 """
@@ -145,6 +146,11 @@ class LSPFileBuffer:
             current_contents = self.contents
             if self._read_file_modified_date != self._read_file_modified_date_passed_to_ls:
                 self._read_file_modified_date_passed_to_ls = self._read_file_modified_date
+                # A VersionedTextDocumentIdentifier's version must increase after each change,
+                # like the range-based didChange notifications sent for edits do. Reusing the
+                # previous number makes diagnostics/resolve data for the old and the new text
+                # indistinguishable to servers that key on it (rust-analyzer, pyright).
+                self.version += 1
                 self.language_server.server.notify.did_change_text_document(
                     {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
                         LSPConstants.TEXT_DOCUMENT: {
@@ -357,8 +363,7 @@ class SolidLanguageServer(ABC):
     the LS-specific version should be incremented instead.
     """
     RAW_DOCUMENT_SYMBOL_CACHE_FILENAME = "raw_document_symbols.pkl"
-    RAW_DOCUMENT_SYMBOL_CACHE_FILENAME_LEGACY_FALLBACK = "document_symbols_cache_v23-06-25.pkl"
-    DOCUMENT_SYMBOL_CACHE_VERSION = 4
+    DOCUMENT_SYMBOL_CACHE_VERSION = 5
     """
     defines the version of the high-level document symbol format.
     This should be incremented whenever there is a change in the way document symbols are stored.
@@ -388,6 +393,8 @@ class SolidLanguageServer(ABC):
             ".vscode",  # Doesn't contain symbols
         }
     )
+
+    _cache_loader = SafePickleLoader(allowed_classes=[DocumentSymbols, SymbolBody, SymbolKind])
 
     # To be overridden and extended by subclasses
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -613,6 +620,16 @@ class SolidLanguageServer(ABC):
         if self._dependency_provider is None:
             self._dependency_provider = self._create_dependency_provider()
         return self._dependency_provider
+
+    def install_dependencies(self) -> None:
+        """
+        Installs the runtime dependencies whose installation is deferred until the language server is launched.
+
+        The remaining dependencies are installed upon instantiation of the language server.
+        Language servers created with a fixed launch command have no dependency provider and thus nothing to install here.
+        """
+        if self._dependency_provider is not None:
+            self._dependency_provider.install_dependencies()
 
     def _create_process_launch_info(self) -> ProcessLaunchInfo:
         dependency_provider = self._get_dependency_provider()
@@ -1215,7 +1232,93 @@ class SolidLanguageServer(ABC):
         # By default, use the matcher of the language
         return self.ls_id.get_source_fn_matcher()
 
-    def is_ignored_path(self, relative_path: str, ignore_unsupported_files: bool = True) -> bool:
+    class ProjectEntry(ABC):
+        @abstractmethod
+        def get_abs_path(self) -> str:
+            pass
+
+        @abstractmethod
+        def is_file(self) -> bool:
+            pass
+
+        @abstractmethod
+        def is_dir(self) -> bool:
+            pass
+
+        @abstractmethod
+        def get_rel_path(self) -> str:
+            pass
+
+        @abstractmethod
+        def get_rel_path_obj(self) -> Path:
+            pass
+
+    class ProjectEntryFromRelPath(ProjectEntry):
+        def __init__(self, rel_path: str, repository_root: str):
+            self.rel_path = rel_path
+            self.repository_root = repository_root
+            self._abs_path: str | None = None
+            self._is_file: bool | None = None
+            self._rel_path_obj: Path | None = None
+
+        def get_abs_path(self) -> str:
+            if self._abs_path is None:
+                self._abs_path = os.path.join(self.repository_root, self.rel_path)
+            return self._abs_path
+
+        def get_rel_path_obj(self) -> Path:
+            if self._rel_path_obj is None:
+                self._rel_path_obj = Path(self.rel_path)
+            return self._rel_path_obj
+
+        def is_file(self) -> bool:
+            if self._is_file is None:
+                abs_path = self.get_abs_path()
+                exists = os.path.exists(abs_path)
+                if exists:
+                    self._is_file = os.path.isfile(abs_path)
+                else:
+                    # assume it is a file if it has a suffix/extension
+                    rel_path_obj = self.get_rel_path_obj()
+                    self._is_file = bool(rel_path_obj.suffix)
+            return self._is_file
+
+        def is_dir(self) -> bool:
+            return os.path.isdir(self.get_abs_path())
+
+        def get_rel_path(self) -> str:
+            return self.rel_path
+
+    class ProjectEntryFromDirEntry(ProjectEntry):
+        def __init__(self, dir_entry: os.DirEntry, rel_path: str):
+            self._dir_entry = dir_entry
+            self._rel_path = rel_path
+            self._rel_path_obj: Path | None = None
+
+        def get_abs_path(self) -> str:
+            return self._dir_entry.path
+
+        def is_file(self) -> bool:
+            return self._dir_entry.is_file()
+
+        def is_dir(self) -> bool:
+            return self._dir_entry.is_dir()
+
+        def get_rel_path(self) -> str:
+            return self._rel_path
+
+        def get_rel_path_obj(self) -> Path:
+            if self._rel_path_obj is None:
+                self._rel_path_obj = Path(self._rel_path)
+            return self._rel_path_obj
+
+    def is_ignored_path(
+        self,
+        relative_path: str,
+        ignore_unsupported_files: bool = True,
+        dir_entry: os.DirEntry | None = None,
+        check_path_for_ignored_dirnames: bool = True,
+    ) -> bool:
         """
         Determine if a path should be ignored based on file type
         and ignore patterns.
@@ -1228,35 +1331,40 @@ class SolidLanguageServer(ABC):
 
         :param relative_path: Relative path to check
         :param ignore_unsupported_files: whether files that are not supported source files should be ignored
+        :param dir_entry: optional os.DirEntry for the path, if available
+        :param check_path_for_ignored_dirnames: whether to check each directory component of the path against the always-ignored
+            directory names (expensive, so disable this if it is known that the containing directories are not subject to
+            the ignored directories rule)
 
         :return: True if the path should be ignored, False otherwise
         """
-        abs_path = os.path.join(self.repository_root_path, relative_path)
-        rel_path = Path(relative_path)
+        if dir_entry is None:
+            project_entry = self.ProjectEntryFromRelPath(relative_path, self.repository_root_path)
+        else:
+            project_entry = self.ProjectEntryFromDirEntry(dir_entry, relative_path)
 
-        # determine whether the path is a file: from the filesystem if the path exists, lexically otherwise
-        exists = os.path.exists(abs_path)
-        if not exists:
-            log.debug("Path %s does not exist; the ignore check is performed on the path itself", abs_path)
-        is_file = os.path.isfile(abs_path) if exists else bool(rel_path.suffix)
+        # determine whether the path is a file
+        is_file = project_entry.is_file()
 
         # check each directory component against always-ignored dirnames
-        dir_parts = rel_path.parts
-        if is_file:
-            dir_parts = dir_parts[:-1]
-        for part in dir_parts:
-            if not part:  # Skip empty parts (e.g., from leading '/')
-                continue
-            if self.is_ignored_dirname(part):
-                return True
+        if check_path_for_ignored_dirnames:
+            rel_path_obj = project_entry.get_rel_path_obj()
+            dir_parts = rel_path_obj.parts
+            if project_entry.is_file():
+                dir_parts = dir_parts[:-1]
+            for part in dir_parts:
+                if not part:  # Skip empty parts (e.g., from leading '/')
+                    continue
+                if self.is_ignored_dirname(part):
+                    return True
 
         # apply the unsupported-extension rule to files
         if is_file and ignore_unsupported_files:
             fn_matcher = self.get_source_fn_matcher()
-            if not fn_matcher.is_relevant_filename(abs_path):
+            if not fn_matcher.is_relevant_filename(project_entry.get_abs_path()):
                 return True
 
-        return match_path(relative_path, self.get_ignore_spec(), root_path=self.repository_root_path)
+        return match_path(relative_path, self.get_ignore_spec(), root_path=self.repository_root_path, is_dir=project_entry.is_dir())
 
     @contextmanager
     def start_server_context(self) -> Iterator["SolidLanguageServer"]:
@@ -1934,7 +2042,7 @@ class SolidLanguageServer(ABC):
               (see :class:`serena.symbol.NamePathMatcher`). A symbol whose name contains it cannot be
               addressed by any tool taking an exact name path, not even via the name path that is
               reported for the symbol itself. Language servers that identify symbols in such a way
-              (e.g. Erlang LS, which reports functions as `name/arity`) must substitute another
+              (e.g. Erlang language servers, which may report functions as `name/arity`) must substitute another
               character here.
 
         :param symbol: the symbol
@@ -2100,6 +2208,7 @@ class SolidLanguageServer(ABC):
         All symbols except the root packages will have a parent attribute.
         Will ignore directories starting with '.', language-specific defaults
         and user-configured directories (e.g. from .gitignore).
+        Ignore rules apply to unresolved paths. Discovered symbolic links are followed only in trusted projects.
 
         :param within_relative_path: pass a relative path to only consider symbols within this path.
             If a file is passed, only the symbols within this file will be considered.
@@ -2109,8 +2218,6 @@ class SolidLanguageServer(ABC):
 
         # Helper function to recursively process directories
         def process_directory(abs_dir_path: str) -> list[ls_types.UnifiedSymbolInformation]:
-            abs_dir_path = os.path.realpath(abs_dir_path)
-
             rel_dir_path: str | None
             try:
                 rel_dir_path = str(Path(abs_dir_path).relative_to(self.repository_root_path))
@@ -2122,7 +2229,7 @@ class SolidLanguageServer(ABC):
 
             result = []
             try:
-                contained_dir_or_file_names = os.listdir(abs_dir_path)
+                contained_dir_or_file_entries = os.scandir(abs_dir_path)
             except OSError:
                 return []
 
@@ -2134,20 +2241,23 @@ class SolidLanguageServer(ABC):
                     uri=str(pathlib.Path(abs_dir_path).as_uri()),
                     range={"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}},
                     absolutePath=str(abs_dir_path),
-                    relativePath=str(Path(abs_dir_path).resolve().relative_to(self.repository_root_path)),
+                    relativePath=os.path.relpath(abs_dir_path, self.repository_root_path),
                 ),
                 children=[],
             )
             result.append(package_symbol)
 
-            for contained_dir_or_file_name in contained_dir_or_file_names:
-                contained_dir_or_file_abs_path = os.path.join(abs_dir_path, contained_dir_or_file_name)
+            for contained_dir_or_file_entry in contained_dir_or_file_entries:
+                # skip symbolic links during discovery in untrusted projects
+                if not self.config.is_project_trusted and contained_dir_or_file_entry.is_symlink():
+                    continue
+
+                contained_dir_or_file_name = contained_dir_or_file_entry.name
+                contained_dir_or_file_abs_path = contained_dir_or_file_entry.path
 
                 # obtain relative path
                 try:
-                    contained_dir_or_file_rel_path = str(
-                        Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path)
-                    )
+                    contained_dir_or_file_rel_path = os.path.relpath(contained_dir_or_file_abs_path, self.repository_root_path)
                 except ValueError as e:
                     # Typically happens when the path is not under the repository root (e.g., symlink pointing outside)
                     log.warning(
@@ -2158,20 +2268,26 @@ class SolidLanguageServer(ABC):
                     )
                     continue
 
-                if self.is_ignored_path(contained_dir_or_file_rel_path):
+                is_dir = contained_dir_or_file_entry.is_dir()
+                if self.is_ignored_path(
+                    contained_dir_or_file_rel_path, dir_entry=contained_dir_or_file_entry, check_path_for_ignored_dirnames=is_dir
+                ):
                     log.debug("Skipping item: %s (because it should be ignored)", contained_dir_or_file_rel_path)
                     continue
 
-                if os.path.isdir(contained_dir_or_file_abs_path):
+                if is_dir:
                     child_symbols = process_directory(contained_dir_or_file_abs_path)
                     package_symbol["children"].extend(child_symbols)
                     for child in child_symbols:
                         child["parent"] = package_symbol
 
-                elif os.path.isfile(contained_dir_or_file_abs_path):
+                elif contained_dir_or_file_entry.is_file():
                     with self._open_file_context(contained_dir_or_file_rel_path, open_in_ls=False) as file_data:
                         document_symbols = self.request_document_symbols(contained_dir_or_file_rel_path, file_data)
-                        file_root_nodes = document_symbols.root_symbols
+
+                        # create shallow copies of the document root symbols to avoid modifying the cached symbols
+                        # when linking them to the file symbol #2126
+                        file_root_nodes = [r.copy() for r in document_symbols.root_symbols]
 
                         # Create file symbol, link with children
                         file_range = self._get_range_from_file_content(file_data.contents)
@@ -2184,7 +2300,7 @@ class SolidLanguageServer(ABC):
                                 uri=str(pathlib.Path(contained_dir_or_file_abs_path).as_uri()),
                                 range=file_range,
                                 absolutePath=str(contained_dir_or_file_abs_path),
-                                relativePath=str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path)),
+                                relativePath=contained_dir_or_file_rel_path,
                             ),
                             children=file_root_nodes,
                             parent=package_symbol,
@@ -2194,22 +2310,6 @@ class SolidLanguageServer(ABC):
 
                     # Link file symbol with package
                     package_symbol["children"].append(file_symbol)
-
-                    # TODO: Not sure if this is actually still needed given recent changes to relative path handling
-                    def fix_relative_path(nodes: list[ls_types.UnifiedSymbolInformation]) -> None:
-                        for node in nodes:
-                            if "location" in node and "relativePath" in node["location"]:
-                                path = Path(node["location"]["relativePath"])  # type: ignore
-                                if path.is_absolute():
-                                    try:
-                                        path = path.relative_to(self.repository_root_path)
-                                        node["location"]["relativePath"] = str(path)
-                                    except Exception:
-                                        pass
-                            if "children" in node:
-                                fix_relative_path(node["children"])
-
-                    fix_relative_path(file_root_nodes)
 
             return result
 
@@ -2528,11 +2628,18 @@ class SolidLanguageServer(ABC):
                 # This is neither really safe nor elegant, but if we don't do it,
                 # there is no way to distinguish between definitions and imports as import is not a symbol-type
                 # and we get the type referenced symbol resulting from imports...
+                # An import symbol is located at the reference itself, whereas a same-named symbol whose body
+                # merely contains the reference (e.g. a caller) is not an import.
+                selection_start = containing_symbol["selectionRange"]["start"]
+                selection_end = containing_symbol["selectionRange"]["end"]
                 if (
                     not include_imports
                     and incoming_symbol is not None
                     and containing_symbol["name"] == incoming_symbol["name"]
                     and containing_symbol["kind"] == incoming_symbol["kind"]
+                    and (selection_start["line"], selection_start["character"])
+                    <= (ref_line, ref_col)
+                    <= (selection_end["line"], selection_end["character"])
                 ):
                     log.debug(
                         f"Found import of referenced symbol {incoming_symbol['name']}"
@@ -3048,38 +3155,10 @@ class SolidLanguageServer(ABC):
 
     def _load_raw_document_symbols_cache(self) -> None:
         cache_file = self.cache_dir / self.RAW_DOCUMENT_SYMBOL_CACHE_FILENAME
-
-        if not cache_file.exists():
-            # check for legacy cache to load to migrate
-            legacy_cache_file = self.cache_dir / self.RAW_DOCUMENT_SYMBOL_CACHE_FILENAME_LEGACY_FALLBACK
-            if legacy_cache_file.exists():
-                try:
-                    legacy_cache: dict[
-                        str, tuple[str, tuple[list[ls_types.UnifiedSymbolInformation], list[ls_types.UnifiedSymbolInformation]]]
-                    ] = load_pickle(legacy_cache_file)
-                    log.info("Migrating legacy document symbols cache with %d entries", len(legacy_cache))
-                    num_symbols_migrated = 0
-                    migrated_cache = {}
-                    for cache_key, (file_hash, (all_symbols, root_symbols)) in legacy_cache.items():
-                        if cache_key.endswith("-True"):  # include_body=True
-                            new_cache_key = cache_key[:-5]
-                            migrated_cache[new_cache_key] = (file_hash, root_symbols)
-                            num_symbols_migrated += len(all_symbols)
-                    log.info("Migrated %d document symbols from legacy cache", num_symbols_migrated)
-                    self._raw_document_symbols_cache = migrated_cache
-                    self._raw_document_symbols_cache_is_modified = True
-                    self._save_raw_document_symbols_cache()
-                    legacy_cache_file.unlink()
-                    return
-                except Exception as e:
-                    log.error("Error during cache migration: %s", e)
-                    return
-
-        # load existing cache (if any)
         if cache_file.exists():
             log.info("Loading document symbols cache from %s", cache_file)
             try:
-                saved_cache = load_cache(str(cache_file), self._raw_document_symbols_cache_version())
+                saved_cache = load_cache(str(cache_file), self._raw_document_symbols_cache_version(), loader=self._cache_loader)
                 if saved_cache is not None:
                     self._raw_document_symbols_cache = saved_cache
                     log.info(f"Loaded {len(self._raw_document_symbols_cache)} entries from raw document symbols cache.")
@@ -3114,7 +3193,7 @@ class SolidLanguageServer(ABC):
         if cache_file.exists():
             log.info("Loading document symbols cache from %s", cache_file)
             try:
-                saved_cache = load_cache(str(cache_file), self._document_symbols_cache_version())
+                saved_cache = load_cache(str(cache_file), self._document_symbols_cache_version(), loader=self._cache_loader)
                 if saved_cache is not None:
                     self._document_symbols_cache = saved_cache
                     log.info(f"Loaded {len(self._document_symbols_cache)} entries from document symbols cache.")

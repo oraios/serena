@@ -332,6 +332,9 @@ class TextUtils:
             else:
                 raise
 
+        if del_start_idx > del_end_idx:
+            raise ValueError(f"Start position ({start_line=}, {start_col=}) is after end position ({end_line=}, {end_col=})")
+
         deleted_text = text[del_start_idx:del_end_idx]
         new_text = text[:del_start_idx] + text[del_end_idx:]
         return new_text, deleted_text
@@ -400,6 +403,36 @@ class TextUtils:
         """
         text_stepper = TextStepper(text)
         return text_stepper.process_all_gather_lines(with_ends=with_ends)
+
+    @staticmethod
+    def line_slice_indices(start_line: int, end_line: int | None, num_lines: int) -> tuple[int, int]:
+        """
+        Computes line slice indices from the given start and end lines.
+
+        :param start_line: the 0-based index of the first line to include, negative values count from the end of the text
+        :param end_line: the 0-based index of the last line to include, negative values count from the end of the text;
+            if None, the slice extends to the end of the text
+        :param num_lines: the total number of lines in the text
+        :return: normalised index pair for slicing (always positive, with the end index exclusive)
+        """
+
+        def normalize_line_idx(idx: int, to_inclusive_end: bool = False) -> int:
+            if idx < 0:
+                idx += num_lines
+            if to_inclusive_end:
+                if idx < 0:
+                    return 0
+                else:
+                    return idx + 1
+            else:
+                return max(0, idx)
+
+        start_idx = normalize_line_idx(start_line)
+        if end_line is None:
+            return start_idx, num_lines
+        else:
+            end_idx = normalize_line_idx(end_line, to_inclusive_end=True)
+            return start_idx, end_idx
 
 
 class PathUtils:

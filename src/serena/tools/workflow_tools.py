@@ -3,11 +3,11 @@ Tools supporting the general workflow of the agent
 """
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from serena.tools import Tool, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional, WriteMemoryTool
+from serena.tools import Tool, ToolMarkerCanEdit, ToolMarkerDoesNotRequireActiveProject, ToolMarkerOptional, WriteMemoryTool
 from serena.tools.memory_tools import MemoryApiMixin
 
 
-class OnboardingTool(Tool, MemoryApiMixin):
+class OnboardingTool(Tool, MemoryApiMixin, ToolMarkerCanEdit):
     """
     Performs onboarding (identifying the project structure and essential tasks, e.g. for testing or building).
     """

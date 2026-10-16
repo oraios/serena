@@ -552,6 +552,45 @@ code, pre, kbd, samp,
     padding-top: 2px;
 }
 
+.project-trust-indicator > a {
+    color: var(--log-warning);
+    font-size: 0.9em;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.project-trust-indicator > a:hover,
+.project-trust-indicator > a:focus-visible {
+    text-decoration: underline;
+}
+
+.dashboard-tooltip {
+    position: fixed;
+    z-index: 10000;
+    box-sizing: border-box;
+    width: 360px;
+    max-width: calc(100vw - 24px);
+    padding: 14px 16px;
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-elevated);
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 1.6;
+    white-space: normal;
+}
+
+.dashboard-tooltip > span {
+    display: block;
+    margin-top: 8px;
+}
+
+.dashboard-tooltip .tooltip-hint {
+    color: var(--text-muted);
+}
+
 .config-value {
     color: var(--text-primary);
 }

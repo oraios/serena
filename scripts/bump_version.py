@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -160,10 +161,21 @@ def bump_repo_version(
         (init_path, init_text, new_init_text),
     ]
 
-    # update changelog only for actual releases (not -dev versions with suffixes)
+    # update the changelog and registry manifest only for actual releases
     if target_version_suffix is None:
         new_changelog_text = update_changelog(changelog_text, new_version)
         file_changes.append((changelog_path, changelog_text, new_changelog_text))
+
+        # update versions in the GitHub MCP registry manifest
+        server_json_path = repo_root / "server.json"
+        log.info("Reading server.json from %s", server_json_path)
+        server_json_text = server_json_path.read_text(encoding="utf-8")
+        server_json = json.loads(server_json_text)
+        server_json["version"] = new_version
+        for package in server_json["packages"]:
+            package["version"] = new_version
+        new_server_json_text = json.dumps(server_json, indent=2, ensure_ascii=False) + "\n"
+        file_changes.append((server_json_path, server_json_text, new_server_json_text))
 
     if dry_run:
         for path, old, new in file_changes:

@@ -325,7 +325,17 @@ def search_files(
     :param paths_exclude_glob: optional glob pattern to exclude files from the list
     :param multiline: whether to apply multi-line matching, enabling the flags re.DOTALL and re.MULTILINE (default: True)
     :return: list of MatchedConsecutiveLines objects
+    :raises ValueError: if the pattern is not a valid regular expression
     """
+    # Validate the pattern once, before the per-file processing below: a pattern that does not
+    # compile is a defect in the request, not a per-file read failure, so it must not be turned
+    # into the empty result that reads like "the pattern occurs nowhere" (see `search_text`,
+    # which documents this error, and the replacement tools, which let it surface).
+    try:
+        re.compile(pattern, (re.MULTILINE | re.DOTALL) if multiline else 0)
+    except re.error as e:
+        raise ValueError(f"Invalid regular expression {pattern!r}: {e}") from e
+
     # apply glob filter
     file_collection = file_collection.filter_glob(paths_include_glob=paths_include_glob, paths_exclude_glob=paths_exclude_glob)
     log.info(f"Processing {len(file_collection)} files.")
@@ -537,8 +547,8 @@ class MultiFileContentReplacer:
     updated content of a file for a selected subset of occurrences.
     """
 
-    OCCURRENCE_ID_REGEX = re.compile(r"^(?P<path>.+):(?P<index>\d+)@(?P<digest>[0-9a-f]{6})$")
-    _DIGEST_LEN = 6
+    OCCURRENCE_ID_REGEX = re.compile(r"^(?P<path>.+):(?P<index>\d+)@(?P<digest>[0-9a-f]{16})$")
+    _DIGEST_LEN = 16
 
     def __init__(self, mode: Literal["literal", "regex"], regex_multiline: bool = True):
         """
@@ -554,12 +564,13 @@ class MultiFileContentReplacer:
         return re.compile(re.escape(needle) if self.mode == "literal" else needle, flags=self._flags)
 
     @classmethod
-    def _digest(cls, matched_text: str) -> str:
-        return hashlib.sha1(matched_text.encode("utf-8")).hexdigest()[: cls._DIGEST_LEN]
+    def _digest(cls, text: str) -> str:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()[: cls._DIGEST_LEN]
 
     @classmethod
-    def make_occurrence_id(cls, relative_path: str, index_in_file: int, matched_text: str) -> str:
-        return f"{relative_path}:{index_in_file}@{cls._digest(matched_text)}"
+    def make_occurrence_id(cls, relative_path: str, index_in_file: int, content_digest: str, start: int, end: int) -> str:
+        """Creates an identifier bound to the file's content and the matched character range."""
+        return f"{relative_path}:{index_in_file}@{cls._digest(f'{content_digest}:{start}:{end}')}"
 
     @staticmethod
     def _expand_backreferences(match: re.Match, repl_template: str) -> str:
@@ -587,6 +598,7 @@ class MultiFileContentReplacer:
         pattern = self._compile(needle)
         occurrences: list[ReplacementOccurrence] = []
         for relative_path, content in files:
+            content_digest = self._digest(content)
             for index_in_file, match in enumerate(pattern.finditer(content)):
                 matched_text = match.group(0)
                 replacement = self._expand_backreferences(match, repl) if self.mode == "regex" else repl
@@ -594,17 +606,25 @@ class MultiFileContentReplacer:
                 # matching again within the matched text indicates the match may have swallowed
                 # more than intended
                 is_ambiguous = "\n" in matched_text and pattern.search(matched_text[1:]) is not None
+
+                # the match end is exclusive, so a match that consumes a line break ends on the
+                # line before the one `match.end()` points at; `search_text` applies the same rule
+                start_line = content.count("\n", 0, match.start())
+                end_line = content.count("\n", 0, match.end())
+                if end_line > start_line and matched_text.endswith("\n"):
+                    end_line -= 1
+
                 occurrences.append(
                     ReplacementOccurrence(
-                        occurrence_id=self.make_occurrence_id(relative_path, index_in_file, matched_text),
+                        occurrence_id=self.make_occurrence_id(relative_path, index_in_file, content_digest, match.start(), match.end()),
                         relative_path=relative_path,
                         index_in_file=index_in_file,
                         start=match.start(),
                         end=match.end(),
                         matched_text=matched_text,
                         replacement=replacement,
-                        start_line=content.count("\n", 0, match.start()),
-                        end_line=content.count("\n", 0, match.end()),
+                        start_line=start_line,
+                        end_line=end_line,
                         is_ambiguous=is_ambiguous,
                     )
                 )
@@ -655,6 +675,26 @@ class MultiFileContentReplacer:
             line_end = len(content)
         old_block = content[line_start:line_end]
         new_block = content[line_start : occ.start] + occ.replacement + content[occ.end : line_end]
+
+        # the file's final line break terminates the last line rather than starting a further one, so
+        # splitting an end-of-file window would materialize the empty remainder behind it as a phantom
+        # line; for a window ending before the file end, an empty remainder instead denotes a real
+        # blank line behind the match, which is merged away by it and therefore has to be shown
+        if line_end == len(content):
+            old_block = old_block.removesuffix("\n")
+            new_block = new_block.removesuffix("\n")
+
+        # the window runs to the next line break after the exclusive match end, so when the match
+        # itself consumed a line break the following line is included on both sides; drop such
+        # trailing lines, as a line the replacement leaves unchanged is not part of the change
+        old_lines = old_block.split("\n")
+        new_lines = new_block.split("\n")
+        while len(old_lines) > 1 and len(new_lines) > 1 and old_lines[-1] == new_lines[-1]:
+            old_lines.pop()
+            new_lines.pop()
+        old_block = "\n".join(old_lines)
+        new_block = "\n".join(new_lines)
+
         location = f"line {occ.start_line}" if occ.start_line == occ.end_line else f"lines {occ.start_line}-{occ.end_line}"
         header = f"  [{occ.occurrence_id}] {location}"
         if occ.is_ambiguous:
@@ -785,7 +825,7 @@ class MultiFileReplacement:
             elif int(id_match.group("index")) not in indices_by_path[id_match.group("path")]:
                 problems.append(f"{oid}: the file now has fewer matches than at dry-run time (content changed)")
             else:
-                problems.append(f"{oid}: the matched text changed since the dry run (content changed)")
+                problems.append(f"{oid}: the file content or matched range changed since the dry run")
 
         if problems:
             problem_lines = "\n".join(f"  {p}" for p in problems)

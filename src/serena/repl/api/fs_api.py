@@ -3,14 +3,12 @@
 The implementation of operations on the project's files.
 """
 
-import os
 from collections import defaultdict
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from serena.tools import CreateTextFileTool, FindFileTool, ListDirTool, ReadFileTool, SearchForPatternTool
-from serena.util.file_system import scan_directory
 from serena.util.text_utils import MatchedConsecutiveLines
 from solidlsp.ls_utils import TextUtils
 
@@ -194,7 +192,10 @@ class FsApi(FacadeApi):
 
         # read lines, using the same (LSP-compliant) notion of line breaks as the line-based editing operations
         lines = TextUtils.split_lines(project.read_file(relative_path))
-        lines = lines[start_line:] if end_line is None else lines[start_line : end_line + 1]
+
+        start_idx, end_idx = TextUtils.line_slice_indices(start_line, end_line, len(lines))
+        lines = lines[start_idx:end_idx]
+
         return FileContent(lines, FileContentRenderer(self._agent, max_answer_chars))
 
     @facade_method(can_edit=True, corresponding_tool=CreateTextFileTool)
@@ -208,14 +209,12 @@ class FsApi(FacadeApi):
         """
         project = self._get_project()
         project_root = Path(project.project_root)
+        # the destination is resolved up front, so that the path which is validated is the path which is written
         abs_path = (project_root / relative_path).resolve()
         will_overwrite_existing = abs_path.exists()
 
-        # validate the destination path
-        if will_overwrite_existing:
-            project.validate_relative_path(relative_path)
-        else:
-            assert abs_path.is_relative_to(project_root), f"Cannot create file outside of the project directory, got {relative_path=}"
+        # validate the destination path; the validation resolves symlinks, thus covering abs_path
+        project.validate_relative_path(relative_path)
 
         # write the file
         abs_path.parent.mkdir(parents=True, exist_ok=True)
@@ -242,44 +241,29 @@ class FsApi(FacadeApi):
             raise FileNotFoundError(f"Directory not found: {relative_path} (check if the path is correct relative to the project root)")
         project.validate_relative_path(relative_path)
 
-        is_ignored_path_fn = project.get_is_ignored_path_fn(relative_path, skip_ignored_files)
-        dirs, files = scan_directory(
-            os.path.join(project.project_root, relative_path),
-            relative_to=project.project_root,
-            recursive=recursive,
-            is_ignored_dir=is_ignored_path_fn,
-            is_ignored_file=is_ignored_path_fn,
-        )
-        return DirectoryListing(dirs, files, DirectoryListingRenderer(self._agent, max_answer_chars))
+        scan_result = project.scan_directory(relative_path, recursive=recursive, skip_ignored_paths=skip_ignored_files)
+        return DirectoryListing(scan_result.directories, scan_result.files, DirectoryListingRenderer(self._agent, max_answer_chars))
 
     @facade_method(corresponding_tool=FindFileTool)
-    def find_file(self, file_mask: str, relative_path: str) -> list[str]:
+    def find_file(self, file_mask: str, relative_path: str, skip_ignored_files: bool = False) -> list[str]:
         """
         Finds files matching the given file mask within the given relative path.
 
         :param file_mask: the filename or file mask (using the wildcards * or ?) to search for
         :param relative_path: the relative path to the directory to search in; pass "." to scan the project root
+        :param skip_ignored_files: whether to skip ignored files/directories
         :return: the relative paths of the matching files
         """
         project = self._get_project()
         project.validate_relative_path(relative_path)
 
-        is_ignored_path_fn = project.get_is_ignored_path_fn(relative_path, skip_ignored_paths=False)
-
-        # find the files by ignoring everything that doesn't match
-        def is_ignored_file(abs_path: str) -> bool:
-            if is_ignored_path_fn(abs_path):
-                return True
-            return not fnmatch(os.path.basename(abs_path), file_mask)
-
-        _dirs, files = scan_directory(
-            path=os.path.join(project.project_root, relative_path),
+        scan_result = project.scan_directory(
+            relative_path,
             recursive=True,
-            is_ignored_dir=is_ignored_path_fn,
-            is_ignored_file=is_ignored_file,
-            relative_to=project.project_root,
+            skip_ignored_paths=skip_ignored_files,
+            is_matching_file=lambda e: fnmatch(e.name, file_mask),
         )
-        return files
+        return scan_result.files
 
     @facade_method(corresponding_tool=SearchForPatternTool)
     def search_for_pattern(
