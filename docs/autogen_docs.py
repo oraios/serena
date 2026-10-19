@@ -162,8 +162,6 @@ def autogen_tool_list(target_filename = "01-about/035_tools.md"):
             "While both interfaces offer the same general functionality for the most part, "
             "the REPL interface addresses several limitations inherent in the tool-based approach (see [advantages](repl-advantages) below).\n\n"
         )
-        f.write("\n\n:::{note}\nThe Serena REPL is an unreleased BETA feature. Please provide feedback; if you encounter issues, report them.\n:::\n\n")
-
 
         def tools_section():
             f.write("## Tools (Classic Interface)\n\n")
@@ -289,10 +287,8 @@ def autogen_about_intro_features():
         # remove callouts
         about_text = re.subn(r"^> \[!\w+\]\s+(^>.*?$)+", "", about_text, flags=re.MULTILINE)[0]
 
-        # replace "Quick Demo" with "Video Introduction", removing the short video
-        about_text = about_text.replace("# Quick Demo", "# Video Introduction")
-        about_text = re.subn(r"^https://github.com/user-attachments/.*?$", "", about_text, flags=re.MULTILINE)[0]
-        about_text = about_text.replace(":tv: Longer video:", "Watch our video:")
+        # fix image in video section
+        about_text = about_text.replace('src="resources', 'src="https://github.com/oraios/serena/raw/release-v2/resources')
 
         # remove emojis (e.g. :tv:)
         about_text = re.subn(r":\w+:\s+", "", about_text)[0]

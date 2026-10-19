@@ -18,7 +18,6 @@ Problems being fixed must be real problems that have either been observed in pra
 to occur in practice.
 
 Do not work on beta features (unless they are trivial bug fixes); instead, provide feedback via issues or discussions.
-At present, the Serena REPL is a beta feature.
 
 ### Adding Support for a New Language Server
 

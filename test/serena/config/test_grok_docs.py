@@ -64,4 +64,4 @@ def test_grok_hook_matcher_docs_match_code(tmp_path: Path):
         with patch("sys.stdin", StringIO(json.dumps(payloads[tool_name]))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
             hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.GROK)
 
-        assert hook.is_grep_call() or hook.is_read_call() or hook._is_shell_command_call()
+        assert hook.is_grep_call() or hook.is_read_call()

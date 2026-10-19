@@ -211,6 +211,7 @@ class EditApi(FacadeApi):
         :param end_line: the 0-based index of the last line to be deleted
         :return: a success message
         """
+        self._get_project().validate_relative_path(relative_path)
         self._create_code_editor().delete_lines(relative_path, start_line, end_line)
         return SUCCESS_RESULT
 
@@ -226,6 +227,7 @@ class EditApi(FacadeApi):
         :param content: the content to insert
         :return: a success message
         """
+        self._get_project().validate_relative_path(relative_path)
         code_editor = self._create_code_editor()
         code_editor.replace_lines(relative_path, start_line, end_line, self._normalize_inserted_content(content))
         return SUCCESS_RESULT
@@ -243,6 +245,7 @@ class EditApi(FacadeApi):
         :param content: the content to be inserted
         :return: a success message
         """
+        self._get_project().validate_relative_path(relative_path)
         self._create_code_editor().insert_at_line(relative_path, line, self._normalize_inserted_content(content))
         return SUCCESS_RESULT
 
@@ -267,6 +270,7 @@ class EditApi(FacadeApi):
             Depending on the language, it may or may not include a preceding docstring or other preceding annotations.
         :return: a success message
         """
+        self._get_project().validate_relative_path(relative_path)
         self._create_code_editor().replace_body(name_path, relative_file_path=relative_path, body=body)
         return SUCCESS_RESULT
 
@@ -282,6 +286,7 @@ class EditApi(FacadeApi):
             the symbol.
         :return: a success message
         """
+        self._get_project().validate_relative_path(relative_path)
         self._create_code_editor().insert_after_symbol(name_path, relative_file_path=relative_path, body=body)
         return SUCCESS_RESULT
 
@@ -297,5 +302,6 @@ class EditApi(FacadeApi):
         :param body: the body/content to be inserted before the line in which the referenced symbol is defined
         :return: a success message
         """
+        self._get_project().validate_relative_path(relative_path)
         self._create_code_editor().insert_before_symbol(name_path, relative_file_path=relative_path, body=body)
         return SUCCESS_RESULT

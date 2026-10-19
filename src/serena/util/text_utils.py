@@ -547,8 +547,8 @@ class MultiFileContentReplacer:
     updated content of a file for a selected subset of occurrences.
     """
 
-    OCCURRENCE_ID_REGEX = re.compile(r"^(?P<path>.+):(?P<index>\d+)@(?P<digest>[0-9a-f]{6})$")
-    _DIGEST_LEN = 6
+    OCCURRENCE_ID_REGEX = re.compile(r"^(?P<path>.+):(?P<index>\d+)@(?P<digest>[0-9a-f]{16})$")
+    _DIGEST_LEN = 16
 
     def __init__(self, mode: Literal["literal", "regex"], regex_multiline: bool = True):
         """
@@ -564,12 +564,13 @@ class MultiFileContentReplacer:
         return re.compile(re.escape(needle) if self.mode == "literal" else needle, flags=self._flags)
 
     @classmethod
-    def _digest(cls, matched_text: str) -> str:
-        return hashlib.sha1(matched_text.encode("utf-8")).hexdigest()[: cls._DIGEST_LEN]
+    def _digest(cls, text: str) -> str:
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()[: cls._DIGEST_LEN]
 
     @classmethod
-    def make_occurrence_id(cls, relative_path: str, index_in_file: int, matched_text: str) -> str:
-        return f"{relative_path}:{index_in_file}@{cls._digest(matched_text)}"
+    def make_occurrence_id(cls, relative_path: str, index_in_file: int, content_digest: str, start: int, end: int) -> str:
+        """Creates an identifier bound to the file's content and the matched character range."""
+        return f"{relative_path}:{index_in_file}@{cls._digest(f'{content_digest}:{start}:{end}')}"
 
     @staticmethod
     def _expand_backreferences(match: re.Match, repl_template: str) -> str:
@@ -597,6 +598,7 @@ class MultiFileContentReplacer:
         pattern = self._compile(needle)
         occurrences: list[ReplacementOccurrence] = []
         for relative_path, content in files:
+            content_digest = self._digest(content)
             for index_in_file, match in enumerate(pattern.finditer(content)):
                 matched_text = match.group(0)
                 replacement = self._expand_backreferences(match, repl) if self.mode == "regex" else repl
@@ -614,7 +616,7 @@ class MultiFileContentReplacer:
 
                 occurrences.append(
                     ReplacementOccurrence(
-                        occurrence_id=self.make_occurrence_id(relative_path, index_in_file, matched_text),
+                        occurrence_id=self.make_occurrence_id(relative_path, index_in_file, content_digest, match.start(), match.end()),
                         relative_path=relative_path,
                         index_in_file=index_in_file,
                         start=match.start(),
@@ -823,7 +825,7 @@ class MultiFileReplacement:
             elif int(id_match.group("index")) not in indices_by_path[id_match.group("path")]:
                 problems.append(f"{oid}: the file now has fewer matches than at dry-run time (content changed)")
             else:
-                problems.append(f"{oid}: the matched text changed since the dry run (content changed)")
+                problems.append(f"{oid}: the file content or matched range changed since the dry run")
 
         if problems:
             problem_lines = "\n".join(f"  {p}" for p in problems)
