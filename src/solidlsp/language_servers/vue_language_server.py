@@ -115,6 +115,10 @@ class VueTypeScriptServer(TypeScriptLanguageServer):
         )
 
     @override
+    def _get_pinned_tsdk_path(self) -> str:
+        return self._custom_tsdk_path
+
+    @override
     def _create_base_initialize_params(self) -> dict:
         params = super()._create_base_initialize_params()
 
@@ -259,7 +263,7 @@ class VueLanguageServer(SolidLanguageServer):
         for vue_file in repo_path.rglob("*.vue"):
             try:
                 relative_path = str(vue_file.relative_to(repo_path))
-                if "node_modules" not in relative_path and not relative_path.startswith("."):
+                if not relative_path.startswith(".") and not self.is_ignored_path(relative_path):
                     vue_files.append(relative_path)
             except Exception as e:
                 log.debug(f"Error processing Vue file {vue_file}: {e}")

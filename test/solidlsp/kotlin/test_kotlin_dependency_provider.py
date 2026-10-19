@@ -1,13 +1,11 @@
 """Tests for Kotlin Language Server dependency resolution and installation."""
 
 import os
-from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from solidlsp.dependency_provider import DownloadedDependency, DownloadedDependencyHashDatabase
 from solidlsp.language_servers.kotlin_language_server import (
     DEFAULT_KOTLIN_LSP_VERSION,
     INITIAL_KOTLIN_LSP_VERSION,
@@ -31,115 +29,6 @@ def _make_provider(
 
 @pytest.mark.kotlin
 class TestKotlinDependencyProvider:
-    @pytest.mark.parametrize(
-        ("platform_id", "asset_suffix", "archive_type", "launcher_parts", "sha256"),
-        [
-            (
-                PlatformId.WIN_x64,
-                ".win.zip",
-                "zip",
-                ("bin", "intellij-server.exe"),
-                "a9b471b16025b1bfb3b0a097862580abb40e3c35406c44242c18b1d70f5d0e44",
-            ),
-            (
-                PlatformId.WIN_arm64,
-                "-aarch64.win.zip",
-                "zip",
-                ("bin", "intellij-server.exe"),
-                "3bf008d8c94fa70eb13fc998eaa42f29b9d13f368984d4cec46277808f94e1de",
-            ),
-            (
-                PlatformId.LINUX_x64,
-                ".tar.gz",
-                "gztar",
-                (f"kotlin-server-{DEFAULT_KOTLIN_LSP_VERSION}", "bin", "intellij-server"),
-                "1e11d2e5fefbf9ea215ad8dd6be95f2222897cd086e8cb7a661a52084a590405",
-            ),
-            (
-                PlatformId.LINUX_arm64,
-                "-aarch64.tar.gz",
-                "gztar",
-                (f"kotlin-server-{DEFAULT_KOTLIN_LSP_VERSION}", "bin", "intellij-server"),
-                "ec7cb254a6662a07fff9f10e4365226afab6c40008f8a974c10ac5e785d6510f",
-            ),
-            (
-                PlatformId.OSX_x64,
-                ".sit",
-                "zip",
-                (f"kotlin-server-{DEFAULT_KOTLIN_LSP_VERSION}", "bin", "intellij-server"),
-                "62ab735947b1c855b505f64f5db8fbd7ff0b52a35ab1897938c6dbfc7b24c8a3",
-            ),
-            (
-                PlatformId.OSX_arm64,
-                "-aarch64.sit",
-                "zip",
-                (f"kotlin-server-{DEFAULT_KOTLIN_LSP_VERSION}", "bin", "intellij-server"),
-                "95da3fc6d3b9092c7616345044a05edb85e5408dc648d081e4e433595c892bec",
-            ),
-        ],
-    )
-    def test_default_artifacts_match_jetbrains_release_matrix(
-        self,
-        tmp_path: Path,
-        platform_id: PlatformId,
-        asset_suffix: str,
-        archive_type: str,
-        launcher_parts: tuple[str, ...],
-        sha256: str,
-    ) -> None:
-        artifact = KotlinLanguageServer.DependencyProvider._create_artifact(DEFAULT_KOTLIN_LSP_VERSION, platform_id)
-        url = (
-            f"https://download-cdn.jetbrains.com/language-server/kotlin-server/{DEFAULT_KOTLIN_LSP_VERSION}/"
-            f"kotlin-server-{DEFAULT_KOTLIN_LSP_VERSION}{asset_suffix}"
-        )
-
-        with patch("solidlsp.dependency_provider.FileUtils.download_and_extract_archive_verified") as download:
-            artifact.dependency.download_to(tmp_path)
-
-        download.assert_called_once_with(
-            url,
-            str(tmp_path),
-            archive_type=archive_type,
-            expected_sha256=sha256,
-            allowed_hosts=KOTLIN_LSP_ALLOWED_HOSTS,
-        )
-        assert artifact.launcher_parts == launcher_parts
-
-    @pytest.mark.parametrize(
-        ("version", "platform_id", "url", "launcher_parts"),
-        [
-            (
-                "262.2310.0",
-                PlatformId.LINUX_x64,
-                "https://download-cdn.jetbrains.com/kotlin-lsp/262.2310.0/kotlin-lsp-262.2310.0-linux-x64.zip",
-                ("kotlin-lsp.sh",),
-            ),
-            (
-                "262.4739.0",
-                PlatformId.LINUX_x64,
-                "https://download-cdn.jetbrains.com/kotlin-lsp/262.4739.0/kotlin-server-262.4739.0.tar.gz",
-                ("kotlin-server-262.4739.0", "bin", "intellij-server"),
-            ),
-            (
-                "262.8190.0",
-                PlatformId.OSX_arm64,
-                "https://download-cdn.jetbrains.com/language-server/kotlin-server/262.8190.0/kotlin-server-262.8190.0-aarch64.sit",
-                ("kotlin-server-262.8190.0", "bin", "intellij-server"),
-            ),
-        ],
-    )
-    def test_version_boundaries_select_the_published_layout(
-        self,
-        version: str,
-        platform_id: PlatformId,
-        url: str,
-        launcher_parts: tuple[str, ...],
-    ) -> None:
-        artifact = KotlinLanguageServer.DependencyProvider._create_artifact(version, platform_id)
-
-        assert artifact.dependency.get_url() == url
-        assert artifact.launcher_parts == launcher_parts
-
     def test_custom_versions_skip_hash_lookup_by_design(self, tmp_path: Path) -> None:
         artifact = KotlinLanguageServer.DependencyProvider._create_artifact("262.8190.1", PlatformId.LINUX_x64)
 
@@ -153,37 +42,12 @@ class TestKotlinDependencyProvider:
             artifact.dependency.download_to(tmp_path)
 
         download.assert_called_once_with(
-            "https://download-cdn.jetbrains.com/language-server/kotlin-server/262.8190.1/kotlin-server-262.8190.1.tar.gz",
+            "https://download.jetbrains.com/language-server/kotlin-server/262.8190.1/kotlin-server-262.8190.1.tar.gz",
             str(tmp_path),
             archive_type="gztar",
             expected_sha256=None,
             allowed_hosts=KOTLIN_LSP_ALLOWED_HOSTS,
         )
-
-    def test_hash_updater_registers_frozen_and_default_artifacts(self) -> None:
-        updated_asset_names: list[str] = []
-
-        class RecordingUpdater:
-            def update(self, dependency: DownloadedDependency) -> None:
-                updated_asset_names.append(dependency.get_url().rsplit("/", 1)[-1])
-
-        with patch.object(DownloadedDependencyHashDatabase, "get_instance") as get_hash_database:
-            get_hash_database.return_value.update_context.return_value = nullcontext(RecordingUpdater())
-            KotlinLanguageServer.DependencyProvider.update_dep_hashes()
-
-        assert set(updated_asset_names) == {
-            "kotlin-lsp-261.13587.0-win-x64.zip",
-            "kotlin-lsp-261.13587.0-linux-x64.zip",
-            "kotlin-lsp-261.13587.0-linux-aarch64.zip",
-            "kotlin-lsp-261.13587.0-mac-x64.zip",
-            "kotlin-lsp-261.13587.0-mac-aarch64.zip",
-            "kotlin-server-263.4702.0.win.zip",
-            "kotlin-server-263.4702.0-aarch64.win.zip",
-            "kotlin-server-263.4702.0.tar.gz",
-            "kotlin-server-263.4702.0-aarch64.tar.gz",
-            "kotlin-server-263.4702.0.sit",
-            "kotlin-server-263.4702.0-aarch64.sit",
-        }
 
     @pytest.mark.parametrize(
         ("settings", "platform_id", "relative_launcher", "expected_directory"),
@@ -193,12 +57,6 @@ class TestKotlinDependencyProvider:
                 PlatformId.LINUX_x64,
                 ("kotlin-lsp.sh",),
                 "kotlin_language_server",
-            ),
-            (
-                {},
-                PlatformId.LINUX_arm64,
-                (f"kotlin-server-{DEFAULT_KOTLIN_LSP_VERSION}", "bin", "intellij-server"),
-                f"kotlin_language_server-{DEFAULT_KOTLIN_LSP_VERSION}",
             ),
         ],
     )

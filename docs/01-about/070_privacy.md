@@ -8,6 +8,7 @@ We collect only the following anonymous usage data whenever Serena is started:
 
  * the version of Serena being used,
  * the operating system being used,
+ * the Serena agent interface being used,
  * the language backend being used,
  * the enabled status of the Serena Dashboard,
  * the enabled [Serena agent context](contexts)

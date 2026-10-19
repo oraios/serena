@@ -8,16 +8,18 @@
 language_backend: LSP
 
 # The interface through which the agent (LLM) accesses Serena's functionality:
-#  * tools: the classic tool interface, in which each operation is a separate tool.
-#      The set of tools is configurable via the tool inclusion/exclusion settings (excluded_tools etc.)
+#  * tools: the classic tool interface, in which each operation is a separate MCP tool.
+#      The set of tools is configurable via the tool inclusion/exclusion settings (excluded_tools, etc.)
 #      of the configuration, the context, modes and the project.
 #  * REPL: operations are accessed programmatically via the serena_repl tool, which executes Python code.
 #      The set of tools is fixed (the REPL tool and the tools required for session management), and the tool
 #      inclusion/exclusion settings do not apply; instead, the operations available in the REPL are configured
 #      via the API inclusion/exclusion settings (excluded_apis etc.).
+#      This is the modern interface, which is new in Serena v2. It has several advantages:
+#      https://oraios.github.io/serena/01-about/035_tools.html#repl-advantages
 # The interface is fixed at startup; it can be overridden by the project activated at startup.
-# IMPORTANT: The REPL interface is a BETA feature. Please provide feedback; if you encounter issues, report them.
-agent_interface: tools
+# Further information: https://oraios.github.io/serena/02-usage/050_configuration.html#agent-interfaces
+agent_interface: REPL
 
 # line ending convention to use when writing source files.
 # Possible values: "lf" (Unix), "crlf" (Windows), "native" (platform default).
@@ -222,7 +224,9 @@ symbol_info_budget: 10
 project_serena_folder_location: "$projectDir/.serena"
 
 # list of glob patterns for project root directories that are considered trusted.
-# Some project settings will only be applied if the project is trusted.
+# Some project settings will only be applied if the project is trusted, and symbolic links within a project folder
+# will be followed only for trusted projects.
+# Details: https://oraios.github.io/serena/02-usage/050_configuration.html#trusted-projects
 # A glob pattern can contain the following:
 #       *  matches any sequence of characters except path separators
 #      **  matches any sequence of characters including path separators
@@ -234,9 +238,9 @@ project_serena_folder_location: "$projectDir/.serena"
 # matches no project root at all.
 # Example:
 #   trusted_project_path_patterns:
-#     - /opt/dev/projects/my_trusted_project   # trusts exactly this project
-#     - /home/user/projects/**                 # trusts every project located below this directory
-#     - C:\Users\Anna\Dev\work\**
+#     - "/opt/dev/projects/my_trusted_project"   # trusts exactly this project
+#     - "/home/user/projects/**"                 # trusts every project located below this directory
+#     - "C:\Users\Anna\Dev\work\**"
 # The pattern "**" matches any project path, so it can be used to trust all projects.
 trusted_project_path_patterns: []
 

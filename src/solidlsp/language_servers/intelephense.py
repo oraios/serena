@@ -32,8 +32,9 @@ class Intelephense(SolidLanguageServer):
     Provides PHP specific instantiation of the LanguageServer class using Intelephense.
 
     You can pass the following entries in ls_specific_settings["php"]:
-        - maxMemory: sets intelephense.maxMemory
-        - maxFileSize: sets intelephense.files.maxSize
+        - maxMemory: the maximum heap size of the server process in MB, applied as Node.js option
+          --max-old-space-size (like VS Code's intelephense.maxMemory)
+        - maxFileSize: sets intelephense.files.maxSize, the maximum size (in bytes) of files to index
         - ignore_vendor: whether or ignore directories named "vendor" (default: true)
         - file_filter: list of additional file extensions (with leading dot) to treat as PHP
           sources, e.g. [".module", ".inc"]. The extensions are added to the defaults (".php",
@@ -84,6 +85,15 @@ class Intelephense(SolidLanguageServer):
 
         def _create_launch_command(self, core_path: str) -> list[str]:
             return [core_path, "--stdio"]
+
+        @override
+        def create_launch_command_env(self) -> dict[str, str]:
+            # the heap size is an option of the Node.js process, which Intelephense cannot change once started
+            max_memory = self._custom_settings.get("maxMemory")
+            if max_memory is None:
+                return {}
+            existing_node_options = os.environ.get("NODE_OPTIONS", "").strip()
+            return {"NODE_OPTIONS": f"{existing_node_options} --max-old-space-size={int(max_memory)}".strip()}
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         super().__init__(config, repository_root_path, None, "php", solidlsp_settings)
@@ -138,13 +148,6 @@ class Intelephense(SolidLanguageServer):
         if license_key:
             initialization_options["licenceKey"] = license_key
 
-        max_memory = self._custom_settings.get("maxMemory")
-        max_file_size = self._custom_settings.get("maxFileSize")
-        if max_memory is not None:
-            initialization_options["intelephense.maxMemory"] = max_memory
-        if max_file_size is not None:
-            initialization_options["intelephense.files.maxSize"] = max_file_size
-
         initialize_params["initializationOptions"] = initialization_options
         return initialize_params
 
@@ -182,15 +185,20 @@ class Intelephense(SolidLanguageServer):
 
         self.server.notify.initialized({})
 
-        # push the file associations derived from the source-file matcher (the default extensions
-        # plus any configured via `file_filter`), such that Intelephense indexes the same set of
-        # files that Serena's symbol tools treat as PHP sources (#1710). This cannot be passed in
+        # push the files configuration: the file associations derived from the source-file matcher
+        # (the default extensions plus any configured via `file_filter`), such that Intelephense
+        # indexes the same set of files that Serena's symbol tools treat as PHP sources (#1710),
+        # and the configured maximum file size. This cannot be passed in
         # the initialize request: Intelephense reads configuration exclusively from
         # workspace/didChangeConfiguration (its initializationOptions only cover storagePath,
         # globalStoragePath, clearCache and licenceKey).
         associations = [f"*{ext}" for ext in self.ls_id.get_source_fn_matcher().file_extensions]
-        intelephense_config: DidChangeConfigurationParams = {"settings": {"intelephense": {"files": {"associations": associations}}}}
-        log.info(f"Sending workspace/didChangeConfiguration with file associations: {associations}")
+        files_config: dict[str, list[str] | int] = {"associations": associations}
+        max_file_size = self._custom_settings.get("maxFileSize")
+        if max_file_size is not None:
+            files_config["maxSize"] = int(max_file_size)
+        intelephense_config: DidChangeConfigurationParams = {"settings": {"intelephense": {"files": files_config}}}
+        log.info(f"Sending workspace/didChangeConfiguration with files configuration: {files_config}")
         self.server.notify.workspace_did_change_configuration(intelephense_config)
 
         # Intelephense server is typically ready immediately after initialization

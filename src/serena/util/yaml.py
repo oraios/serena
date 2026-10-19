@@ -138,17 +138,24 @@ def normalise_yaml_comments(commented_map: CommentedMap, comment_normalisation: 
 
     def remove_nested_comments() -> None:
         """
-        Removes nested comments, particularly of sequences, which incorrectly capture comments
+        Removes nested comments, particularly of sequences and maps, which incorrectly capture comments
         that are actually intended for top-level keys.
         """
-        for key in commented_map.keys():
-            entry = commented_map[key]
-            if isinstance(entry, CommentedSeq):
+
+        def remove_recursive(entry: Any):
+            if isinstance(entry, CommentedSeq | CommentedMap):
                 items = entry.ca.items
                 if isinstance(items, dict):
                     items_keys = list(items.keys())
                     for i in items_keys:
                         items[i] = [None] * 4
+                if isinstance(entry, CommentedMap):
+                    for v in entry.values():
+                        remove_recursive(v)
+
+        for key in commented_map.keys():
+            entry = commented_map[key]
+            remove_recursive(entry)
 
     match comment_normalisation:
         case YamlCommentNormalisation.NONE:

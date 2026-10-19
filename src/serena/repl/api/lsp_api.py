@@ -407,6 +407,9 @@ class LspApi(FacadeApi):
         :return: the top-level symbols of the file
         """
         # Note: file system sync not required (relevant file is opened in the language server explicitly)
+
+        self._get_project().validate_relative_path(relative_path)
+
         if depth == -1:
             depth = 1 if relative_path.endswith((".java", ".kt")) else 0
 
@@ -492,6 +495,9 @@ class LspApi(FacadeApi):
         """
         # Note: file system sync not required; the symbol finder opens all relevant source files explicitly in the case of changes
 
+        if relative_path:
+            self._get_project().validate_relative_path(relative_path)
+
         if include_body:
             depth = 0  # ignore user-specified depth if include_body is True
         assert max_matches != 0, "max_matches must be > 0 or equal to -1."
@@ -548,6 +554,8 @@ class LspApi(FacadeApi):
         :param exclude_kinds: optional list of LSP symbol kinds (integers, i.e. values of `SymbolKind`) to exclude.
         :return: the references to the symbol
         """
+        self._get_project().validate_relative_path(relative_path)
+
         # file system sync needed for case where symbol finder does not perform a global search, updating everything
         if relative_path:
             self._get_project().ls_sync_file_system_changes()
@@ -586,6 +594,7 @@ class LspApi(FacadeApi):
         :param exclude_kinds: (optional) list of LSP symbol kinds (integers, i.e. values of `SymbolKind`) to exclude.
         :return: the symbols implementing the given symbol
         """
+        self._get_project().validate_relative_path(relative_path)
         self._get_project().ls_sync_file_system_changes()
 
         symbol_retriever = self._create_symbol_retriever()
@@ -623,6 +632,7 @@ class LspApi(FacadeApi):
         :param include_info: whether to include additional info (hover-like). Default False.
         :return: the declaring symbol
         """
+        self._get_project().validate_relative_path(relative_path)
         self._get_project().ls_sync_file_system_changes()
         symbol_retriever = self._create_symbol_retriever()
 
@@ -673,6 +683,7 @@ class LspApi(FacadeApi):
             Diagnostics with lower-or-equal numeric severity are returned.
         :return: the grouped diagnostics for the requested file.
         """
+        self._get_project().validate_relative_path(relative_path)
         self._get_project().ls_sync_file_system_changes()
 
         symbol_retriever = self._create_symbol_retriever()
@@ -713,6 +724,9 @@ class LspApi(FacadeApi):
             Diagnostics with lower-or-equal numeric severity are returned.
         :return: the grouped diagnostics for the requested symbol and, optionally, its referencing symbols.
         """
+        if reference_file:
+            self._get_project().validate_relative_path(reference_file)
+
         self._get_project().ls_sync_file_system_changes()
 
         symbol_retriever = self._create_symbol_retriever()
@@ -747,6 +761,7 @@ class LspApi(FacadeApi):
         :param new_name: the new name for the symbol
         :return: a result summary indicating success or failure
         """
+        self._get_project().validate_relative_path(relative_path)
         self._get_project().ls_sync_file_system_changes()
         return self._create_ls_code_editor().rename_symbol(name_path, relative_path=relative_path, new_name=new_name)
 
@@ -775,6 +790,7 @@ class LspApi(FacadeApi):
         :param relative_path: the relative path to the file containing the symbol to delete
         :return: a success message, or a message listing the references preventing deletion
         """
+        self._get_project().validate_relative_path(relative_path)
         self._get_project().ls_sync_file_system_changes()
 
         symbol_retriever = self._create_symbol_retriever()
