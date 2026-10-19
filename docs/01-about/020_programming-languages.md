@@ -181,7 +181,10 @@ Some languages require additional installations or setup steps, as noted.
   (uses `terraform-ls` 0.36.5, which Serena downloads automatically; requires Terraform on PATH)
 * **TOML**  
   (experimental; uses Taplo 0.10.0, taken from PATH if present, otherwise downloaded automatically)
-* **TypeScript**
+* **TypeScript**  
+  (by default, uses typescript-language-server (language `typescript`); the native language server of
+  TypeScript 7 (language `typescript_tsgo`) is installed automatically via npm, requiring Node.js and npm
+  only for the installation)
 * **Deno**  
   (experimental; requires the `deno` CLI on PATH — it bundles the language server used here;
   serves Deno TypeScript/JavaScript and understands `npm:` / `jsr:` / `https:` imports and the `Deno.*`

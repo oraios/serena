@@ -38,8 +38,12 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Project-wide symbol discovery now skips file and directory symlinks in untrusted projects.
     In trusted projects, ignore rules consistently apply to unresolved alias paths, and symlinks to
     targets outside the project root no longer cause discovery to fail (#2163).
+  - Scala: add opt-in setting `terminate_bloop_on_stop` to terminate the Bloop build-server daemons
+    that Metals leaves running after shutdown (#1816)
   - Performance: Speed up project-wide symbol discovery by reusing directory-entry metadata for ignore
     checks and avoiding repeated ancestor-directory checks for files.
+  - Add `typescript_tsgo`, which uses the native language server of TypeScript 7 (`tsc --lsp`) and installs
+    the `typescript` package automatically (#1402)
 
 # v2.0.0 (2026-10-13)
 
