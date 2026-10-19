@@ -1121,10 +1121,11 @@ class TestSerenaAgent:
 
         # the external file is read-only: the absolute path the answer carries must not reach the editing tools as a
         # project path, which would write outside the project (the code editor joins a relative path to the root,
-        # and joining an absolute one leaves it absolute)
+        # and joining an absolute one leaves it absolute). The tool's own path validation refuses it first; the code
+        # editor refuses it again for any caller that bypasses the tools
         external_path = defining_symbol["relative_path"]
         contents_before = Path(external_path).read_text(encoding="utf-8")
-        with pytest.raises(ValueError, match="absolute"):
+        with pytest.raises(ValueError, match="outside the project root|absolute"):
             serena_agent.get_tool(ReplaceSymbolBodyTool).apply(
                 name_path=defining_symbol["name_path"], relative_path=external_path, body="def exists(path): ..."
             )
