@@ -73,7 +73,7 @@ class ResponseFacade(BaseModel):
 
 
 class ResponseConfigOverview(BaseModel):
-    active_project: dict[str, str | None]
+    active_project: dict[str, str | bool | None]
     context: dict[str, str]
     modes: list[dict[str, str]]
     active_tools: list[str]
@@ -529,10 +529,11 @@ class SerenaDashboardAPI:
         # Get active project info
         project = self._agent.get_active_project()
         active_project_name = project.project_name if project else None
-        project_info = {
+        project_info: dict[str, str | bool | None] = {
             "name": active_project_name,
             "language": ", ".join([ls_id.get_key() for ls_id in project.project_config.language_servers]) if project else None,
             "path": str(project.project_root) if project else None,
+            "is_trusted": project.is_trusted() if project else None,
         }
 
         # Get context info

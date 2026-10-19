@@ -1232,7 +1232,93 @@ class SolidLanguageServer(ABC):
         # By default, use the matcher of the language
         return self.ls_id.get_source_fn_matcher()
 
-    def is_ignored_path(self, relative_path: str, ignore_unsupported_files: bool = True) -> bool:
+    class ProjectEntry(ABC):
+        @abstractmethod
+        def get_abs_path(self) -> str:
+            pass
+
+        @abstractmethod
+        def is_file(self) -> bool:
+            pass
+
+        @abstractmethod
+        def is_dir(self) -> bool:
+            pass
+
+        @abstractmethod
+        def get_rel_path(self) -> str:
+            pass
+
+        @abstractmethod
+        def get_rel_path_obj(self) -> Path:
+            pass
+
+    class ProjectEntryFromRelPath(ProjectEntry):
+        def __init__(self, rel_path: str, repository_root: str):
+            self.rel_path = rel_path
+            self.repository_root = repository_root
+            self._abs_path: str | None = None
+            self._is_file: bool | None = None
+            self._rel_path_obj: Path | None = None
+
+        def get_abs_path(self) -> str:
+            if self._abs_path is None:
+                self._abs_path = os.path.join(self.repository_root, self.rel_path)
+            return self._abs_path
+
+        def get_rel_path_obj(self) -> Path:
+            if self._rel_path_obj is None:
+                self._rel_path_obj = Path(self.rel_path)
+            return self._rel_path_obj
+
+        def is_file(self) -> bool:
+            if self._is_file is None:
+                abs_path = self.get_abs_path()
+                exists = os.path.exists(abs_path)
+                if exists:
+                    self._is_file = os.path.isfile(abs_path)
+                else:
+                    # assume it is a file if it has a suffix/extension
+                    rel_path_obj = self.get_rel_path_obj()
+                    self._is_file = bool(rel_path_obj.suffix)
+            return self._is_file
+
+        def is_dir(self) -> bool:
+            return os.path.isdir(self.get_abs_path())
+
+        def get_rel_path(self) -> str:
+            return self.rel_path
+
+    class ProjectEntryFromDirEntry(ProjectEntry):
+        def __init__(self, dir_entry: os.DirEntry, rel_path: str):
+            self._dir_entry = dir_entry
+            self._rel_path = rel_path
+            self._rel_path_obj: Path | None = None
+
+        def get_abs_path(self) -> str:
+            return self._dir_entry.path
+
+        def is_file(self) -> bool:
+            return self._dir_entry.is_file()
+
+        def is_dir(self) -> bool:
+            return self._dir_entry.is_dir()
+
+        def get_rel_path(self) -> str:
+            return self._rel_path
+
+        def get_rel_path_obj(self) -> Path:
+            if self._rel_path_obj is None:
+                self._rel_path_obj = Path(self._rel_path)
+            return self._rel_path_obj
+
+    def is_ignored_path(
+        self,
+        relative_path: str,
+        ignore_unsupported_files: bool = True,
+        dir_entry: os.DirEntry | None = None,
+        check_path_for_ignored_dirnames: bool = True,
+    ) -> bool:
         """
         Determine if a path should be ignored based on file type
         and ignore patterns.
@@ -1245,35 +1331,40 @@ class SolidLanguageServer(ABC):
 
         :param relative_path: Relative path to check
         :param ignore_unsupported_files: whether files that are not supported source files should be ignored
+        :param dir_entry: optional os.DirEntry for the path, if available
+        :param check_path_for_ignored_dirnames: whether to check each directory component of the path against the always-ignored
+            directory names (expensive, so disable this if it is known that the containing directories are not subject to
+            the ignored directories rule)
 
         :return: True if the path should be ignored, False otherwise
         """
-        abs_path = os.path.join(self.repository_root_path, relative_path)
-        rel_path = Path(relative_path)
+        if dir_entry is None:
+            project_entry = self.ProjectEntryFromRelPath(relative_path, self.repository_root_path)
+        else:
+            project_entry = self.ProjectEntryFromDirEntry(dir_entry, relative_path)
 
-        # determine whether the path is a file: from the filesystem if the path exists, lexically otherwise
-        exists = os.path.exists(abs_path)
-        if not exists:
-            log.debug("Path %s does not exist; the ignore check is performed on the path itself", abs_path)
-        is_file = os.path.isfile(abs_path) if exists else bool(rel_path.suffix)
+        # determine whether the path is a file
+        is_file = project_entry.is_file()
 
         # check each directory component against always-ignored dirnames
-        dir_parts = rel_path.parts
-        if is_file:
-            dir_parts = dir_parts[:-1]
-        for part in dir_parts:
-            if not part:  # Skip empty parts (e.g., from leading '/')
-                continue
-            if self.is_ignored_dirname(part):
-                return True
+        if check_path_for_ignored_dirnames:
+            rel_path_obj = project_entry.get_rel_path_obj()
+            dir_parts = rel_path_obj.parts
+            if project_entry.is_file():
+                dir_parts = dir_parts[:-1]
+            for part in dir_parts:
+                if not part:  # Skip empty parts (e.g., from leading '/')
+                    continue
+                if self.is_ignored_dirname(part):
+                    return True
 
         # apply the unsupported-extension rule to files
         if is_file and ignore_unsupported_files:
             fn_matcher = self.get_source_fn_matcher()
-            if not fn_matcher.is_relevant_filename(abs_path):
+            if not fn_matcher.is_relevant_filename(project_entry.get_abs_path()):
                 return True
 
-        return match_path(relative_path, self.get_ignore_spec(), root_path=self.repository_root_path)
+        return match_path(relative_path, self.get_ignore_spec(), root_path=self.repository_root_path, is_dir=project_entry.is_dir())
 
     @contextmanager
     def start_server_context(self) -> Iterator["SolidLanguageServer"]:
@@ -2117,6 +2208,7 @@ class SolidLanguageServer(ABC):
         All symbols except the root packages will have a parent attribute.
         Will ignore directories starting with '.', language-specific defaults
         and user-configured directories (e.g. from .gitignore).
+        Ignore rules apply to unresolved paths. Discovered symbolic links are followed only in trusted projects.
 
         :param within_relative_path: pass a relative path to only consider symbols within this path.
             If a file is passed, only the symbols within this file will be considered.
@@ -2126,8 +2218,6 @@ class SolidLanguageServer(ABC):
 
         # Helper function to recursively process directories
         def process_directory(abs_dir_path: str) -> list[ls_types.UnifiedSymbolInformation]:
-            abs_dir_path = os.path.realpath(abs_dir_path)
-
             rel_dir_path: str | None
             try:
                 rel_dir_path = str(Path(abs_dir_path).relative_to(self.repository_root_path))
@@ -2151,13 +2241,17 @@ class SolidLanguageServer(ABC):
                     uri=str(pathlib.Path(abs_dir_path).as_uri()),
                     range={"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}},
                     absolutePath=str(abs_dir_path),
-                    relativePath=str(Path(abs_dir_path).resolve().relative_to(self.repository_root_path)),
+                    relativePath=os.path.relpath(abs_dir_path, self.repository_root_path),
                 ),
                 children=[],
             )
             result.append(package_symbol)
 
             for contained_dir_or_file_entry in contained_dir_or_file_entries:
+                # skip symbolic links during discovery in untrusted projects
+                if not self.config.is_project_trusted and contained_dir_or_file_entry.is_symlink():
+                    continue
+
                 contained_dir_or_file_name = contained_dir_or_file_entry.name
                 contained_dir_or_file_abs_path = contained_dir_or_file_entry.path
 
@@ -2174,11 +2268,14 @@ class SolidLanguageServer(ABC):
                     )
                     continue
 
-                if self.is_ignored_path(contained_dir_or_file_rel_path):
+                is_dir = contained_dir_or_file_entry.is_dir()
+                if self.is_ignored_path(
+                    contained_dir_or_file_rel_path, dir_entry=contained_dir_or_file_entry, check_path_for_ignored_dirnames=is_dir
+                ):
                     log.debug("Skipping item: %s (because it should be ignored)", contained_dir_or_file_rel_path)
                     continue
 
-                if contained_dir_or_file_entry.is_dir():
+                if is_dir:
                     child_symbols = process_directory(contained_dir_or_file_abs_path)
                     package_symbol["children"].extend(child_symbols)
                     for child in child_symbols:
@@ -2203,7 +2300,7 @@ class SolidLanguageServer(ABC):
                                 uri=str(pathlib.Path(contained_dir_or_file_abs_path).as_uri()),
                                 range=file_range,
                                 absolutePath=str(contained_dir_or_file_abs_path),
-                                relativePath=str(Path(contained_dir_or_file_abs_path).resolve().relative_to(self.repository_root_path)),
+                                relativePath=contained_dir_or_file_rel_path,
                             ),
                             children=file_root_nodes,
                             parent=package_symbol,
@@ -2213,22 +2310,6 @@ class SolidLanguageServer(ABC):
 
                     # Link file symbol with package
                     package_symbol["children"].append(file_symbol)
-
-                    # TODO: Not sure if this is actually still needed given recent changes to relative path handling
-                    def fix_relative_path(nodes: list[ls_types.UnifiedSymbolInformation]) -> None:
-                        for node in nodes:
-                            if "location" in node and "relativePath" in node["location"]:
-                                path = Path(node["location"]["relativePath"])  # type: ignore
-                                if path.is_absolute():
-                                    try:
-                                        path = path.relative_to(self.repository_root_path)
-                                        node["location"]["relativePath"] = str(path)
-                                    except Exception:
-                                        pass
-                            if "children" in node:
-                                fix_relative_path(node["children"])
-
-                    fix_relative_path(file_root_nodes)
 
             return result
 

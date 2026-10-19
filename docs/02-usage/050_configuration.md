@@ -102,7 +102,11 @@ Limitations applied to untrusted projects:
   - `activation_command` is a shell command that is to be run whenever the project is activated.
   - `ls_specific_settings` defines project-specific language server settings, which can change, in particular,
     how language servers are started for the project.
-- Following of symbolic links in project directories is not supported in untrusted projects (links are fully ignored).
+- Following of symbolic links in project directories is restricted in untrusted projects:
+  - Symbolic links are not followed when walking the project directory tree.
+  - Explicitly requested targets that resolve to locations outside the project root are rejected.
+- Project-local language server installations (e.g. a TypeScript LS installation in `node_modules`) will only be used
+  for trusted projects, while untrusted projects will use Serena's managed installation.
 
 ```{note}
 The term "trusted" implies only that one trusts the project enough to enable the additional features listed above.
@@ -1105,8 +1109,8 @@ Supported settings:
 | `intelephense_version` | `1.14.4` | Override the npm package version Serena installs when `ls_path` is not set. |
 | `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
 | `ignore_vendor` | `true` | Ignore directories named `vendor` while indexing the project. |
-| `maxFileSize` | unset | Forwarded as `intelephense.files.maxSize` in `initializationOptions`. |
-| `maxMemory` | unset | Forwarded as `intelephense.maxMemory` in `initializationOptions`. |
+| `maxFileSize` | unset | Maximum size (in bytes) of files Intelephense indexes; sets `intelephense.files.maxSize`. |
+| `maxMemory` | unset | Maximum heap size (in MB) of the Intelephense process; applied as Node.js option `--max-old-space-size`. |
 | `file_filter` | unset | Additional file extensions (with leading dot) to treat as PHP sources, e.g. `[".module", ".install"]`; added to the defaults `.php` / `.phtml` (#1710). |
 
 Example configuration making Drupal source files visible to the symbol tools:
@@ -1419,6 +1423,20 @@ The dict is forwarded to vtsls verbatim — Serena does not validate its structu
 - *tsserver fails to start after pointing at a custom `tsdk`* — verify the path resolves to a directory containing `tsserver.js` (e.g. `.yarn/sdks/typescript/lib`, not `.yarn/sdks/typescript`). Relative paths are interpreted relative to the project root.
 - *Setting appears in `solidlsp` logs but vtsls does not react* — cross-check the key against the vtsls configuration schema linked above. The dict is forwarded as-is, so an unknown or wrong-typed key is silently ignored by vtsls.
 - *Need to inspect what Serena is actually forwarding* — the dict is logged at INFO level via the `Forwarding user-provided initializationOptions to vtsls: …` line at language server startup.
+
+#### TypeScript via the native TypeScript 7 language server
+
+The configuration key is `typescript_tsgo`. Serena installs the `typescript` npm package and runs its native
+binary as `tsc --lsp --stdio`.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `typescript_version` | `7.0.2` | Override the `typescript` npm package version Serena installs (7.0 or later). |
+| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
+| `indexing_timeout` | `30.0` | Timeout in seconds for project indexing. |
+| `indexing_start_grace` | `0.0` | Timeout in seconds to wait for indexing progress to start before the first cross-file reference query; the native server loads projects while handling requests, so no wait is needed by default. |
 
 #### Vue
 

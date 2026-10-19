@@ -115,9 +115,17 @@ class AnsibleLanguageServer(SolidLanguageServer):
         return False
 
     @override
-    def is_ignored_path(self, relative_path: str, ignore_unsupported_files: bool = True) -> bool:
+    def is_ignored_path(
+        self,
+        relative_path: str,
+        ignore_unsupported_files: bool = True,
+        dir_entry: os.DirEntry | None = None,
+        check_path_for_ignored_dirnames: bool = True,
+    ) -> bool:
         # standard ignore rules (extension, gitignore, etc.)
-        if super().is_ignored_path(relative_path, ignore_unsupported_files):
+        if super().is_ignored_path(
+            relative_path, ignore_unsupported_files, dir_entry=dir_entry, check_path_for_ignored_dirnames=check_path_for_ignored_dirnames
+        ):
             return True
 
         # for yml/yaml files, check if they are in ansible-specific paths

@@ -2,9 +2,46 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Fix: the MCP registry manifest (`server.json`) declared Serena's own CLI arguments as runtime
+    arguments, so clients installing Serena from the MCP registry generated a launch command with a
+    stray package spec, and project auto-activation failed
+  - Fix: logs stopped updating when using SSE or streamable HTTP because Uvicorn's logging
+    configuration closed the Serena's log handlers. This is due to a bug in the MCP SDK,
+    in which the logging configuration override was effectively hard-coded.
+    We now patch Uvicorn's log config constructor to prevent this.
+    This affected both dashboard log retrieval and file logs written by Serena.
+   
+* Dashboard:
+  - Show an `[untrusted]` indicator beside the active project name for untrusted projects,
+    with a formatted tooltip explaining the limitations and a link to the trusted-projects
+    documentation. Add reusable tooltip support for hover and keyboard interaction.
+  - Change the default value of `web_dashboard_open_on_launch` to false on systems that support
+    tray-based access to the dashboard.
+
+* Security:
+  - Fix: typescript-language-server loaded `node_modules/typescript/lib/tsserver.js` from the project
+    whenever the project provided one, so merely opening an untrusted repository executed JavaScript
+    supplied by that repository. tsserver is now pinned to the TypeScript installation managed by
+    Serena unless the project is trusted; loading the project's own TypeScript has become a
+    trust-gated feature (#2129)
+
 * Language Servers:
+  - Fix: the Intelephense settings `maxMemory` and `maxFileSize` had no effect, because they were passed
+    as initialization options, which Intelephense does not read; `maxMemory` now limits the heap of the
+    server process, and `maxFileSize` is passed as `intelephense.files.maxSize`
+  - Fix: Explicit symbol and diagnostics requests now validate their input paths against the project's
+    trust policy. Symlinks to files outside the project root are rejected in untrusted projects;
+    links within the project and outside-root links in trusted projects remain supported (#2163).
+  - Fix: Project-wide symbol discovery now skips file and directory symlinks in untrusted projects.
+    In trusted projects, ignore rules consistently apply to unresolved alias paths, and symlinks to
+    targets outside the project root no longer cause discovery to fail (#2163).
   - Scala: add opt-in setting `terminate_bloop_on_stop` to terminate the Bloop build-server daemons
     that Metals leaves running after shutdown (#1816)
+  - Performance: Speed up project-wide symbol discovery by reusing directory-entry metadata for ignore
+    checks and avoiding repeated ancestor-directory checks for files.
+  - Add `typescript_tsgo`, which uses the native language server of TypeScript 7 (`tsc --lsp`) and installs
+    the `typescript` package automatically (#1402)
 
 # v2.0.0 (2026-10-13)
 
