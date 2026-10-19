@@ -242,6 +242,8 @@ class LanguageServerId(Enum):
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
+    TYPESCRIPT_TSGO = "typescript_tsgo"
+    """Native language server of TypeScript 7 (``tsc --lsp``) for TypeScript (instead of typescript-language-server, which is the default)"""
     PYTHON_JEDI = "python_jedi"
     """Jedi language server for Python (instead of pyright, which is the default)"""
     PYTHON_TY = "python_ty"
@@ -370,6 +372,7 @@ class LanguageServerId(Enum):
         """
         return self in {
             self.TYPESCRIPT_VTS,
+            self.TYPESCRIPT_TSGO,
             self.PYTHON_JEDI,
             self.PYTHON_TY,
             self.PYTHON_PYREFLY,
@@ -450,7 +453,7 @@ class LanguageServerId(Enum):
                 return FilenameMatcher(".py", ".pyi")
             case self.JAVA:
                 return FilenameMatcher(".java")
-            case self.TYPESCRIPT | self.TYPESCRIPT_VTS:
+            case self.TYPESCRIPT | self.TYPESCRIPT_VTS | self.TYPESCRIPT_TSGO:
                 # see https://github.com/oraios/serena/issues/204
                 path_patterns = []
                 for prefix in ["c", "m", ""]:
@@ -750,6 +753,10 @@ class LanguageServerId(Enum):
                 from solidlsp.language_servers.vts_language_server import VtsLanguageServer
 
                 return VtsLanguageServer
+            case self.TYPESCRIPT_TSGO:
+                from solidlsp.language_servers.tsgo_language_server import TsgoLanguageServer
+
+                return TsgoLanguageServer
             case self.VUE:
                 from solidlsp.language_servers.vue_language_server import VueLanguageServer
 

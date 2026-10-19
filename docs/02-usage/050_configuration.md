@@ -1423,6 +1423,20 @@ The dict is forwarded to vtsls verbatim — Serena does not validate its structu
 - *Setting appears in `solidlsp` logs but vtsls does not react* — cross-check the key against the vtsls configuration schema linked above. The dict is forwarded as-is, so an unknown or wrong-typed key is silently ignored by vtsls.
 - *Need to inspect what Serena is actually forwarding* — the dict is logged at INFO level via the `Forwarding user-provided initializationOptions to vtsls: …` line at language server startup.
 
+#### TypeScript via the native TypeScript 7 language server
+
+The configuration key is `typescript_tsgo`. Serena installs the `typescript` npm package and runs its native
+binary as `tsc --lsp --stdio`.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `typescript_version` | `7.0.2` | Override the `typescript` npm package version Serena installs (7.0 or later). |
+| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
+| `indexing_timeout` | `30.0` | Timeout in seconds for project indexing. |
+| `indexing_start_grace` | `0.0` | Timeout in seconds to wait for indexing progress to start before the first cross-file reference query; the native server loads projects while handling requests, so no wait is needed by default. |
+
 #### Vue
 
 Serena uses `@vue/language-server` (Volar) for the `vue` language key, together with a companion TypeScript language server.

@@ -92,9 +92,11 @@ _LANGUAGE_REPO_ALIASES: dict[LanguageServerId, LanguageServerId] = {
     LanguageServerId.RUBY_SOLARGRAPH: LanguageServerId.RUBY,
     LanguageServerId.PYTHON_TY: LanguageServerId.PYTHON,
     LanguageServerId.PYTHON_PYREFLY: LanguageServerId.PYTHON,
+    LanguageServerId.TYPESCRIPT_TSGO: LanguageServerId.TYPESCRIPT,
 }
 
 PYTHON_LANGUAGE_BACKENDS = [LanguageServerId.PYTHON, LanguageServerId.PYTHON_TY, LanguageServerId.PYTHON_BASEDPYRIGHT]
+TYPESCRIPT_LANGUAGE_BACKENDS = [LanguageServerId.TYPESCRIPT, LanguageServerId.TYPESCRIPT_TSGO]
 
 
 def get_repo_path(language: LanguageServerId) -> Path:
@@ -342,6 +344,7 @@ _LANGUAGE_PYTEST_MARKERS: dict[LanguageServerId, list[MarkDecorator | Mark]] = {
     LanguageServerId.PYTHON_BASEDPYRIGHT: [pytest.mark.python],
     LanguageServerId.RUST: [pytest.mark.rust],
     LanguageServerId.TYPESCRIPT: [pytest.mark.typescript],
+    LanguageServerId.TYPESCRIPT_TSGO: [pytest.mark.typescript],
     LanguageServerId.BSL: [pytest.mark.bsl],
     LanguageServerId.SVELTE: [pytest.mark.svelte],
     LanguageServerId.ANGULAR: [pytest.mark.angular],

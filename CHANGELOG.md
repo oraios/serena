@@ -38,6 +38,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     targets outside the project root no longer cause discovery to fail (#2163).
   - Performance: Speed up project-wide symbol discovery by reusing directory-entry metadata for ignore
     checks and avoiding repeated ancestor-directory checks for files.
+  - Add `typescript_tsgo`, which uses the native language server of TypeScript 7 (`tsc --lsp`) and installs
+    the `typescript` package automatically (#1402)
 
 # v2.0.0 (2026-10-13)
 
