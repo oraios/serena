@@ -14,6 +14,7 @@ from serena.agent import SerenaAgent
 from serena.config.serena_config import (
     DEFAULT_PROJECT_SERENA_FOLDER_LOCATION,
     AgentInterface,
+    LanguageServerFileSystemSyncStrategy,
     ProjectConfig,
     RegisteredProject,
     SerenaConfig,
@@ -22,6 +23,7 @@ from serena.config.serena_config import (
 from serena.constants import PROJECT_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
 from serena.language_backend import BuiltinLanguageBackend
 from serena.project import MemoryManager, Project
+from serena.util.yaml import load_yaml
 from solidlsp.ls_config import LanguageServerId
 from test.conftest import create_default_serena_config
 
@@ -164,6 +166,60 @@ class TestProjectConfig:
     def test_template_is_complete(self):
         _, is_complete = ProjectConfig._load_yaml_dict(PROJECT_TEMPLATE_FILE)
         assert is_complete, "Project template YAML is incomplete; all fields must be present (with descriptions)."
+
+
+class TestLanguageServerFileSystemSyncStrategy:
+    @staticmethod
+    def _project_config(strategy: LanguageServerFileSystemSyncStrategy | None) -> ProjectConfig:
+        return ProjectConfig(
+            project_name="test",
+            language_servers=[LanguageServerId.PYTHON],
+            ls_file_system_sync_strategy=strategy,
+        )
+
+    def test_unset_strategy_uses_recommended_full_strategy(self):
+        config = SerenaConfig()
+
+        assert config.ls_file_system_sync_strategy is None
+        assert config.determine_ls_file_system_sync_strategy() == LanguageServerFileSystemSyncStrategy.FULL
+
+    def test_project_strategy_overrides_global_strategy(self):
+        config = SerenaConfig(ls_file_system_sync_strategy=LanguageServerFileSystemSyncStrategy.NONE)
+        project_config = self._project_config(LanguageServerFileSystemSyncStrategy.FULL)
+
+        assert config.determine_ls_file_system_sync_strategy(project_config) == LanguageServerFileSystemSyncStrategy.FULL
+
+    def test_project_without_strategy_uses_global_strategy(self):
+        config = SerenaConfig(ls_file_system_sync_strategy=LanguageServerFileSystemSyncStrategy.NONE)
+
+        assert config.determine_ls_file_system_sync_strategy(self._project_config(None)) == LanguageServerFileSystemSyncStrategy.NONE
+
+    def test_project_strategy_roundtrips_through_yaml(self):
+        project_config = self._project_config(LanguageServerFileSystemSyncStrategy.NONE)
+        data = project_config._to_yaml_dict()
+
+        assert data["ls_file_system_sync_strategy"] == "none"
+        assert (
+            ProjectConfig._from_dict(data, local_override_keys=[]).ls_file_system_sync_strategy == LanguageServerFileSystemSyncStrategy.NONE
+        )
+
+    def test_invalid_project_strategy_is_rejected(self):
+        data = self._project_config(None)._to_yaml_dict()
+        data["ls_file_system_sync_strategy"] = "invalid"
+
+        with pytest.raises(ValueError, match="Invalid ls_file_system_sync_strategy"):
+            ProjectConfig._from_dict(data, local_override_keys=[])
+
+    def test_project_local_strategy_is_loaded(self, tmp_path):
+        serena_dir = tmp_path / SERENA_MANAGED_DIR_NAME
+        serena_dir.mkdir()
+        (serena_dir / "project.yml").write_text('project_name: "test"\nlanguages: ["python"]\n')
+        (serena_dir / "project.local.yml").write_text("ls_file_system_sync_strategy: none\n")
+
+        project_config = ProjectConfig.load(tmp_path, SerenaConfig())
+
+        assert project_config.ls_file_system_sync_strategy == LanguageServerFileSystemSyncStrategy.NONE
+        assert "ls_file_system_sync_strategy" in project_config._local_override_keys
 
 
 class TestProjectConfigLanguageBackend:
@@ -639,6 +695,35 @@ class TestSerenaConfigLoadSave:
         self.master_config_path.write_text("projects:\n")
         config = SerenaConfig.from_config_file(generate_if_missing=False)
         assert config.projects == []
+
+    def test_file_system_sync_strategy_is_loaded_and_persisted(self):
+        self.master_config_path.write_text("projects: []\nls_file_system_sync_strategy: none\n")
+
+        config = SerenaConfig.from_config_file(generate_if_missing=False)
+
+        assert config.ls_file_system_sync_strategy == LanguageServerFileSystemSyncStrategy.NONE
+        assert SerenaConfig.from_config_file(generate_if_missing=False).ls_file_system_sync_strategy == (
+            LanguageServerFileSystemSyncStrategy.NONE
+        )
+
+    def test_unset_file_system_sync_strategy_is_loaded_and_persisted(self):
+        self.master_config_path.write_text("projects: []\nls_file_system_sync_strategy: null\n")
+
+        config = SerenaConfig.from_config_file(generate_if_missing=False)
+
+        assert config.ls_file_system_sync_strategy is None
+        assert config.determine_ls_file_system_sync_strategy() == LanguageServerFileSystemSyncStrategy.FULL
+        assert SerenaConfig.from_config_file(generate_if_missing=False).ls_file_system_sync_strategy is None
+
+    def test_missing_file_system_sync_strategy_is_migrated_to_unset(self):
+        self.master_config_path.write_text("projects: []\n")
+
+        config = SerenaConfig.from_config_file(generate_if_missing=False)
+        persisted_config = load_yaml(str(self.master_config_path))
+
+        assert config.determine_ls_file_system_sync_strategy() == LanguageServerFileSystemSyncStrategy.FULL
+        assert "ls_file_system_sync_strategy" in persisted_config
+        assert persisted_config["ls_file_system_sync_strategy"] is None
 
     @pytest.mark.parametrize("setting", ["", "auth_secret: null\n", 'auth_secret: ""\n'])
     def test_unset_auth_secret_is_generated_and_persisted(self, setting: str) -> None:

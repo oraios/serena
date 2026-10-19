@@ -63,6 +63,14 @@ activation_command_timeout: 180
 # This does not affect Serena's own files (e.g. memories and configuration files), which always use native line endings.
 line_ending:
 
+# strategy for synchronizing file-system changes made outside Serena with language servers.
+# Possible values:
+#  * unset: use the global setting or, if that is also unset, the recommended strategy (currently "full").
+#  * full: walk all project source files before symbolic operations and notify language servers of changes.
+#  * none: do not scan for external file changes. Only use this for a checkout that is not changed externally;
+#      otherwise language-server results may become stale after editor, agent, git, or build operations.
+ls_file_system_sync_strategy:
+
 # The language backend to use for this project.
 # If not set, the global setting from serena_config.yml is used.
 # Valid values: LSP, JetBrains

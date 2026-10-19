@@ -35,6 +35,8 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Language Servers:
   - Add VB.NET language server support (via the Roslyn-based `Microsoft.CodeAnalysis.LanguageServer`,
     also shared with the C# language server)
+  - Add `ls_file_system_sync_strategy` with `full` and `none` modes, allowing expensive pre-query
+    file-system scans to be disabled for checkouts without external changes and logging the synchronization duration (#2145).
   - Fix: the Intelephense settings `maxMemory` and `maxFileSize` had no effect, because they were passed
     as initialization options, which Intelephense does not read; `maxMemory` now limits the heap of the
     server process, and `maxFileSize` is passed as `intelephense.files.maxSize`
