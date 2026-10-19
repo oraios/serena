@@ -38,6 +38,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     targets outside the project root no longer cause discovery to fail (#2163).
   - Performance: Speed up project-wide symbol discovery by reusing directory-entry metadata for ignore
     checks and avoiding repeated ancestor-directory checks for files.
+  - Fix: Svelte and Astro companion TypeScript indexing now respects project ignore patterns and ignored
+    directory names (as Vue does since #2125), so ignored build output such as a `svelte-package` `dist/`
+    folder is no longer opened and pinned on the companion TS server
 
 # v2.0.0 (2026-10-13)
 
