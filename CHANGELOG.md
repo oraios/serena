@@ -12,6 +12,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     see `CONTRIBUTING.md`
 
 * General:
+  - Fix: Stop source directory symlink cycles, deduplicate source results, and bound the in-memory logging backlog
+    when a log consumer stalls.
   - **Major**: Add the Serena REPL as a new agent interface, reducing the tool set to a minimum and providing
     a general code execution environment for all Serena operations.
     This has several significant advantages over regular tool executions.  

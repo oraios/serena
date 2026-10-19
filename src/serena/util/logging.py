@@ -30,7 +30,7 @@ class MemoryLogHandler(logging.Handler):
         super().__init__(level=level)
         self.setFormatter(logging.Formatter(SERENA_LOG_FORMAT))
         self._log_buffer = LogBuffer(max_messages=max_messages)
-        self._log_queue: queue.Queue[str] = queue.Queue()
+        self._log_queue: queue.Queue[str] = queue.Queue(maxsize=LOG_MESSAGES_BUFFER_SIZE)
         self._stop_event = threading.Event()
         self._emit_callbacks: list[Callable[[str], None]] = []
 
@@ -47,7 +47,11 @@ class MemoryLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         msg = self.format(record)
-        self._log_queue.put_nowait(msg)
+        try:
+            self._log_queue.put_nowait(msg)
+        except queue.Full:
+            # Logging must not block application threads when a consumer stalls.
+            pass
 
     def _process_queue(self) -> None:
         while not self._stop_event.is_set():

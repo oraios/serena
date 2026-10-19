@@ -359,9 +359,18 @@ class Project(ToStringMixin):
         if os.path.isfile(start_path):
             return [relative_path]
         else:
+            directory_ancestors = []
+            source_files = set()
             # os.walk hands back directories and files separately, so `is_file` is already known here and
             # does not have to be re-derived from the filesystem for every one of them.
             for root, dirs, files in os.walk(start_path, followlinks=True):
+                real_root = os.path.realpath(root)
+                while directory_ancestors and directory_ancestors[-1][0] != os.path.dirname(root):
+                    directory_ancestors.pop()
+                if any(real_root == ancestor[1] for ancestor in directory_ancestors):
+                    dirs.clear()
+                    continue
+                directory_ancestors.append((root, real_root))
                 # prevent recursion into ignored directories
                 dirs[:] = [d for d in dirs if not self.is_ignored_path(os.path.join(root, d), is_file=False)]
 
@@ -370,6 +379,9 @@ class Project(ToStringMixin):
                     abs_file_path = os.path.join(root, file)
                     try:
                         if not self.is_ignored_path(abs_file_path, ignore_non_source_files=True, is_file=True):
+                            real_file_path = os.path.realpath(abs_file_path)
+                            if real_file_path in source_files:
+                                continue
                             try:
                                 rel_file_path = os.path.relpath(abs_file_path, start=self.project_root)
                             except Exception:
@@ -379,6 +391,7 @@ class Project(ToStringMixin):
                                     self.project_root,
                                 )
                                 continue
+                            source_files.add(real_file_path)
                             rel_file_paths.append(rel_file_path)
                     except FileNotFoundError:
                         log.warning(
