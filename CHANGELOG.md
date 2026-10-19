@@ -38,6 +38,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     targets outside the project root no longer cause discovery to fail (#2163).
   - Performance: Speed up project-wide symbol discovery by reusing directory-entry metadata for ignore
     checks and avoiding repeated ancestor-directory checks for files.
+  - Vue: `ls_path`/`ls_base_cmd` in `ls_specific_settings["vue"]` are now honoured. Together with the new
+    `ts_ls_path`, `tsdk_path` and `vue_plugin_path` settings they let an existing installation be used,
+    in which case Serena neither installs anything nor requires node/npm.
+  - Fix: Vue required npm even when the managed installation was up to date; npm is now only required
+    for installing. Missing node/npm raise a `SolidLSPException` instead of failing an `assert`
+    (which is skipped under `python -O`).
 
 # v2.0.0 (2026-10-13)
 

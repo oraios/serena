@@ -10,6 +10,7 @@ import pathlib
 import shutil
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path, PurePath
 from time import sleep
 from typing import Any
@@ -33,6 +34,20 @@ from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class VueRuntimePaths:
+    """Resolved locations of everything the Vue LS and its companion TypeScript LS need at runtime."""
+
+    vue_ls_cmd: list[str]
+    """launch command of @vue/language-server (including ``--stdio``)"""
+    ts_ls_executable_path: str
+    """the typescript-language-server executable used by the companion server"""
+    tsdk_path: str
+    """the ``lib`` directory of the TypeScript installation (tsdk)"""
+    vue_plugin_path: str
+    """the directory of the @vue/typescript-plugin package"""
 
 
 class VueTypeScriptServer(TypeScriptLanguageServer):
@@ -156,6 +171,12 @@ class VueLanguageServer(SolidLanguageServer):
 
     You can pass the following entries in ls_specific_settings["vue"]:
         - vue_language_server_version: Version of @vue/language-server to install (default: "3.1.5")
+        - ls_path / ls_base_cmd: Use an existing @vue/language-server instead of the managed npm installation
+          (``--stdio`` is appended). When either is set, Serena installs nothing and the following entries
+          must be set as well:
+            - ts_ls_path: the typescript-language-server executable
+            - tsdk_path: the ``lib`` directory of the TypeScript installation
+            - vue_plugin_path: the directory of the @vue/typescript-plugin package
 
     Note: TypeScript versions are configured via ls_specific_settings["typescript"]:
         - typescript_version: Version of TypeScript to install (default: "5.9.3")
@@ -166,12 +187,14 @@ class VueLanguageServer(SolidLanguageServer):
     VUE_SERVER_READY_TIMEOUT = 3.0
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
-        vue_lsp_executable_path, self.tsdk_path, self._ts_ls_cmd = self._setup_runtime_dependencies(config, solidlsp_settings)
-        self._vue_ls_dir = os.path.join(self.ls_resources_dir(solidlsp_settings), "vue-lsp")
+        runtime_paths = self._setup_runtime_dependencies(config, solidlsp_settings)
+        self.tsdk_path = runtime_paths.tsdk_path
+        self._ts_ls_cmd = runtime_paths.ts_ls_executable_path
+        self._vue_plugin_path = runtime_paths.vue_plugin_path
         super().__init__(
             config,
             repository_root_path,
-            ProcessLaunchInfo(cmd=vue_lsp_executable_path, cwd=repository_root_path),
+            ProcessLaunchInfo(cmd=runtime_paths.vue_ls_cmd, cwd=repository_root_path),
             "vue",
             solidlsp_settings,
             cache_version_raw_document_symbols=2,
@@ -531,18 +554,57 @@ class VueLanguageServer(SolidLanguageServer):
         )
         return deleted_text
 
+    @staticmethod
+    def _get_custom_runtime_paths(vue_config: SolidLSPSettings.CustomLSSettings) -> VueRuntimePaths | None:
+        """
+        :return: the user-provided runtime paths if ``ls_path``/``ls_base_cmd`` is configured, else ``None``
+        :raises SolidLSPException: if the custom launch command is configured incompletely
+        """
+        base_cmd = vue_config.get("ls_base_cmd")
+        if base_cmd is not None and not isinstance(base_cmd, list):
+            log.warning("The 'ls_base_cmd' setting should be a list of strings. Ignoring the provided value: %s", base_cmd)
+            base_cmd = None
+        if base_cmd is None:
+            ls_path = vue_config.get("ls_path")
+            if ls_path is None:
+                return None
+            base_cmd = [ls_path]
+
+        companion_keys = ("ts_ls_path", "tsdk_path", "vue_plugin_path")
+        missing = [key for key in companion_keys if not vue_config.get(key)]
+        if missing:
+            raise SolidLSPException(
+                "A custom Vue language server ('ls_path'/'ls_base_cmd') also requires the settings "
+                f"{', '.join(repr(k) for k in companion_keys)} in ls_specific_settings['vue']; "
+                f"missing: {', '.join(repr(k) for k in missing)}"
+            )
+        log.info("Using user-provided Vue language server: %s", base_cmd)
+        return VueRuntimePaths(
+            vue_ls_cmd=[*base_cmd, "--stdio"],
+            ts_ls_executable_path=vue_config.get("ts_ls_path"),
+            tsdk_path=vue_config.get("tsdk_path"),
+            vue_plugin_path=vue_config.get("vue_plugin_path"),
+        )
+
+    @staticmethod
+    def _require_executable(name: str, hint: str) -> None:
+        if shutil.which(name) is None:
+            raise SolidLSPException(f"{name} is not installed or isn't in PATH. {hint}")
+
     @classmethod
-    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> tuple[list[str], str, str]:
-        is_node_installed = shutil.which("node") is not None
-        assert is_node_installed, "node is not installed or isn't in PATH. Please install NodeJS and try again."
-        is_npm_installed = shutil.which("npm") is not None
-        assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
+    def _setup_runtime_dependencies(cls, config: LanguageServerConfig, solidlsp_settings: SolidLSPSettings) -> VueRuntimePaths:
+        vue_config = solidlsp_settings.get_ls_specific_settings(LanguageServerId.VUE)
+        custom_paths = cls._get_custom_runtime_paths(vue_config)
+        if custom_paths is not None:
+            return custom_paths
+
+        # the managed installation consists of npm package shims, which require node to run
+        cls._require_executable("node", "Please install NodeJS and try again.")
 
         # Get TypeScript version settings from TypeScript language server settings
         typescript_config = solidlsp_settings.get_ls_specific_settings(LanguageServerId.TYPESCRIPT)
         typescript_version = typescript_config.get("typescript_version", "5.9.3")
         typescript_language_server_version = typescript_config.get("typescript_language_server_version", "5.1.3")
-        vue_config = solidlsp_settings.get_ls_specific_settings(LanguageServerId.VUE)
         vue_language_server_version = vue_config.get("vue_language_server_version", "3.1.5")
         npm_registry = vue_config.get("npm_registry", typescript_config.get("npm_registry"))
 
@@ -578,6 +640,7 @@ class VueLanguageServer(SolidLanguageServer):
             ts_ls_executable_path += ".cmd"
 
         tsdk_path = os.path.join(vue_ls_dir, "node_modules", "typescript", "lib")
+        vue_plugin_path = os.path.join(vue_ls_dir, "node_modules", "@vue", "typescript-plugin")
 
         # Check if installation is needed based on executables AND version
         version_file = os.path.join(vue_ls_dir, ".installed_version")
@@ -601,6 +664,8 @@ class VueLanguageServer(SolidLanguageServer):
             needs_install = True
 
         if needs_install:
+            # npm is only required for installing; an up-to-date installation is used without it
+            cls._require_executable("npm", "Please install npm and try again.")
             log.info("Installing Vue/TypeScript Language Server dependencies...")
             deps.install(vue_ls_dir)
             # Write version marker file
@@ -618,7 +683,12 @@ class VueLanguageServer(SolidLanguageServer):
                 f"typescript-language-server executable not found at {ts_ls_executable_path}, something went wrong with the installation."
             )
 
-        return [vue_executable_path, "--stdio"], tsdk_path, ts_ls_executable_path
+        return VueRuntimePaths(
+            vue_ls_cmd=[vue_executable_path, "--stdio"],
+            ts_ls_executable_path=ts_ls_executable_path,
+            tsdk_path=tsdk_path,
+            vue_plugin_path=vue_plugin_path,
+        )
 
     def _create_base_initialize_params(self) -> dict:
         initialize_params = {
@@ -659,8 +729,6 @@ class VueLanguageServer(SolidLanguageServer):
 
     def _start_typescript_server(self) -> None:
         try:
-            vue_ts_plugin_path = os.path.join(self._vue_ls_dir, "node_modules", "@vue", "typescript-plugin")
-
             ts_config = LanguageServerConfig(
                 ls_id=LanguageServerId.TYPESCRIPT,
                 trace_lsp_communication=False,
@@ -671,7 +739,7 @@ class VueLanguageServer(SolidLanguageServer):
                 config=ts_config,
                 repository_root_path=self.repository_root_path,
                 solidlsp_settings=self._solidlsp_settings,
-                vue_plugin_path=vue_ts_plugin_path,
+                vue_plugin_path=self._vue_plugin_path,
                 tsdk_path=self.tsdk_path,
                 ts_ls_executable_path=self._ts_ls_cmd,
             )
