@@ -31,8 +31,9 @@ line_ending: native
 # Possible values:
 #  * unset: use the recommended strategy for reliable results (currently "full").
 #  * full: walk all project source files before symbolic operations and notify language servers of changes.
-#  * none: do not scan for external file changes. Only use this for a checkout that is not changed externally;
-#      otherwise language-server results may become stale after editor, agent, git, or build operations.
+#  * none: do not scan for file changes made outside Serena. Only use this for a checkout whose files
+#      are changed only through Serena; otherwise language-server results may become stale after editor,
+#      agent, git, or build operations.
 # This setting can be overridden on a per-project basis in project.yml or project.local.yml.
 ls_file_system_sync_strategy:
 
