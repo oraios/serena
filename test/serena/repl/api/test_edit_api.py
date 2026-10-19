@@ -6,7 +6,7 @@ import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from unittest.mock import MagicMock
 
 import pytest
@@ -157,3 +157,69 @@ def test_replace_lines_keeps_the_file_when_the_insert_fails(
         api.replace_lines("a.py", start_line=1, end_line=2, content="TWO\nTHREE")
 
     assert (tmp_path / "a.py").read_text(encoding="utf-8") == "one\ntwo\nthree\nfour\n"
+
+
+@pytest.mark.parametrize("mode", ["literal", "regex"])
+@pytest.mark.parametrize(
+    "updated_content",
+    [
+        "b = foo()\nc = foo()\n",
+        "new = foo()\na = foo()\nb = foo()\nc = foo()\n",
+        "a = foo()\nc = foo()\nb = foo()\n",
+    ],
+    ids=["earlier-match-deleted", "earlier-match-inserted", "matches-reordered"],
+)
+def test_replace_in_files_rejects_preview_selection_after_file_changes(
+    line_editing_api: tuple[EditApi, _LineEditingCodeEditor], tmp_path: Path, mode: Literal["literal", "regex"], updated_content: str
+) -> None:
+    api, _ = line_editing_api
+    source = tmp_path / "a.py"
+    source.write_text("a = foo()\nb = foo()\nc = foo()\n", encoding="utf-8")
+    preview = api.replace_in_files("foo", "bar", mode=mode, dry_run=True)
+    assert isinstance(preview, ReplacementPreview)
+    selected_id = preview.occurrences[1].occurrence_id
+
+    source.write_text(updated_content, encoding="utf-8")
+    other_source = tmp_path / "b.py"
+    other_source.write_text("other = foo()\n", encoding="utf-8")
+    other_preview = api.replace_in_files("foo", "bar", mode=mode, relative_path="b.py", dry_run=True)
+    assert isinstance(other_preview, ReplacementPreview)
+
+    with pytest.raises(ValueError, match="NO changes were applied"):
+        api.replace_in_files("foo", "bar", mode=mode, occurrence_ids=[other_preview.occurrences[0].occurrence_id, selected_id])
+
+    assert source.read_text(encoding="utf-8") == updated_content
+    assert other_source.read_text(encoding="utf-8") == "other = foo()\n"
+
+
+def test_replace_in_files_applies_preview_selection_when_another_file_changes(
+    line_editing_api: tuple[EditApi, _LineEditingCodeEditor], tmp_path: Path
+) -> None:
+    api, _ = line_editing_api
+    source = tmp_path / "a.py"
+    source.write_text("a = foo()\nb = foo()\nc = foo()\n", encoding="utf-8")
+    preview = api.replace_in_files("foo", "bar", mode="literal", dry_run=True)
+    assert isinstance(preview, ReplacementPreview)
+    other_source = tmp_path / "b.py"
+    other_source.write_text("other = foo()\n", encoding="utf-8")
+
+    api.replace_in_files("foo", "bar", mode="literal", occurrence_ids=[preview.occurrences[1].occurrence_id])
+
+    assert source.read_text(encoding="utf-8") == "a = foo()\nb = bar()\nc = foo()\n"
+    assert other_source.read_text(encoding="utf-8") == "other = foo()\n"
+
+
+def test_replace_in_files_rejects_preview_selection_for_a_different_match_range(
+    line_editing_api: tuple[EditApi, _LineEditingCodeEditor], tmp_path: Path
+) -> None:
+    api, _ = line_editing_api
+    source = tmp_path / "a.py"
+    original_content = "a = foo()\nb = foo()\n"
+    source.write_text(original_content, encoding="utf-8")
+    preview = api.replace_in_files(r"(?<=a = )foo", "bar", mode="regex", dry_run=True)
+    assert isinstance(preview, ReplacementPreview)
+
+    with pytest.raises(ValueError, match="NO changes were applied"):
+        api.replace_in_files(r"(?<=b = )foo", "bar", mode="regex", occurrence_ids=[preview.occurrences[0].occurrence_id])
+
+    assert source.read_text(encoding="utf-8") == original_content

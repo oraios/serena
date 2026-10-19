@@ -6,7 +6,7 @@ You can configure the following options in ls_specific_settings (in serena_confi
     ls_specific_settings:
       kotlin:
         ls_path: '/path/to/bin/intellij-server'  # Custom path to Kotlin Language Server executable
-        kotlin_lsp_version: '263.4702.0'  # Kotlin Language Server version (default: current bundled version)
+        kotlin_lsp_version: '263.6379.0'  # Kotlin Language Server version (default: current bundled version)
         jvm_options: '-Xmx2G'  # JVM options for Kotlin Language Server (default: -Xmx2G)
 
 Example configuration for large projects:
@@ -19,8 +19,8 @@ IntelliJ system directory:
     KLS is built on IntelliJ's platform, which by default creates a new ~52 MB
     idea-system<random>/ directory in /tmp for each instance. These directories
     are never cleaned up, which can exhaust RAM on tmpfs systems after many runs.
-    Serena redirects idea.system.path to <ls_resources_dir>/kotlin_language_server/system/,
-    making it a bounded per-project cache that persists across sessions (faster restarts).
+    Serena redirects idea.system.path to the claimed project cache's kotlin-lsp-system directory,
+    preserving the index across sessions while isolating concurrent instances.
 """
 # SPDX-License-Identifier: MIT
 
@@ -51,14 +51,17 @@ log = logging.getLogger(__name__)
 # -Xmx2G: 2GB heap is sufficient for most projects; override via ls_specific_settings for large codebases
 DEFAULT_KOTLIN_JVM_OPTIONS = "-Xmx2G"
 
-KOTLIN_LSP_ALLOWED_HOSTS = ("download-cdn.jetbrains.com",)
+KOTLIN_LSP_ALLOWED_HOSTS = ("download-cdn.jetbrains.com", "download.jetbrains.com")
 
 # Version pinning convention (see eclipse_jdtls.py for the full spec):
 #   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
 #   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
 # NOTE: After changing either pinned version, run scripts/update_downloaded_dependency_hashes.py.
+# IMPORTANT: We have now switched back to the initial version, because all newer versions keep expiring
+#   after a short period of time and therefore cannot be reliably used.
+#   Until a new version is provided that does not expire, the DEFAULT version shall not be changed!
 INITIAL_KOTLIN_LSP_VERSION = "261.13587.0"
-DEFAULT_KOTLIN_LSP_VERSION = "263.4702.0"
+DEFAULT_KOTLIN_LSP_VERSION = INITIAL_KOTLIN_LSP_VERSION
 
 # Versions before this one use kotlin-lsp-{version}-{platform}.zip and a kotlin-lsp script.
 # Starting with 262.4739.0, JetBrains publishes kotlin-server archives with platform-specific
@@ -130,6 +133,7 @@ class KotlinLanguageServer(SolidLanguageServer):
             self._storage_lock: FileLock | None = None
             self._is_fallback_storage_dir = False
             self.storage_dir = self._claim_storage_dir(project_cache_dir)
+            self._system_dir = os.path.join(self.storage_dir, "kotlin-lsp-system")
 
         def _claim_storage_dir(self, project_cache_dir: str) -> str:
             """Claims the on-disk directory this instance's Kotlin LSP process will use for its index storage.
@@ -191,7 +195,7 @@ class KotlinLanguageServer(SolidLanguageServer):
                 cdn_path = "language-server/kotlin-server" if version_parts >= KOTLIN_SERVER_CDN_PATH_MIN_VERSION else "kotlin-lsp"
                 return KotlinLSPArtifact(
                     dependency=DownloadedDependency(
-                        url=f"https://download-cdn.jetbrains.com/{cdn_path}/{version}/{asset_name}",
+                        url=f"https://download.jetbrains.com/{cdn_path}/{version}/{asset_name}",
                         archive_type=archive_type,
                         allowed_hosts=KOTLIN_LSP_ALLOWED_HOSTS,
                         verified=verified,
@@ -205,7 +209,7 @@ class KotlinLanguageServer(SolidLanguageServer):
 
             return KotlinLSPArtifact(
                 dependency=DownloadedDependency(
-                    url=f"https://download-cdn.jetbrains.com/kotlin-lsp/{version}/kotlin-lsp-{version}-{kotlin_suffix}.zip",
+                    url=f"https://download.jetbrains.com/kotlin-lsp/{version}/kotlin-lsp-{version}-{kotlin_suffix}.zip",
                     archive_type="zip",
                     allowed_hosts=KOTLIN_LSP_ALLOWED_HOSTS,
                     verified=verified,
@@ -217,11 +221,12 @@ class KotlinLanguageServer(SolidLanguageServer):
         def update_dep_hashes(cls) -> None:
             pinned_artifacts = [
                 *(cls._create_artifact(INITIAL_KOTLIN_LSP_VERSION, PlatformId(platform)) for platform in LEGACY_PLATFORM_KOTLIN_SUFFIX),
-                *(
+            ]
+            if DEFAULT_KOTLIN_LSP_VERSION != INITIAL_KOTLIN_LSP_VERSION:
+                pinned_artifacts.extend(
                     cls._create_artifact(DEFAULT_KOTLIN_LSP_VERSION, PlatformId(platform))
                     for platform in KOTLIN_SERVER_ARTIFACT_BY_PLATFORM
-                ),
-            ]
+                )
             with DownloadedDependencyHashDatabase.get_instance().update_context() as database:
                 for artifact in pinned_artifacts:
                     database.update(artifact.dependency)
@@ -270,7 +275,7 @@ class KotlinLanguageServer(SolidLanguageServer):
             platform_id = PlatformUtils.get_platform_id()
             intellij_launcher_name = "intellij-server.exe" if platform_id.is_windows() else "intellij-server"
             if os.path.basename(core_path).lower() == intellij_launcher_name:
-                command.extend(["--system-path", os.path.join(self.storage_dir, "kotlin-lsp-system")])
+                command.extend(["--system-path", self._system_dir])
             return command
 
         def create_launch_command_env(self) -> dict[str, str]:
@@ -286,15 +291,9 @@ class KotlinLanguageServer(SolidLanguageServer):
             else:
                 jvm_options = DEFAULT_KOTLIN_JVM_OPTIONS
 
-            # Redirect IntelliJ's system directory to a stable path under ls_resources_dir.
-            # Without this, each KLS instance creates a new ~52 MB /tmp/idea-system<random>/ directory
-            # that is never removed on shutdown. On tmpfs systems this causes unbounded RAM consumption
-            # (e.g. 329 stale directories totalling 30 GiB after repeated test runs).
-            # Using a fixed path makes it a bounded per-project cache and preserves the IntelliJ index
-            # across sessions for faster restarts.
-            system_dir = os.path.join(self._ls_resources_dir, "system")
-            os.makedirs(system_dir, exist_ok=True)
-            idea_system_path_opt = f"-Didea.system.path={system_dir}"
+            # preserve the claimed system directory as one JVM option, including paths containing spaces
+            os.makedirs(self._system_dir, exist_ok=True)
+            idea_system_path_opt = f'-Didea.system.path="{self._system_dir}"'
             jvm_options_full = f"{jvm_options} {idea_system_path_opt}".strip() if jvm_options else idea_system_path_opt
 
             env["JAVA_TOOL_OPTIONS"] = jvm_options_full

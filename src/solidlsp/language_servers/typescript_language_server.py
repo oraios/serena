@@ -69,6 +69,25 @@ def prefer_non_node_modules_definition(definitions: list[ls_types.Location]) -> 
     return definitions[0]
 
 
+def _get_install_dir(ls_resources_dir: str, typescript_version: str, typescript_language_server_version: str) -> str:
+    """
+    Determines the directory into which the given combination of TypeScript and typescript-language-server
+    versions is installed.
+
+    :param ls_resources_dir: the language server's resources directory
+    :param typescript_version: the version of the `typescript` package
+    :param typescript_language_server_version: the version of the `typescript-language-server` package
+    :return: the installation directory (which contains the `node_modules` directory)
+    """
+    # legacy unversioned dir reserved for INITIAL pair; any other version combination goes into a versioned subdir
+    is_initial = (
+        typescript_version == INITIAL_TYPESCRIPT_VERSION
+        and typescript_language_server_version == INITIAL_TYPESCRIPT_LANGUAGE_SERVER_VERSION
+    )
+    ls_dirname = "ts-lsp" if is_initial else f"ts-lsp-{typescript_version}-{typescript_language_server_version}"
+    return os.path.join(ls_resources_dir, ls_dirname)
+
+
 class TypeScriptServerCrashedError(SolidLSPException):
     """Raised when tsserver reported its own abnormal exit via window/logMessage.
 
@@ -95,6 +114,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         - server_ready_timeout: float, timeout in seconds for the server-ready signal (default: 10.0)
         - indexing_start_grace: float, timeout in seconds to wait for tsserver to *start*
           reporting indexing progress before the first cross-file reference query (default: 5.0)
+
+    If the project is not trusted, tsserver is pinned to the TypeScript installation managed by SolidLSP
+    (see :meth:`_get_pinned_tsdk_path`); only a trusted project may have its own `node_modules/typescript`
+    loaded by typescript-language-server.
     """
 
     @classmethod
@@ -299,13 +322,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             is_npm_installed = shutil.which("npm") is not None
             assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
-            # legacy unversioned dir reserved for INITIAL pair; any other version combination goes into a versioned subdir
-            is_initial = (
-                typescript_version == INITIAL_TYPESCRIPT_VERSION
-                and typescript_language_server_version == INITIAL_TYPESCRIPT_LANGUAGE_SERVER_VERSION
-            )
-            ls_dirname = "ts-lsp" if is_initial else f"ts-lsp-{typescript_version}-{typescript_language_server_version}"
-            tsserver_ls_dir = os.path.join(self._ls_resources_dir, ls_dirname)
+            tsserver_ls_dir = _get_install_dir(self._ls_resources_dir, typescript_version, typescript_language_server_version)
             tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
 
             if not os.path.exists(tsserver_executable_path):
@@ -332,6 +349,46 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             return "javascriptreact"
         return self.language_id
 
+    def _get_pinned_tsdk_path(self) -> str:
+        """
+        :return: the path of the TypeScript ``lib`` directory to which tsserver is to be pinned, i.e. the
+            TypeScript installation that is managed by SolidLSP rather than provided by the project
+        """
+        install_dir = _get_install_dir(
+            self._ls_resources_dir,
+            self._custom_settings.get("typescript_version", DEFAULT_TYPESCRIPT_VERSION),
+            self._custom_settings.get("typescript_language_server_version", DEFAULT_TYPESCRIPT_LANGUAGE_SERVER_VERSION),
+        )
+        return os.path.join(install_dir, "node_modules", "typescript", "lib")
+
+    def _create_tsserver_initialization_options(self) -> dict[str, Any]:
+        """
+        Creates the ``tsserver`` entry of the initialization options, which pins the TypeScript version that
+        typescript-language-server loads.
+
+        Given no pinned path, typescript-language-server prefers the workspace's own
+        ``node_modules/typescript/lib/tsserver.js`` over the version installed by SolidLSP, i.e. JavaScript
+        taken from the project is executed as soon as the language server starts. Only a trusted project may
+        therefore be left unpinned.
+
+        :return: the options to be added to ``initializationOptions`` (empty for a trusted project)
+        :raises SolidLSPException: if the project is untrusted and no managed TypeScript installation exists,
+            which is the case if the launch command is user-provided (``ls_path``/``ls_base_cmd``)
+        """
+        if self.config.is_project_trusted:
+            return {}
+        tsdk_path = self._get_pinned_tsdk_path()
+        if not os.path.isdir(tsdk_path):
+            raise SolidLSPException(
+                f"Cannot pin tsserver for untrusted project {self.repository_root_path}: no TypeScript "
+                f"installation at {tsdk_path}. Refusing to continue without the pin, because the project's "
+                f"own node_modules/typescript would be executed instead. Either mark the project as trusted, "
+                f"or drop the 'ls_path'/'ls_base_cmd' setting for typescript so that the TypeScript "
+                f"installation is managed here."
+            )
+        log.info("Project is not trusted; pinning tsserver to %s", tsdk_path)
+        return {"tsserver": {"path": tsdk_path}}
+
     def _create_base_initialize_params(self) -> dict:
         initialize_params = {
             "locale": "en",
@@ -341,6 +398,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             # machines). Serena relies on the types already installed in the project instead.
             "initializationOptions": {
                 "disableAutomaticTypingAcquisition": True,
+                **self._create_tsserver_initialization_options(),
             },
             "capabilities": {
                 "textDocument": {

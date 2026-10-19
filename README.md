@@ -24,15 +24,14 @@ approaches that rely on low-level concepts like line numbers or primitive search
 Practically, this means that your agent operates **faster, more efficiently and more reliably**, especially in larger and
 more complex codebases.
 
-> [!IMPORTANT]
-> Do not install Serena via an MCP or plugin marketplace! They contain outdated and suboptimal installation commands. 
-> Instead, follow our [Quick Start](#quick-start) instructions.
+> [!TIP]
+> Serena v2 with the new **REPL-based agent interface** has been released.    
+> [Learn more](https://oraios.github.io/serena/01-about/035_tools.html#serena-s-repl-code-execution-based-interface) 
+> about the new interface and how to [configure it](https://oraios.github.io/serena/02-usage/050_configuration.html#agent-interfaces).
 
-## Quick Demo
+## Video
 
-https://github.com/user-attachments/assets/8d11646e-b80e-4723-b9d7-32d6101b5f58
-
-:tv: Longer video: [Introduction to Serena in 5 Minutes (YouTube)](https://www.youtube.com/watch?v=5QN7gN1KYLA)
+<a href="https://www.youtube.com/watch?v=5QN7gN1KYLA"><img src="resources/serena-video-placeholder.png" style="width:500px"></a>
 
 ## What Our "End Users" Say
 
@@ -217,11 +216,10 @@ To achieve this, Serena offers multiple levels of (composable) configuration:
 
 ## Quick Start
 
-**Prerequisites**. Serena is managed by *uv*, and [installing uv](https://docs.astral.sh/uv/getting-started/installation/) is the only required prerequisite.
+> [!IMPORTANT]
+> Do not install Serena via an MCP or plugin marketplace! They contain outdated and suboptimal installation commands.
 
-> [!NOTE]
-> When using the language server backend, some additional dependencies may need to be installed to support certain languages;
-> see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.
+**Prerequisites**. Serena is managed by *uv*, and [installing uv](https://docs.astral.sh/uv/getting-started/installation/) is the only required prerequisite.
 
 **Install Serena**. Serena is installed via uv as follows:
 
@@ -230,6 +228,10 @@ uv tool install -p 3.13 serena-agent
 ```
 
 After successful installation, the command `serena` should be available in your shell.
+
+> [!NOTE]
+> When using the language server backend, some additional dependencies may need to be installed to support certain languages;
+> see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.
 
 **Initialise Serena**. To initialise Serena and verify that your setup works correctly, simply run:
 
