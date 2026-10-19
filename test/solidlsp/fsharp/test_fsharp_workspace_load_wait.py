@@ -47,7 +47,7 @@ class _FakeServer:
             threading.Timer(self._workspace_load_delay, self._report_workspace_load).start()
 
     def _report_workspace_load(self) -> None:
-        self.workspace_load_reported_at = time.monotonic()
+        self.workspace_load_reported_at = time.perf_counter()
         self._notification_handlers["fsharp/notifyWorkspace"]({"content": _WORKSPACE_LOAD_FINISHED})
 
 
@@ -72,9 +72,9 @@ def test_start_returns_only_after_the_workspace_has_been_loaded(tmp_path, monkey
     monkeypatch.setattr(FSharpLanguageServer, "WORKSPACE_LOAD_TIMEOUT", 5.0)
     ls, fake = _fsharp_ls(str(tmp_path), workspace_load_delay=0.5)
 
-    started_at = time.monotonic()
+    started_at = time.perf_counter()
     ls._start_server()
-    returned_at = time.monotonic()
+    returned_at = time.perf_counter()
 
     assert fake.workspace_load_reported_at is not None, "the fake server never reported a project load"
     assert returned_at > fake.workspace_load_reported_at
@@ -87,10 +87,10 @@ def test_start_does_not_wait_when_there_is_no_project_to_load(tmp_path, monkeypa
     monkeypatch.setattr(FSharpLanguageServer, "WORKSPACE_LOAD_TIMEOUT", 0.2)
     ls, _ = _fsharp_ls(str(tmp_path), workspace_load_delay=None)
 
-    started_at = time.monotonic()
+    started_at = time.perf_counter()
     ls._start_server()
 
-    assert time.monotonic() - started_at < 0.2
+    assert time.perf_counter() - started_at < 0.2
 
 
 def test_start_gives_up_when_the_workspace_load_is_never_reported(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -98,8 +98,9 @@ def test_start_gives_up_when_the_workspace_load_is_never_reported(tmp_path, monk
     monkeypatch.setattr(FSharpLanguageServer, "WORKSPACE_LOAD_TIMEOUT", 0.2)
     ls, _ = _fsharp_ls(str(tmp_path), workspace_load_delay=None)
 
-    started_at = time.monotonic()
+    started_at = time.perf_counter()
     ls._start_server()
 
-    assert 0.2 <= time.monotonic() - started_at < 1.0
+    # the lower bound allows for a wait that returns a hair early on a coarse platform clock
+    assert 0.15 <= time.perf_counter() - started_at < 1.0
     assert ls.server_ready.is_set(), "the timeout branch must release anything else waiting on readiness"
