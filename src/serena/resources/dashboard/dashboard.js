@@ -239,6 +239,55 @@ class BannerRotation {
     }
 }
 
+// A formatted tooltip kept within the viewport and available to keyboard users.
+class DashboardTooltip {
+    #anchor;
+    #tooltip;
+    #events = new AbortController();
+
+    constructor(anchor, tooltip) {
+        this.#anchor = anchor;
+        this.#tooltip = tooltip;
+        const options = {signal: this.#events.signal};
+        const wrapper = anchor.parentElement;
+        wrapper.addEventListener('mouseenter', () => this.#show(), options);
+        wrapper.addEventListener('mouseleave', () => {
+            if (!wrapper.contains(document.activeElement)) this.#hide();
+        }, options);
+        anchor.addEventListener('focus', () => this.#show(), options);
+        anchor.addEventListener('blur', () => this.#hide(), options);
+        anchor.addEventListener('keydown', event => {
+            if (event.key === 'Escape') this.#hide();
+        }, options);
+        const reposition = () => {
+            if (!this.#tooltip.hidden) this.#show();
+        };
+        window.addEventListener('resize', reposition, options);
+        document.addEventListener('scroll', reposition, {...options, capture: true});
+    }
+
+    #show() {
+        // position below the trigger, or above it when there is insufficient room
+        this.#tooltip.hidden = false;
+        const anchor = this.#anchor.getBoundingClientRect();
+        const tooltip = this.#tooltip.getBoundingClientRect();
+        const left = Math.max(12, Math.min(anchor.left, window.innerWidth - tooltip.width - 12));
+        const top = anchor.bottom + tooltip.height + 12 <= window.innerHeight
+            ? anchor.bottom : Math.max(12, anchor.top - tooltip.height);
+        this.#tooltip.style.left = `${left}px`;
+        this.#tooltip.style.top = `${top}px`;
+    }
+
+    #hide() {
+        this.#tooltip.hidden = true;
+    }
+
+    destroy() {
+        this.#hide();
+        this.#events.abort();
+    }
+}
+
 class Dashboard {
     constructor() {
         let self = this;
@@ -249,6 +298,7 @@ class Dashboard {
         this.lastConfigDataJson = null; // Cache for comparison
         this.jetbrainsMode = false;
         this.activeProjectName = null;
+        this.projectTrustTooltip = null;
         this.languageToRemove = null;
         this.currentMemoryName = null;
         this.originalMemoryContent = null;
@@ -610,6 +660,10 @@ class Dashboard {
 
     displayConfig(config) {
         try {
+            // release tooltip listeners before replacing the configuration display
+            this.projectTrustTooltip?.destroy();
+            this.projectTrustTooltip = null;
+
             // Check if tools and memories sections are currently expanded
             const $existingToolsContent = $('#tools-content');
             const $existingMemoriesContent = $('#memories-content');
@@ -628,12 +682,24 @@ class Dashboard {
 
             // Project info
             html += '<div class="config-label">Active Project:</div>';
+            html += '<div class="config-value">';
             if (config.active_project.name && config.active_project.path) {
                 const configPath = config.active_project.path + '/.serena/project.yml';
-                html += '<div class="config-value"><span title="Project configuration in ' + configPath + '">' + config.active_project.name + '</span></div>';
+                html += '<span title="Project configuration in ' + this.escapeHtml(configPath) + '">' + this.escapeHtml(config.active_project.name) + '</span>';
             } else {
-                html += '<div class="config-value">' + (config.active_project.name || 'None') + '</div>';
+                html += this.escapeHtml(config.active_project.name || 'None');
             }
+            if (config.active_project.name && config.active_project.is_trusted === false) {
+                html += ' <span class="project-trust-indicator">'
+                    + '<a id="project-untrusted" href="https://oraios.github.io/serena/02-usage/050_configuration.html#trusted-projects" '
+                    + 'target="_blank" rel="noopener noreferrer" aria-describedby="project-trust-tooltip">[untrusted]</a>'
+                    + '<span id="project-trust-tooltip" class="dashboard-tooltip" role="tooltip" hidden>'
+                    + '<strong>Untrusted projects are subject to several limitations:</strong>'
+                    + '<span>In particular, some project settings (e.g. LS-specific settings, activation commands) '
+                    + 'will be ignored, and symbolic links within the project will not be followed.</span>'
+                    + '<span class="tooltip-hint">Click to learn more.</span></span></span>';
+            }
+            html += '</div>';
 
             html += '<div class="config-label">Interface:</div>';
             html += '<div class="config-value">' + config.agent_interface + '</div>';
@@ -642,7 +708,7 @@ class Dashboard {
             html += '<div class="config-value">' + config.language_backend + '</div>';
 
             if (!this.jetbrainsMode) {
-                html += '<div class="config-label">Languages:</div>';
+                html += '<div class="config-label">Language Servers:</div>';
                 html += '<div class="config-value">';
                 if (config.languages && config.languages.length > 0) {
                     html += '<div class="languages-container">';
@@ -661,7 +727,7 @@ class Dashboard {
                         if (this.isAddingLanguage) {
                             html += '<div id="add-language-spinner" class="language-spinner">';
                         } else {
-                            html += '<button id="add-language-btn" class="btn language-add-btn">+ Add Language</button>';
+                            html += '<button id="add-language-btn" class="btn language-add-btn">+ Add</button>';
                             html += '<div id="add-language-spinner" class="language-spinner" style="display:none;">';
                         }
                         html += '<div class="spinner"></div>';
@@ -769,6 +835,12 @@ class Dashboard {
             html += '</div>';
 
             this.$configDisplay.html(html);
+
+            // connect the trust explanation to its link for mouse and keyboard interaction
+            const trustIndicator = document.getElementById('project-untrusted');
+            if (trustIndicator) {
+                this.projectTrustTooltip = new DashboardTooltip(trustIndicator, document.getElementById('project-trust-tooltip'));
+            }
 
             // Attach event handlers for the dynamically created add language button
             $('#add-language-btn').click(this.openLanguageModal.bind(this));

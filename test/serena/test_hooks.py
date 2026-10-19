@@ -352,14 +352,13 @@ class TestPreToolUseRemindAboutSerenaHook:
         assert capsys.readouterr().out == ""
 
     @pytest.mark.parametrize(
-        ("payload", "expected_grep", "expected_read_file", "expected_read_code_file", "expected_shell"),
+        ("payload", "expected_grep", "expected_read_file", "expected_read_code_file"),
         [
             (
                 {
                     **_grok_input("run_terminal_command", session_id="grok-robust-string-input"),
                     "toolInput": "cat src/foo.py",
                 },
-                False,
                 False,
                 False,
                 False,
@@ -373,9 +372,8 @@ class TestPreToolUseRemindAboutSerenaHook:
                 False,
                 False,
                 False,
-                False,
             ),
-            (_grok_input("run_terminal_command", {}, session_id="grok-robust-empty-input"), False, False, False, False),
+            (_grok_input("run_terminal_command", {}, session_id="grok-robust-empty-input"), False, False, False),
             (
                 {
                     **_grok_input("grep", {"pattern": "foo", "path": "."}, session_id="grok-robust-truncated-input"),
@@ -384,13 +382,11 @@ class TestPreToolUseRemindAboutSerenaHook:
                 True,
                 False,
                 False,
-                False,
             ),
-            (_grok_input("run_terminal_command", {"command": 123}, session_id="grok-robust-numeric-command"), False, False, False, True),
+            (_grok_input("run_terminal_command", {"command": 123}, session_id="grok-robust-numeric-command"), False, False, False),
             (
                 _grok_input("run_terminal_command", {"command": f"cat {'a' * 10000}.py"}, session_id="grok-robust-long-command"),
                 False,
-                True,
                 True,
                 True,
             ),
@@ -410,7 +406,6 @@ class TestPreToolUseRemindAboutSerenaHook:
         expected_grep: bool,
         expected_read_file: bool,
         expected_read_code_file: bool,
-        expected_shell: bool,
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
     ):
@@ -420,10 +415,88 @@ class TestPreToolUseRemindAboutSerenaHook:
             assert hook.is_grep_call() is expected_grep
             assert hook.is_read_file_call() is expected_read_file
             assert hook.is_read_code_file_call() is expected_read_code_file
-            assert hook._is_shell_command_call() is expected_shell
             hook.execute()
 
         assert capsys.readouterr().out == ""
+
+    @pytest.mark.parametrize("client", [HookClient.CLAUDE_CODE, HookClient.CODEBUDDY, HookClient.DSH, HookClient.ZCODE])
+    @pytest.mark.parametrize(
+        ("command", "expected_grep", "expected_read", "expected_code_read"),
+        [
+            ("rg -n foo src/main.py", True, False, False),
+            ("cd project && rg -n foo src/main.py", True, False, False),
+            ("cd project&&ugrep foo src", True, False, False),
+            ("rg 'unterminated", True, False, False),
+            ("find . -name '*.py'", False, False, False),
+            ("env FOO=bar cat 'src/file with spaces.py'", False, True, True),
+            ("FOO=bar head -n 50 src/main.py", False, True, True),
+            ("sed -n '1,200p' src/main.py", False, True, True),
+            ("cat src/main.py 2>/dev/null | grep -n foo", True, True, True),
+            ("cd src && cat README.md", False, True, False),
+            ("ls | head -5", False, True, False),
+            ("sed -i 's/foo/bar/' src/main.py", False, False, False),
+        ],
+        ids=[
+            "rg",
+            "compound-rg",
+            "compound-ugrep-without-spaces",
+            "malformed-quoting",
+            "find",
+            "env-cat-quoted-path",
+            "assignment-head",
+            "sed-print",
+            "cat-piped-into-grep",
+            "markdown-cat-in-code-dir",
+            "head-on-stdin",
+            "sed-in-place-edit",
+        ],
+    )
+    def test_native_shell_tool_commands_are_classified(
+        self,
+        client: HookClient,
+        command: str,
+        expected_grep: bool,
+        expected_read: bool,
+        expected_code_read: bool,
+        tmp_path: Path,
+    ):
+        """Searches and reads which clients route through their native ``Bash`` tool are classified like the dedicated tools."""
+        payload = _base_input("Bash", tool_input={"command": command})
+        with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            hook = PreToolUseRemindAboutSymbolicToolsHook(client)
+
+        assert hook.is_grep_call() is expected_grep
+        assert hook.is_read_file_call() is expected_read
+        assert hook.is_read_code_file_call() is expected_code_read
+
+    @pytest.mark.parametrize("client", [HookClient.CLAUDE_CODE, HookClient.CODEBUDDY, HookClient.DSH, HookClient.ZCODE])
+    @pytest.mark.parametrize("command", ["cat src/main.py", "rg -n foo src/main.py"], ids=["read-like", "grep-like"])
+    def test_non_shell_tool_with_command_parameter_is_not_classified(self, client: HookClient, command: str, tmp_path: Path):
+        """A tool which merely has a ``command`` parameter is not a shell read/search for clients with a native shell tool."""
+        payload = _base_input("mcp__deploy__run_task", tool_input={"command": command, "task_name": "deploy"})
+        with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            hook = PreToolUseRemindAboutSymbolicToolsHook(client)
+
+        assert hook.is_grep_call() is False
+        assert hook.is_read_file_call() is False
+
+    def test_codex_compound_shell_command_is_classified(self, tmp_path: Path):
+        payload = _base_input("exec_command", tool_input={"cmd": "cd repo && rg -n foo src/main.py"})
+        with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
+            hook = PreToolUseRemindAboutSymbolicToolsHook(HookClient.CODEX)
+
+        assert hook.is_grep_call() is True
+
+    def test_deny_output_after_threshold_bash_searches_claude_code(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        """Searches via Claude Code's native ``Bash`` tool trigger the same reminder as ``Grep`` calls."""
+        payload = _base_input("Bash", tool_input={"command": "cd project && rg -n foo src/main.py"})
+        for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
+            _execute_remind_hook(HookClient.CLAUDE_CODE, payload, tmp_path)
+
+        result = json.loads(capsys.readouterr().out.strip())
+        hook_output = result["hookSpecificOutput"]
+        assert hook_output["permissionDecision"] == "deny"
+        assert "grep" in hook_output["additionalContext"].lower()
 
     def test_serena_tool_detection(self, tmp_path: Path):
         for name, expected in [("mcp_serena_find_symbol", True), ("serena_overview", True), ("grep_search", False)]:
@@ -861,7 +934,6 @@ class TestToolUseCounter:
         tool_name: str,
         timestamp: datetime,
         file_path: str | None = None,
-        command_args_str: str | None = None,
     ) -> PreToolUseRemindAboutSymbolicToolsHook:
         """Create a minimal stub that satisfies ToolUseCounter.update without reading stdin.
 
@@ -872,16 +944,12 @@ class TestToolUseCounter:
 
         :param file_path: optional payload path; the hook classifies read-style tools as
             file reads regardless of the path extension.
-        :param command_args_str: optional shell-argument tail; equivalent to ``file_path`` but
-            populates the ``cmd``-derived field instead of ``file_path``.
         """
         stub = object.__new__(PreToolUseRemindAboutSymbolicToolsHook)
         stub._tool_name = tool_name.lower()
         stub._client = HookClient.VSCODE
         stub.triggered_at_timestamp = timestamp
-        stub._command = None
-        stub._command_name = None
-        stub._command_args_str = command_args_str
+        stub._shell_command_line = None
         stub._file_path = file_path
         return stub
 

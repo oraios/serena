@@ -28,8 +28,11 @@ class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta, ToolMarkerCanEdit
 
     def apply(self, session_id: str, code: str) -> str:
         """
-        Executes the given Python code, which has access to Serena's functionality through the object `s`.
-        The functionality is organised in facades, which are attributes of `s` (e.g. `s.myfacade`).
+        Executes the given Python code in a REPL, which provides access to all of Serena's functionality
+        (symbol & reference search, file overviews, editing, refactoring, inspections, etc.).
+
+        Serena's functionality is provided through an object `s`.
+        The functionality is organised in facades, which are attributes of `s`.
 
         Documentation: Use `s.info("<facade>")` when you will use a facade's functionality (it documents all common
         operations at once) and `s.info("<facade>.<method>")` for a single or a rarely needed operation. Several items
