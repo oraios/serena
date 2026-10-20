@@ -278,17 +278,35 @@ class LineEnding(Enum):
             raise ValueError(f"Invalid line_ending: {value!r}. Valid values are: {valid}") from e
 
 
+class LanguageServerFileSystemSyncStrategy(Enum):
+    """Strategy for synchronizing external file-system changes with language servers."""
+
+    FULL = "full"
+    NONE = "none"
+
+    @classmethod
+    def from_str(cls, value: str) -> "LanguageServerFileSystemSyncStrategy":
+        """Parse a string value into a file-system synchronization strategy."""
+        try:
+            return cls(value.lower())
+        except ValueError as e:
+            valid = [strategy.value for strategy in cls]
+            raise ValueError(f"Invalid ls_file_system_sync_strategy: {value!r}. Valid values are: {valid}") from e
+
+
 @dataclass
 class SharedConfig(ToolInclusionDefinition, ApiInclusionDefinition, ToStringMixin):
     """Shared between SerenaConfig and ProjectConfig, the latter used to override values in the form
     (same as in ModeSelectionDefinition).
-    The defaults here shall be none and should be set to the global default values in SerenaConfig.
+    The defaults here shall be none and should normally be set to the global default values in SerenaConfig.
+    Fields whose effective defaults are resolved dynamically may remain unset.
     """
 
     symbol_info_budget: float | None = None
     language_backend: LanguageBackend | None = None
     agent_interface: AgentInterface | None = None
     line_ending: LineEnding | None = None
+    ls_file_system_sync_strategy: LanguageServerFileSystemSyncStrategy | None = None
     read_only_memory_patterns: list[str] = field(default_factory=list)
     ignored_memory_patterns: list[str] = field(default_factory=list)
     ls_specific_settings: dict = field(default_factory=dict)
@@ -627,6 +645,12 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
 
         line_ending_value = data.get("line_ending")
         line_ending = LineEnding.from_str(line_ending_value) if line_ending_value else None
+        ls_file_system_sync_strategy_value = data.get("ls_file_system_sync_strategy")
+        ls_file_system_sync_strategy = (
+            LanguageServerFileSystemSyncStrategy.from_str(ls_file_system_sync_strategy_value)
+            if ls_file_system_sync_strategy_value
+            else None
+        )
 
         # gracefully handle user errors: incorrect use of None/empty where a list is required
         ignored_paths = data["ignored_paths"] or []
@@ -658,6 +682,7 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
             initial_prompt=data["initial_prompt"],
             encoding=data["encoding"],
             line_ending=line_ending,
+            ls_file_system_sync_strategy=ls_file_system_sync_strategy,
             language_backend=language_backend,
             agent_interface=agent_interface,
             added_modes=data["added_modes"],
@@ -686,6 +711,9 @@ class ProjectConfig(SharedConfig, ModeSelectionDefinitionWithAddedModes):
         d["language_backend"] = self.language_backend.get_key() if self.language_backend is not None else None
         d["agent_interface"] = self.agent_interface.value if self.agent_interface is not None else None
         d["line_ending"] = self.line_ending.value if self.line_ending is not None else None
+        d["ls_file_system_sync_strategy"] = (
+            self.ls_file_system_sync_strategy.value if self.ls_file_system_sync_strategy is not None else None
+        )
 
         return d
 
@@ -989,7 +1017,13 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
     # *** static members ***
 
     CONFIG_FILE = "serena_config.yml"
-    CONFIG_FIELDS_WITH_TYPE_CONVERSION = {"projects", "language_backend", "agent_interface", "line_ending"}
+    CONFIG_FIELDS_WITH_TYPE_CONVERSION = {
+        "projects",
+        "language_backend",
+        "agent_interface",
+        "line_ending",
+        "ls_file_system_sync_strategy",
+    }
 
     # *** methods ***
     @classmethod
@@ -1171,6 +1205,16 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         else:
             num_migrations += 1
             instance.line_ending = get_dataclass_default(SerenaConfig, "line_ending")
+
+        # determine language-server file-system synchronization strategy
+        if "ls_file_system_sync_strategy" not in loaded_commented_yaml:
+            num_migrations += 1
+        ls_file_system_sync_strategy_value = loaded_commented_yaml.get("ls_file_system_sync_strategy")
+        instance.ls_file_system_sync_strategy = (
+            LanguageServerFileSystemSyncStrategy.from_str(ls_file_system_sync_strategy_value)
+            if ls_file_system_sync_strategy_value
+            else None
+        )
 
         # migrate deprecated "gui_log_level" field if necessary
         if "gui_log_level" in loaded_commented_yaml:
@@ -1462,6 +1506,11 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         # convert line ending to string
         commented_yaml["line_ending"] = self.line_ending.value
 
+        # convert language-server file-system synchronization strategy to string
+        commented_yaml["ls_file_system_sync_strategy"] = (
+            self.ls_file_system_sync_strategy.value if self.ls_file_system_sync_strategy is not None else None
+        )
+
         # transfer comments from the template file
         # NOTE: The template file now uses leading comments, but we previously used trailing comments,
         #       so we apply a conversion, which detects the old style and transforms it.
@@ -1594,6 +1643,16 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
             if log_choice:
                 log.info(f"Using language backend from global configuration: {language_backend.name}")
         return language_backend
+
+    def determine_ls_file_system_sync_strategy(self, project_config: ProjectConfig | None = None) -> LanguageServerFileSystemSyncStrategy:
+        """Determine the effective file-system synchronization strategy for a project.
+
+        An explicitly configured project strategy takes precedence over the global strategy. If neither is configured,
+        the recommended strategy for reliable results is used.
+        """
+        if project_config is not None and project_config.ls_file_system_sync_strategy is not None:
+            return project_config.ls_file_system_sync_strategy
+        return self.ls_file_system_sync_strategy or LanguageServerFileSystemSyncStrategy.FULL
 
     def get_ls_priority(self, ls_id: LanguageServerIdLike) -> int:
         """
