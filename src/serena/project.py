@@ -15,6 +15,7 @@ from serena.config.serena_config import (
     ProjectConfig,
     ProjectConfigAutoGenerationMode,
     SerenaConfig,
+    expand_home_in_settings,
 )
 from serena.language_backend import LanguageBackend
 from serena.ls_manager import LanguageServerFactory, LanguageServerManager
@@ -676,6 +677,9 @@ class Project(ToStringMixin):
                         f"Project path {self.project_root} is not trusted, ignoring LS-specific settings from project configuration. "
                         "To trust the project, modify the trusted path patterns in the global configuration."
                     )
+            # expand ``~`` in path-valued settings; done here (after merging, before use) so that the
+            # configured value is never rewritten in the configuration files
+            ls_specific_settings = expand_home_in_settings(ls_specific_settings)
             factory = LanguageServerFactory(
                 project_root=self.project_root,
                 project_config=self.project_config,

@@ -2,6 +2,14 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Fix: a leading `~` in path-valued configuration settings was used verbatim, so the value was resolved
+    relative to the current working directory (`<cwd>/~/.serena/...`) instead of the home directory.
+    This affected the entries of `projects`, `project_serena_folder_location` and path options in
+    `ls_specific_settings` (e.g. `maven_user_settings`, `gradle_user_home`), making a configuration file
+    that is shared between machines with different home directories silently point to the wrong location.
+    `~` is now expanded before the value is used as a path (#2160).
+
 # v2.1.0 (2026-10-19)
 
 * General:
