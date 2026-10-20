@@ -152,7 +152,7 @@ Some languages require additional installations or setup steps, as noted.
   alternatives: [BasedPyright](https://github.com/DetachHead/basedpyright) (language `python_basedpyright`),
   [ty](https://github.com/astral-sh/ty) (language `python_ty`),
   [pyrefly](https://github.com/facebook/pyrefly) (language `python_pyrefly`),
-  [Jedi](https://github.com/palotas/jedi-language-server) (language `python_jedi`);
+  [Jedi](https://github.com/pappasam/jedi-language-server) (language `python_jedi`);
   Pyright, BasedPyright, ty, and pyrefly require `uv`/`uvx` in PATH)
 * **QML**
   (requires Qt 6, provides `qmlls` or `qmlls6` on PATH; see the [Qt qmlls documentation](https://doc.qt.io/qt-6/qtqml-tool-qmlls.html))
