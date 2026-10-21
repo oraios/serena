@@ -325,7 +325,22 @@ class ClangdLanguageServer(SolidLanguageServer):
         def _create_launch_command(self, core_path: str) -> list[str]:
             # --background-index enables clangd to index all files in the project,
             # which is required for finding cross-file references
-            return [core_path, "--background-index"]
+            command = [core_path, "--background-index"]
+
+            # return all references instead of clangd's default of at most 1000, unless the user sets a limit
+            if not self._user_sets_reference_limit():
+                command.append("--limit-references=0")
+
+            return command
+
+        def _user_sets_reference_limit(self) -> bool:
+            """
+            :return: whether the user-provided extra arguments (`ls_extra_args`) already set clangd's reference limit
+            """
+            extra_args = self._custom_settings.get("ls_extra_args", [])
+            if not isinstance(extra_args, list):
+                return False
+            return any(str(arg).lstrip("-").startswith("limit-references") for arg in extra_args)
 
     def _create_base_initialize_params(self) -> dict:
         """

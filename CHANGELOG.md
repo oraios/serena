@@ -5,6 +5,8 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Language Servers:
   - Fix: the C/C++ (clangd) symbol cache was discarded on every start when a value in
     `ls_specific_settings.cpp` was quoted in YAML (e.g. `ls_path: '...'`)
+  - Fix: C/C++ (clangd) reference searches returned at most 1000 references; clangd is now started with
+    `--limit-references=0` unless `ls_extra_args` already sets a limit
 
 # v2.1.0 (2026-10-19)
 
