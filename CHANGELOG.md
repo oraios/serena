@@ -2,6 +2,10 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Language Servers:
+  - Performance: finding referencing symbols opened each referencing file in the language server once per
+    reference; a file is now opened only when its symbols are not cached yet
+
 # v2.1.0 (2026-10-19)
 
 * General:
