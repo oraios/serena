@@ -34,7 +34,12 @@ class ClangdLanguageServer(SolidLanguageServer):
           ``compile_commands.json`` if needed.
         - clangd_version: Override the pinned Clangd version downloaded by Serena
           (default: the bundled Serena version).
+        - files_kept_open: Number of most recently used files that stay open in clangd after use, such that
+          consecutive requests on the same file do not make clangd parse it again (default: 3; 0 closes every
+          file right after use). Each open file keeps its parsed form in clangd's memory.
     """
+
+    _DEFAULT_FILES_KEPT_OPEN = 3
 
     @staticmethod
     def _determine_log_level(line: str) -> int:
@@ -78,6 +83,19 @@ class ClangdLanguageServer(SolidLanguageServer):
         self.service_ready_event = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
         self.resolve_main_method_available = threading.Event()
+
+    @override
+    def _get_number_of_files_kept_open_in_ls(self) -> int:
+        cpp_settings = self._custom_settings or {}
+        files_kept_open = cpp_settings.get("files_kept_open", self._DEFAULT_FILES_KEPT_OPEN)
+        if isinstance(files_kept_open, bool) or not isinstance(files_kept_open, int) or files_kept_open < 0:
+            log.warning(
+                "Invalid value %r for the C/C++ setting 'files_kept_open'; using the default of %d",
+                files_kept_open,
+                self._DEFAULT_FILES_KEPT_OPEN,
+            )
+            return self._DEFAULT_FILES_KEPT_OPEN
+        return files_kept_open
 
     @override
     def _raw_document_symbols_cache_fingerprint(self) -> Hashable:
