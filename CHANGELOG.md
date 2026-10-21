@@ -2,6 +2,11 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Language Servers:
+  - Performance: C/C++ (clangd) requests the symbols of up to 4 uncached files of a directory at the same time
+    when a directory is scanned, instead of one file after another; configurable via the `cpp` setting
+    `parallel_document_symbol_requests` (1 restores the previous behaviour)
+
 # v2.1.0 (2026-10-19)
 
 * General:

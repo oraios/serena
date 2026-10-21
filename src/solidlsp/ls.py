@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
 
+import contextvars
 import dataclasses
 import hashlib
 import json
@@ -11,6 +12,7 @@ import threading
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Hashable, Iterator, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import copy
 from dataclasses import dataclass
@@ -538,6 +540,11 @@ class SolidLanguageServer(ABC):
         default language identifier to be passed to the language server in `textDocument/didOpen` notifications.
         """
         self.open_file_buffers: dict[str, LSPFileBuffer] = {}
+        self._open_file_buffers_lock = threading.RLock()
+        """
+        guards `open_file_buffers` and the reference counts of its buffers, which concurrent document symbol requests
+        (see `_prefetch_document_symbols`) update from several threads
+        """
         self.ls_id = ls_id
         """
         identifies the language server (not to be confused with the language_id passed to the language server)
@@ -1062,6 +1069,16 @@ class SolidLanguageServer(ABC):
         """
         return 2
 
+    def _get_number_of_parallel_document_symbol_requests(self) -> int:
+        """
+        Returns the number of document symbol requests that may be sent concurrently when the symbols of a whole
+        directory are needed (see `request_full_symbol_tree`).
+
+        Meant to be overridden by subclasses for language servers that process concurrent requests in parallel and take
+        long to process a single file. The default (1) requests the symbols of one file at a time.
+        """
+        return 1
+
     def notify_files_created(self, relative_file_paths: Sequence[str]) -> None:
         """
         Called when one or more files were newly created on disk (detected outside of Serena's own file
@@ -1417,36 +1434,38 @@ class SolidLanguageServer(ABC):
             absolute_file_path = absolute_file_path.resolve()
         uri = absolute_file_path.as_uri()
 
-        if uri in self.open_file_buffers:
-            fb = self.open_file_buffers[uri]
-            assert fb.uri == uri
-            assert fb.ref_count >= 1
+        with self._open_file_buffers_lock:
+            if uri in self.open_file_buffers:
+                fb = self.open_file_buffers[uri]
+                assert fb.uri == uri
+                assert fb.ref_count >= 1
 
-            fb.ref_count += 1
-            if open_in_ls:
-                fb.ensure_open_in_ls()
-        else:
-            version = 0
-            language_id = self._get_language_id_for_file(relative_file_path)
-            fb = LSPFileBuffer(
-                abs_path=absolute_file_path,
-                uri=uri,
-                encoding=self._encoding,
-                version=version,
-                language_id=language_id,
-                ref_count=1,
-                language_server=self,
-                open_in_ls=open_in_ls,
-            )
-            self.open_file_buffers[uri] = fb
+                fb.ref_count += 1
+                if open_in_ls:
+                    fb.ensure_open_in_ls()
+            else:
+                version = 0
+                language_id = self._get_language_id_for_file(relative_file_path)
+                fb = LSPFileBuffer(
+                    abs_path=absolute_file_path,
+                    uri=uri,
+                    encoding=self._encoding,
+                    version=version,
+                    language_id=language_id,
+                    ref_count=1,
+                    language_server=self,
+                    open_in_ls=open_in_ls,
+                )
+                self.open_file_buffers[uri] = fb
 
         try:
             yield fb
         finally:
-            fb.ref_count -= 1
-            if fb.ref_count == 0:
-                fb.close()
-                del self.open_file_buffers[uri]
+            with self._open_file_buffers_lock:
+                fb.ref_count -= 1
+                if fb.ref_count == 0:
+                    fb.close()
+                    del self.open_file_buffers[uri]
 
     @contextmanager
     def _open_file_context(
@@ -2197,6 +2216,34 @@ class SolidLanguageServer(ABC):
 
         return document_symbols
 
+    def _prefetch_document_symbols(self, relative_file_paths: list[str]) -> dict[str, DocumentSymbols]:
+        """
+        Requests the document symbols of the given files concurrently, using up to
+        `_get_number_of_parallel_document_symbol_requests` requests at a time.
+        Does nothing if the language server allows only one request at a time.
+        Each request runs in a copy of the caller's context, such that context variables set by the caller
+        apply to it as well.
+        Failures are only logged, since the caller requests the symbols of files without a result again.
+
+        :param relative_file_paths: the relative paths of the files
+        :return: a mapping from relative file path to the file's symbols, for the files whose request succeeded
+        """
+        number_of_workers = self._get_number_of_parallel_document_symbol_requests()
+        if number_of_workers <= 1 or len(relative_file_paths) <= 1:
+            return {}
+        result: dict[str, DocumentSymbols] = {}
+        with ThreadPoolExecutor(max_workers=number_of_workers, thread_name_prefix=f"DocumentSymbols-{self.ls_id.get_key()}") as executor:
+            futures = [
+                executor.submit(contextvars.copy_context().run, self.request_document_symbols, relative_file_path)
+                for relative_file_path in relative_file_paths
+            ]
+            for relative_file_path, future in zip(relative_file_paths, futures, strict=True):
+                try:
+                    result[relative_file_path] = future.result()
+                except Exception as e:
+                    log.debug("Failed to prefetch document symbols for %s: %s", relative_file_path, e)
+        return result
+
     def request_full_symbol_tree(self, within_relative_path: str | None = None) -> list[ls_types.UnifiedSymbolInformation]:
         """
         Will go through all files in the project or within a relative path and build a tree of symbols.
@@ -2247,12 +2294,13 @@ class SolidLanguageServer(ABC):
             )
             result.append(package_symbol)
 
+            # collect the entries to include, in directory order
+            included_entries: list[tuple[os.DirEntry[str], str, bool]] = []
             for contained_dir_or_file_entry in contained_dir_or_file_entries:
                 # skip symbolic links during discovery in untrusted projects
                 if not self.config.is_project_trusted and contained_dir_or_file_entry.is_symlink():
                     continue
 
-                contained_dir_or_file_name = contained_dir_or_file_entry.name
                 contained_dir_or_file_abs_path = contained_dir_or_file_entry.path
 
                 # obtain relative path
@@ -2275,6 +2323,16 @@ class SolidLanguageServer(ABC):
                     log.debug("Skipping item: %s (because it should be ignored)", contained_dir_or_file_rel_path)
                     continue
 
+                included_entries.append((contained_dir_or_file_entry, contained_dir_or_file_rel_path, is_dir))
+
+            # request the document symbols of the directory's files concurrently (if enabled)
+            prefetched_document_symbols = self._prefetch_document_symbols(
+                [rel_path for entry, rel_path, is_dir in included_entries if not is_dir and entry.is_file()]
+            )
+
+            for contained_dir_or_file_entry, contained_dir_or_file_rel_path, is_dir in included_entries:
+                contained_dir_or_file_name = contained_dir_or_file_entry.name
+                contained_dir_or_file_abs_path = contained_dir_or_file_entry.path
                 if is_dir:
                     child_symbols = process_directory(contained_dir_or_file_abs_path)
                     package_symbol["children"].extend(child_symbols)
@@ -2283,7 +2341,9 @@ class SolidLanguageServer(ABC):
 
                 elif contained_dir_or_file_entry.is_file():
                     with self._open_file_context(contained_dir_or_file_rel_path, open_in_ls=False) as file_data:
-                        document_symbols = self.request_document_symbols(contained_dir_or_file_rel_path, file_data)
+                        document_symbols = prefetched_document_symbols.get(contained_dir_or_file_rel_path)
+                        if document_symbols is None:
+                            document_symbols = self.request_document_symbols(contained_dir_or_file_rel_path, file_data)
 
                         # create shallow copies of the document root symbols to avoid modifying the cached symbols
                         # when linking them to the file symbol #2126
