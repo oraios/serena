@@ -3192,7 +3192,7 @@ class SolidLanguageServer(ABC):
                 # keep the unreadable content, which the next save would otherwise replace
                 backup_file = self._set_aside_unreadable_cache_file(cache_file)
                 log.warning(
-                    "Failed to load raw document symbols cache from %s (%s); Ignoring cache (kept as %s).",
+                    "Failed to load raw document symbols cache from %s (%s); Ignoring cache (kept as %s). Run 'serena project index' to rebuild it.",
                     cache_file,
                     e,
                     backup_file,
@@ -3229,7 +3229,7 @@ class SolidLanguageServer(ABC):
                 # keep the unreadable content, which the next save would otherwise replace
                 backup_file = self._set_aside_unreadable_cache_file(cache_file)
                 log.warning(
-                    "Failed to load document symbols cache from %s (%s); Ignoring cache (kept as %s).",
+                    "Failed to load document symbols cache from %s (%s); Ignoring cache (kept as %s). Run 'serena project index' to rebuild it.",
                     cache_file,
                     e,
                     backup_file,
