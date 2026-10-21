@@ -3163,6 +3163,22 @@ class SolidLanguageServer(ABC):
             return (*base_version, fingerprint)
         return base_version
 
+    @staticmethod
+    def _set_aside_unreadable_cache_file(cache_file: Path) -> Path | None:
+        """
+        Moves a cache file that could not be loaded to a backup file next to it, replacing an older backup.
+
+        :param cache_file: the cache file that could not be loaded
+        :return: the backup file, or None if the cache file could not be moved
+        """
+        backup_file = cache_file.with_name(cache_file.name + ".bak")
+        try:
+            os.replace(cache_file, backup_file)
+        except OSError as e:
+            log.warning("Failed to move unreadable cache file %s to %s: %s", cache_file, backup_file, e)
+            return None
+        return backup_file
+
     def _load_raw_document_symbols_cache(self) -> None:
         cache_file = self.cache_dir / self.RAW_DOCUMENT_SYMBOL_CACHE_FILENAME
         if cache_file.exists():
@@ -3173,11 +3189,13 @@ class SolidLanguageServer(ABC):
                     self._raw_document_symbols_cache = saved_cache
                     log.info(f"Loaded {len(self._raw_document_symbols_cache)} entries from raw document symbols cache.")
             except Exception as e:
-                # cache can become corrupt, so just skip loading it
+                # keep the unreadable content, which the next save would otherwise replace
+                backup_file = self._set_aside_unreadable_cache_file(cache_file)
                 log.warning(
-                    "Failed to load raw document symbols cache from %s (%s); Ignoring cache.",
+                    "Failed to load raw document symbols cache from %s (%s); Ignoring cache (kept as %s).",
                     cache_file,
                     e,
+                    backup_file,
                 )
 
     def _save_document_symbols_cache(self) -> None:
@@ -3208,11 +3226,13 @@ class SolidLanguageServer(ABC):
                     self._document_symbols_cache = saved_cache
                     log.info(f"Loaded {len(self._document_symbols_cache)} entries from document symbols cache.")
             except Exception as e:
-                # cache can become corrupt, so just skip loading it
+                # keep the unreadable content, which the next save would otherwise replace
+                backup_file = self._set_aside_unreadable_cache_file(cache_file)
                 log.warning(
-                    "Failed to load document symbols cache from %s (%s); Ignoring cache.",
+                    "Failed to load document symbols cache from %s (%s); Ignoring cache (kept as %s).",
                     cache_file,
                     e,
+                    backup_file,
                 )
 
     def save_cache(self) -> None:
