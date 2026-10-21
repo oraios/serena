@@ -9,6 +9,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     `--limit-references=0` unless `ls_extra_args` already sets a limit
   - C/C++ (clangd) logs errors only (`--log=error`) instead of a line for every request and parse, unless
     `ls_extra_args` sets `--log` or Serena logs at debug level
+  - Fix: every line a language server wrote to stderr was followed by an empty line in Serena's log
 
 # v2.1.0 (2026-10-19)
 
