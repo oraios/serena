@@ -520,6 +520,8 @@ Supported settings:
 | `ls_path` | managed download | Override the `clangd` executable path. |
 | `compile_commands_dir` | `.serena` | Directory where Serena writes a transformed `compile_commands.json` if the project's original database uses relative `directory` entries. |
 | `clangd_version` | `19.1.2` | Override the `clangd` version Serena downloads when `ls_path` is not set. |
+| `indexing_timeout` | `60.0` | Maximum time in seconds to wait, before the first cross-file query, for `clangd`'s background index to finish. Results of that query may be incomplete if indexing takes longer. |
+| `indexing_start_grace` | `2.0` | Time in seconds to wait for `clangd` to report background indexing at all before the first cross-file query. |
 
 Serena starts `clangd` with `--limit-references=0` (all references) and `--log=error` (errors only; omitted when Serena itself logs at debug level).
 Setting either option in `ls_extra_args` replaces Serena's value, e.g. `ls_extra_args: ["--log=info"]`.
