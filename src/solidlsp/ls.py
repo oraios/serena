@@ -543,7 +543,7 @@ class SolidLanguageServer(ABC):
         self._open_file_buffers_lock = threading.RLock()
         """
         guards `open_file_buffers` and the reference counts of its buffers, which concurrent document symbol requests
-        (see `_prefetch_document_symbols`) update from several threads
+        (see `request_document_symbols_concurrently`) update from several threads
         """
         self.ls_id = ls_id
         """
@@ -1071,8 +1071,8 @@ class SolidLanguageServer(ABC):
 
     def _get_number_of_parallel_document_symbol_requests(self) -> int:
         """
-        Returns the number of document symbol requests that may be sent concurrently when the symbols of a whole
-        directory are needed (see `request_full_symbol_tree`).
+        Returns the number of document symbol requests that may be sent concurrently when the symbols of many files
+        are needed (see `request_document_symbols_concurrently`).
 
         Meant to be overridden by subclasses for language servers that process concurrent requests in parallel and take
         long to process a single file. The default (1) requests the symbols of one file at a time.
@@ -2216,7 +2216,7 @@ class SolidLanguageServer(ABC):
 
         return document_symbols
 
-    def _prefetch_document_symbols(self, relative_file_paths: list[str]) -> dict[str, DocumentSymbols]:
+    def request_document_symbols_concurrently(self, relative_file_paths: list[str]) -> dict[str, DocumentSymbols]:
         """
         Requests the document symbols of the given files concurrently, using up to
         `_get_number_of_parallel_document_symbol_requests` requests at a time.
@@ -2326,7 +2326,7 @@ class SolidLanguageServer(ABC):
                 included_entries.append((contained_dir_or_file_entry, contained_dir_or_file_rel_path, is_dir))
 
             # request the document symbols of the directory's files concurrently (if enabled)
-            prefetched_document_symbols = self._prefetch_document_symbols(
+            prefetched_document_symbols = self.request_document_symbols_concurrently(
                 [rel_path for entry, rel_path, is_dir in included_entries if not is_dir and entry.is_file()]
             )
 

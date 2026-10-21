@@ -35,8 +35,8 @@ class ClangdLanguageServer(SolidLanguageServer):
         - clangd_version: Override the pinned Clangd version downloaded by Serena
           (default: the bundled Serena version).
         - parallel_document_symbol_requests: Number of files whose symbols are requested from clangd at the same
-          time when a directory is scanned and its files are not cached yet (default: 4; 1 requests one file at a
-          time). clangd parses each of these files in a worker thread of its own.
+          time when a directory is scanned or the project is indexed and the files are not cached yet (default: 4;
+          1 requests one file at a time). clangd parses each of these files in a worker thread of its own.
     """
 
     _DEFAULT_PARALLEL_DOCUMENT_SYMBOL_REQUESTS = 4

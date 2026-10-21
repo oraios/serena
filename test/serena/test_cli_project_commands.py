@@ -3,6 +3,7 @@
 import os
 import shutil
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -262,6 +263,62 @@ class TestProjectIndex:
         log_file = os.path.join(temp_project_dir, ".serena", "logs", "indexing.txt")
         with open(log_file, encoding="utf-8") as f:
             assert "数据.py" in f.read()
+
+    def test_index_requests_symbols_concurrently_where_the_language_server_allows_it(self, cli_runner, temp_project_dir, monkeypatch):
+        from solidlsp.ls import DocumentSymbols, SolidLanguageServer
+
+        file_names = [f"module_{index}.py" for index in range(8)]
+        for file_name in file_names:
+            with open(os.path.join(temp_project_dir, file_name), "w", encoding="utf-8") as f:
+                f.write("def hello():\n    pass\n")
+        lock = threading.Lock()
+        running = 0
+        max_running = 0
+        requested_files: list[str] = []
+
+        def slow_request(self, relative_file_path, file_buffer=None):
+            nonlocal running, max_running
+            with lock:
+                running += 1
+                max_running = max(max_running, running)
+                requested_files.append(relative_file_path)
+            time.sleep(0.1)
+            with lock:
+                running -= 1
+            return DocumentSymbols([])
+
+        monkeypatch.setattr(SolidLanguageServer, "_get_number_of_parallel_document_symbol_requests", lambda self: 4)
+        monkeypatch.setattr(SolidLanguageServer, "request_document_symbols", slow_request)
+        result = cli_runner.invoke(
+            ProjectCommands.index, [temp_project_dir, "--language", "python", "--log-level", "ERROR", "--timeout", "5"]
+        )
+
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+        assert 2 <= max_running <= 4
+        assert sorted(requested_files) == file_names
+
+    def test_index_records_files_that_fail_when_indexed_concurrently(self, cli_runner, temp_project_dir, monkeypatch):
+        from solidlsp.ls import DocumentSymbols, SolidLanguageServer
+
+        for file_name in ["good.py", "failing.py"]:
+            with open(os.path.join(temp_project_dir, file_name), "w", encoding="utf-8") as f:
+                f.write("def hello():\n    pass\n")
+
+        def request(self, relative_file_path, file_buffer=None):
+            if relative_file_path == "failing.py":
+                raise RuntimeError(f"cannot index {relative_file_path}")
+            return DocumentSymbols([])
+
+        monkeypatch.setattr(SolidLanguageServer, "_get_number_of_parallel_document_symbol_requests", lambda self: 4)
+        monkeypatch.setattr(SolidLanguageServer, "request_document_symbols", request)
+        result = cli_runner.invoke(
+            ProjectCommands.index, [temp_project_dir, "--language", "python", "--log-level", "ERROR", "--timeout", "5"]
+        )
+
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+        log_file = os.path.join(temp_project_dir, ".serena", "logs", "indexing.txt")
+        with open(log_file, encoding="utf-8") as f:
+            assert f.read().splitlines()[0] == "failing.py"
 
 
 class TestProjectCreateHelper:

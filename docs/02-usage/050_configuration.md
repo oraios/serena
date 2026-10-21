@@ -520,7 +520,7 @@ Supported settings:
 | `ls_path` | managed download | Override the `clangd` executable path. |
 | `compile_commands_dir` | `.serena` | Directory where Serena writes a transformed `compile_commands.json` if the project's original database uses relative `directory` entries. |
 | `clangd_version` | `19.1.2` | Override the `clangd` version Serena downloads when `ls_path` is not set. |
-| `parallel_document_symbol_requests` | `4` | Number of files whose symbols are requested from `clangd` at the same time when a directory is scanned (e.g. `find_symbol` or `get_symbols_overview` on a directory) and its files are not cached yet. `1` requests one file at a time. `clangd` parses each of these files in a worker thread of its own (see its `-j` option). |
+| `parallel_document_symbol_requests` | `4` | Number of files whose symbols are requested from `clangd` at the same time when a directory is scanned (e.g. `find_symbol` or `get_symbols_overview` on a directory) or the project is indexed (`serena project index`) and the files are not cached yet. `1` requests one file at a time. `clangd` parses each of these files in a worker thread of its own (see its `-j` option). |
 
 #### C/C++ via `ccls`
 
