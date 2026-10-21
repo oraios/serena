@@ -222,7 +222,7 @@ class LanguageServerId(Enum):
     QML = "qml"
     """QML language server using Qt's qmlls (or qmlls6).
     Supports .qml files. Requires Qt 6 installation providing qmlls on PATH.
-    See https://doc.qt.io/qt-6/qtqml-tool-qmlls.html
+    See https://doc.qt.io/qt-6/qtqml-tooling-qmlls.html
     """
     GLEAM = "gleam"
     """Gleam language server bundled with the Gleam compiler (`gleam lsp`).
