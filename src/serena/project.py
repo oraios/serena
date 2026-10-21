@@ -689,7 +689,7 @@ class Project(ToStringMixin):
             # if there is an existing instance, stop its language servers first
             if self.language_server_manager is not None:
                 log.info("Stopping existing language server manager ...")
-                self.language_server_manager.stop_all()
+                self.language_server_manager.stop_all(save_cache=True)
                 self.language_server_manager = None
 
             log.info(f"Creating language server manager for {self.project_root}")
