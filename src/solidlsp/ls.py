@@ -2556,7 +2556,8 @@ class SolidLanguageServer(ABC):
             ref_line = ref["range"]["start"]["line"]
             ref_col = ref["range"]["start"]["character"]
 
-            with self.open_file(ref_path) as file_data:
+            # the file is opened in the language server only if its symbols have to be requested
+            with self.open_file(ref_path, open_in_ls=False) as file_data:
                 body_factory = SymbolBodyFactory(file_data)
 
                 # Get the containing symbol for this reference
@@ -2710,7 +2711,7 @@ class SolidLanguageServer(ABC):
         :return: The container symbol (if found) or None.
         """
         # checking if the line is empty, unfortunately ugly and duplicating code, but I don't want to refactor
-        with self.open_file(relative_file_path):
+        with self.open_file(relative_file_path, open_in_ls=False):
             absolute_file_path = os.path.join(self.repository_root_path, relative_file_path)
             if self._path_contains_dots(relative_file_path):
                 absolute_file_path = str(pathlib.Path(absolute_file_path).resolve())

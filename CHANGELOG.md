@@ -19,6 +19,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     incorrect double semicolon behind (`... n * 3;;`). Mirrors the range-start fix already applied
     to Go's `type`/`var`/`const` declarations, and the range-end fix already applied to Nix's
     attribute declarations (#1956)
+  - Performance: finding referencing symbols opened each referencing file in the language server once per
+    reference; a file is now opened only when its symbols are not cached yet
 
 # v2.1.0 (2026-10-19)
 
