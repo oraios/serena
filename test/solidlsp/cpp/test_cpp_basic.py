@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from serena.util.yaml import load_yaml
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_utils import SymbolUtils
@@ -236,3 +237,25 @@ class TestCppDocumentSymbolCache:
 
             _ = ls_alt.request_document_symbols(main_cpp)
             _assert_caches_modified(ls_alt)
+
+    @pytest.mark.parametrize("quoted_value", ["'.serena-quoted'", '".serena-quoted"'])
+    def test_cache_survives_restart_with_quoted_yaml_setting(self, tmp_path: Path, quoted_value: str) -> None:
+        repo_path = self._copy_cpp_fixture(tmp_path)
+        settings_file = tmp_path / "settings.yml"
+        settings_file.write_text(f"cpp:\n  compile_commands_dir: {quoted_value}\n", encoding="utf-8")
+        ls_settings = {LanguageServerId.CPP: dict(load_yaml(str(settings_file))["cpp"])}
+        main_cpp = "a.cpp"
+
+        with start_ls_context(
+            LanguageServerId.CPP, repo_path=str(repo_path), ls_specific_settings=ls_settings, solidlsp_dir=tmp_path
+        ) as ls:
+            _ = ls.request_document_symbols(main_cpp)
+            ls.save_cache()
+
+        with start_ls_context(
+            LanguageServerId.CPP, repo_path=str(repo_path), ls_specific_settings=ls_settings, solidlsp_dir=tmp_path
+        ) as ls_again:
+            assert main_cpp in ls_again._raw_document_symbols_cache
+            assert main_cpp in ls_again._document_symbols_cache
+            assert not ls_again._raw_document_symbols_cache_is_modified
+            assert not ls_again._document_symbols_cache_is_modified

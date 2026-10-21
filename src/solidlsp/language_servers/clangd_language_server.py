@@ -85,11 +85,23 @@ class ClangdLanguageServer(SolidLanguageServer):
         cpp_settings = self._custom_settings or {}
         return (
             cache_format_version,
-            cpp_settings.get("clangd_version"),
-            cpp_settings.get("ls_path"),
-            cpp_settings.get("compile_commands_dir"),
+            self._to_plain_str(cpp_settings.get("clangd_version")),
+            self._to_plain_str(cpp_settings.get("ls_path")),
+            self._to_plain_str(cpp_settings.get("compile_commands_dir")),
             self._compile_commands_fingerprint(),
         )
+
+    @staticmethod
+    def _to_plain_str(value: Any) -> Any:
+        """
+        Converts a setting value that is a string to a plain `str`.
+
+        Settings read from YAML can be instances of `str` subclasses that preserve the original quoting.
+
+        :param value: the setting value
+        :return: the value as a plain `str` if it is a string, the value itself otherwise
+        """
+        return str(value) if isinstance(value, str) else value
 
     def _compile_commands_fingerprint(self) -> str | None:
         compile_db_path = os.path.join(self.repository_root_path, "compile_commands.json")
@@ -313,7 +325,28 @@ class ClangdLanguageServer(SolidLanguageServer):
         def _create_launch_command(self, core_path: str) -> list[str]:
             # --background-index enables clangd to index all files in the project,
             # which is required for finding cross-file references
-            return [core_path, "--background-index"]
+            command = [core_path, "--background-index"]
+
+            # return all references instead of clangd's default of at most 1000, unless the user sets a limit
+            if not self._user_sets_option("limit-references"):
+                command.append("--limit-references=0")
+
+            # log errors only instead of a line for every request and parse, unless the user sets a log level or
+            # Serena itself logs at debug level
+            if not self._user_sets_option("log") and not log.isEnabledFor(logging.DEBUG):
+                command.append("--log=error")
+
+            return command
+
+        def _user_sets_option(self, option_name: str) -> bool:
+            """
+            :param option_name: the name of a clangd option without leading dashes, e.g. "log"
+            :return: whether the user-provided extra arguments (`ls_extra_args`) already set the given option
+            """
+            extra_args = self._custom_settings.get("ls_extra_args", [])
+            if not isinstance(extra_args, list):
+                return False
+            return any(str(arg).lstrip("-").split("=", 1)[0] == option_name for arg in extra_args)
 
     def _create_base_initialize_params(self) -> dict:
         """
