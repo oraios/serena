@@ -9,7 +9,7 @@ import pathlib
 import shutil
 import threading
 from abc import ABC, abstractmethod
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from collections.abc import Callable, Hashable, Iterator, Sequence
 from contextlib import contextmanager
 from copy import copy
@@ -183,6 +183,13 @@ class LSPFileBuffer:
         """
         self._open_in_ls()
 
+    @property
+    def is_open_in_ls(self) -> bool:
+        """
+        Whether the file has been opened in the language server
+        """
+        return self._is_open_in_ls
+
     def _invalidate_cached_data(self, mtime: float | None = None) -> float | None:
         """
         Invalidates cached data (file contents, hash) if the file was modified since it was read
@@ -227,6 +234,62 @@ class LSPFileBuffer:
     def split_lines(self) -> list[str]:
         """Splits the contents of the file into lines."""
         return self.contents.split("\n")
+
+
+class _FilesKeptOpenInLs:
+    """
+    The most recently used files that stay open in the language server after the requests that used them,
+    such that consecutive requests on the same file do not make the language server process the file again.
+    The collection holds one reference (see `LSPFileBuffer.ref_count`) to each buffer it keeps.
+    """
+
+    def __init__(self, capacity: int) -> None:
+        """
+        :param capacity: the maximum number of files to keep open; 0 disables keeping files open
+        """
+        self._capacity = capacity
+        self._buffers: OrderedDict[str, LSPFileBuffer] = OrderedDict()
+
+    def keep(self, file_buffer: LSPFileBuffer) -> list[LSPFileBuffer]:
+        """
+        Marks the given buffer, which is open in the language server, as the most recently used one,
+        taking a reference to it if it is not kept yet.
+
+        :param file_buffer: the buffer to keep
+        :return: the buffers that are no longer kept, whose references the caller must release
+        """
+        if self._capacity <= 0:
+            return []
+        if file_buffer.uri in self._buffers:
+            self._buffers.move_to_end(file_buffer.uri)
+            return []
+
+        # take a reference to the buffer and drop the least recently used buffers beyond the capacity
+        file_buffer.ref_count += 1
+        self._buffers[file_buffer.uri] = file_buffer
+        released_buffers = []
+        while len(self._buffers) > self._capacity:
+            released_buffers.append(self._buffers.popitem(last=False)[1])
+        return released_buffers
+
+    def release(self, uri: str) -> LSPFileBuffer | None:
+        """
+        Stops keeping the buffer of the given file.
+
+        :param uri: the URI of the file
+        :return: the buffer that is no longer kept, whose reference the caller must release, or None if the file was not kept
+        """
+        return self._buffers.pop(uri, None)
+
+    def release_all(self) -> list[LSPFileBuffer]:
+        """
+        Stops keeping any buffer.
+
+        :return: the buffers that are no longer kept, whose references the caller must release
+        """
+        released_buffers = list(self._buffers.values())
+        self._buffers.clear()
+        return released_buffers
 
 
 class SymbolBody(ToStringMixin):
@@ -538,6 +601,7 @@ class SolidLanguageServer(ABC):
         default language identifier to be passed to the language server in `textDocument/didOpen` notifications.
         """
         self.open_file_buffers: dict[str, LSPFileBuffer] = {}
+        self._files_kept_open = _FilesKeptOpenInLs(self._get_number_of_files_kept_open_in_ls())
         self.ls_id = ls_id
         """
         identifies the language server (not to be confused with the language_id passed to the language server)
@@ -894,6 +958,8 @@ class SolidLanguageServer(ABC):
         :return: the published diagnostics, or ``None`` if no diagnostics are available.
         """
         uri = self._validate_text_document_diagnostics_request(relative_file_path, start_line, end_line, min_severity)
+        # servers publish diagnostics when they process a newly opened file, so a file kept open is opened anew
+        self._close_file_if_only_kept_open(relative_file_path)
         published_uri = self._get_published_diagnostics_uri(uri)
         diagnostics: list[ls_types.Diagnostic] | None = None
 
@@ -995,6 +1061,8 @@ class SolidLanguageServer(ABC):
         :return: A list of diagnostics for the file
         """
         uri = self._validate_text_document_diagnostics_request(relative_file_path, start_line, end_line, min_severity)
+        # servers publish diagnostics when they process a newly opened file, so a file kept open is opened anew
+        self._close_file_if_only_kept_open(relative_file_path)
         published_uri = self._get_published_diagnostics_uri(uri)
         diagnostics_before_request = self._get_published_diagnostics_generation(published_uri)
         ret: list[ls_types.Diagnostic] | None = None
@@ -1061,6 +1129,17 @@ class SolidLanguageServer(ABC):
         if the LS is not fully initialized yet.
         """
         return 2
+
+    def _get_number_of_files_kept_open_in_ls(self) -> int:
+        """
+        Returns the number of most recently used files that stay open in the language server after the requests
+        that used them (instead of being closed right away), such that consecutive requests on the same file do not
+        make the language server process the file again.
+
+        Meant to be overridden by subclasses for language servers that do expensive work whenever a file is opened.
+        The default (0) closes every file right after use.
+        """
+        return 0
 
     def notify_files_created(self, relative_file_paths: Sequence[str]) -> None:
         """
@@ -1443,10 +1522,32 @@ class SolidLanguageServer(ABC):
         try:
             yield fb
         finally:
-            fb.ref_count -= 1
-            if fb.ref_count == 0:
-                fb.close()
-                del self.open_file_buffers[uri]
+            if fb.is_open_in_ls:
+                for released_buffer in self._files_kept_open.keep(fb):
+                    self._release_file_buffer(released_buffer)
+            self._release_file_buffer(fb)
+
+    def _release_file_buffer(self, file_buffer: LSPFileBuffer) -> None:
+        """
+        Releases a reference to the given open file buffer, closing the file once no references remain.
+
+        :param file_buffer: the buffer to release
+        """
+        file_buffer.ref_count -= 1
+        if file_buffer.ref_count == 0:
+            file_buffer.close()
+            del self.open_file_buffers[file_buffer.uri]
+
+    def _close_file_if_only_kept_open(self, relative_file_path: str) -> None:
+        """
+        Closes the given file in the language server if it is open only because it is kept open after earlier
+        requests, such that the next request opens it anew and the server processes it again.
+
+        :param relative_file_path: the relative path of the file
+        """
+        released_buffer = self._files_kept_open.release(self._resolve_file_uri(relative_file_path))
+        if released_buffer is not None:
+            self._release_file_buffer(released_buffer)
 
     @contextmanager
     def _open_file_context(
@@ -3311,6 +3412,8 @@ class SolidLanguageServer(ABC):
         :param shutdown_timeout: time, in seconds, to wait for the server to shutdown gracefully before killing it
         """
         try:
+            for released_buffer in self._files_kept_open.release_all():
+                self._release_file_buffer(released_buffer)
             self.server.stop(timeout=shutdown_timeout)
         except Exception as e:
             log.warning(f"Exception while shutting down language server: {e}")

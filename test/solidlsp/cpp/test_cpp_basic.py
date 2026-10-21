@@ -96,10 +96,21 @@ class TestCppLanguageServer:
         refs2 = language_server.request_references(file_path, sel_start["line"], sel_start["character"])
         assert sorted(map(_ref_key, refs2)) == sorted(map(_ref_key, refs)), "Reference results should be stable across calls"
 
-    @pytest.mark.parametrize("language_server", _cpp_servers, indirect=True)
-    @pytest.mark.xfail(
-        strict=True,
-        reason=("Both clangd and ccls do not support cross-file references for newly created files that were never opened by the LS."),
+    @pytest.mark.parametrize(
+        "language_server",
+        [
+            pytest.param(
+                ls_id,
+                marks=pytest.mark.xfail(
+                    strict=True,
+                    reason="ccls does not support cross-file references for newly created files that were never opened by the LS.",
+                )
+                if ls_id == LanguageServerId.CPP_CCLS
+                else (),
+            )
+            for ls_id in _cpp_servers
+        ],
+        indirect=True,
     )
     def test_find_references_in_newly_written_file(self, language_server: SolidLanguageServer) -> None:
         # Create a new file that references the 'add' function from b.cpp

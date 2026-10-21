@@ -5,6 +5,9 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Language Servers:
   - Performance: finding referencing symbols opened each referencing file in the language server once per
     reference; a file is now opened only when its symbols are not cached yet
+  - Performance: C/C++ (clangd) keeps the 3 most recently used files open between requests, so consecutive
+    requests on the same file no longer make clangd parse it again; configurable via the `cpp` setting
+    `files_kept_open` (0 restores the previous behaviour)
 
 # v2.1.0 (2026-10-19)
 
