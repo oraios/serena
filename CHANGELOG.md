@@ -2,6 +2,10 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Language Servers:
+  - Fix: the C/C++ (clangd) symbol cache was discarded on every start when a value in
+    `ls_specific_settings.cpp` was quoted in YAML (e.g. `ls_path: '...'`)
+
 # v2.1.0 (2026-10-19)
 
 * General:

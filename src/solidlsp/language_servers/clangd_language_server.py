@@ -85,11 +85,23 @@ class ClangdLanguageServer(SolidLanguageServer):
         cpp_settings = self._custom_settings or {}
         return (
             cache_format_version,
-            cpp_settings.get("clangd_version"),
-            cpp_settings.get("ls_path"),
-            cpp_settings.get("compile_commands_dir"),
+            self._to_plain_str(cpp_settings.get("clangd_version")),
+            self._to_plain_str(cpp_settings.get("ls_path")),
+            self._to_plain_str(cpp_settings.get("compile_commands_dir")),
             self._compile_commands_fingerprint(),
         )
+
+    @staticmethod
+    def _to_plain_str(value: Any) -> Any:
+        """
+        Converts a setting value that is a string to a plain `str`.
+
+        Settings read from YAML can be instances of `str` subclasses that preserve the original quoting.
+
+        :param value: the setting value
+        :return: the value as a plain `str` if it is a string, the value itself otherwise
+        """
+        return str(value) if isinstance(value, str) else value
 
     def _compile_commands_fingerprint(self) -> str | None:
         compile_db_path = os.path.join(self.repository_root_path, "compile_commands.json")
