@@ -137,6 +137,10 @@ class AstroTypeScriptServer(TypeScriptLanguageServer):
         return "typescript"
 
     @override
+    def _get_pinned_tsdk_path(self) -> str:
+        return self._custom_tsdk_path
+
+    @override
     def _create_base_initialize_params(self) -> dict:
         params = super()._create_base_initialize_params()
         params["initializationOptions"] = {

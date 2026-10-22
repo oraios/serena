@@ -73,7 +73,8 @@ class ResponseFacade(BaseModel):
 
 
 class ResponseConfigOverview(BaseModel):
-    active_project: dict[str, str | None]
+    web_dashboard_open_on_launch: bool | None
+    active_project: dict[str, str | bool | None]
     context: dict[str, str]
     modes: list[dict[str, str]]
     active_tools: list[str]
@@ -329,6 +330,24 @@ class SerenaDashboardAPI:
                 raise ValueError("Config overview not yet available")
             return result
 
+        @self._app.route("/save_web_dashboard_open_on_launch", methods=["POST"])
+        def save_web_dashboard_open_on_launch() -> dict[str, str]:
+            # require an explicit boolean choice
+            request_data = request.get_json()
+            value = request_data.get("web_dashboard_open_on_launch") if isinstance(request_data, dict) else None
+            if not isinstance(value, bool):
+                return {"status": "error", "message": "web_dashboard_open_on_launch must be a boolean"}
+
+            # persist the preference through the task executor
+            def run() -> None:
+                self._agent.serena_config.save_web_dashboard_open_on_launch(value)
+
+            try:
+                self._agent.issue_task(run, logged=True, name="SaveWebDashboardOpenOnLaunch")
+                return {"status": "success"}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+
         @self._app.route("/shutdown", methods=["PUT"])
         def shutdown() -> dict[str, str]:
             self._agent.shutdown()
@@ -529,10 +548,11 @@ class SerenaDashboardAPI:
         # Get active project info
         project = self._agent.get_active_project()
         active_project_name = project.project_name if project else None
-        project_info = {
+        project_info: dict[str, str | bool | None] = {
             "name": active_project_name,
             "language": ", ".join([ls_id.get_key() for ls_id in project.project_config.language_servers]) if project else None,
             "path": str(project.project_root) if project else None,
+            "is_trusted": project.is_trusted() if project else None,
         }
 
         # Get context info
@@ -646,6 +666,7 @@ class SerenaDashboardAPI:
             encoding = project.project_config.encoding
 
         return ResponseConfigOverview(
+            web_dashboard_open_on_launch=self._agent.serena_config.web_dashboard_open_on_launch,
             active_project=project_info,
             context=context_info,
             modes=modes_info,

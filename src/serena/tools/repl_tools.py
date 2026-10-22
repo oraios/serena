@@ -1,13 +1,15 @@
 """
 Tools which provide access to Serena's functionality through Python code execution
 """
-
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from sensai.util.string import dict_string
+
+from serena.tools import ToolMarkerCanEdit
 from serena.tools.tools_base import Tool, ToolMarkerBeta, ToolMarkerOptional
 
 
-class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
+class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta, ToolMarkerCanEdit):
     """
     Executes Python code which accesses Serena's functionality programmatically.
     """
@@ -20,10 +22,17 @@ class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
             docs += "\n\nAvailable facades are provided at project activation"
         return docs
 
-    def apply(self, session_id: str, code: str) -> str:
+    def _format_tool_params(self, params: dict) -> str:
+        code = params.pop("code", "")
+        return dict_string(params) + "\n" + code
+
+    def apply(self, session: str, code: str) -> str:
         """
-        Executes the given Python code, which has access to Serena's functionality through the object `s`.
-        The functionality is organised in facades, which are attributes of `s` (e.g. `s.myfacade`).
+        Executes the given Python code in a REPL, which provides access to all of Serena's functionality
+        (symbol & reference search, file overviews, editing, refactoring, inspections, etc.).
+
+        Serena's functionality is provided through an object `s`.
+        The functionality is organised in facades, which are attributes of `s`.
 
         Documentation: Use `s.info("<facade>")` when you will use a facade's functionality (it documents all common
         operations at once) and `s.info("<facade>.<method>")` for a single or a rarely needed operation. Several items
@@ -34,8 +43,9 @@ class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
         calls).
 
         The code is executed like a notebook cell: if its last statement is an expression, the expression's value is
-        the result. Results are rendered in a form suitable for you; lists are rendered element-wise,
+        the result. Results of facade methods are rendered in a form optimised for you; lists are rendered element-wise,
         strings are passed through unchanged.
+        You cannot use `print` or other output functions to return content; only use the last expression to return content.
 
         Output size: methods with a `max_answer_chars` parameter limit the size of the rendered result (-1 uses the
         configured default). If the limit is exceeded, a shortened result (or no content) is rendered instead;
@@ -47,8 +57,9 @@ class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta):
         `s.vars()` lists the persisted items, `s.clear()` removes them. Do not store facades (`s.<facade>`) in
         variables; access them via `s` at call time. Do not keep large results longer than needed.
 
-        :param session_id: your Serena session id, as provided in Serena's instructions (call `initial_instructions` if you do not have one)
+        :param session: your Serena session id, as provided in Serena's instructions (call `initial_instructions` if you do not have one)
         :param code: the Python code to execute
         :return: the representation of the returned value, or the error if execution failed
         """
-        return self.agent.get_repl().execute(code, self.agent.get_session(session_id))
+        # NOTE: Parameter `session` cannot be called `session_id` because of a bug in the Claude Desktop client.
+        return self.agent.get_repl().execute(code, self.agent.get_session(session))

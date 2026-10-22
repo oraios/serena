@@ -737,7 +737,7 @@ class SerenaAgent:
             self._dashboard_manager = DashboardManager(
                 port,
                 self.serena_config.web_dashboard_listen_address,
-                self.serena_config.web_dashboard_open_on_launch,
+                self.serena_config.is_dashboard_opened_on_launch(),
                 self._active_project,
                 mode_str=self.serena_config.web_dashboard_interface,
             )
@@ -751,17 +751,23 @@ class SerenaAgent:
     def _send_usage_info(self) -> None:
         if os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true" or os.getenv("SERENA_USAGE_REPORTING") == "false":
             return
-        params: dict[str, str | int] = {
-            "os": platform.system(),
-            "dashboard": int(self.serena_config.web_dashboard),
-            "version": self.version,
-            "backend": self._language_backend.get_key(),
-            "context": self._context.name,
-        }
-        try:
-            requests.get("https://oraios-software.de/serena_usage.php", params=params, timeout=1)
-        except Exception as e:
-            log.debug(f"Failed to send usage info: {e}")
+
+        def send_usage_info():
+            params: dict[str, str | int] = {
+                "os": platform.system(),
+                "dashboard": int(self.serena_config.web_dashboard),
+                "version": self.version,
+                "backend": self._language_backend.get_key(),
+                "context": self._context.name,
+                "agent_interface": self._agent_interface.value,
+            }
+            try:
+                requests.get("https://oraios-software.de/serena_usage.php", params=params, timeout=5)
+            except Exception as e:
+                log.warning(f"Failed to send usage info: {e}")
+
+        # start thread to send usage info asynchronously, so that it does not block the agent startup
+        threading.Thread(target=send_usage_info, daemon=True).start()
 
     @staticmethod
     def _is_dashboard_openable(serena_config: SerenaConfig) -> bool:
@@ -770,7 +776,7 @@ class SerenaAgent:
         :return: whether the web dashboard is available and opening it is a meaningful operation
             (i.e. it is enabled and not opened automatically)
         """
-        return serena_config.web_dashboard and not serena_config.web_dashboard_open_on_launch and not serena_config.gui_log_window
+        return serena_config.web_dashboard and not serena_config.is_dashboard_opened_on_launch() and not serena_config.gui_log_window
 
     @classmethod
     def _create_base_toolset(
@@ -1198,7 +1204,7 @@ class SerenaAgent:
 
         # inform about the session id
         system_prompt += "\n\n" + self._format_prompt_tag(
-            f"Your Serena session id is `{session_id}`. Pass it as the `session_id` parameter to tools which require it.",
+            f"Your Serena session id is `{session_id}`. Pass it as the `session` parameter to tools which require it.",
             tag="session",
         )
 

@@ -5,12 +5,15 @@ The Serena Model Context Protocol (MCP) Server
 
 import sys
 from collections.abc import AsyncIterator, Iterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
+from functools import wraps
+from inspect import signature
 from typing import Any, Literal, cast
 
 import docstring_parser
+import uvicorn
 from mcp.server.mcpserver import server
 from mcp.server.mcpserver.context import LifespanContextT, RequestT
 from mcp.server.mcpserver.exceptions import ToolError
@@ -44,6 +47,34 @@ def configure_logging(*args, **kwargs) -> None:
 
 # patch the logging configuration function in fastmcp, because it's hard-coded and broken
 server.configure_logging = configure_logging  # type: ignore
+
+
+@contextmanager
+def uvicorn_ignore_logging_config_context() -> Iterator[None]:
+    """
+    Temporarily suppress Uvicorn logging configuration during HTTP server execution.
+    The MCP SDK uses Uvicorn to serve the MCP server over HTTP but does not allow uvicorn's logging
+    configuration to be set. As a result, uvicorn's default configuration applies, which, unfortunately,
+    overrides any existing logging configuration.
+    This context manager temporarily replaces the uvicorn.Config constructor to ignore any logging configuration
+    options, ensuring that the existing logging configuration remains intact.
+    """
+    original_config = uvicorn.Config
+
+    @wraps(original_config)
+    def create_config(*args: Any, **kwargs: Any) -> uvicorn.Config:
+        # override logging options supplied positionally, by keyword, or through defaults
+        arguments = signature(original_config).bind_partial(*args, **kwargs)
+        arguments.arguments["log_config"] = None
+        arguments.arguments["log_level"] = None
+        return original_config(*arguments.args, **arguments.kwargs)
+
+    # restore the constructor
+    uvicorn.Config = create_config  # type: ignore
+    try:
+        yield
+    finally:
+        uvicorn.Config = original_config
 
 
 @dataclass

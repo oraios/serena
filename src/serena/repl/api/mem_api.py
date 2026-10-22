@@ -164,7 +164,7 @@ class MemoryApi(FacadeApi):
         """
         return self._get_memory_manager().delete_memory(memory_name, is_tool_context=True)
 
-    @facade_method(corresponding_tool=OnboardingTool)
+    @facade_method(corresponding_tool=OnboardingTool, can_edit=True)
     def onboarding(self) -> str:
         """
         Provides the instructions for performing onboarding (identifying the project structure and essential tasks,

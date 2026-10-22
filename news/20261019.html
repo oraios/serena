@@ -1,0 +1,25 @@
+<div class="news-item">
+    <h3>Serena v2.1.0</h3>
+    <p class="date">2026-10-19</p>
+    <p><b>Important Fixes.</b></p>
+    <ul>
+        <li>Restored Claude Desktop client compatibility in chat mode (code mode was unaffected).</li>
+        <li>Fixed dashboard and file logging when running the MCP server in HTTP mode,
+            working around an MCP SDK configuration issue.</li>
+    </ul>
+    <p>
+        <b>Expanded Language Server Support.</b>
+        Serena now supports VB.NET via a Roslyn-based language server.
+        The new <code>typescript_tsgo</code> option provides access to TypeScript 7's native language
+        server, with automatic installation of the TypeScript package.
+    </p>
+    <p>
+        See our <a target="_blank" href="https://github.com/oraios/serena/blob/main/CHANGELOG.md">change log</a>
+        for the full list of changes.
+    </p>
+    <p>
+        <b>Update Now.</b>
+        If you are using the uv tool installation of Serena, upgrade as follows:<br>
+        <code>uv tool upgrade serena-agent</code>
+    </p>
+</div>

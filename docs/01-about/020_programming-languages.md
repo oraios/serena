@@ -67,11 +67,11 @@ Some languages require additional installations or setup steps, as noted.
 * **Dart**
 * **Elixir**  
   (requires Elixir installation; Expert language server is downloaded automatically)
-* **Elm**  
-  (requires Elm compiler)
 * **Erlang**  
-  (requires installation of beam and [erlang_ls](https://github.com/erlang-ls/erlang_ls); experimental, might be slow or hang;
-  note that functions are addressed as `name#arity`, e.g. `create_user#4`, because `/` is reserved as the name path separator)
+  (uses the [Erlang Language Platform](https://github.com/WhatsApp/erlang-language-platform); Serena downloads the pinned platform release automatically; requires Erlang/OTP; functions are addressed as `name#arity`, e.g. `create_user#4`, because `/` is reserved as the name path separator)
+* **Elm**
+
+  (requires Elm compiler)
 * **F#**  
   (requires [.NET v8.0+](https://dotnet.microsoft.com/en-us/download/dotnet); uses FsAutoComplete/Ionide, which is auto-installed; for Homebrew .NET on macOS, set DOTNET_ROOT in your environment)
 * **Fortran**   
@@ -93,7 +93,8 @@ Some languages require additional installations or setup steps, as noted.
   single-file document symbols are available. Note: the upstream server does not implement `textDocument/references`,
   so find-references is unsupported.)
 * **Groovy**  
-  (requires local groovy-language-server.jar setup via `GROOVY_LS_JAR_PATH` or configuration)
+  (requires a local groovy-language-server.jar, configured via `ls_jar_path` in `ls_specific_settings`;
+  see the [Groovy Setup Guide](../03-special-guides/groovy_setup_guide_for_serena) for details)
 * **Haskell**  
   (automatically locates HLS via ghcup, stack, or system PATH; supports Stack and Cabal projects)
 * **Haxe**
@@ -122,6 +123,9 @@ Some languages require additional installations or setup steps, as noted.
   (requires `lean` and `lake` installed via [elan](https://github.com/leanprover/elan); uses the built-in Lean 4 LSP;
   the project must be a Lake project with `lake build` run before use)
 * **Lua**
+  (by default, uses `lua-language-server`; the experimental Rust-based [EmmyLua Analyzer](https://github.com/EmmyLuaLs/emmylua-analyzer-rust)
+  can be selected with language `lua_emmylua`; Serena manages a verified download unless `ls_path` is set;
+  references from other files are not found if the file defining the symbol uses CRLF line endings)
 * **Luau**
 * **Markdown**  
   (must explicitly enable language `markdown`, primarily useful for documentation-heavy projects)
@@ -146,7 +150,9 @@ Some languages require additional installations or setup steps, as noted.
 * **PHP**  
   (by default, uses the Intelephense language server (language `php`), set `INTELEPHENSE_LICENSE_KEY` environment variable for premium features;
   we also support [Phpactor](https://github.com/phpactor/phpactor) (language `php_phpactor`), which requires PHP 8.1+;
-  and the experimental [PHPantom](https://github.com/PHPantom-dev/phpantom_lsp) backend (language `php_phpantom`)
+  the experimental [PHPantom](https://github.com/PHPantom-dev/phpantom_lsp) backend (language `php_phpantom`);
+  and the experimental standalone [Devsense PHP Language Server](https://www.npmjs.com/package/devsense-php-ls)
+  (language `php_devsense`), which is installed with npm when needed
 * **PowerShell**  
   (requires PowerShell 7+ (`pwsh`) on PATH or in a standard install location; Serena automatically downloads PowerShell Editor Services 4.4.0 and installs PSScriptAnalyzer 1.25.0 via `Save-Module` from your configured PowerShell repository)
 * **Python**
@@ -154,7 +160,7 @@ Some languages require additional installations or setup steps, as noted.
   alternatives: [BasedPyright](https://github.com/DetachHead/basedpyright) (language `python_basedpyright`),
   [ty](https://github.com/astral-sh/ty) (language `python_ty`),
   [pyrefly](https://github.com/facebook/pyrefly) (language `python_pyrefly`),
-  [Jedi](https://github.com/palotas/jedi-language-server) (language `python_jedi`);
+  [Jedi](https://github.com/pappasam/jedi-language-server) (language `python_jedi`);
   Pyright, BasedPyright, ty, and pyrefly require `uv`/`uvx` in PATH)
 * **QML**
   (requires Qt 6, provides `qmlls` or `qmlls6` on PATH; see the [Qt qmlls documentation](https://doc.qt.io/qt-6/qtqml-tool-qmlls.html))
@@ -183,13 +189,19 @@ Some languages require additional installations or setup steps, as noted.
   (uses `terraform-ls` 0.36.5, which Serena downloads automatically; requires Terraform on PATH)
 * **TOML**  
   (experimental; uses Taplo 0.10.0, taken from PATH if present, otherwise downloaded automatically)
-* **TypeScript**
+* **TypeScript**  
+  (by default, uses typescript-language-server (language `typescript`); the native language server of
+  TypeScript 7 (language `typescript_tsgo`) is installed automatically via npm, requiring Node.js and npm
+  only for the installation)
 * **Deno**  
   (experimental; requires the `deno` CLI on PATH — it bundles the language server used here;
   serves Deno TypeScript/JavaScript and understands `npm:` / `jsr:` / `https:` imports and the `Deno.*`
   globals, which the plain TypeScript language server does not; overlaps `typescript` on file extensions,
   so it is not auto-detected and must be set as the language explicitly — do not also enable `typescript`
   for the same files)
+* **VB.NET**  
+  (uses the community Roslyn-based [roslyn-vbnet-languageserver](https://github.com/LaunchCG/roslyn-vbnet-languageserver) (language `vbnet`), requiring [.NET v10+](https://dotnet.microsoft.com/en-us/download/dotnet) and, on Windows, `pwsh` ([PowerShell 7+](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows?view=powershell-7.5));
+  also handles `.cs` files so mixed VB.NET/C# solutions share one language server instance; for pure C# projects, `csharp` takes precedence)
 * **Vue**
   (3.x with TypeScript; requires Node.js v18+ and npm; supports .vue Single File Components with monorepo detection)
 * **Wolfram Language**
@@ -203,6 +215,20 @@ Some languages require additional installations or setup steps, as noted.
 Additional language servers can easily be supported by providing an adapter implementation;
 see our [contribution guide](https://github.com/oraios/serena/blob/main/CONTRIBUTING.md).
 If you need to support a custom language server which is not yet publicly available, you have the option to [register an external language server](external-ls-registration).
+
+### Downloading Language Server Dependencies Ahead of Time
+
+Language server dependencies are normally downloaded when a project using the respective language is first activated.
+In environments with restricted network access, dependencies can instead be downloaded during a container or machine build:
+
+```shell
+serena download-ls-dependencies python typescript
+```
+
+Language servers that require an external toolchain, such as Go or Java, can only be prepared
+when that toolchain is installed; failures are reported and the command exits non-zero after attempting the remaining servers.
+
+The downloaded dependencies are tied to the Serena version that installed them, so repeat the command after upgrading Serena.
 
 ## The Serena JetBrains Plugin
 

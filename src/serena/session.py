@@ -39,7 +39,7 @@ class SessionRegistry:
     the set of ids is not controlled).
     """
 
-    def __init__(self, max_sessions: int = 100, idle_ttl_seconds: float = 6 * 3600) -> None:
+    def __init__(self, max_sessions: int = 100, idle_ttl_seconds: float = 48 * 3600) -> None:
         """
         :param max_sessions: the maximum number of sessions to keep
         :param idle_ttl_seconds: the time after which an idle session is evicted (releasing its REPL namespace)
