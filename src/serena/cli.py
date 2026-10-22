@@ -40,7 +40,6 @@ from serena.constants import (
     SERENAS_OWN_MODE_YAMLS_DIR,
 )
 from serena.language_backend import BuiltinLanguageBackend, LanguageBackendRegistry
-from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.tools import ActivateProjectTool
 from serena.util.cli_util import AutoRegisteringGroup
@@ -51,6 +50,7 @@ from solidlsp.util.subprocess_util import subprocess_kwargs
 
 if TYPE_CHECKING:
     from serena.memories.memory_manager import MemoryManager
+    from solidlsp.ls import SolidLanguageServer
 
 log = logging.getLogger(__name__)
 
@@ -763,6 +763,12 @@ class SerenaConfigCommands(AutoRegisteringGroup):
 class ProjectCommands(AutoRegisteringGroup):
     """Group for 'project' subcommands."""
 
+    _INDEXING_CHUNK_SIZE = 64
+    """
+    the number of files whose symbols are requested together when indexing a project; the language server may process
+    the requests of a chunk concurrently (see `SolidLanguageServer.request_document_symbols_concurrently`)
+    """
+
     def __init__(self) -> None:
         super().__init__(
             name="project", help="Manage Serena projects. You can run `project <command> --help` for more info on each command."
@@ -919,21 +925,45 @@ class ProjectCommands(AutoRegisteringGroup):
             files_failed = []
             language_file_counts: dict[LanguageServerIdLike, int] = collections.defaultdict(lambda: 0)
             last_save_time = time.monotonic()
-            for i, project_file in enumerate(tqdm(files, desc="Indexing")):
-                project_file: Project.ProjectFile
-                rel_path = project_file.rel_path
-                try:
-                    ls = ls_mgr.get_language_server(rel_path)
-                    ls.request_document_symbols(rel_path)
-                    language_file_counts[ls.ls_id] += 1
-                except Exception as e:
-                    log.error(f"Failed to index {rel_path}, continuing.")
-                    collected_exceptions.append(e)
-                    files_failed.append(rel_path)
-                now = time.monotonic()
-                if now - last_save_time >= 30:
-                    ls_mgr.save_all_caches()
-                    last_save_time = now
+            with tqdm(total=len(files), desc="Indexing") as progress:
+                for chunk_start in range(0, len(files), ProjectCommands._INDEXING_CHUNK_SIZE):
+                    chunk = files[chunk_start : chunk_start + ProjectCommands._INDEXING_CHUNK_SIZE]
+
+                    # determine the language server of each file in the chunk
+                    chunk_files: list[tuple[str, SolidLanguageServer]] = []
+                    for project_file in chunk:
+                        try:
+                            chunk_files.append((project_file.rel_path, ls_mgr.get_language_server(project_file.rel_path)))
+                        except Exception as e:
+                            log.error(f"Failed to index {project_file.rel_path}, continuing.")
+                            collected_exceptions.append(e)
+                            files_failed.append(project_file.rel_path)
+                            progress.update(1)
+
+                    # request the symbols of the chunk's files concurrently, where the language server supports it
+                    rel_paths_per_language_server: dict[SolidLanguageServer, list[str]] = collections.defaultdict(list)
+                    for rel_path, ls in chunk_files:
+                        rel_paths_per_language_server[ls].append(rel_path)
+                    indexed_rel_paths: set[str] = set()
+                    for ls, rel_paths in rel_paths_per_language_server.items():
+                        indexed_rel_paths.update(ls.request_document_symbols_concurrently(rel_paths))
+
+                    # request the symbols of the remaining files one by one, recording failures
+                    for rel_path, ls in chunk_files:
+                        try:
+                            if rel_path not in indexed_rel_paths:
+                                ls.request_document_symbols(rel_path)
+                            language_file_counts[ls.ls_id] += 1
+                        except Exception as e:
+                            log.error(f"Failed to index {rel_path}, continuing.")
+                            collected_exceptions.append(e)
+                            files_failed.append(rel_path)
+                        progress.update(1)
+
+                    now = time.monotonic()
+                    if now - last_save_time >= 30:
+                        ls_mgr.save_all_caches()
+                        last_save_time = now
             reported_language_file_counts = {k.get_key(): v for k, v in language_file_counts.items()}
             click.echo(f"Indexed files per language: {dict_string(reported_language_file_counts, brackets=None)}")
             ls_mgr.save_all_caches()

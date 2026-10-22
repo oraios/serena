@@ -34,7 +34,12 @@ class ClangdLanguageServer(SolidLanguageServer):
           ``compile_commands.json`` if needed.
         - clangd_version: Override the pinned Clangd version downloaded by Serena
           (default: the bundled Serena version).
+        - parallel_document_symbol_requests: Number of files whose symbols are requested from clangd at the same
+          time when a directory is scanned or the project is indexed and the files are not cached yet (default: 4;
+          1 requests one file at a time). clangd parses each of these files in a worker thread of its own.
     """
+
+    _DEFAULT_PARALLEL_DOCUMENT_SYMBOL_REQUESTS = 4
 
     @staticmethod
     def _determine_log_level(line: str) -> int:
@@ -78,6 +83,19 @@ class ClangdLanguageServer(SolidLanguageServer):
         self.service_ready_event = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
         self.resolve_main_method_available = threading.Event()
+
+    @override
+    def _get_number_of_parallel_document_symbol_requests(self) -> int:
+        cpp_settings = self._custom_settings or {}
+        parallel_requests = cpp_settings.get("parallel_document_symbol_requests", self._DEFAULT_PARALLEL_DOCUMENT_SYMBOL_REQUESTS)
+        if isinstance(parallel_requests, bool) or not isinstance(parallel_requests, int) or parallel_requests < 1:
+            log.warning(
+                "Invalid value %r for the C/C++ setting 'parallel_document_symbol_requests'; using the default of %d",
+                parallel_requests,
+                self._DEFAULT_PARALLEL_DOCUMENT_SYMBOL_REQUESTS,
+            )
+            return self._DEFAULT_PARALLEL_DOCUMENT_SYMBOL_REQUESTS
+        return parallel_requests
 
     @override
     def _raw_document_symbols_cache_fingerprint(self) -> Hashable:
