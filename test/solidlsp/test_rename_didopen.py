@@ -1,3 +1,4 @@
+import threading
 from unittest.mock import MagicMock
 
 from solidlsp.ls import SolidLanguageServer
@@ -31,6 +32,7 @@ def test_request_rename_symbol_edit_opens_file_before_rename(tmp_path) -> None:
     language_server.repository_root_path = str(tmp_path)
     language_server.server_started = True
     language_server.open_file_buffers = {}
+    language_server._open_file_buffers_lock = threading.RLock()
     language_server._encoding = "utf-8"
     language_server.language_id = "typescript"
     language_server.server = server
