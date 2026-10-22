@@ -10,6 +10,7 @@ results (document symbols, hover, etc.) for the lifetime of the server. This tes
 that startup instead fails fast once that warning is observed.
 """
 
+import json
 import shutil
 import time
 from pathlib import Path
@@ -47,7 +48,19 @@ def test_startup_does_not_wait_out_the_full_timeout() -> None:
         assert all_symbols == []
 
 
-def test_adding_graphql_config_invalidates_the_stale_empty_cache(tmp_path_factory: pytest.TempPathFactory) -> None:
+@pytest.mark.parametrize(
+    ("config_filename", "config_content"),
+    [
+        (".graphqlrc.yml", "schema: schema.graphql\n"),
+        (
+            "package.json",
+            json.dumps({"name": "test-repo", "dependencies": {"graphql": "^16.9.0"}, "graphql": {"schema": "schema.graphql"}}),
+        ),
+    ],
+)
+def test_adding_graphql_config_invalidates_the_stale_empty_cache(
+    tmp_path_factory: pytest.TempPathFactory, config_filename: str, config_content: str
+) -> None:
     """
     Regression test: `_raw_document_symbols_cache_fingerprint` must account for the resolved
     graphql-config, or Serena's own on-disk document-symbols cache -- keyed only on each file's
@@ -72,7 +85,7 @@ def test_adding_graphql_config_invalidates_the_stale_empty_cache(tmp_path_factor
 
     # Add a graphql-config, then start a *new* server instance against the same repo path (and
     # therefore the same on-disk document-symbols cache) without touching schema.graphql itself.
-    (repo_path / ".graphqlrc.yml").write_text("schema: schema.graphql\n")
+    (repo_path / config_filename).write_text(config_content)
 
     with start_ls_context(LanguageServerId.GRAPHQL, repo_path=str(repo_path)) as ls:
         all_symbols, _ = ls.request_document_symbols("schema.graphql").get_all_symbols_and_roots()

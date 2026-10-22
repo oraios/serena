@@ -32,6 +32,7 @@ Caveats:
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import shutil
@@ -119,12 +120,31 @@ class GraphQLLanguageServer(SolidLanguageServer):
                     content = f.read()
             except OSError:
                 continue
-            if filename == "package.json" and b'"graphql"' not in content:
-                # package.json is only a graphql-config if it has a "graphql" key; otherwise it's
-                # not a match and we keep looking (cosmiconfig's own resolution behaves the same way).
-                continue
+            if filename == "package.json":
+                content = self._extract_graphql_config_from_package_json(content)
+                if content is None:
+                    continue
             return (filename, hashlib.sha256(content).hexdigest())
         return None
+
+    @staticmethod
+    def _extract_graphql_config_from_package_json(content: bytes) -> bytes | None:
+        """
+        Extracts the graphql-config embedded in a ``package.json``.
+
+        :param content: the raw content of the ``package.json`` file.
+        :return: a canonical serialization of the value of the top-level ``graphql`` key, or ``None``
+            if the file is not valid JSON or has no such key (in which case it is not a graphql-config,
+            and cosmiconfig keeps looking). Only this value is returned so that changes to the rest of
+            the file (dependencies, scripts, ...), which do not affect the language server, are ignored.
+        """
+        try:
+            package = json.loads(content)
+        except ValueError:
+            return None
+        if not isinstance(package, dict) or "graphql" not in package:
+            return None
+        return json.dumps(package["graphql"], sort_keys=True).encode()
 
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
         def _get_or_install_core_dependency(self) -> str:
