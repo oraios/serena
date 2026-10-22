@@ -3420,9 +3420,14 @@ class SolidLanguageServer(ABC):
 
         :param shutdown_timeout: time, in seconds, to wait for the server to shutdown gracefully before killing it
         """
+        # close the files kept open while the language server is still running
         try:
             for released_buffer in self._files_kept_open.release_all():
                 self._release_file_buffer(released_buffer)
+        except Exception as e:
+            log.warning(f"Exception while closing the files kept open in the language server: {e}")
+
+        try:
             self.server.stop(timeout=shutdown_timeout)
         except Exception as e:
             log.warning(f"Exception while shutting down language server: {e}")
