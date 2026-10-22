@@ -520,6 +520,7 @@ Supported settings:
 | `ls_path` | managed download | Override the `clangd` executable path. |
 | `compile_commands_dir` | `.serena` | Directory where Serena writes a transformed `compile_commands.json` if the project's original database uses relative `directory` entries. |
 | `clangd_version` | `19.1.2` | Override the `clangd` version Serena downloads when `ls_path` is not set. |
+| `files_kept_open` | `3` | Number of most recently used files that stay open in `clangd` after use, so that consecutive requests on the same file do not make `clangd` parse it again. `0` closes every file right after use. Each open file keeps its parsed form in `clangd`'s memory. |
 
 #### C/C++ via `ccls`
 
