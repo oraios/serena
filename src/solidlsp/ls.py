@@ -1361,7 +1361,7 @@ class SolidLanguageServer(ABC):
         # apply the unsupported-extension rule to files
         if is_file and ignore_unsupported_files:
             fn_matcher = self.get_source_fn_matcher()
-            if not fn_matcher.is_relevant_filename(project_entry.get_abs_path()):
+            if not fn_matcher.is_relevant_file(project_entry.get_abs_path()):
                 return True
 
         return match_path(relative_path, self.get_ignore_spec(), root_path=self.repository_root_path, is_dir=project_entry.is_dir())
