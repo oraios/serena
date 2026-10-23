@@ -2,6 +2,15 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Language Servers:
+  - Add experimental Pkl language server support (language `pkl`), using Apple's
+    [Pkl Language Server](https://github.com/apple/pkl-lsp), which must be installed as `pkl-lsp` on PATH
+    in version 0.8.0 or newer. The language must be added to a project's `language_servers` explicitly, as
+    experimental languages are not auto-detected. The server implements neither
+    `textDocument/documentSymbol` nor `textDocument/references`, so Serena's symbol and reference tools
+    return no results for Pkl sources (logging that the server does not implement them); definition,
+    hover, diagnostics and formatting work.
+
 # v2.1.0 (2026-10-19)
 
 * General:

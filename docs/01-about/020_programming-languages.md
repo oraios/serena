@@ -145,6 +145,11 @@ Some languages require additional installations or setup steps, as noted.
   the experimental [PHPantom](https://github.com/PHPantom-dev/phpantom_lsp) backend (language `php_phpantom`);
   and the experimental standalone [Devsense PHP Language Server](https://www.npmjs.com/package/devsense-php-ls)
   (language `php_devsense`), which is installed with npm when needed
+* **Pkl**  
+  (experimental; must be explicitly added to the languages list, as it is not auto-detected; requires version
+  0.8.0 or newer of the `pkl-lsp` executable on PATH. The server implements neither
+  `textDocument/documentSymbol` nor `textDocument/references`, so Serena's symbol and reference tools return
+  no results for Pkl sources (the server's limitation is logged); definition, hover, diagnostics and formatting work)
 * **PowerShell**  
   (requires PowerShell 7+ (`pwsh`) on PATH or in a standard install location; Serena automatically downloads PowerShell Editor Services 4.4.0 and installs PSScriptAnalyzer 1.25.0 via `Save-Module` from your configured PowerShell repository)
 * **Python**

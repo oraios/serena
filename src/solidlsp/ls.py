@@ -927,6 +927,24 @@ class SolidLanguageServer(ABC):
         """
         return True
 
+    def _supports_document_symbols(self) -> bool:
+        """
+        Whether the language server implements ``textDocument/documentSymbol``.
+
+        Override to return ``False`` when the underlying server does not implement the method, so that
+        a request the server would answer with an internal error is not sent.
+        """
+        return True
+
+    def _supports_references(self) -> bool:
+        """
+        Whether the language server implements ``textDocument/references``.
+
+        Override to return ``False`` when the underlying server does not implement the method, so that
+        a request the server would answer with an internal error is not sent.
+        """
+        return True
+
     def _get_published_diagnostics_wait_timeout(self, pull_diagnostics_failed: bool) -> float:
         """
         Gets the timeout for waiting on published diagnostics after a diagnostics request.
@@ -1838,6 +1856,15 @@ class SolidLanguageServer(ABC):
 
         :return: A list of locations where the symbol is referenced (excluding ignored directories)
         """
+        if not self._supports_references():
+            log.debug(
+                "The language server '%s' does not implement textDocument/references; no references of the symbol at %s:%d:%d are available",
+                self.language_id,
+                relative_file_path,
+                line,
+                column,
+            )
+            return []
         request = self.ReferencesLocationRequest(self, relative_file_path, line, column)
         return request.execute()
 
@@ -2079,6 +2106,12 @@ class SolidLanguageServer(ABC):
 
                 log.debug("Cached document symbol content for %s has changed (old hash=%s)", relative_file_path, file_hash)
 
+            if not self._supports_document_symbols():
+                log.debug(
+                    "The language server '%s' does not implement textDocument/documentSymbol; no symbols are available", self.language_id
+                )
+                return DocumentSymbols([])
+
             # no cached result: get the raw root symbols from the language server
             document_symbols = self._build_document_symbols_from_raw_symbols(relative_file_path, file_buffer=file_data)
 
@@ -2312,6 +2345,10 @@ class SolidLanguageServer(ABC):
                     package_symbol["children"].append(file_symbol)
 
             return result
+
+        if not self._supports_document_symbols():
+            log.debug("The language server '%s' does not implement textDocument/documentSymbol; no symbols are available", self.language_id)
+            return []
 
         if within_relative_path:
             within_abs_path = os.path.join(self.repository_root_path, within_relative_path)

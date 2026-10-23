@@ -336,6 +336,7 @@ _LANGUAGE_PYTEST_MARKERS: dict[LanguageServerId, list[MarkDecorator | Mark]] = {
     LanguageServerId.PHP: [pytest.mark.php],
     LanguageServerId.PHP_PHPACTOR: [pytest.mark.php],
     LanguageServerId.PHP_PHPANTOM: [pytest.mark.php],
+    LanguageServerId.PKL: [pytest.mark.pkl],
     LanguageServerId.POWERSHELL: [pytest.mark.powershell],
     LanguageServerId.PYTHON: [pytest.mark.python],
     LanguageServerId.PYTHON_JEDI: [pytest.mark.python],
@@ -501,6 +502,8 @@ def _determine_disabled_language_servers() -> list[LanguageServerId]:
         result.append(LanguageServerId.CLOJURE)
     if _sh.which("verible-verilog-ls") is None:
         result.append(LanguageServerId.SYSTEMVERILOG)
+    if _sh.which("pkl-lsp") is None:
+        result.append(LanguageServerId.PKL)
     if not _is_matlab_available():
         result.append(LanguageServerId.MATLAB)
     if ERLANG_UNAVAILABLE:  # no Erlang/OTP / no rebar3 / unsupported platform -- see test/solidlsp/erlang

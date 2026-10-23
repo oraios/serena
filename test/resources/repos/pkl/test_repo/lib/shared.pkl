@@ -1,0 +1,10 @@
+module shared
+
+const OFFSET: Int = 41
+
+function helper(n: Int): Int = n + OFFSET
+
+class Point {
+  x: Int
+  y: Int
+}
