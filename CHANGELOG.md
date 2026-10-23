@@ -2,6 +2,9 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Security:
+  - Update the Docker image from Node.js 22.18.0 to the 22.23.4 security release.
+
 # v2.1.0 (2026-10-19)
 
 * General:
