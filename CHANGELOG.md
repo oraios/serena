@@ -2,6 +2,10 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Language Servers:
+  - BSL: upgrade to bsl-language-server 1.0.7; wait for the server's initial indexing instead
+    of a fixed delay before the first cross-file request; add `jvm_options` setting (e.g. `-Xmx`).
+
 # v2.1.0 (2026-10-19)
 
 * General:
