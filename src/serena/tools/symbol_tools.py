@@ -3,7 +3,7 @@ Language server-related tools
 """
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 from serena.symbol import SymbolDictGrouper
 from serena.tools import (
@@ -209,7 +209,9 @@ class FindImplementationsTool(Tool, ToolMarkerSymbolicRead, LspApiMixin):
         max_answer_chars: int = -1,
     ) -> str:
         """
-        Finds implementations of the symbol at the given `name_path`.
+        Finds implementations of the symbol at the given `name_path`: the methods overriding an abstract method,
+        the classes implementing an interface. For a class or interface whose language server reports no
+        implementations, its direct subtypes are returned instead (where the server provides a type hierarchy).
 
         :param name_path: the symbol's name path
         :param relative_path: the relative path to the file containing the symbol for which to find implementations.
@@ -226,6 +228,53 @@ class FindImplementationsTool(Tool, ToolMarkerSymbolicRead, LspApiMixin):
             .find_implementations(
                 name_path,
                 relative_path,
+                include_info=include_info,
+                include_kinds=include_kinds,
+                exclude_kinds=exclude_kinds,
+                max_answer_chars=max_answer_chars,
+            )
+            .represent()
+        )
+
+
+class FindTypeHierarchyTool(Tool, ToolMarkerSymbolicRead, ToolMarkerOptional, LspApiMixin):
+    """
+    Finds the subtypes or supertypes of a class/interface using the language server's type hierarchy.
+    """
+
+    def apply(
+        self,
+        name_path: str,
+        relative_path: str,
+        direction: Literal["subtypes", "supertypes"] = "subtypes",
+        include_info: bool = False,
+        include_kinds: list[int] = [],  # noqa: B006
+        exclude_kinds: list[int] = [],  # noqa: B006
+        max_answer_chars: int = -1,
+    ) -> str:
+        """
+        Finds the subtypes (the classes extending it, the types implementing it) or the supertypes
+        (the bases it extends, the interfaces it implements) of the type at the given `name_path`, as the language
+        server reports them: the direct ones per the LSP specification, though some servers (pyrefly) include the
+        indirect ones too. Types defined outside the project (the standard library, installed packages) are not
+        included. Empty when the server provides no type hierarchy.
+
+        :param name_path: the type's name path
+        :param relative_path: the relative path to the file containing the type. Must be a file, not a directory.
+        :param direction: "subtypes" (default) or "supertypes"
+        :param include_info: whether to include additional info (hover-like, typically including docstring and signature)
+            about the resulting types.
+        :param include_kinds: (optional) limits results to the given LSP symbol kinds (integers)
+        :param exclude_kinds: (optional) list of LSP symbol kinds (integers) to exclude.
+        :param max_answer_chars: max result length; -1 for default
+        :return: a list of JSON objects with the related types
+        """
+        return (
+            self._api()
+            .find_type_hierarchy(
+                name_path,
+                relative_path,
+                direction=direction,
                 include_info=include_info,
                 include_kinds=include_kinds,
                 exclude_kinds=exclude_kinds,
