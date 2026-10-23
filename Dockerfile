@@ -26,7 +26,7 @@ RUN python3 -m pip install --no-cache-dir pipx \
 
 # Install nodejs
 ENV NVM_VERSION=0.40.3
-ENV NODE_VERSION=22.18.0
+ENV NODE_VERSION=22.23.4
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v${NVM_VERSION}/install.sh | bash
 # standard location
 ENV NVM_DIR=/root/.nvm
