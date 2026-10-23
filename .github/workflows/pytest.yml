@@ -73,7 +73,7 @@ jobs:
       # other-langs: grab-bag + scripting languages + haskell + qml. Haskell (GHC/HLS) and qml (qmlls) are
       # installed only on Linux -- too slow/expensive to build on the macOS runner (Haskell), or not worth
       # the cost of a cross-OS Qt pull (qmlls) -- and skip on Windows+macOS via the central conftest guard.
-      MARKERS_OTHER_LANGS: "ruby or php or lua or luau or bash or powershell or elixir or erlang or dart or deno or haxe or haskell or terraform or rego or ansible or yaml or toml or markdown or latex or crystal or cue or fortran or ada or matlab or systemverilog or hlsl or msl or al or qml or gleam"
+      MARKERS_OTHER_LANGS: "ruby or php or lua or luau or bash or powershell or elixir or erlang or dart or deno or haxe or haskell or terraform or rego or ansible or yaml or toml or markdown or latex or crystal or cue or fortran or ada or matlab or systemverilog or hlsl or msl or al or qml or gleam or pkl"
       # niche: slow, mostly-cached toolchains. ocaml + haskell are the two slowest -- kept in separate
       # batches (ocaml here, haskell in other-langs). nix + perl skip on Windows via the guard.
       MARKERS_NICHE: "julia or r or perl or lean4 or nix or ocaml"
@@ -462,6 +462,47 @@ jobs:
           missing="$(ldd "$QMLLS_DIR/qmlls" | grep 'not found' || true)"
           [ -z "$missing" ] || { echo "ERROR: qmlls has unresolved runtime libs:"; echo "$missing"; exit 1; }
           echo "$QMLLS_DIR" >> "$GITHUB_PATH"
+      - name: Setup Java for the Pkl Language Server
+        # The other-langs batch installs no JDK, but the pkl-lsp JAR is compiled for Java 23.
+        if: matrix.batch == 'other-langs' && runner.os == 'Linux'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Install Pkl Language Server
+        # Restricted to Linux like qmlls and Gleam; Windows/macOS CI skip via the conftest guard. Upstream
+        # publishes only a JAR, so the "binary" is a launcher script in the cached language server directory.
+        if: matrix.batch == 'other-langs' && runner.os == 'Linux'
+        shell: bash
+        run: |
+          # Keep in step with MINIMUM_SUPPORTED_VERSION in pkl_language_server.py: the server refuses to start
+          # on anything older, and this JAR is the release the test suite is run against.
+          PKL_LSP_VERSION="0.8.0"
+          PKL_LSP_DIR="$HOME/.serena/language_servers/static/pkl-lsp-${PKL_LSP_VERSION}"
+          PKL_LSP_JAR="$PKL_LSP_DIR/pkl-lsp.jar"
+          PKL_LSP_URL="https://github.com/apple/pkl-lsp/releases/download/${PKL_LSP_VERSION}/pkl-lsp-${PKL_LSP_VERSION}.jar"
+
+          mkdir -p "$PKL_LSP_DIR"
+
+          # Download only when absent. -s guards against a truncated file, and the download goes to a .part
+          # name that is renamed only on success, so an interrupted run cannot leave a plausible JAR behind.
+          # Upstream release tags carry no "v" prefix.
+          if [ ! -s "$PKL_LSP_JAR" ]; then
+            curl -fsSL --retry 3 -o "$PKL_LSP_JAR.part" "$PKL_LSP_URL"
+            mv "$PKL_LSP_JAR.part" "$PKL_LSP_JAR"
+          fi
+
+          # The launcher resolves the JAR and the JDK relative to itself, so the cached directory stays
+          # relocatable.
+          cat > "$PKL_LSP_DIR/pkl-lsp" <<'LAUNCHER'
+          #!/bin/sh
+          exec "${JAVA_HOME:+$JAVA_HOME/bin/}java" -jar "$(dirname "$0")/pkl-lsp.jar" "$@"
+          LAUNCHER
+          chmod +x "$PKL_LSP_DIR/pkl-lsp"
+
+          # Fail loudly here rather than as a test timeout if the JAR or the JDK is unusable.
+          "$PKL_LSP_DIR/pkl-lsp" --version
+          echo "$PKL_LSP_DIR" >> "$GITHUB_PATH"
       - name: Install Gleam compiler
         # Gleam's LSP is bundled with the compiler (started via `gleam lsp`). Restricted to Linux like
         # qmlls; Gleam skips on Windows/macOS CI via the conftest guard. The compiler is a self-contained

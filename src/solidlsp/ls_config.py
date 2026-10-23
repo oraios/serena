@@ -240,6 +240,14 @@ class LanguageServerId(Enum):
     Requires Wolfram Mathematica 13.0+ or Wolfram Engine 12.1+.
     Set WOLFRAM_PATH environment variable or configure ls_path in ls_specific_settings.
     """
+    PKL = "pkl"
+    """Pkl language server (https://github.com/apple/pkl-lsp), the one that backs the official Pkl support
+    in editors. Supports .pkl files. Requires version 0.8.0 or newer of the 'pkl-lsp' executable on PATH, the
+    release this implementation was written against.
+    The server implements neither textDocument/documentSymbol nor textDocument/references, so Serena's
+    symbol and reference tools return no results for Pkl sources; definition, hover, diagnostics and
+    formatting work.
+    """
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
@@ -401,6 +409,7 @@ class LanguageServerId(Enum):
             self.ANGULAR,
             self.DENO,
             self.LUA_EMMYLUA,
+            self.PKL,
         }
 
     def is_superset_language(self) -> bool:
@@ -678,6 +687,8 @@ class LanguageServerId(Enum):
                 # only scripts: the language server does have a service for .config files, but it provides
                 # no symbols for them, so treating them as source files would only pollute the symbol index
                 return FilenameMatcher(".nf")
+            case self.PKL:
+                return FilenameMatcher(".pkl")
             case self.WOLFRAM:
                 return FilenameMatcher(".wl", ".wls")
             case self.HTML:
@@ -1007,6 +1018,10 @@ class LanguageServerId(Enum):
                 from solidlsp.language_servers.nextflow_language_server import NextflowLanguageServer
 
                 return NextflowLanguageServer
+            case self.PKL:
+                from solidlsp.language_servers.pkl_language_server import PklLanguageServer
+
+                return PklLanguageServer
             case self.WOLFRAM:
                 from solidlsp.language_servers.wolfram_language_server import WolframLanguageServer
 

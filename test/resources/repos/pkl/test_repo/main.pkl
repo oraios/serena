@@ -1,0 +1,8 @@
+amends "lib/shared.pkl"
+
+local answer: Int = helper(1)
+
+local origin: Point = new {
+  x = OFFSET
+  y = answer
+}
