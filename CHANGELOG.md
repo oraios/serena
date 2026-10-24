@@ -2,6 +2,12 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Fix: project-level `ls_specific_settings` replaced the global settings for the same language server
+    silently. Since the replacement is per language rather than per key, a project block that only set
+    `ls_path`, for example, dropped every global key such as `ls_extra_args`, leaving no trace. The
+    replacement behaviour is unchanged, but the global keys hidden by a project block are now logged (#2188).
+
 # v2.1.0 (2026-10-19)
 
 * General:
