@@ -31,6 +31,34 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+def merge_ls_specific_settings(global_settings: dict, project_settings: dict) -> dict:
+    """
+    Merge project-level LS-specific settings on top of the global ones, language block by language block.
+
+    The merge is per language and not per key: a project-level block for a language replaces the
+    global block for that language entirely, so keys the project block omits silently fall back to
+    the language server's own defaults. That is easy to misread as a small override, so any global
+    key hidden this way is logged.
+
+    :param global_settings: the ``ls_specific_settings`` from the global configuration
+    :param project_settings: the ``ls_specific_settings`` from the project configuration
+    :return: a new dict containing the merged settings
+    """
+    merged_settings = dict(global_settings)
+    for ls_key, project_ls_settings in project_settings.items():
+        global_ls_settings = global_settings.get(ls_key)
+        if isinstance(global_ls_settings, dict) and isinstance(project_ls_settings, dict):
+            hidden_keys = sorted(set(global_ls_settings) - set(project_ls_settings))
+            if hidden_keys:
+                log.warning(
+                    f"Project-level settings for language server '{ls_key}' replace the global settings for the same "
+                    f"language and hide: {', '.join(hidden_keys)}. Copy the global values into the project "
+                    f"configuration to keep them."
+                )
+        merged_settings[ls_key] = project_ls_settings
+    return merged_settings
+
+
 class Project(ToStringMixin):
     def __init__(
         self,
@@ -670,7 +698,9 @@ class Project(ToStringMixin):
             ls_specific_settings = dict(self.serena_config.ls_specific_settings)
             if self.project_config.ls_specific_settings:
                 if is_trusted:
-                    ls_specific_settings.update(self.project_config.ls_specific_settings)
+                    ls_specific_settings = merge_ls_specific_settings(
+                        self.serena_config.ls_specific_settings, self.project_config.ls_specific_settings
+                    )
                 else:
                     log.warning(
                         f"Project path {self.project_root} is not trusted, ignoring LS-specific settings from project configuration. "
