@@ -2,6 +2,12 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Language Servers:
+  - Fix: C# solution discovery aborted with ``ValueError: path is on mount '\\.\nul'`` when the repository
+    contained a file with a reserved DOS device name (e.g. ``nul``, typically created accidentally by
+    `... > nul` in Git Bash), failing the C# language server startup. Reserved-name entries are now skipped
+    per entry instead of aborting the whole directory scan
+
 # v2.1.0 (2026-10-19)
 
 * General:

@@ -157,7 +157,16 @@ def breadth_first_file_scan(root_dir: str, is_ignored_path: Callable[[str], bool
                 if item.startswith("."):
                     continue
                 item_path = os.path.join(current_dir, item)
-                if is_ignored_path(os.path.relpath(item_path, root_dir)):
+                try:
+                    relative_path = os.path.relpath(item_path, root_dir)
+                except ValueError:
+                    # Entry paths that cannot be relativized must not abort the whole
+                    # directory scan: on Windows, files with reserved DOS device names
+                    # ("nul", "con", ...) normalize to the device itself (e.g. \\.\nul)
+                    # and os.path.relpath rejects them with a mount-mismatch ValueError.
+                    # Such files appear in practice, e.g. from `... > nul` in Git Bash.
+                    continue
+                if is_ignored_path(relative_path):
                     continue
                 if os.path.isdir(item_path):
                     queue.append(item_path)
