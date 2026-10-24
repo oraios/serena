@@ -1,4 +1,5 @@
 import os
+import sys
 import tempfile
 from pathlib import Path
 from typing import cast
@@ -379,3 +380,26 @@ class TestCSharpSolutionProjectOpening:
                 f"Found malformed symbols: {[format_symbol_for_assert(sym) for sym in malformed_symbols]}",
                 pytrace=False,
             )
+
+
+@pytest.mark.csharp
+def test_find_solution_with_reserved_device_name_entry(tmp_path: Path) -> None:
+    r"""A file with a reserved DOS device name (e.g. "nul") must not crash solution discovery.
+
+    On Windows, path normalization resolves such an entry to the device (e.g. ``\\.\nul``),
+    so ``os.path.relpath`` raises ``ValueError``; the scan has to skip the entry instead.
+    Observed in practice: C# language server startup failed on a repository containing such a
+    file, typically created accidentally by shell commands like ``... > nul`` run in Git Bash.
+    """
+    (tmp_path / "TestRepo.sln").write_text("", encoding="utf-8")
+    (tmp_path / "Program.cs").write_text("class Program {}", encoding="utf-8")
+    if sys.platform == "win32":
+        # Normal Win32 path handling refuses to create reserved device names (or silently
+        # targets the device); the extended-length path prefix bypasses that, matching how
+        # such a file comes into existence from Git Bash/MSYS.
+        junk = "\\\\?\\" + str(tmp_path / "nul")
+        with open(junk, "w", encoding="utf-8") as f:
+            f.write("accidental shell redirect")
+    result = find_solution_or_project_file(str(tmp_path))
+    assert result is not None
+    assert Path(result) == tmp_path / "TestRepo.sln"
