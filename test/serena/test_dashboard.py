@@ -6,7 +6,7 @@ import pytest
 
 from serena.config.context_mode import SerenaAgentContext
 from serena.config.serena_config import AgentInterface
-from serena.dashboard import SerenaDashboardAPI
+from serena.dashboard.dashboard import SerenaDashboardAPI
 from serena.language_backend import BuiltinLanguageBackend
 from solidlsp.ls_config import LanguageServerId
 
