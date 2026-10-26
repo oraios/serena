@@ -582,7 +582,7 @@ class TopLevelCommands(AutoRegisteringGroup):
     @click.option("--width", type=int, default=1400, show_default=True, help="Window width.")
     @click.option("--height", type=int, default=900, show_default=True, help="Window height.")
     def dashboard_viewer(url: str, width: int, height: int) -> None:
-        from serena.dashboard.dashboard_api import SerenaDashboardViewer
+        from serena.dashboard.dashboard_viewer import SerenaDashboardViewer
 
         viewer = SerenaDashboardViewer(url, width=width, height=height)
         viewer.run()

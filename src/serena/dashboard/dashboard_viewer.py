@@ -13,6 +13,7 @@ from serena.util.pywebview import WebViewWithTray
 
 log = logging.getLogger(__name__)
 
+
 def open_url_in_browser(url: str, use_subprocess: bool = False) -> None:
     """
     Opens the given URL in the user's default web browser,
