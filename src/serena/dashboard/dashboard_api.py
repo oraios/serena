@@ -2,6 +2,7 @@
 
 import json
 import os
+import pickle
 import socket
 import threading
 import urllib.error
@@ -12,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Self
 from flask import Flask, Response, redirect, request, send_from_directory
 from pydantic import BaseModel
 from sensai.util import logging
-from sensai.util.pickle import dump_pickle, load_pickle
+from sensai.util.pickle import dump_pickle
 
 from serena.analytics import ToolUsageStats
 from serena.config.serena_config import SerenaConfig, SerenaPaths
@@ -169,8 +170,15 @@ class ReadNews:
                     last_read_news_id = "20260321"  # fix originally misnamed news id
                 return last_read_news_id
 
+        class RemappingUnpickler(pickle.Unpickler):
+            def find_class(self, module, name):
+                if (module, name) == ("serena.dashboard", "ReadNews"):
+                    return ReadNews
+                return super().find_class(module, name)
+
         if os.path.exists(read_news_path):
-            return load_pickle(read_news_path)
+            with open(read_news_path, "rb") as f:
+                return RemappingUnpickler(f).load()
         else:
             instance = ReadNews(read_ids=[], legacy_last_read_id=load_legacy_last_read_id())
             instance._save()
