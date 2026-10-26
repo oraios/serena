@@ -11,6 +11,7 @@ import threading
 import time
 from enum import Enum
 
+import psutil
 from overrides import override
 
 from solidlsp.initialize_params import DefaultInitializeParamsBuilder, InitializeParamsBuilder
@@ -33,6 +34,7 @@ DEFAULT_CLIENT_NAME = "Serena"
 DEFAULT_ON_STALE_LOCK = "auto-clean"
 DEFAULT_LOG_MULTI_INSTANCE_NOTICE = True
 DEFAULT_AUTO_IMPORT_BUILD = True
+DEFAULT_TERMINATE_BLOOP_ON_STOP = False
 DEFAULT_PROJECT_ROOT_SCAN_DEPTH = 3
 DEFAULT_INDEXING_TIMEOUT = 180.0
 DEFAULT_INDEXING_START_GRACE = 15.0
@@ -404,6 +406,7 @@ def _get_scala_settings(solidlsp_settings: SolidLSPSettings) -> dict[str, object
         - indexing_timeout: float
         - indexing_start_grace: float
         - indexing_quiet_period: float
+        - terminate_bloop_on_stop: bool
     """
     from solidlsp.ls_config import LanguageServerId
 
@@ -418,6 +421,7 @@ def _get_scala_settings(solidlsp_settings: SolidLSPSettings) -> dict[str, object
         "indexing_timeout": DEFAULT_INDEXING_TIMEOUT,
         "indexing_start_grace": DEFAULT_INDEXING_START_GRACE,
         "indexing_quiet_period": DEFAULT_INDEXING_QUIET_PERIOD,
+        "terminate_bloop_on_stop": DEFAULT_TERMINATE_BLOOP_ON_STOP,
     }
 
     if not solidlsp_settings.ls_specific_settings:
@@ -448,6 +452,7 @@ def _get_scala_settings(solidlsp_settings: SolidLSPSettings) -> dict[str, object
         "indexing_quiet_period": _parse_positive_float(
             scala_settings.get("indexing_quiet_period"), "indexing_quiet_period", DEFAULT_INDEXING_QUIET_PERIOD
         ),
+        "terminate_bloop_on_stop": scala_settings.get("terminate_bloop_on_stop", DEFAULT_TERMINATE_BLOOP_ON_STOP),
     }
 
 
@@ -483,6 +488,9 @@ class ScalaLanguageServer(SolidLanguageServer):
             indexing_start_grace: 15
             # How long Metals must report nothing for its work to count as finished
             indexing_quiet_period: 3
+            # Terminate the Bloop daemons running under this Serena process when Metals stops (default: false).
+            # Bloop shares one server per user, so other Metals clients may be using such a daemon.
+            terminate_bloop_on_stop: false
 
     Indexing:
         Metals reports its import, indexing and compilation as LSP work-done progress, and
@@ -525,6 +533,7 @@ class ScalaLanguageServer(SolidLanguageServer):
         self._indexing_timeout: float = settings["indexing_timeout"]  # type: ignore[assignment]
         self._indexing_start_grace: float = settings["indexing_start_grace"]  # type: ignore[assignment]
         self._indexing_quiet_period: float = settings["indexing_quiet_period"]  # type: ignore[assignment]
+        self._terminate_bloop_on_stop: bool = settings["terminate_bloop_on_stop"]  # type: ignore[assignment]
 
         self._progress = MetalsProgressTracker()
 
@@ -564,6 +573,87 @@ class ScalaLanguageServer(SolidLanguageServer):
     @override
     def _create_initialize_params_builder(self) -> InitializeParamsBuilder:
         return ScalaInitializeParamsBuilder(self, self._build_roots)
+
+    @override
+    def stop(self, shutdown_timeout: float = 2.0) -> None:
+        """
+        Stops Metals and, if ``terminate_bloop_on_stop`` is enabled, the Bloop build-server daemons it spawned.
+
+        Bloop self-daemonizes (``bloop.BloopServer daemon:...``) and is re-parented to PID 1
+        after Metals exits, so it is invisible to the process-tree cleanup that stops Metals
+        itself and keeps consuming RAM (oraios/serena#1816). The Bloop daemons which are
+        descendants of this process just before Metals stops are remembered; any that are
+        still alive afterwards are terminated.
+
+        This function never raises an exception (any exceptions during cleanup are logged).
+        """
+        bloop_daemons = self._discover_bloop_descendants() if self._terminate_bloop_on_stop else []
+        super().stop(shutdown_timeout=shutdown_timeout)
+        self._terminate_bloop_daemons(bloop_daemons)
+
+    @staticmethod
+    def _is_bloop_server(process: psutil.Process) -> bool:
+        """
+        :return: whether the given process runs the Bloop build server
+        """
+        return any("bloop.BloopServer" in part for part in process.cmdline() or [])
+
+    def _discover_bloop_descendants(self) -> list[psutil.Process]:
+        """
+        Collect the Bloop server processes that are descendants of the current process.
+
+        The result holds process objects rather than PIDs, as psutil identifies a process by PID and
+        creation time and thereby refuses to signal an unrelated process which has reused the PID.
+        """
+        daemons: list[psutil.Process] = []
+        try:
+            for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+                try:
+                    if self._is_bloop_server(proc) and os.getpid() in {p.pid for p in proc.parents()}:
+                        daemons.append(proc)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            log.warning(f"Could not enumerate Bloop processes before shutdown: {e!r}")
+        if daemons:
+            log.info(f"Discovered Bloop daemon process(es) under this session: {sorted(d.pid for d in daemons)}")
+        return daemons
+
+    def _terminate_bloop_daemons(self, daemons: list[psutil.Process], terminate_timeout: float = 3.0) -> None:
+        """
+        Terminate previously discovered Bloop processes that survived Metals shutdown.
+        This function never raises an exception: a failure to terminate a process is logged
+        and does not prevent the remaining processes from being terminated.
+        """
+        for daemon in daemons:
+            try:
+                self._terminate_bloop_daemon(daemon, terminate_timeout)
+            except psutil.NoSuchProcess:
+                # the process has exited in the meantime (or its PID has been reused)
+                continue
+            except Exception as e:
+                log.warning(f"Could not terminate Bloop daemon pid={daemon.pid}: {e!r}")
+
+    def _terminate_bloop_daemon(self, daemon: psutil.Process, terminate_timeout: float) -> None:
+        """
+        Terminates the given Bloop server, killing it if it does not exit within the timeout.
+
+        :param daemon: the process to terminate
+        :param terminate_timeout: time, in seconds, to wait for the process to exit after termination was requested
+        :raises psutil.Error: if the process cannot be inspected or signalled (e.g. ``psutil.AccessDenied``)
+        """
+        # skip the process if it is no longer a Bloop server
+        if not self._is_bloop_server(daemon):
+            return
+
+        # request termination and kill the process if it does not exit in time
+        log.info(f"Terminating orphaned Bloop daemon pid={daemon.pid}")
+        daemon.terminate()
+        try:
+            daemon.wait(timeout=terminate_timeout)
+        except psutil.TimeoutExpired:
+            log.warning(f"Bloop daemon pid={daemon.pid} did not exit in {terminate_timeout}s; killing")
+            daemon.kill()
 
     def _check_metals_db_status(self, build_root_path: str, solidlsp_settings: SolidLSPSettings) -> None:
         """

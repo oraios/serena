@@ -120,6 +120,8 @@ Metals uses an H2 database (`.metals/metals.mv.db`) to cache semantic informatio
 - **Bloop Build Server**: All instances share a single Bloop process (port 8212)
 - **Compilation Results**: Shared via Bloop — no duplicate compilation
 
+Because the Bloop process is shared, Serena leaves it running when it stops. If you would rather not leave it behind, enable `terminate_bloop_on_stop` in the Scala language server settings (see the [configuration reference](../02-usage/050_configuration.md)).
+
 ### Stale Lock Detection
 
 If a Metals process crashes without proper cleanup, it may leave a stale lock file (`.metals/metals.mv.db.lock.db`). This can prevent proper AUTO_SERVER coordination, causing new instances to fall back to in-memory database mode (degraded experience).

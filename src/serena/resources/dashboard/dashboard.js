@@ -295,6 +295,7 @@ class Dashboard {
         // Page state
         this.currentPage = 'overview';
         this.configData = null;
+        this.dashboardWelcomeDismissed = false;
         this.lastConfigDataJson = null; // Cache for comparison
         this.jetbrainsMode = false;
         this.activeProjectName = null;
@@ -400,6 +401,8 @@ class Dashboard {
         this.outputChart = null;
 
         // Register event handlers
+        $('#dashboard-auto-open-enable').click(() => this.saveDashboardOpenOnLaunch(true));
+        $('#dashboard-auto-open-disable').click(() => this.saveDashboardOpenOnLaunch(false));
         this.$saveLogsBtn.click(this.saveLogs.bind(this));
         this.$copyLogsBtn.click(this.copyLogs.bind(this));
         this.$clearLogsBtn.click(this.clearLogs.bind(this));
@@ -621,6 +624,7 @@ class Dashboard {
                     self.configData = response;
                     self.jetbrainsMode = response.jetbrains_mode;
                     self.activeProjectName = response.active_project.name;
+                    $('#dashboard-welcome').toggle(!self.dashboardWelcomeDismissed && response.web_dashboard_open_on_launch === null);
                     self.displayConfig(response);
                     self.displayBasicStats(response.tool_stats_summary);
                     self.displayProjects(response.registered_projects);
@@ -642,6 +646,25 @@ class Dashboard {
             },
             complete: function () {
                 self.waitingForConfigPollingResult = false;
+            }
+        });
+    }
+
+    saveDashboardOpenOnLaunch(value) {
+        this.dashboardWelcomeDismissed = true;
+        $('#dashboard-welcome').hide();
+        $.ajax({
+            url: '/save_web_dashboard_open_on_launch',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({web_dashboard_open_on_launch: value}),
+            success: (response) => {
+                if (response.status !== 'success') {
+                    alert(response.message || 'Could not queue the preference change. Please reload to try again.');
+                }
+            },
+            error: () => {
+                alert('Could not queue the preference change. Please reload to try again.');
             }
         });
     }

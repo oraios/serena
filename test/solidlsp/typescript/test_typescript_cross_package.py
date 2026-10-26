@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from solidlsp.ls_config import LanguageServerId
-from test.conftest import start_ls_context
+from test.conftest import TYPESCRIPT_LANGUAGE_BACKENDS, start_ls_context
 
 CROSS_PKG_DIR = Path(__file__).parent.parent.parent / "resources" / "repos" / "typescript"
 PACKAGE_A = str(CROSS_PKG_DIR / "cross_package_a")
@@ -18,12 +18,13 @@ class TestCrossPackageReferences:
     when additional_workspace_folders is configured.
     """
 
-    def test_cross_package_find_references(self) -> None:
+    @pytest.mark.parametrize("ls_id", TYPESCRIPT_LANGUAGE_BACKENDS)
+    def test_cross_package_find_references(self, ls_id: LanguageServerId) -> None:
         """Starting from package_a, with package_b as additional workspace,
         references in package_b should be discovered.
         """
         with start_ls_context(
-            LanguageServerId.TYPESCRIPT,
+            ls_id,
             repo_path=PACKAGE_A,
             additional_workspace_folders=[PACKAGE_B],
         ) as ls:
@@ -44,10 +45,11 @@ class TestCrossPackageReferences:
                 f"Expected cross-package reference from package_b/consumer.ts, but only found refs in: {ref_paths}"
             )
 
-    def test_cross_package_referencing_symbols(self) -> None:
+    @pytest.mark.parametrize("ls_id", TYPESCRIPT_LANGUAGE_BACKENDS)
+    def test_cross_package_referencing_symbols(self, ls_id: LanguageServerId) -> None:
         """Test the higher-level request_referencing_symbols across packages."""
         with start_ls_context(
-            LanguageServerId.TYPESCRIPT,
+            ls_id,
             repo_path=PACKAGE_A,
             additional_workspace_folders=[PACKAGE_B],
         ) as ls:
@@ -76,10 +78,11 @@ class TestCrossPackageReferences:
             cross_refs = [p for p in ref_files if "cross_package_b" in p or "consumer.ts" in p]
             assert len(cross_refs) > 0, f"Expected cross-package referencing symbol from package_b, but only found refs in: {ref_files}"
 
-    def test_without_additional_workspace_no_cross_refs(self) -> None:
+    @pytest.mark.parametrize("ls_id", TYPESCRIPT_LANGUAGE_BACKENDS)
+    def test_without_additional_workspace_no_cross_refs(self, ls_id: LanguageServerId) -> None:
         """Baseline: without additional_workspace_folders, cross-package refs should NOT appear."""
         with start_ls_context(
-            LanguageServerId.TYPESCRIPT,
+            ls_id,
             repo_path=PACKAGE_A,
         ) as ls:
             symbols = ls.request_document_symbols("shared_utils.ts").get_all_symbols_and_roots()
