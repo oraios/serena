@@ -19,7 +19,7 @@ from flask import Flask, request
 from PIL import Image
 from sensai.util import logging
 
-from serena.config.serena_config import SerenaPaths
+from serena.config.serena_paths import SerenaPaths
 from serena.constants import SERENA_DASHBOARD_DIR, SerenaPorts
 from serena.dashboard.dashboard_viewer import SerenaDashboardViewer, open_url_in_browser
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from sensai.util import logging
 
-from serena.config.serena_config import SerenaPaths
+from serena.config.serena_paths import SerenaPaths
 from serena.constants import SERENA_DASHBOARD_DIR
 from serena.util.pywebview import WebViewWithTray
 
