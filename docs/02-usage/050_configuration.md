@@ -1256,6 +1256,7 @@ Supported settings:
 | `indexing_timeout` | `180` | How long to wait, in seconds, for Metals to finish importing, indexing and compiling before the first cross-file query. On expiry the query proceeds and a warning names what was still outstanding. |
 | `indexing_start_grace` | `15` | How long to wait, in seconds, for Metals to report any work at all. A server that reports none within this window is taken to have nothing to do. |
 | `indexing_quiet_period` | `3` | How long, in seconds, Metals must report nothing for its work to count as finished. Metals hands off between its phases rather than overlapping them, so it reports nothing for a moment in between; a shorter period risks mistaking that gap for completion. |
+| `terminate_bloop_on_stop` | `false` | Terminate the Bloop build-server daemons that were running under this Serena process once Metals has stopped. Bloop daemonizes itself and would otherwise keep running as an orphan. It is opt-in because Bloop shares one server per user: another Metals client (e.g. VS Code) may be connected to a daemon that Serena started, and stopping it would interrupt that client. |
 
 #### SCSS / Sass / CSS
 
@@ -1422,6 +1423,20 @@ The dict is forwarded to vtsls verbatim — Serena does not validate its structu
 - *tsserver fails to start after pointing at a custom `tsdk`* — verify the path resolves to a directory containing `tsserver.js` (e.g. `.yarn/sdks/typescript/lib`, not `.yarn/sdks/typescript`). Relative paths are interpreted relative to the project root.
 - *Setting appears in `solidlsp` logs but vtsls does not react* — cross-check the key against the vtsls configuration schema linked above. The dict is forwarded as-is, so an unknown or wrong-typed key is silently ignored by vtsls.
 - *Need to inspect what Serena is actually forwarding* — the dict is logged at INFO level via the `Forwarding user-provided initializationOptions to vtsls: …` line at language server startup.
+
+#### TypeScript via the native TypeScript 7 language server
+
+The configuration key is `typescript_tsgo`. Serena installs the `typescript` npm package and runs its native
+binary as `tsc --lsp --stdio`.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `typescript_version` | `7.0.2` | Override the `typescript` npm package version Serena installs (7.0 or later). |
+| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
+| `indexing_timeout` | `30.0` | Timeout in seconds for project indexing. |
+| `indexing_start_grace` | `0.0` | Timeout in seconds to wait for indexing progress to start before the first cross-file reference query; the native server loads projects while handling requests, so no wait is needed by default. |
 
 #### Vue
 
