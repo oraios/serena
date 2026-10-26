@@ -212,6 +212,22 @@ class CodeEditor(Generic[TSymbol], ABC):
         with self.edited_file_context(relative_file_path) as edited_file:
             edited_file.insert_text_at_position(PositionInFile(line=line, col=col), body)
 
+    @staticmethod
+    def _validate_line_index(line: int, parameter_name: str) -> None:
+        """
+        Validates that a line-level edit receives a non-negative, 0-based line index.
+
+        Unlike ``read_file``, the line-level edits do not support negative indices. Without
+        this check, ``TextUtils.get_index_from_line_col`` maps a negative line to the start
+        of the file, so e.g. ``replace_lines(-2, -1, ...)`` would insert its content at the
+        beginning and report success instead of replacing the last two lines.
+
+        :param line: the line index to validate
+        :param parameter_name: the name of the parameter for the error message
+        """
+        if line < 0:
+            raise ValueError(f"{parameter_name} must be a non-negative 0-based line index, got {line}")
+
     def insert_at_line(self, relative_path: str, line: int, content: str) -> None:
         """
         Inserts content at the given line in the given file.
@@ -220,6 +236,7 @@ class CodeEditor(Generic[TSymbol], ABC):
         :param line: the 0-based index of the line to insert content at
         :param content: the content to insert
         """
+        self._validate_line_index(line, "line")
         with self.edited_file_context(relative_path) as edited_file:
             edited_file.insert_text_at_position(PositionInFile(line, 0), content)
 
@@ -231,6 +248,8 @@ class CodeEditor(Generic[TSymbol], ABC):
         :param start_line: the 0-based index of the first line to delete (inclusive)
         :param end_line: the 0-based index of the last line to delete (inclusive)
         """
+        self._validate_line_index(start_line, "start_line")
+        self._validate_line_index(end_line, "end_line")
         with self.edited_file_context(relative_path) as edited_file:
             self._delete_line_range(edited_file, start_line, end_line)
 
@@ -247,6 +266,8 @@ class CodeEditor(Generic[TSymbol], ABC):
         :param end_line: the 0-based index of the last line to replace (inclusive)
         :param content: the content to insert in place of the range
         """
+        self._validate_line_index(start_line, "start_line")
+        self._validate_line_index(end_line, "end_line")
         with self.edited_file_context(relative_path) as edited_file:
             self._delete_line_range(edited_file, start_line, end_line)
             edited_file.insert_text_at_position(PositionInFile(line=start_line, col=0), content)
