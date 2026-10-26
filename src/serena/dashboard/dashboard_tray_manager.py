@@ -70,25 +70,30 @@ class SerenaDashboardTrayManager:
     ALIVE_CHECK_INTERVAL_SECONDS = 3
     """interval in seconds between alive checks of registered instances"""
 
-    def __init__(self, use_pywebview: bool = False, alive_check_use_pid: bool = True) -> None:
+    def __init__(self) -> None:
         """
-        :param use_pywebview: whether to use pywebview-based viewer applications (separate child processes)
-            for opening dashboards; if False, open them directly in the user's default web browser.
-        :param alive_check_use_pid: whether to use the process ID for alive checks of registered instances.
-            If True, the manager will check whether the process with the registered PID is still running.
-            If False, the manager will perform an HTTP request to the instance's heartbeat endpoint to check
-            if it's alive.
+        NOTE: This constructor is called in `ensure_running` (string execution)
         """
         import pystray
 
         self._instances: dict[int, TrayManagedInstance] = {}
         self._lock = threading.Lock()
         self._tray_icon: Optional["pystray.Icon"] = None
-        self._alive_check_use_pid = alive_check_use_pid
+        self._alive_check_use_pid = True
+        """
+        whether to use the process ID for alive checks of registered instances.
+        If True, the manager will check whether the process with the registered PID is still running.
+        If False, the manager will perform an HTTP request to the instance's heartbeat endpoint to check
+        if it's alive.
+        """
         self._app = Flask(self.__class__.__name__)
         self._app.config["TRUSTED_HOSTS"] = self.TRUSTED_HOSTS
+        self._use_pywebview = False
+        """
+        whether to use pywebview-based viewer applications (separate child processes)
+        for opening dashboards; if False, open them directly in the user's default web browser.
+        """
         self._setup_routes()
-        self._use_pywebview = use_pywebview
 
     def _setup_routes(self) -> None:
         @self._app.route("/health", methods=["GET"])
