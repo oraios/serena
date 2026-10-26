@@ -2,6 +2,12 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Fix: under the `sse` and `streamable-http` transports, stopping the MCP server with SIGINT/SIGTERM
+    did not shut the agent down, so language servers were left to be killed and the symbol caches they
+    had built were never saved (the server lifespan runs per connection under these transports, and
+    uvicorn re-raises the signal right after its loop ends). The CLI now shuts the agent down on the
+    signal and when the server loop ends for any other reason, as the `stdio` transport already did
 * Language Servers:
   - Extend allowed types in persisted symbol caches, fixing cache loading issues with `clangd`
     when overriding values like `ls_path`, `clangd_version` or `compile_commands_dir`
