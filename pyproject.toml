@@ -4,7 +4,7 @@ requires = ["hatchling"]
 
 [project]
 name = "serena-agent"
-version = "2.0.1.dev0"
+version = "2.1.1.dev0"
 description = "A powerful MCP toolkit for coding, providing semantic retrieval and editing capabilities - the IDE for your agent"
 authors = [{ name = "Oraios AI", email = "info@oraios-ai.de" }]
 readme = "README.md"
@@ -338,6 +338,7 @@ markers = [
   "php: language server running for PHP",
   "perl: language server running for Perl",
   "csharp: language server running for C#",
+  "vbnet: language server running for VB.NET",
   "elixir: language server running for Elixir",
   "elm: language server running for Elm",
   "terraform: language server running for Terraform",
