@@ -2,6 +2,9 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - Fix: line-level edits (`delete_lines`, `replace_lines`, `insert_at_line`) now reject negative line indices instead of silently targeting the start of the file.
+
 # v2.1.0 (2026-10-19)
 
 * General:
