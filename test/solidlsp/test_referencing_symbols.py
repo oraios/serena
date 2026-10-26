@@ -6,6 +6,7 @@ No language markers: the language server process is replaced by a test double, s
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 from unittest.mock import MagicMock
 
 from solidlsp import ls_types
@@ -17,6 +18,7 @@ from solidlsp.settings import SolidLSPSettings
 
 _TARGET_SOURCE = "def run():\n    return 1\n"
 _CALLER_SOURCE = "import target\n\n\ndef run():\n    return target.run()\n"
+_TWO_CALLERS_SOURCE = "import target\n\n\ndef first():\n    return target.run()\n\n\ndef second():\n    return target.run()\n"
 
 
 class _ScriptedLanguageServer(SolidLanguageServer):
@@ -83,3 +85,35 @@ def test_referencing_symbols_with_same_name_as_target_listed_after_its_declarati
 
     callers = {(ref.symbol["location"]["relativePath"], ref.symbol["name"]) for ref in refs}
     assert callers == {("first.py", "run"), ("second.py", "run")}, f"Expected both same-named callers, got {callers}"
+
+
+def test_referencing_file_is_opened_in_language_server_once_and_not_when_cached(tmp_path: Path) -> None:
+    (tmp_path / "target.py").write_text(_TARGET_SOURCE, encoding="utf-8")
+    (tmp_path / "callers.py").write_text(_TWO_CALLERS_SOURCE, encoding="utf-8")
+    uri = {name: (tmp_path / f"{name}.py").as_uri() for name in ("target", "callers")}
+    references = [
+        {"uri": uri["target"], "range": _range(0, 4, 0, 7)},
+        {"uri": uri["callers"], "range": _range(4, 18, 4, 21)},
+        {"uri": uri["callers"], "range": _range(8, 18, 8, 21)},
+    ]
+    document_symbols = {
+        uri["target"]: [_function_symbol("run", _range(0, 0, 1, 12), _range(0, 4, 0, 7))],
+        uri["callers"]: [
+            _function_symbol("first", _range(3, 0, 4, 23), _range(3, 4, 3, 9)),
+            _function_symbol("second", _range(7, 0, 8, 23), _range(7, 4, 7, 10)),
+        ],
+    }
+    language_server = _ScriptedLanguageServer(tmp_path, references, document_symbols)
+    did_open = cast(MagicMock, language_server.server.notify.did_open_text_document)
+
+    def callers_file_opens() -> int:
+        return sum(1 for call in did_open.call_args_list if call.args[0]["textDocument"]["uri"] == uri["callers"])
+
+    refs_with_cold_cache = language_server.request_referencing_symbols("target.py", 0, 4)
+    opens_with_cold_cache = callers_file_opens()
+    refs_with_warm_cache = language_server.request_referencing_symbols("target.py", 0, 4)
+
+    assert [ref.symbol["name"] for ref in refs_with_cold_cache] == ["first", "second"]
+    assert [ref.symbol["name"] for ref in refs_with_warm_cache] == ["first", "second"]
+    assert opens_with_cold_cache == 1
+    assert callers_file_opens() == opens_with_cold_cache
