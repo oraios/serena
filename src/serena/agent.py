@@ -401,7 +401,7 @@ class DashboardManager:
         def from_platform(cls) -> "DashboardManager.Mode":
             match platform.system():
                 case "Windows":
-                    return cls.WEBVIEW
+                    return cls.TRAY_MANAGER
                 case "Darwin":
                     return cls.TRAY_MANAGER
                 case _:
