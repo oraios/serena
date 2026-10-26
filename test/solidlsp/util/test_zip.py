@@ -1,3 +1,4 @@
+import os
 import sys
 import zipfile
 from pathlib import Path
@@ -88,6 +89,24 @@ def test_skip_on_error(monkeypatch, temp_zip_file: Path, tmp_path: Path) -> None
     assert (dest_dir / "file1.txt").exists()
     assert not (dest_dir / "file2.txt").exists()
     assert (dest_dir / "folder" / "file3.txt").exists()
+
+
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="Unix permission bits are not applicable on Windows")
+def test_restores_executable_permission(tmp_path: Path) -> None:
+    """Executable bits stored in the archive's external_attr should be restored on extraction."""
+    zip_path = tmp_path / "exec.zip"
+    with zipfile.ZipFile(zip_path, "w") as zipf:
+        info = zipfile.ZipInfo("bin/tool")
+        info.external_attr = 0o755 << 16
+        zipf.writestr(info, "#!/bin/sh\necho hi\n")
+
+    dest_dir = tmp_path / "extracted"
+    extractor = SafeZipExtractor(zip_path, dest_dir, verbose=False)
+    extractor.extract_all()
+
+    extracted_file = dest_dir / "bin" / "tool"
+    assert extracted_file.exists()
+    assert os.stat(extracted_file).st_mode & 0o111
 
 
 @pytest.mark.skipif(not sys.platform.startswith("win"), reason="Windows-only test")

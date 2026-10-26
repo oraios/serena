@@ -1,6 +1,7 @@
 """
 Provides Python specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Python.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import threading

@@ -2,6 +2,7 @@
 Provides OCaml and Reason specific instantiation of the SolidLanguageServer class.
 Contains various configurations and settings specific to OCaml and Reason.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

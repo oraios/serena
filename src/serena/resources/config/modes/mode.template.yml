@@ -23,3 +23,10 @@ included_optional_tools: []
 # This cannot be combined with non-empty excluded_tools or included_optional_tools.
 # Find the list of tools here: https://oraios.github.io/serena/01-about/035_tools.html
 fixed_tools: []
+
+# APIs (facades or facade methods, e.g. "lsp" or "lsp.find_symbol") to be excluded from the REPL in this mode.
+excluded_apis: []
+
+# included APIs that would otherwise be excluded (particularly optional facade methods, which are disabled by default),
+# e.g. "lsp.get_diagnostics_for_symbol".
+included_apis: []

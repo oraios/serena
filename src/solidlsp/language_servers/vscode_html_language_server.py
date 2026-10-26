@@ -15,6 +15,7 @@ Caveats:
       cross-file ``find references`` / ``go to definition`` is not meaningful for HTML.
     * Language is registered as experimental.
 """
+# SPDX-License-Identifier: MIT
 
 from __future__ import annotations
 

@@ -83,3 +83,64 @@ class TestTextUtils:
         with pytest.raises(InvalidTextLocationError):
             # end_line = 5 is well past the one-line-past-EOF position (3) for a 3-line file.
             TextUtils.delete_text_between_positions("a\nb\nc", 0, 0, 5, 0)
+
+    def test_insert_position_accounts_for_newline_merge(self) -> None:
+        r"""A leading "\n" inserted directly after an existing "\r" merges with it into a single
+        "\r\n" newline sequence. The returned position must therefore be derived from the
+        resulting text; computing it from the inserted text alone reports a line too far.
+        """
+        new_text, line, col = TextUtils.insert_text_at_position("\r", 1, 0, "\n")
+        assert new_text == "\r\n"
+        assert (line, col) == (1, 0)
+
+    def test_insert_position_after_full_text_accounts_for_newline_merge(self) -> None:
+        r"""Inserting one line past the last line prepends a "\n" to the inserted text; when the
+        text ends in "\r" the two merge into a single "\r\n". The returned position must describe
+        where the inserted text actually ended up.
+        """
+        new_text, line, col = TextUtils.insert_text_at_position("a\r", 2, 0, "X")
+        assert new_text == "a\r\nX"
+        assert (line, col) == (1, 1)
+
+    def test_insert_position_after_full_text_without_merge(self) -> None:
+        r"""The same one-line-past-EOF insertion into "\n"-terminated text is unaffected."""
+        new_text, line, col = TextUtils.insert_text_at_position("a\n", 2, 0, "X")
+        assert new_text == "a\n\nX"
+        assert (line, col) == (2, 1)
+
+    def test_insert_position_accounts_for_newline_merge_mid_document(self) -> None:
+        r"""The merge is not specific to the end of the buffer: inserting "\n" at the start of a
+        line that follows a bare "\r" merges with that "\r" in the middle of the document too.
+        """
+        new_text, line, col = TextUtils.insert_text_at_position("x\ry", 1, 0, "\n")
+        assert new_text == "x\r\ny"
+        assert (line, col) == (1, 0)
+
+    def test_insert_position_inside_newline_sequence_splits_it(self) -> None:
+        r"""Inserting between the "\r" and the "\n" of a "\r\n" splits it into two newline
+        sequences, adding a line. The position must again come from the resulting text.
+        """
+        new_text, line, col = TextUtils.insert_text_at_position("\r\n", 0, 1, "Z")
+        assert new_text == "\rZ\n"
+        assert (line, col) == (1, 1)
+
+    def test_insert_at_column_beyond_text_appends(self) -> None:
+        """A column past the end of the text appends and reports the true end position.
+
+        Callers may pass a column that exceeds the text length -- notably an LSP column, which
+        counts UTF-16 code units, for a line containing non-BMP characters. The insertion clamps
+        to the end of the text, so the reported position must too, rather than addressing an
+        index that does not exist in the result.
+        """
+        new_text, line, col = TextUtils.insert_text_at_position("abc", 0, 10, "X")
+        assert new_text == "abcX"
+        assert (line, col) == (0, 4)
+
+    def test_insert_at_column_beyond_text_containing_non_bmp_character(self) -> None:
+        """A non-BMP character is one code point but two UTF-16 code units, which is one way a
+        caller's column comes to exceed the text length. The column is clamped, and the returned
+        position is expressed in code points like every other position in TextUtils.
+        """
+        new_text, line, col = TextUtils.insert_text_at_position("\U0001f600", 0, 2, "X")
+        assert new_text == "\U0001f600X"
+        assert (line, col) == (0, 2)

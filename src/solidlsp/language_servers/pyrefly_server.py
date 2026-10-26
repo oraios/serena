@@ -8,6 +8,7 @@ You can pass the following entries in ``ls_specific_settings["python_pyrefly"]``
     - indexing_mode: Override pyrefly's LSP indexing mode (e.g. ``lazy-blocking``).
     - workspace_indexing_limit: Override pyrefly's workspace indexing limit.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os
@@ -29,7 +30,7 @@ from solidlsp.settings import SolidLSPSettings
 
 log = logging.getLogger(__name__)
 
-PYREFLY_VERSION = "1.1.1"
+PYREFLY_VERSION = "1.2.0"
 PYREFLY_CONFIG_DOC_URL = "https://pyrefly.org/en/docs/configuration/"
 
 # Pyrefly cancels in-flight requests with these error codes whenever its workspace state mutates

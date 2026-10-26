@@ -9,3 +9,5 @@ excluded_tools:
   - rename_memory
   - list_memories
   - onboarding
+excluded_apis:
+  - mem

@@ -54,7 +54,7 @@ class TestClojureProjectIndexing:
 
         # extra.clj contains two real call sites (in double-product and triple-product);
         # they must be returned regardless of whether the file was opened beforehand
-        extra_refs = [r for r in refs if r.get("relativePath", "").endswith("extra.clj")]
+        extra_refs = [r for r in refs if r.get("relativePath", "").endswith("extra.clj")]  # type: ignore
         assert extra_refs, (
             "Expected references to 'multiply' to include call sites from extra.clj, "
             f"but got files: {sorted(ref_paths)}. "
@@ -82,7 +82,9 @@ class TestClojureProjectIndexing:
         ref_paths = {r.get("relativePath", "") for r in refs}
 
         consumer_refs = [
-            r for r in refs if r.get("relativePath", "").replace("\\", "/").endswith("sub_module/src/sub_module_app/consumer.clj")
+            r
+            for r in refs
+            if r.get("relativePath", "").replace("\\", "/").endswith("sub_module/src/sub_module_app/consumer.clj")  # type: ignore
         ]
         assert consumer_refs, (
             "Expected references to 'multiply' to include call sites from the sibling module "

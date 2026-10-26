@@ -130,6 +130,7 @@ class TestScssReferences:
         line, col = coords.line, coords.col
         refs = language_server.request_references(path, line, col + 2)
         ref_paths = {r.get("relativePath", "") for r in refs}
+        ref_paths = {r for r in ref_paths if r}  # filter out empty strings
         assert any(p.endswith("buttons.scss") for p in ref_paths), (
             f"Expected card-surface references to include buttons.scss, got: {ref_paths}"
         )
@@ -148,6 +149,7 @@ class TestScssReferences:
         line, col = coords.line, coords.col
         refs = language_server.request_references(path, line, col + 2)
         ref_paths = {r.get("relativePath", "") for r in refs}
+        ref_paths = {r for r in ref_paths if r}  # filter out empty strings
         assert any(p.endswith("buttons.scss") for p in ref_paths), (
             f"Expected $color-primary references to include buttons.scss, got: {ref_paths}"
         )

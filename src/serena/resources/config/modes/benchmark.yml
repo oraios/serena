@@ -18,3 +18,5 @@ excluded_tools:
   - delete_memory
   - rename_memory
   - onboarding
+excluded_apis:
+  - mem

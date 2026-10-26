@@ -1,6 +1,7 @@
 """
 Provides TypeScript specific instantiation of the LanguageServer class. Contains various configurations and settings specific to TypeScript.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os
@@ -25,8 +26,8 @@ from solidlsp.ls import (
 )
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
-from solidlsp.ls_utils import PlatformId, PlatformUtils
-from solidlsp.lsp_protocol_handler.lsp_types import MessageType
+from solidlsp.ls_utils import PlatformUtils
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeResult, MessageType
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
@@ -76,6 +77,25 @@ def prefer_non_node_modules_definition(definitions: list[ls_types.Location]) -> 
     return definitions[0]
 
 
+def _get_install_dir(ls_resources_dir: str, typescript_version: str, typescript_language_server_version: str) -> str:
+    """
+    Determines the directory into which the given combination of TypeScript and typescript-language-server
+    versions is installed.
+
+    :param ls_resources_dir: the language server's resources directory
+    :param typescript_version: the version of the `typescript` package
+    :param typescript_language_server_version: the version of the `typescript-language-server` package
+    :return: the installation directory (which contains the `node_modules` directory)
+    """
+    # legacy unversioned dir reserved for INITIAL pair; any other version combination goes into a versioned subdir
+    is_initial = (
+        typescript_version == INITIAL_TYPESCRIPT_VERSION
+        and typescript_language_server_version == INITIAL_TYPESCRIPT_LANGUAGE_SERVER_VERSION
+    )
+    ls_dirname = "ts-lsp" if is_initial else f"ts-lsp-{typescript_version}-{typescript_language_server_version}"
+    return os.path.join(ls_resources_dir, ls_dirname)
+
+
 class TypeScriptServerCrashedError(SolidLSPException):
     """Raised when tsserver reported its own abnormal exit via window/logMessage.
 
@@ -102,6 +122,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
         - server_ready_timeout: float, timeout in seconds for the server-ready signal (default: 10.0)
         - indexing_start_grace: float, timeout in seconds to wait for tsserver to *start*
           reporting indexing progress before the first cross-file reference query (default: 5.0)
+
+    If the project is not trusted, tsserver is pinned to the TypeScript installation managed by SolidLSP
+    (see :meth:`_get_pinned_tsdk_path`); only a trusted project may have its own `node_modules/typescript`
+    loaded by typescript-language-server.
     """
 
     @classmethod
@@ -261,6 +285,21 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             self.describe_indexing_state(),
         )
 
+    def _verify_initialize_response(self, init_response: InitializeResult) -> None:
+        capabilities = init_response["capabilities"]
+        if capabilities.get("textDocumentSync") != 2:
+            raise SolidLSPException(f"Unexpected textDocumentSync capability: {capabilities.get('textDocumentSync')!r}")
+        expected_completion_provider = {"triggerCharacters": [".", '"', "'", "/", "@", "<"], "resolveProvider": True}
+        if capabilities.get("completionProvider") != expected_completion_provider:
+            raise SolidLSPException(f"Unexpected completionProvider capability: {capabilities.get('completionProvider')!r}")
+
+    def _wait_for_server_ready(self) -> None:
+        server_ready_timeout = self._get_server_ready_timeout()
+        if self.server_ready.wait(timeout=server_ready_timeout):
+            log.info("TypeScript server is ready")
+        else:
+            self._handle_server_ready_timeout(server_ready_timeout)
+
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
 
@@ -282,21 +321,6 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             """
             Setup runtime dependencies for TypeScript Language Server and return the path to the executable.
             """
-            platform_id = PlatformUtils.get_platform_id()
-
-            valid_platforms = [
-                PlatformId.LINUX_x64,
-                PlatformId.LINUX_arm64,
-                PlatformId.OSX,
-                PlatformId.OSX_x64,
-                PlatformId.OSX_arm64,
-                PlatformId.WIN_x64,
-                PlatformId.WIN_arm64,
-            ]
-            assert platform_id in valid_platforms, (
-                f"Platform {platform_id} is not supported for multilspy javascript/typescript at the moment"
-            )
-
             # Get version settings from ls_specific_settings or use defaults
             language_specific_config = self._custom_settings
             typescript_version = language_specific_config.get("typescript_version", DEFAULT_TYPESCRIPT_VERSION)
@@ -328,13 +352,7 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             is_npm_installed = shutil.which("npm") is not None
             assert is_npm_installed, "npm is not installed or isn't in PATH. Please install npm and try again."
 
-            # legacy unversioned dir reserved for INITIAL pair; any other version combination goes into a versioned subdir
-            is_initial = (
-                typescript_version == INITIAL_TYPESCRIPT_VERSION
-                and typescript_language_server_version == INITIAL_TYPESCRIPT_LANGUAGE_SERVER_VERSION
-            )
-            ls_dirname = "ts-lsp" if is_initial else f"ts-lsp-{typescript_version}-{typescript_language_server_version}"
-            tsserver_ls_dir = os.path.join(self._ls_resources_dir, ls_dirname)
+            tsserver_ls_dir = _get_install_dir(self._ls_resources_dir, typescript_version, typescript_language_server_version)
             tsserver_executable_path = os.path.join(tsserver_ls_dir, "node_modules", ".bin", "typescript-language-server")
 
             if not os.path.exists(tsserver_executable_path):
@@ -361,6 +379,46 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             return "javascriptreact"
         return self.language_id
 
+    def _get_pinned_tsdk_path(self) -> str:
+        """
+        :return: the path of the TypeScript ``lib`` directory to which tsserver is to be pinned, i.e. the
+            TypeScript installation that is managed by SolidLSP rather than provided by the project
+        """
+        install_dir = _get_install_dir(
+            self._ls_resources_dir,
+            self._custom_settings.get("typescript_version", DEFAULT_TYPESCRIPT_VERSION),
+            self._custom_settings.get("typescript_language_server_version", DEFAULT_TYPESCRIPT_LANGUAGE_SERVER_VERSION),
+        )
+        return os.path.join(install_dir, "node_modules", "typescript", "lib")
+
+    def _create_tsserver_initialization_options(self) -> dict[str, Any]:
+        """
+        Creates the ``tsserver`` entry of the initialization options, which pins the TypeScript version that
+        typescript-language-server loads.
+
+        Given no pinned path, typescript-language-server prefers the workspace's own
+        ``node_modules/typescript/lib/tsserver.js`` over the version installed by SolidLSP, i.e. JavaScript
+        taken from the project is executed as soon as the language server starts. Only a trusted project may
+        therefore be left unpinned.
+
+        :return: the options to be added to ``initializationOptions`` (empty for a trusted project)
+        :raises SolidLSPException: if the project is untrusted and no managed TypeScript installation exists,
+            which is the case if the launch command is user-provided (``ls_path``/``ls_base_cmd``)
+        """
+        if self.config.is_project_trusted:
+            return {}
+        tsdk_path = self._get_pinned_tsdk_path()
+        if not os.path.isdir(tsdk_path):
+            raise SolidLSPException(
+                f"Cannot pin tsserver for untrusted project {self.repository_root_path}: no TypeScript "
+                f"installation at {tsdk_path}. Refusing to continue without the pin, because the project's "
+                f"own node_modules/typescript would be executed instead. Either mark the project as trusted, "
+                f"or drop the 'ls_path'/'ls_base_cmd' setting for typescript so that the TypeScript "
+                f"installation is managed here."
+            )
+        log.info("Project is not trusted; pinning tsserver to %s", tsdk_path)
+        return {"tsserver": {"path": tsdk_path}}
+
     def _create_base_initialize_params(self) -> dict:
         initialize_params = {
             "locale": "en",
@@ -369,9 +427,8 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             # slow, network-dependent, and nondeterministic (and can hang on offline/locked-down
             # machines). Serena relies on the types already installed in the project instead.
             "initializationOptions": {
-                "preferences": {
-                    "disableAutomaticTypingAcquisition": True,
-                },
+                "disableAutomaticTypingAcquisition": True,
+                **self._create_tsserver_initialization_options(),
             },
             "capabilities": {
                 "textDocument": {
@@ -514,21 +571,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             "Sending initialize request from LSP client to LSP server and awaiting response",
         )
         init_response = self.server.send.initialize(initialize_params)
-
-        # TypeScript-specific capability checks
-        assert init_response["capabilities"]["textDocumentSync"] == 2
-        assert "completionProvider" in init_response["capabilities"]
-        assert init_response["capabilities"]["completionProvider"] == {
-            "triggerCharacters": [".", '"', "'", "/", "@", "<"],
-            "resolveProvider": True,
-        }
+        self._verify_initialize_response(init_response)
 
         self.server.notify.initialized({})
-        server_ready_timeout = self._get_server_ready_timeout()
-        if self.server_ready.wait(timeout=server_ready_timeout):
-            log.info("TypeScript server is ready")
-        else:
-            self._handle_server_ready_timeout(server_ready_timeout)
+        self._wait_for_server_ready()
 
         # Wait for any async project loading to complete.
         # typescript-language-server may send $/progress for "Initializing JS/TS
@@ -547,20 +593,25 @@ class TypeScriptLanguageServer(SolidLanguageServer):
     def _find_representative_source_file(self, directory: str) -> str | None:
         """Find a TypeScript file suitable for triggering project loading.
 
-        Prefers a file adjacent to tsconfig.json (indicating the project root),
-        then falls back to the first .ts/.tsx file found.
+        Prefers a file under a `src` subdirectory adjacent to tsconfig.json (the
+        conventional source root), so a root-level tool config that tsconfig excludes
+        (vitest.config.ts, jest.config.ts, etc.) is not picked over the project's real
+        source tree. Falls back to a file directly adjacent to tsconfig.json, then to
+        the first .ts/.tsx file found anywhere in the directory.
         """
         for root, dirs, files in os.walk(directory):
             dirs[:] = [d for d in dirs if not self.is_ignored_dirname(d)]
             if "tsconfig.json" in files:
+                src_dir = os.path.join(root, "src")
+                if os.path.isdir(src_dir):
+                    for src_root, src_dirs, src_files in os.walk(src_dir):
+                        src_dirs[:] = [d for d in src_dirs if not self.is_ignored_dirname(d)]
+                        for f in src_files:
+                            if f.endswith((".ts", ".tsx")) and not f.endswith(".d.ts"):
+                                return os.path.join(src_root, f)
                 for f in files:
                     if f.endswith((".ts", ".tsx")) and not f.endswith(".d.ts"):
                         return os.path.join(root, f)
-                src_dir = os.path.join(root, "src")
-                if os.path.isdir(src_dir):
-                    for f in os.listdir(src_dir):
-                        if f.endswith((".ts", ".tsx")) and not f.endswith(".d.ts"):
-                            return os.path.join(src_dir, f)
 
         for root, dirs, files in os.walk(directory):
             dirs[:] = [d for d in dirs if not self.is_ignored_dirname(d)]
@@ -606,18 +657,33 @@ class TypeScriptLanguageServer(SolidLanguageServer):
 
     @override
     def _wait_for_cross_file_references_if_needed(self) -> None:
-        if self._has_waited_for_cross_file_references:
-            return
+        # checked before the latch: a crash observed after the first query's wait would otherwise
+        # never be raised, and the query would return an empty result as if it were complete
+        self._raise_if_crashed()
 
         timeout = self._get_indexing_timeout()
-        start_grace = self._get_indexing_start_grace()
-        if self._wait_for_indexing_start_or_completion(timeout=timeout, start_grace=start_grace):
+        if not self._has_waited_for_cross_file_references:
+            start_grace = self._get_indexing_start_grace()
+            self._log_cross_file_indexing_wait_outcome(
+                self._wait_for_indexing_start_or_completion(timeout=timeout, start_grace=start_grace), timeout
+            )
+            self._has_waited_for_cross_file_references = True
+            return
+
+        # The latch above only covers the first query; a later one can still open a file from a
+        # project tsserver has not loaded before, starting a fresh $/progress cycle to drain.
+        with self._progress_lock:
+            indexing_in_progress = bool(self._active_progress_tokens)
+        if indexing_in_progress:
+            self._log_cross_file_indexing_wait_outcome(self.wait_for_indexing(timeout=timeout), timeout)
+
+    def _log_cross_file_indexing_wait_outcome(self, completed: bool, timeout: float) -> None:
+        if completed:
             log.info("TypeScript cross-file indexing complete")
         else:
             log.warning(
                 "TypeScript cross-file indexing did not complete within %.0fs; proceeding (%s)", timeout, self.describe_indexing_state()
             )
-        self._has_waited_for_cross_file_references = True
 
     @override
     def _get_preferred_definition(self, definitions: list[ls_types.Location]) -> ls_types.Location:

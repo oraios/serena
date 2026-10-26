@@ -3,3 +3,5 @@ prompt: |
   The onboarding process is not applied.
 excluded_tools:
   - onboarding
+excluded_apis:
+  - mem.onboarding

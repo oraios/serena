@@ -9,7 +9,7 @@
 
 <div align="center">
   <a href="https://discord.com/invite/cVUNQmnV4r"><img src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&labelColor=0a0e14&logo=discord&logoColor=5865F2" alt="discord"></a>
-  <a href="https://github.com/oraios/serena/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-b0e8ff?style=flat-square&labelColor=0a0e14" alt="license"></a>
+  <a href="https://github.com/oraios/serena/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-b0e8ff?style=flat-square&labelColor=0a0e14" alt="license: GPL-3.0-or-later"></a>
 </div>
 <br>
 
@@ -24,15 +24,14 @@ approaches that rely on low-level concepts like line numbers or primitive search
 Practically, this means that your agent operates **faster, more efficiently and more reliably**, especially in larger and
 more complex codebases.
 
-> [!IMPORTANT]
-> Do not install Serena via an MCP or plugin marketplace! They contain outdated and suboptimal installation commands. 
-> Instead, follow our [Quick Start](#quick-start) instructions.
+> [!TIP]
+> Serena v2 with the new **REPL-based agent interface** has been released.    
+> [Learn more](https://oraios.github.io/serena/01-about/035_tools.html#serena-s-repl-code-execution-based-interface) 
+> about the new interface and how to [configure it](https://oraios.github.io/serena/02-usage/050_configuration.html#agent-interfaces).
 
-## Quick Demo
+## Video
 
-https://github.com/user-attachments/assets/8d11646e-b80e-4723-b9d7-32d6101b5f58
-
-:tv: Longer video: [Introduction to Serena in 5 Minutes (YouTube)](https://www.youtube.com/watch?v=5QN7gN1KYLA)
+<a href="https://www.youtube.com/watch?v=5QN7gN1KYLA"><img src="resources/serena-video-placeholder.png" style="width:500px"></a>
 
 ## What Our "End Users" Say
 
@@ -110,7 +109,7 @@ Serena incorporates a powerful abstraction layer for the integration of language
 The underlying language servers are typically open-source projects or at least freely available for use.
 
 When using Serena's language server backend, we provide **support for over 40 programming languages**, including
-Ada / SPARK, AL, Angular, Ansible, Bash, BSL, C#, C/C++, Clojure, Crystal, CUE, Dart, Deno, Elixir, Elm, Erlang, Fortran, F#, GDScript, Gleam, GLSL, Go, Groovy, Haskell, Haxe, HLSL, HTML, Java, JavaScript, JSON, Julia, Kotlin, LaTeX, Lean 4, Lua, Luau, Markdown, MATLAB, mSL, Nextflow, Nix, OCaml, Pascal, Perl, PHP, PowerShell, Python, QML, R, Rego, Ruby, Rust, Scala, SCSS / Sass / CSS, Solidity, Svelte, Swift, SystemVerilog, Terraform, TOML, TypeScript, Vue, WGSL, Wolfram Language, YAML, and Zig.
+Ada / SPARK, AL, Angular, Ansible, Astro, Bash, BSL, C#, C/C++, Clojure, Crystal, CUE, Dart, Deno, Elixir, Elm, Erlang, Fortran, F#, GDScript, Gleam, GLSL, Go, GraphQL, Groovy, Haskell, Haxe, HLSL, HTML, Java, JavaScript, JSON, Julia, Kotlin, LaTeX, Lean 4, Lua, Luau, Markdown, MATLAB, mSL, Nextflow, Nix, OCaml, Pascal, Perl, PHP, PowerShell, Python, QML, R, Rego, Ruby, Rust, Scala, SCSS / Sass / CSS, Solidity, Svelte, Swift, SystemVerilog, Terraform, TOML, TypeScript, VB.NET, Vue, WGSL, Wolfram Language, YAML, and Zig.
 
 ### The Serena JetBrains Plugin
 
@@ -217,11 +216,10 @@ To achieve this, Serena offers multiple levels of (composable) configuration:
 
 ## Quick Start
 
-**Prerequisites**. Serena is managed by *uv*, and [installing uv](https://docs.astral.sh/uv/getting-started/installation/) is the only required prerequisite.
+> [!IMPORTANT]
+> Do not install Serena via an MCP or plugin marketplace! They contain outdated and suboptimal installation commands.
 
-> [!NOTE]
-> When using the language server backend, some additional dependencies may need to be installed to support certain languages;
-> see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.
+**Prerequisites**. Serena is managed by *uv*, and [installing uv](https://docs.astral.sh/uv/getting-started/installation/) is the only required prerequisite.
 
 **Install Serena**. Serena is installed via uv as follows:
 
@@ -230,6 +228,10 @@ uv tool install -p 3.13 serena-agent
 ```
 
 After successful installation, the command `serena` should be available in your shell.
+
+> [!NOTE]
+> When using the language server backend, some additional dependencies may need to be installed to support certain languages;
+> see the [Language Support](https://oraios.github.io/serena/01-about/020_programming-languages.html) page for details.
 
 **Initialise Serena**. To initialise Serena and verify that your setup works correctly, simply run:
 
@@ -261,5 +263,15 @@ Please refer to the [user guide](https://oraios.github.io/serena/02-usage/000_in
 A significant part of Serena, especially support for various languages, was contributed by the open source community.
 We are very grateful for the many contributors who made this possible and who played an important role in making Serena
 what it is today.
+
+## License
+
+Serena is licensed per component: **SolidLSP** (`src/solidlsp`) under the [MIT License](LICENSES/MIT.txt),
+the **Serena application** (everything else) under [GPL-3.0-or-later](LICENSES/GPL-3.0-or-later.txt).
+Distributions combining both are as a whole subject to the GPL.
+
+See [LICENSE](LICENSE) for the authoritative overview and the
+[license documentation](https://oraios.github.io/serena/01-about/060_license.html) for the background.
+Contributions require acceptance of our [CLA](CLA.md); see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 <!-- mcp-name: io.github.oraios/serena -->

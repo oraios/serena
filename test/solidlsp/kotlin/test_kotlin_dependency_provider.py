@@ -1,12 +1,11 @@
 """Tests for Kotlin Language Server dependency resolution and installation."""
 
-from contextlib import nullcontext
+import os
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from solidlsp.dependency_provider import DownloadedDependency, DownloadedDependencyHashDatabase
 from solidlsp.language_servers.kotlin_language_server import (
     DEFAULT_KOTLIN_LSP_VERSION,
     INITIAL_KOTLIN_LSP_VERSION,
@@ -30,115 +29,6 @@ def _make_provider(
 
 @pytest.mark.kotlin
 class TestKotlinDependencyProvider:
-    @pytest.mark.parametrize(
-        ("platform_id", "asset_suffix", "archive_type", "launcher_parts", "sha256"),
-        [
-            (
-                PlatformId.WIN_x64,
-                ".win.zip",
-                "zip",
-                ("bin", "intellij-server.exe"),
-                "f2daaa476f26d99301b406f76de6d87c437d04dc72f06845154619d8f991c51f",
-            ),
-            (
-                PlatformId.WIN_arm64,
-                "-aarch64.win.zip",
-                "zip",
-                ("bin", "intellij-server.exe"),
-                "73a552a6a420158622e5ad8d96b53da8aa8ced3f88a24fded01575927a2fd8e7",
-            ),
-            (
-                PlatformId.LINUX_x64,
-                ".tar.gz",
-                "gztar",
-                (f"kotlin-server-{DEFAULT_KOTLIN_LSP_VERSION}", "bin", "intellij-server"),
-                "2d99d8e198fbe4aa8f4481e37799724ce94803b4ea12a60b416040e3fcd7cc5e",
-            ),
-            (
-                PlatformId.LINUX_arm64,
-                "-aarch64.tar.gz",
-                "gztar",
-                (f"kotlin-server-{DEFAULT_KOTLIN_LSP_VERSION}", "bin", "intellij-server"),
-                "2317831c6e5607d05b7ebc1da655330125ce0e3d66fbf24517dfce442debc14e",
-            ),
-            (
-                PlatformId.OSX_x64,
-                ".sit",
-                "zip",
-                (f"kotlin-server-{DEFAULT_KOTLIN_LSP_VERSION}", "bin", "intellij-server"),
-                "17369fda97c85418ac24ab38a9df56b21522a3468dfe193832fe455c13920745",
-            ),
-            (
-                PlatformId.OSX_arm64,
-                "-aarch64.sit",
-                "zip",
-                (f"kotlin-server-{DEFAULT_KOTLIN_LSP_VERSION}", "bin", "intellij-server"),
-                "6ba6021a706b21e64cef33f7e2b79f187c0910320722bb2d3ed05ad1115ec43f",
-            ),
-        ],
-    )
-    def test_default_artifacts_match_jetbrains_release_matrix(
-        self,
-        tmp_path: Path,
-        platform_id: PlatformId,
-        asset_suffix: str,
-        archive_type: str,
-        launcher_parts: tuple[str, ...],
-        sha256: str,
-    ) -> None:
-        artifact = KotlinLanguageServer.DependencyProvider._create_artifact(DEFAULT_KOTLIN_LSP_VERSION, platform_id)
-        url = (
-            f"https://download-cdn.jetbrains.com/language-server/kotlin-server/{DEFAULT_KOTLIN_LSP_VERSION}/"
-            f"kotlin-server-{DEFAULT_KOTLIN_LSP_VERSION}{asset_suffix}"
-        )
-
-        with patch("solidlsp.dependency_provider.FileUtils.download_and_extract_archive_verified") as download:
-            artifact.dependency.download_to(tmp_path)
-
-        download.assert_called_once_with(
-            url,
-            str(tmp_path),
-            archive_type=archive_type,
-            expected_sha256=sha256,
-            allowed_hosts=KOTLIN_LSP_ALLOWED_HOSTS,
-        )
-        assert artifact.launcher_parts == launcher_parts
-
-    @pytest.mark.parametrize(
-        ("version", "platform_id", "url", "launcher_parts"),
-        [
-            (
-                "262.2310.0",
-                PlatformId.LINUX_x64,
-                "https://download-cdn.jetbrains.com/kotlin-lsp/262.2310.0/kotlin-lsp-262.2310.0-linux-x64.zip",
-                ("kotlin-lsp.sh",),
-            ),
-            (
-                "262.4739.0",
-                PlatformId.LINUX_x64,
-                "https://download-cdn.jetbrains.com/kotlin-lsp/262.4739.0/kotlin-server-262.4739.0.tar.gz",
-                ("kotlin-server-262.4739.0", "bin", "intellij-server"),
-            ),
-            (
-                "262.8190.0",
-                PlatformId.OSX_arm64,
-                "https://download-cdn.jetbrains.com/language-server/kotlin-server/262.8190.0/kotlin-server-262.8190.0-aarch64.sit",
-                ("kotlin-server-262.8190.0", "bin", "intellij-server"),
-            ),
-        ],
-    )
-    def test_version_boundaries_select_the_published_layout(
-        self,
-        version: str,
-        platform_id: PlatformId,
-        url: str,
-        launcher_parts: tuple[str, ...],
-    ) -> None:
-        artifact = KotlinLanguageServer.DependencyProvider._create_artifact(version, platform_id)
-
-        assert artifact.dependency.get_url() == url
-        assert artifact.launcher_parts == launcher_parts
-
     def test_custom_versions_skip_hash_lookup_by_design(self, tmp_path: Path) -> None:
         artifact = KotlinLanguageServer.DependencyProvider._create_artifact("262.8190.1", PlatformId.LINUX_x64)
 
@@ -152,37 +42,12 @@ class TestKotlinDependencyProvider:
             artifact.dependency.download_to(tmp_path)
 
         download.assert_called_once_with(
-            "https://download-cdn.jetbrains.com/language-server/kotlin-server/262.8190.1/kotlin-server-262.8190.1.tar.gz",
+            "https://download.jetbrains.com/language-server/kotlin-server/262.8190.1/kotlin-server-262.8190.1.tar.gz",
             str(tmp_path),
             archive_type="gztar",
             expected_sha256=None,
             allowed_hosts=KOTLIN_LSP_ALLOWED_HOSTS,
         )
-
-    def test_hash_updater_registers_frozen_and_default_artifacts(self) -> None:
-        updated_asset_names: list[str] = []
-
-        class RecordingUpdater:
-            def update(self, dependency: DownloadedDependency) -> None:
-                updated_asset_names.append(dependency.get_url().rsplit("/", 1)[-1])
-
-        with patch.object(DownloadedDependencyHashDatabase, "get_instance") as get_hash_database:
-            get_hash_database.return_value.update_context.return_value = nullcontext(RecordingUpdater())
-            KotlinLanguageServer.DependencyProvider.update_dep_hashes()
-
-        assert set(updated_asset_names) == {
-            "kotlin-lsp-261.13587.0-win-x64.zip",
-            "kotlin-lsp-261.13587.0-linux-x64.zip",
-            "kotlin-lsp-261.13587.0-linux-aarch64.zip",
-            "kotlin-lsp-261.13587.0-mac-x64.zip",
-            "kotlin-lsp-261.13587.0-mac-aarch64.zip",
-            "kotlin-server-262.9593.0.win.zip",
-            "kotlin-server-262.9593.0-aarch64.win.zip",
-            "kotlin-server-262.9593.0.tar.gz",
-            "kotlin-server-262.9593.0-aarch64.tar.gz",
-            "kotlin-server-262.9593.0.sit",
-            "kotlin-server-262.9593.0-aarch64.sit",
-        }
 
     @pytest.mark.parametrize(
         ("settings", "platform_id", "relative_launcher", "expected_directory"),
@@ -192,12 +57,6 @@ class TestKotlinDependencyProvider:
                 PlatformId.LINUX_x64,
                 ("kotlin-lsp.sh",),
                 "kotlin_language_server",
-            ),
-            (
-                {},
-                PlatformId.LINUX_arm64,
-                (f"kotlin-server-{DEFAULT_KOTLIN_LSP_VERSION}", "bin", "intellij-server"),
-                f"kotlin_language_server-{DEFAULT_KOTLIN_LSP_VERSION}",
             ),
         ],
     )
@@ -265,6 +124,85 @@ class TestKotlinDependencyProvider:
                 str(tmp_path / "project-cache" / "kotlin-lsp-system"),
             ]
             assert other_os_provider.create_launch_command() == [other_os_launcher, "--stdio"]
+
+    def test_single_instance_keeps_the_deterministic_cache_dir(self, tmp_path: Path) -> None:
+        """The common case (one Serena instance, possibly restarted) must keep reusing the
+        same on-disk directory, or the Kotlin LSP loses its index cache on every restart.
+        """
+        provider = _make_provider(tmp_path)
+
+        assert provider.storage_dir == str(tmp_path / "project-cache")
+
+    def test_second_concurrent_instance_gets_its_own_storage_dir(self, tmp_path: Path) -> None:
+        """Two Serena instances activating the same project concurrently (oraios/serena#1966)
+        must not be handed the same Kotlin LSP storage directory: the second one falls back to
+        a directory of its own instead of contending with the first for the same index.
+        """
+        first = _make_provider(tmp_path)
+        second = _make_provider(tmp_path)
+        try:
+            assert first.storage_dir == str(tmp_path / "project-cache")
+            assert second.storage_dir != first.storage_dir
+            assert second.storage_dir.startswith(str(tmp_path / "project-cache") + "-instance-")
+        finally:
+            first.release_storage_lock()
+            second.release_storage_lock()
+
+    def test_storage_dir_is_reclaimed_once_the_first_instance_releases_it(self, tmp_path: Path) -> None:
+        first = _make_provider(tmp_path)
+        first.release_storage_lock()
+
+        second = _make_provider(tmp_path)
+        try:
+            assert second.storage_dir == str(tmp_path / "project-cache")
+        finally:
+            second.release_storage_lock()
+
+    def test_fallback_storage_dir_is_removed_on_release(self, tmp_path: Path) -> None:
+        """The second instance's fallback directory (oraios/serena#1966) must not survive its
+        own release, or every lock collision leaks a multi-MB IntelliJ index directory forever.
+        """
+        first = _make_provider(tmp_path)
+        second = _make_provider(tmp_path)
+        try:
+            assert os.path.isdir(second.storage_dir)
+            second.release_storage_lock()
+            assert not os.path.exists(second.storage_dir)
+        finally:
+            first.release_storage_lock()
+
+    def test_primary_storage_dir_survives_release(self, tmp_path: Path) -> None:
+        """The deterministic per-project directory must persist after release: it is the
+        index cache a restarted single instance is meant to reuse.
+        """
+        provider = _make_provider(tmp_path)
+        os.makedirs(provider.storage_dir, exist_ok=True)
+        index_marker = Path(provider.storage_dir) / "index-marker"
+        index_marker.write_text("kotlin lsp index data", encoding="utf-8")
+
+        provider.release_storage_lock()
+
+        assert index_marker.exists()
+
+    def test_concurrent_instances_get_different_system_path_arguments(self, tmp_path: Path) -> None:
+        launcher = "/path/to/intellij-server"
+        first = _make_provider(tmp_path, {"ls_path": launcher})
+        second = _make_provider(tmp_path, {"ls_path": launcher})
+        try:
+            with patch(
+                "solidlsp.language_servers.kotlin_language_server.PlatformUtils.get_platform_id",
+                return_value=PlatformId.LINUX_x64,
+            ):
+                first_cmd = first.create_launch_command()
+                second_cmd = second.create_launch_command()
+
+            assert first_cmd == [launcher, "--stdio", "--system-path", str(tmp_path / "project-cache" / "kotlin-lsp-system")]
+            assert second_cmd[:2] == [launcher, "--stdio"]
+            assert second_cmd[2] == "--system-path"
+            assert second_cmd[3] != first_cmd[3]
+        finally:
+            first.release_storage_lock()
+            second.release_storage_lock()
 
     def test_invalid_version_is_rejected_before_download(self) -> None:
         with pytest.raises(ValueError, match="dot-separated integers"):

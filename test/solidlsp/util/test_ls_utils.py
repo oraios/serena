@@ -6,7 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
-from solidlsp.ls_utils import FileUtils
+from solidlsp.ls_exceptions import SolidLSPException
+from solidlsp.ls_utils import FileUtils, PlatformId, PlatformUtils
 
 
 class _FakeResponse:
@@ -104,3 +105,42 @@ def test_read_file_primary_path_normalizes_crlf(tmp_path: Path) -> None:
 
     assert "\r" not in content
     assert content.splitlines() == lines
+
+
+@pytest.mark.parametrize(
+    ("system", "machine", "expected"),
+    [
+        pytest.param("FreeBSD", "amd64", PlatformId.FREEBSD_x64, id="freebsd-amd64"),
+        pytest.param("FreeBSD", "arm64", PlatformId.FREEBSD_arm64, id="freebsd-arm64"),
+    ],
+)
+def test_get_platform_id_freebsd(system: str, machine: str, expected: PlatformId) -> None:
+    """FreeBSD should resolve to a freebsd platform id."""
+    with (
+        patch("solidlsp.ls_utils.platform.system", return_value=system),
+        patch("solidlsp.ls_utils.platform.machine", return_value=machine),
+        patch("solidlsp.ls_utils.platform.architecture", return_value=("64bit",)),
+    ):
+        assert PlatformUtils.get_platform_id() is expected
+
+
+def test_get_platform_id_freebsd_i386_raises() -> None:
+    """32-bit FreeBSD was deprecated with the release of FreeBSD 15.0 and must fail with the standard error."""
+    with (
+        patch("solidlsp.ls_utils.platform.system", return_value="FreeBSD"),
+        patch("solidlsp.ls_utils.platform.machine", return_value="i386"),
+        patch("solidlsp.ls_utils.platform.architecture", return_value=("32bit",)),
+    ):
+        with pytest.raises(SolidLSPException, match="Unknown platform"):
+            PlatformUtils.get_platform_id()
+
+
+def test_get_platform_id_unknown_platform_still_raises() -> None:
+    """Platforms without an explicit mapping must keep failing explicitly."""
+    with (
+        patch("solidlsp.ls_utils.platform.system", return_value="SunOS"),
+        patch("solidlsp.ls_utils.platform.machine", return_value="i86pc"),
+        patch("solidlsp.ls_utils.platform.architecture", return_value=("64bit",)),
+    ):
+        with pytest.raises(SolidLSPException):
+            PlatformUtils.get_platform_id()

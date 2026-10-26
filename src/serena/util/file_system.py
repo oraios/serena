@@ -1,6 +1,12 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import logging
 import os
 import re
+import stat
+import tempfile
+import time
+from collections import deque
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -12,9 +18,79 @@ from sensai.util.logging import LogTime
 
 log = logging.getLogger(__name__)
 
+
+def write_file_atomic(path: str, content: str, *, encoding: str, newline: str | None = None) -> None:
+    """
+    Write ``content`` to ``path`` atomically: the content is written to a temporary file in the
+    same directory first, then swapped into place with ``os.replace``. A plain
+    ``open(path, "w")`` is not atomic: it truncates the file before the new content is complete,
+    so a crash, an out-of-memory kill, or a disk-full error partway through the write leaves
+    ``path`` holding neither the old content nor the new one.
+
+    :param path: the path to write to
+    :param content: the text content to write
+    :param encoding: the encoding to use for the write
+    :param newline: passed through to the underlying ``open()`` call to control newline translation
+    """
+    # ``open(path, "w")`` follows symlinks and writes through to the target, whereas replacing the
+    # link path itself would swap the link out for a regular file and leave its target holding the
+    # old content. Resolving first keeps this a drop-in replacement, and puts the temporary file in
+    # the destination's real directory, which is where it has to be for the rename to be atomic.
+    path = os.path.realpath(path)
+    target_dir = os.path.dirname(path) or "."
+    try:
+        existing_mode: int | None = stat.S_IMODE(os.stat(path).st_mode)
+    except FileNotFoundError:
+        existing_mode = None
+    fd, tmp_path = tempfile.mkstemp(dir=target_dir, prefix=os.path.basename(path) + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding=encoding, newline=newline) as f:
+            f.write(content)
+        # mkstemp creates the temp file with mode 0600 regardless of umask, which would silently
+        # tighten an existing file's permissions (e.g. 0644 -> 0600) on replace. Restore the
+        # original mode, or fall back to what a plain open(path, "w") would have produced for a
+        # new file (0666 masked by the process umask).
+        os.chmod(tmp_path, existing_mode if existing_mode is not None else _new_file_mode())
+        _replace_with_retry(tmp_path, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _new_file_mode() -> int:
+    """The mode a plain ``open(path, "w")`` would give a brand-new file: 0o666 masked by the
+    process umask. Reading the umask requires setting it, so the previous value is restored
+    immediately after.
+    """
+    current_umask = os.umask(0o022)
+    os.umask(current_umask)
+    return 0o666 & ~current_umask
+
+
+def _replace_with_retry(src: str, dst: str, *, attempts: int = 10, delay_s: float = 0.05) -> None:
+    """``os.replace(src, dst)`` with a short retry on a Windows sharing violation: on Windows the
+    atomic rename fails with ``PermissionError`` if another process momentarily holds ``dst`` open
+    (e.g. a second Serena process reading the same memory or source file). A brief bounded retry
+    rides out that contention; the temp file is still complete, so this never falls back to a
+    non-atomic write.
+    """
+    for attempt in range(attempts):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(delay_s)
+
+
 # Characters meaningful to pathspec's gitignore grammar: glob wildcards, bracket expressions,
 # the escape character itself, and '!'/'#' which change a whole pattern's meaning when they
 # are its first character. Backslash-escaping them makes a literal name safe to interpolate.
+# Escape surrounding whitespace too, so pathspec does not strip it from literal names.
 _GITIGNORE_PATTERN_SPECIAL_CHARS_RE = re.compile(r"([\\*?\[\]!#])")
 
 
@@ -22,7 +98,8 @@ def _escape_gitignore_path_component(component: str) -> str:
     """Escape gitignore/pathspec pattern metacharacters in a single path component (no
     separators) so it is matched as a literal name rather than as glob syntax.
     """
-    return _GITIGNORE_PATTERN_SPECIAL_CHARS_RE.sub(r"\\\1", component)
+    component = _GITIGNORE_PATTERN_SPECIAL_CHARS_RE.sub(r"\\\1", component)
+    return re.sub(r"(^\s|\s$)", r"\\\1", component)
 
 
 class ScanResult(NamedTuple):
@@ -101,6 +178,66 @@ def scan_directory(
     return ScanResult(directories, files)
 
 
+def dir_entry_from_path(path: str) -> os.DirEntry:
+    parent, name = os.path.split(os.path.normpath(path))
+    for entry in os.scandir(parent or "."):
+        if entry.name == name:
+            return entry
+    raise FileNotFoundError(f"No such file or directory: '{path}'")
+
+
+def walk_dir_entries(
+    top, topdown=True, onerror=None, followlinks=False, recursive=True, is_ignored_dir: Callable[[os.DirEntry], bool] = lambda x: False
+) -> Iterator[tuple[str, list[os.DirEntry], list[os.DirEntry]]]:
+    """
+    Variant of os.walk which yields os.DirEntry objects instead of strings.
+    This allows for more efficient file system access, as it avoids additional stat calls.
+
+    The directories contained in the result are exactly those that are descended into, i.e. ignored
+    directories and (unless `followlinks` is set) symbolic links to directories are not contained.
+
+    :param top: the root directory to start walking from
+    :param topdown: if True, yield the directory before its subdirectories; if False, yield the subdirectories before the directory
+    :param onerror: a function to call with an OSError instance if an error occurs while accessing a directory
+    :param followlinks: if True, follow symbolic links to directories; if False, do not follow them
+    :param recursive: whether to recursively walk into subdirectories; if False, only the top directory is yielded
+    :param is_ignored_dir: a function to determine whether a directory should be ignored; it takes an os.DirEntry and returns True if
+        the directory should be ignored
+    :return: an iterator yielding tuples of (directory path, list of subdirectory entries, list of file entries)
+    """
+    try:
+        with os.scandir(top) as it:
+            entries = list(it)
+    except OSError as error:
+        if onerror is not None:
+            onerror(error)
+        return
+
+    dirs = []
+    files = []
+
+    for entry in entries:
+        try:
+            is_dir = entry.is_dir()
+        except OSError:
+            is_dir = False
+
+        if not is_dir:
+            files.append(entry)
+        elif (followlinks or not entry.is_symlink()) and not is_ignored_dir(entry):
+            dirs.append(entry)
+
+    if topdown:
+        yield top, dirs, files
+
+    if recursive:
+        for entry in dirs:
+            yield from walk_dir_entries(entry.path, topdown, onerror, followlinks, is_ignored_dir=is_ignored_dir)
+
+    if not topdown:
+        yield top, dirs, files
+
+
 def find_all_non_ignored_files(repo_root: str) -> list[str]:
     """
     Find all non-ignored files in the repository, respecting all gitignore files in the repository.
@@ -148,14 +285,18 @@ class GitignoreParser:
     and provides methods to check if paths should be ignored.
     """
 
-    def __init__(self, repo_root: str) -> None:
+    def __init__(self, repo_root: str, *, prune_spec: PathSpec | None = None) -> None:
         """
         Initialize the parser for a repository.
 
         :param repo_root: Root directory of the repository
+        :param prune_spec: Configured ignore patterns used to prune gitignore discovery
         """
         self.repo_root = os.path.abspath(repo_root)
         self.ignore_specs: list[GitignoreSpec] = []
+        self._specs_by_directory: dict[str, list[GitignoreSpec]] = {}
+        self._indexed_specs_count = 0
+        self._prune_spec = prune_spec
         self._load_gitignore_files()
 
     def _load_gitignore_files(self) -> None:
@@ -166,6 +307,9 @@ class GitignoreParser:
                 spec = self._create_ignore_spec(gitignore_path)
                 if spec.patterns:  # Only add non-empty specs
                     self.ignore_specs.append(spec)
+                    rel_dir = os.path.relpath(os.path.dirname(gitignore_path), self.repo_root).replace(os.sep, "/")
+                    self._specs_by_directory.setdefault("" if rel_dir == "." else rel_dir, []).append(spec)
+                    self._indexed_specs_count = len(self.ignore_specs)
 
     def _iter_gitignore_files(self, follow_symlinks: bool = False) -> Iterator[str]:
         """
@@ -174,7 +318,7 @@ class GitignoreParser:
 
         :return: an iterator yielding paths to .gitignore files (top-down)
         """
-        queue: list[str] = [self.repo_root]
+        queue: deque[str] = deque([self.repo_root])
 
         def scan(abs_path: str | None) -> Iterator[str]:
             try:
@@ -196,14 +340,17 @@ class GitignoreParser:
                     continue
 
         while queue:
-            next_abs_path = queue.pop(0)
+            next_abs_path = queue.popleft()
             if next_abs_path != self.repo_root:
                 try:
                     rel_path = os.path.relpath(next_abs_path, self.repo_root)
                 except ValueError:
                     # If the path is on a different drive (Windows) or cannot be made relative for another reason, we ignore it
                     continue
-                if self.should_ignore(rel_path):
+                if (
+                    self._prune_spec is not None
+                    and match_path(rel_path.replace(os.sep, "/") + "/", self._prune_spec, root_path=self.repo_root)
+                ) or self.should_ignore(rel_path):
                     continue
             yield from scan(next_abs_path)
 
@@ -226,6 +373,7 @@ class GitignoreParser:
 
         return GitignoreSpec(gitignore_file_path, patterns)
 
+    # Backport of upstream #1806: keep filesystem names literal in patterns.
     def _parse_gitignore_content(self, content: str, gitignore_dir: str) -> list[str]:
         """
         Parse gitignore content and adjust patterns based on the gitignore file location.
@@ -320,6 +468,14 @@ class GitignoreParser:
         :param path: Path to check (absolute or relative to repo_root)
         :return: True if the path should be ignored, False otherwise
         """
+        # The public list is authoritative; refresh the derived cache after length changes.
+        if self._indexed_specs_count != len(self.ignore_specs):
+            self._specs_by_directory.clear()
+            for spec in self.ignore_specs:
+                rel_dir = os.path.relpath(os.path.dirname(spec.file_path), self.repo_root).replace(os.sep, "/")
+                self._specs_by_directory.setdefault("" if rel_dir == "." else rel_dir, []).append(spec)
+            self._indexed_specs_count = len(self.ignore_specs)
+
         # Convert to relative path from repo root
         if os.path.isabs(path):
             try:
@@ -345,10 +501,14 @@ class GitignoreParser:
         if os.path.exists(abs_path) and os.path.isdir(abs_path) and not rel_path.endswith("/"):
             rel_path = rel_path + "/"
 
-        # Check against each ignore spec
-        for spec in self.ignore_specs:
-            if spec.matches(rel_path):
-                return True
+        # Escaped directory prefixes restrict specs to their own subtrees. Walk from
+        # root to parent (including a directory itself) in the original discovery order.
+        directory = ""
+        for component in ["", *rel_path.split("/")[:-1]]:
+            directory = f"{directory}/{component}" if directory else component
+            for spec in self._specs_by_directory.get(directory, []):
+                if spec.matches(rel_path):
+                    return True
 
         return False
 
@@ -363,10 +523,12 @@ class GitignoreParser:
     def reload(self) -> None:
         """Reload all gitignore files from the repository."""
         self.ignore_specs.clear()
+        self._specs_by_directory.clear()
+        self._indexed_specs_count = 0
         self._load_gitignore_files()
 
 
-def match_path(relative_path: str, path_spec: PathSpec, root_path: str = "") -> bool:
+def match_path(relative_path: str, path_spec: PathSpec, root_path: str = "", is_dir: bool | None = None) -> bool:
     """
     Match a relative path against a given pathspec. Just pathspec.match_file() is not enough,
     we need to do some massaging to fix issues with pathspec matching.
@@ -374,6 +536,8 @@ def match_path(relative_path: str, path_spec: PathSpec, root_path: str = "") -> 
     :param relative_path: relative path to match against the pathspec
     :param path_spec: the pathspec to match against
     :param root_path: the root path from which the relative path is derived
+    :param is_dir: whether the path is a directory, where the caller already knows; passing it avoids
+        an `os.path.isdir` call. `None` determines it from the filesystem.
     :return:
     """
     if str(relative_path) in {"", "."}:
@@ -391,7 +555,12 @@ def match_path(relative_path: str, path_spec: PathSpec, root_path: str = "") -> 
 
     # pathspec can't handle the matching of directories if they don't end with a slash!
     # see https://github.com/cpburnz/python-pathspec/issues/89
-    abs_path = os.path.abspath(os.path.join(root_path, relative_path))
-    if os.path.isdir(abs_path) and not normalized_path.endswith("/"):
-        normalized_path = normalized_path + "/"
+    # A path that already ends with '/' needs no stat: the slash is only ever appended, so the
+    # directory check is irrelevant for it (this is the hot path of gitignore discovery).
+    if not normalized_path.endswith("/"):
+        if is_dir is None:
+            abs_path = os.path.abspath(os.path.join(root_path, relative_path))
+            is_dir = os.path.isdir(abs_path)
+        if is_dir:
+            normalized_path = normalized_path + "/"
     return path_spec.match_file(normalized_path)

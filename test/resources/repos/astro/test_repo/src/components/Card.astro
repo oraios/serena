@@ -1,0 +1,24 @@
+---
+interface Props {
+	title: string;
+	body: string;
+	href: string;
+}
+
+const { href, title, body } = Astro.props;
+function formatTitle(val: string): string {
+    return val.toUpperCase();
+}
+---
+
+<li class="link-card">
+	<a href={href}>
+		<h2>
+			{formatTitle(title)}
+			<span>&rarr;</span>
+		</h2>
+		<p>
+			{body}
+		</p>
+	</a>
+</li>

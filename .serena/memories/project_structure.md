@@ -25,3 +25,6 @@ Serena is an MCP-based "IDE for coding agents": semantic code retrieval/editing/
 - Package name (PyPI): `serena-agent`; Wheel includes `serena`, `interprompt`, `solidlsp`.
 - Python: `>=3.11, <3.15`. Dependencies are exact-pinned in `pyproject.toml` (uvx installs from git, lockfile ignored — pin exactly).
 - Entry points: `serena` → `serena.cli:top_level`; `serena-hooks` → `serena.hooks:hook_commands`.
+- Licensing is per component (authoritative overview: `LICENSE`; texts in `LICENSES/`): `src/solidlsp`, `test/solidlsp`, `test/resources` → MIT; everything else (incl. `src/interprompt`, `scripts`, `test/serena`) → GPL-3.0-or-later.
+  Never change SolidLSP's MIT status. New `.py` files under `src/`/`scripts/` get a `# SPDX-License-Identifier: <id>` line (after the module docstring); `scripts/add_spdx_headers.py` adds missing ones idempotently and is invoked by `gen_prompt_factory.py`.
+  Contributions require the CLA (`CLA.md`, enforced via cla-assistant.io).

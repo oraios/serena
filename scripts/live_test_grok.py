@@ -32,6 +32,7 @@ Usage::
     uv run python scripts/live_test_grok.py --skip-unit   # skip the pytest smoke run
     uv run python scripts/live_test_grok.py --help        # all options
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import argparse
 import json

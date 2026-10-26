@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from agno.models.anthropic.claude import Claude
 from agno.models.google.gemini import Gemini
 from agno.os import AgentOS

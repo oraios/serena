@@ -20,16 +20,32 @@ Serena is configured using a multi-layered approach:
 
 The global configuration file allows you to change general settings and defaults that will apply to all projects unless overridden.
 
+### Accessing the Configuration File
+
+The configuration file is auto-created when you first run Serena. It is stored in your user directory:
+* Linux/macOS/Git-Bash: `~/.serena/serena_config.yml`
+* Windows (CMD/PowerShell): `%USERPROFILE%\.serena\serena_config.yml`
+
+You can access it
+* through [Serena's dashboard](060_dashboard) while Serena is running (use the respective button)
+* directly, using your favourite text editor
+* using the command
+
+  ```shell
+  serena config edit
+  ```
+
 ### Settings
 
 Some of the configurable settings include:
+  * the agent interface to use (tools or REPL, [see below](agent-interfaces))
   * the language backend to use by default (i.e., the JetBrains plugin or language servers);
     this can also be [overridden per project](per-project-language-backend)
   * UI settings affecting the [Serena Dashboard and GUI tool](060_dashboard.md)
-  * the set of tools to enable/disable by default
+  * the set of tools or REPL API functions to enable/disable by default
   * the set of [modes](modes) to use by default
   * tool execution parameters (timeout, max. answer length)
-  * global ignore rules
+  * global ignore rules for project files and folders
   * logging settings
   * the set of trusted project paths
   * advanced settings specific to individual language servers (see [below](ls-specific-settings))
@@ -41,20 +57,67 @@ Some of the settings it contains can, however, be *extended* or *overridden* in 
 For detailed information on the parameters and possible settings, see the
 [template file](https://github.com/oraios/serena/blob/main/src/serena/resources/serena_config.template.yml).
 
-### Accessing the Configuration File
+(agent-interfaces)=
+#### Agent Interfaces
 
-The configuration file is auto-created when you first run Serena. It is stored in your user directory:
-  * Linux/macOS/Git-Bash: `~/.serena/serena_config.yml`
-  * Windows (CMD/PowerShell): `%USERPROFILE%\.serena\serena_config.yml`
+Serena provides its functionality to the agent (LLM) through one of two interfaces
+(see [Tools and APIs](../01-about/035_tools) for the operations they offer):
 
-You can access it
-  * through [Serena's dashboard](060_dashboard) while Serena is running (use the respective button) 
-  * directly, using your favourite text editor
-  * using the command
+* **tools**: every operation is a separate tool of the MCP server.
+* **REPL** (new in Serena v2): a single tool executes Python code, through which the agent accesses the operations
+  programmatically, being able to combine several of them in one call.
+  This interface has several [advantages](https://oraios.github.io/serena/01-about/035_tools.html#repl-advantages)
+  over the classical tool interface.
 
-    ```shell
-    serena config edit
-    ```
+The interface is selected via the `agent_interface` setting in the global configuration.
+It can be overridden in the project configuration or via the `--agent-interface` command-line option,
+and it is fixed for the duration of a session.
+
+The two interfaces are configured differently:
+
+* With the **tool interface**, the set of tools results from the tool inclusion/exclusion settings
+  (`excluded_tools`, `included_optional_tools`, `fixed_tools`) of the global configuration, the context,
+  the modes and the project configuration.
+* With the **REPL interface**, the set of tools is fixed (the REPL tool and the tools which have no
+  counterpart within the REPL, e.g. for project activation); the tool settings above consequently do not apply.
+  The operations available *within* the REPL are configured via `included_apis`/`excluded_apis` instead,
+  which are supported in the same configuration layers and reference either a group of operations
+  (e.g. `lsp`) or an individual operation (e.g. `lsp.find_symbol`).
+
+```{note}
+Restricting the operations available in the REPL is a means of steering the agent, not a security mechanism:
+the Python code that is executed can, in principle, do anything the Serena process can do.
+See [Security](070_security) for isolation options.
+```
+
+(trusted-projects-config)=
+#### Trusted Projects
+
+The setting `trusted_project_path_patterns` configures the set of project root paths that are considered trusted,
+enabling additional features.
+
+Limitations applied to untrusted projects:
+
+- Some [project settings](project-config) are ignored for untrusted projects:
+  - `activation_command` is a shell command that is to be run whenever the project is activated.
+  - `ls_specific_settings` defines project-specific language server settings, which can change, in particular,
+    how language servers are started for the project.
+- Following of symbolic links in project directories is restricted in untrusted projects:
+  - Symbolic links are not followed when walking the project directory tree.
+  - Explicitly requested targets that resolve to locations outside the project root are rejected.
+- Project-local language server installations (e.g. a TypeScript LS installation in `node_modules`) will only be used
+  for trusted projects, while untrusted projects will use Serena's managed installation.
+
+```{note}
+The term "trusted" implies only that one trusts the project enough to enable the additional features listed above.
+An "untrusted" project is not sandboxed, strongly restricted or otherwise contained.
+See our [security documentation](trusted-projects) for details.
+```
+
+The default set of trusted paths depends on the age of your configuration: Installations predating
+the introduction of this setting retain a pattern that trusts all projects, ensuring that existing workflows are
+not broken, whereas newly created configurations trust no project by default.
+The applicable value can be inspected in the dashboard.
 
 ## Modes and Contexts
 
@@ -238,7 +301,7 @@ This ensures backward compatibility: existing projects that already have a `.ser
 Most users will not need to adjust these settings.
 :::
 
-Under the key `ls_specific_settings` in `serena_config.yml`, you can you pass global per-language, 
+Under the key `ls_specific_settings` in `serena_config.yml`, you can pass global per-language, 
 language server-specific configuration. 
 
 You can use the same key in the project configuration files (`project.yml`
@@ -544,7 +607,17 @@ Supported settings:
 
 | Setting | Default | Description |
 |---|---|---|
-| `expert_version` | `v0.1.0-rc.6` | Override the Expert version Serena downloads when it does not use an `expert` executable already found in PATH. |
+| `expert_version` | `v0.1.10` | Override the Expert version Serena downloads when it does not use an `expert` executable already found in PATH. |
+
+#### Erlang
+
+Serena uses the [Erlang Language Platform](https://github.com/WhatsApp/erlang-language-platform) (ELP) for Erlang support. Serena downloads the pinned official release asset for the current platform.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed download | Override the ELP executable path. |
 
 #### Elm
 
@@ -732,8 +805,13 @@ The following settings are supported for the Java language server:
 | `maven_user_settings` | `~/.m2/settings.xml` | Path to Maven `settings.xml` |
 | `gradle_user_home` | `~/.gradle` | Path to Gradle user home directory |
 | `gradle_wrapper_enabled` | `false` | Use the project's Gradle wrapper (`gradlew`) instead of the bundled Gradle distribution. Enable this for projects with custom plugins or repositories. |
+| `maven_import_enabled` | `true` | Whether JDTLS imports Maven projects. Disable on Gradle-only repositories to skip `pom.xml` detection work. |
+| `gradle_import_enabled` | `true` | Whether JDTLS imports Gradle projects. Disable on Maven-only repositories to skip Gradle detection work. |
+| `update_build_configuration` | `interactive` | What JDTLS does after `pom.xml` / `build.gradle` changes: `disabled`, `interactive`, or `automatic`. Prefer `automatic` for headless agents that cannot answer a prompt. |
+| `autobuild_enabled` | `true` | Whether JDTLS rebuilds after edits. Disable on very large repositories to reduce background CPU. |
 | `gradle_java_home` | `null` | Path to the JDK used by Gradle. When unset, Gradle uses `JAVA_HOME` if `use_system_java_home` is enabled and `JAVA_HOME` is set; otherwise it falls back to Serena's bundled JRE. |
 | `use_system_java_home` | `false` | Use the system's `JAVA_HOME` environment variable for JDTLS itself and, when `gradle_java_home` is unset, Gradle import. Enable this if your project requires a specific JDK vendor or version for Gradle's JDK checks. |
+| `custom_jre_path` | `null` | Path to an executable JDK 21+ Java launcher used only for JDTLS instead of Serena's bundled JRE. Serena queries the JVM for its real `java.home`, so symlinked launchers are supported. This does not replace `gradle_java_home` or entries in `runtimes`; configure those independently when needed. |
 | `runtimes` | `[]` | Extra JRE/JDK entries registered with JDT-LS via `java.configuration.runtimes`. Use this when a project's source/target level exceeds the JDK JDT-LS itself runs on (currently JDK 21 in default vscode-java VSIX mode). Each entry is a mapping with required `name` (e.g. `JavaSE-25`, matching the `JavaSE-NN` container the build tool requests) and `path` (JDK/JRE home directory; must exist), plus optional `default`, `sources`, and `javadoc` (passed through to JDT-LS). Entries extend rather than replace the bundled `JavaSE-21` runtime; an entry that reuses the `JavaSE-21` name overrides the bundled one. Changing this setting invalidates the JDTLS workspace hash so a fresh import is performed. |
 | `gradle_version` | `8.14.2` | (vscode-java mode only) Override the Gradle distribution version Serena downloads by default. |
 | `vscode_java_version` | `1.54.0-923` | (vscode-java mode only) Override the bundled `vscode-java` runtime bundle version Serena downloads by default. |
@@ -796,10 +874,10 @@ Supported settings:
 | Setting | Default | Description |
 |---|---|---|
 | `ls_path` | managed download | Override the Kotlin Language Server executable path. |
-| `kotlin_lsp_version` | `262.9593.0` | Override the Kotlin Language Server version Serena downloads when `ls_path` is not set. |
+| `kotlin_lsp_version` | `263.4702.0` | Override the Kotlin Language Server version Serena downloads when `ls_path` is not set. |
 | `jvm_options` | `-Xmx2G` | Value assigned to `JAVA_TOOL_OPTIONS` for the Kotlin LS process. Set to `""` to disable JVM options entirely. |
 
-The managed `262.9593.0` packages include a bundled JBR. For a custom `ls_path`, point directly to
+The managed `263.4702.0` packages include a bundled JBR. For a custom `ls_path`, point directly to
 `bin/intellij-server` (`bin/intellij-server.exe` on Windows). Serena also retains the legacy download
 layout for custom Kotlin LSP versions older than `262.4739.0`. The pinned current and frozen initial
 releases are checksum-verified; arbitrary custom versions are downloaded without checksum verification.
@@ -809,7 +887,7 @@ Example:
 ```yaml
 ls_specific_settings:
   kotlin:
-    kotlin_lsp_version: "262.9593.0"
+    kotlin_lsp_version: "263.4702.0"
     jvm_options: "-Xmx4G -XX:+UseG1GC"
 ```
 
@@ -832,6 +910,27 @@ Supported settings:
 | Setting | Default | Description |
 |---|---|---|
 | `lua_language_server_version` | `3.15.0` | Override the bundled `lua-language-server` version Serena downloads when it cannot use an existing installation from PATH or common install locations. |
+
+#### EmmyLua Analyzer
+
+The experimental Rust-based EmmyLua Analyzer backend is selected explicitly with `language: lua_emmylua`. Serena uses the `emmylua_ls` executable configured via `ls_path`; if none is configured, it downloads the pinned release for the current platform and verifies its SHA-256 checksum.
+
+Supported settings under `ls_specific_settings.lua_emmylua`:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed download | Override the `emmylua_ls` executable path. |
+| `emmylua_ls_version` | `0.25.1` | Select the EmmyLua Analyzer release to download. The default release is checksum-verified; custom release versions should be used only when the release asset is trusted. |
+
+Example:
+
+```yaml
+languages:
+  - name: lua_emmylua
+ls_specific_settings:
+  lua_emmylua:
+    ls_path: /opt/emmylua_ls
+```
 
 
 #### Luau
@@ -917,6 +1016,11 @@ The JSON document contains the settings object directly, without an outer `nixd`
 Serena loads this file once when creating the language server, uses it as nixd's `initializationOptions`, and serves the same effective
 settings through LSP `workspace/configuration` requests. Existing `initializationOptions` configured under `ls_specific_settings.nix`
 remain top-level overrides and are reflected in both paths. Restart Serena after changing the JSON file.
+
+For the first request after opening a file, nixd can briefly return an empty hover while its initial analysis is completing.
+Serena retries that response up to five times with a 100 ms delay between attempts before returning `null`. This bounded
+retry prevents a transient startup response from immediately making hover unavailable; unsupported positions still return
+`null` after the same bounded retry interval.
 
 
 #### Pascal (`pasls`)
@@ -1005,8 +1109,8 @@ Supported settings:
 | `intelephense_version` | `1.14.4` | Override the npm package version Serena installs when `ls_path` is not set. |
 | `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
 | `ignore_vendor` | `true` | Ignore directories named `vendor` while indexing the project. |
-| `maxFileSize` | unset | Forwarded as `intelephense.files.maxSize` in `initializationOptions`. |
-| `maxMemory` | unset | Forwarded as `intelephense.maxMemory` in `initializationOptions`. |
+| `maxFileSize` | unset | Maximum size (in bytes) of files Intelephense indexes; sets `intelephense.files.maxSize`. |
+| `maxMemory` | unset | Maximum heap size (in MB) of the Intelephense process; applied as Node.js option `--max-old-space-size`. |
 | `file_filter` | unset | Additional file extensions (with leading dot) to treat as PHP sources, e.g. `[".module", ".install"]`; added to the defaults `.php` / `.phtml` (#1710). |
 
 Example configuration making Drupal source files visible to the symbol tools:
@@ -1032,6 +1136,25 @@ Supported settings:
 | `ls_path` | managed download | Override the Phpactor PHAR path. |
 | `phpactor_version` | `2025.12.21.1` | Override the Phpactor PHAR version Serena downloads when `ls_path` is not set. |
 | `ignore_vendor` | `true` | Ignore directories named `vendor` while indexing the project. |
+
+#### PHP (`Devsense`)
+
+Serena provides the experimental `php_devsense` language key for the standalone [Devsense PHP Language Server](https://www.npmjs.com/package/devsense-php-ls).
+Serena requires `node` and `npm`, installs the pinned npm package, and launches its matching platform-specific binary.
+This avoids depending on npm's platform-specific `.bin` shim. Basic language-server features are available without a
+license; premium features can be activated with the `DEVSENSE_PHP_LS_LICENSE` environment variable. The Devsense
+package requires visible attribution, so keep this documentation link when redistributing or packaging the integration.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `ls_path` | managed npm install | Override the `devsense-php-ls` executable path; on Windows use the `.exe` binary or a working launcher. |
+| `devsense_php_ls_version` | `1.0.19197` | Override the pinned npm package version used by the managed install. |
+| `npm_registry` | `null` | Override the npm registry used for the managed install. |
+| `ignore_vendor` | `true` | Ignore directories named `vendor` while indexing the project. |
+| `php_version` | unset | Forward the PHP version as `initializationOptions["php.version"]`. |
+| `file_filter` | unset | Additional file extensions (with leading dot) to treat as PHP sources, added to `.php` / `.phtml`. |
 
 #### PowerShell
 
@@ -1123,7 +1246,7 @@ Supported settings:
 
 | Setting | Default | Description |
 |---|---|---|
-| `metals_version` | `1.6.4` | Override the Metals version Serena bootstraps. |
+| `metals_version` | `1.6.8` | Override the Metals version Serena bootstraps. |
 | `client_name` | `Serena` | Client identifier sent to Metals. |
 | `on_stale_lock` | `auto-clean` | How Serena handles stale Metals H2 database locks. Supported values: `auto-clean`, `warn`, `fail`. |
 | `log_multi_instance_notice` | `true` | Log a notice when another Metals instance is detected. |
@@ -1133,6 +1256,7 @@ Supported settings:
 | `indexing_timeout` | `180` | How long to wait, in seconds, for Metals to finish importing, indexing and compiling before the first cross-file query. On expiry the query proceeds and a warning names what was still outstanding. |
 | `indexing_start_grace` | `15` | How long to wait, in seconds, for Metals to report any work at all. A server that reports none within this window is taken to have nothing to do. |
 | `indexing_quiet_period` | `3` | How long, in seconds, Metals must report nothing for its work to count as finished. Metals hands off between its phases rather than overlapping them, so it reports nothing for a moment in between; a shorter period risks mistaking that gap for completion. |
+| `terminate_bloop_on_stop` | `false` | Terminate the Bloop build-server daemons that were running under this Serena process once Metals has stopped. Bloop daemonizes itself and would otherwise keep running as an orphan. It is opt-in because Bloop shares one server per user: another Metals client (e.g. VS Code) may be connected to a daemon that Serena started, and stopping it would interrupt that client. |
 
 #### SCSS / Sass / CSS
 
@@ -1164,7 +1288,18 @@ Supported settings:
 |---|---|---|
 | `ls_path` | managed install | Override the Solidity language server executable path. |
 | `solidity_language_server_version` | `0.8.4` | Override the npm package version Serena installs when `ls_path` is not set. |
+| `solidity_state_dir` | `<ls_resources_dir>/solidity-state` on macOS | Writable state root for the managed Solidity language server on macOS. Serena uses a child-process-only home-directory override so Hardhat does not write to `~/Library`; `HOME` in the Serena process is unchanged. |
 | `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
+
+On macOS, if the default Solid-LSP resources directory is not writable, configure an alternative path:
+
+```yaml
+ls_specific_settings:
+  solidity:
+    solidity_state_dir: /path/to/writable/solidity-state
+```
+
+This setting is ignored on Linux and Windows, where the existing launch environment is unchanged.
 
 #### SystemVerilog
 
@@ -1213,6 +1348,19 @@ Supported settings:
 | `indexing_timeout` | `30.0` | Timeout in seconds for waiting on tsserver's `$/progress` project-indexing signal to *drain* once it has started (both at startup and before the first cross-file reference query). If indexing does not complete within this window, Serena logs a warning and proceeds anyway. Increase it for very large projects. |
 | `server_ready_timeout` | `10.0` | Timeout in seconds for waiting on the server-ready signal after initialization. If the signal does not arrive within this window, Serena logs a message and proceeds anyway. |
 | `indexing_start_grace` | `5.0` | Timeout in seconds to wait for tsserver to *start* reporting `$/progress` before the first cross-file reference query. tsserver must resolve the project graph before it can emit the first progress token, and that can take longer than the default on a very large project; if it takes longer than this window, Serena assumes no indexing was needed and may return incomplete cross-file references. Raising `indexing_timeout` alone does not help here, since this grace elapses first. Increase this for very large projects if `find_referencing_symbols`/`request_references` returns incomplete results shortly after project load. |
+
+##### TypeScript monorepos and cross-package references
+
+In a monorepo, `find_referencing_symbols` / `find_references` only include consumers in other packages when tsserver can walk from a package's declaration file back to its sources. That walk requires [TypeScript project references](https://www.typescriptlang.org/docs/handbook/project-references.html) (`composite` + `references`), not merely a solution-style root `tsconfig.json` or `package.json` `exports`.
+
+Without those edges, results are **silently partial**: a symbol may show only same-package references (or none) even though other packages import it. This is tsserver behaviour Serena inherits, not a Serena bug ([microsoft/TypeScript#30823](https://github.com/microsoft/TypeScript/issues/30823); oraios/serena#1939).
+
+What to do in a TypeScript monorepo:
+
+- Declare `composite: true` in each library package's `tsconfig.json` and list dependent projects under `references` in the consumer (or a solution-style root).
+- Prefer source imports (or generate declaration maps) so tsserver can map `dist/*.d.ts` back to sources.
+- After changing the project graph, restart Serena (or the TypeScript language server) so tsserver rebuilds the program.
+- If cross-package references still look short, verify with grep before treating the LSP answer as complete; same-package results being complete does not imply the package boundary was crossed.
 
 #### Svelte
 
@@ -1276,6 +1424,20 @@ The dict is forwarded to vtsls verbatim — Serena does not validate its structu
 - *Setting appears in `solidlsp` logs but vtsls does not react* — cross-check the key against the vtsls configuration schema linked above. The dict is forwarded as-is, so an unknown or wrong-typed key is silently ignored by vtsls.
 - *Need to inspect what Serena is actually forwarding* — the dict is logged at INFO level via the `Forwarding user-provided initializationOptions to vtsls: …` line at language server startup.
 
+#### TypeScript via the native TypeScript 7 language server
+
+The configuration key is `typescript_tsgo`. Serena installs the `typescript` npm package and runs its native
+binary as `tsc --lsp --stdio`.
+
+Supported settings:
+
+| Setting | Default | Description |
+|---|---|---|
+| `typescript_version` | `7.0.2` | Override the `typescript` npm package version Serena installs (7.0 or later). |
+| `npm_registry` | `null` | Override the npm registry Serena uses for the managed install. |
+| `indexing_timeout` | `30.0` | Timeout in seconds for project indexing. |
+| `indexing_start_grace` | `0.0` | Timeout in seconds to wait for indexing progress to start before the first cross-file reference query; the native server loads projects while handling requests, so no wait is needed by default. |
+
 #### Vue
 
 Serena uses `@vue/language-server` (Volar) for the `vue` language key, together with a companion TypeScript language server.
@@ -1323,8 +1485,6 @@ It is advisable to use the default prompt as a starting point and modify it to s
 
 ### Usage Reporting
 
-On startup, Serena reports anonymous usage data to help us understand Serena usage.
-Specifically, we collect the Serena version, the operating system & language backend being used as well as the dashboard enabled status.
-No personally identifiable information or project-specific information is collected.
+On startup, Serena reports anonymous usage data to help us understand Serena usage, as explained in our [privacy policy](privacy).
 
-If you want to opt out of usage reporting, set the environment variable `SERENA_USAGE_REPORTING` to `false`.
+If you want to opt out of usage data reporting, set the environment variable `SERENA_USAGE_REPORTING` to `false`.

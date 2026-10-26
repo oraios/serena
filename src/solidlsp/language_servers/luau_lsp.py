@@ -18,6 +18,7 @@ Advanced settings via ls_specific_settings["luau"]:
 
 See: https://github.com/JohnnyMorganz/luau-lsp
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import platform

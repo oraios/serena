@@ -56,6 +56,7 @@ class TestSvelteRename:
     def test_rename_svelte_export_updates_svelte_importers(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "lib", "components", "Counter.svelte")
         coords = find_text_coordinates(read_repo_file(language_server, file_path), r"(count)")
+        assert coords is not None
 
         workspace_edit = language_server.request_rename_symbol_edit(file_path, coords.line, coords.col, "score")
 
@@ -69,6 +70,7 @@ class TestSvelteRename:
     def test_rename_svelte_export_updates_ts_and_svelte_files(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "lib", "components", "Words.svelte")
         coords = find_text_coordinates(read_repo_file(language_server, file_path), r"(words)")
+        assert coords is not None
 
         workspace_edit = language_server.request_rename_symbol_edit(file_path, coords.line, coords.col, "vocabulary")
 

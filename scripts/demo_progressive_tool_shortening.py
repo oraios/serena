@@ -5,13 +5,15 @@ printing the full result, then progressively tighter max_answer_chars
 to show the successive shortening stages. Both LSP and JetBrains backends
 are tested (JB is skipped if no IDE is running).
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 import json
 from pprint import pprint
 
 from serena.agent import SerenaAgent
-from serena.config.serena_config import LanguageBackend, SerenaConfig
+from serena.config.serena_config import SerenaConfig
 from serena.constants import REPO_ROOT
+from serena.language_backend import BuiltinLanguageBackend
 from serena.tools import (
     FindReferencingSymbolsTool,
     FindSymbolTool,
@@ -164,16 +166,16 @@ def run_jb_tools(agent: SerenaAgent) -> None:
     )
 
 
-def make_agent(backend: LanguageBackend) -> SerenaAgent:
+def make_agent(backend: BuiltinLanguageBackend) -> SerenaAgent:
     config = SerenaConfig.from_config_file()
     config.web_dashboard = False
-    config.language_backend = backend
+    config.set_builtin_language_backend(backend)
     return SerenaAgent(project=REPO_ROOT, serena_config=config)
 
 
 if __name__ == "__main__":
     # LSP backend
-    lsp_agent = make_agent(LanguageBackend.LSP)
+    lsp_agent = make_agent(BuiltinLanguageBackend.LSP)
     try:
         run_lsp_tools(lsp_agent)
         run_backend_independent_tools(lsp_agent)
@@ -182,7 +184,7 @@ if __name__ == "__main__":
 
     # JetBrains backend (requires a running IDE)
     try:
-        jb_agent = make_agent(LanguageBackend.JETBRAINS)
+        jb_agent = make_agent(BuiltinLanguageBackend.JETBRAINS)
         try:
             run_jb_tools(jb_agent)
         finally:

@@ -176,7 +176,7 @@ def test_bsl_dependency_provider_custom_version_no_sha() -> None:
     from solidlsp.language_servers.common import RuntimeDependencyCollection
 
     settings = SolidLSPSettings()
-    settings.ls_specific_settings[LanguageServerId.BSL] = {"bsl_ls_version": "0.28.0"}
+    settings.ls_specific_settings[LanguageServerId.BSL.get_key()] = {"bsl_ls_version": "0.28.0"}
     provider = BSLLanguageServer.DependencyProvider(
         settings.get_ls_specific_settings(LanguageServerId.BSL),
         "/tmp/ls_resources",
@@ -216,7 +216,7 @@ def test_bsl_launch_command_uses_ls_path_without_download() -> None:
     from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
 
     settings = SolidLSPSettings()
-    settings.ls_specific_settings[LanguageServerId.BSL] = {"ls_path": "/custom/path/bsl-language-server.jar"}
+    settings.ls_specific_settings[LanguageServerId.BSL.get_key()] = {"ls_path": "/custom/path/bsl-language-server.jar"}
     provider = BSLLanguageServer.DependencyProvider(
         settings.get_ls_specific_settings(LanguageServerId.BSL),
         "/tmp/ls_resources",
@@ -243,7 +243,7 @@ def test_bsl_launch_command_requires_java() -> None:
     from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
 
     settings = SolidLSPSettings()
-    settings.ls_specific_settings[LanguageServerId.BSL] = {"ls_path": "/custom/path/bsl-language-server.jar"}
+    settings.ls_specific_settings[LanguageServerId.BSL.get_key()] = {"ls_path": "/custom/path/bsl-language-server.jar"}
     provider = BSLLanguageServer.DependencyProvider(
         settings.get_ls_specific_settings(LanguageServerId.BSL),
         "/tmp/ls_resources",
@@ -260,7 +260,7 @@ def test_bsl_launch_command_rejects_old_java() -> None:
     from solidlsp.language_servers.bsl_language_server import BSL_LS_MIN_JAVA_VERSION, BSLLanguageServer
 
     settings = SolidLSPSettings()
-    settings.ls_specific_settings[LanguageServerId.BSL] = {"ls_path": "/custom/path/bsl-language-server.jar"}
+    settings.ls_specific_settings[LanguageServerId.BSL.get_key()] = {"ls_path": "/custom/path/bsl-language-server.jar"}
     provider = BSLLanguageServer.DependencyProvider(
         settings.get_ls_specific_settings(LanguageServerId.BSL),
         "/tmp/ls_resources",

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import json
 import multiprocessing
 import os
@@ -25,10 +27,12 @@ from serena.analytics import ToolUsageStats
 from serena.config.serena_config import SerenaConfig, SerenaPaths
 from serena.constants import SERENA_DASHBOARD_DIR, SerenaPorts
 from serena.task_executor import TaskExecutor
+from serena.tools import ReadMemoryTool
 from serena.util.logging import MemoryLogHandler
 from serena.util.pypi import PyPIPackageInfo
 from serena.util.pywebview import WebViewWithTray
 from serena.util.version import Version
+from solidlsp.ls_config import LanguageServerRegistry
 
 if TYPE_CHECKING:
     from serena.agent import SerenaAgent
@@ -57,11 +61,26 @@ class ResponseToolStats(BaseModel):
     stats: dict[str, dict[str, int]]
 
 
+class ResponseFacadeMethod(BaseModel):
+    name: str
+    is_enabled: bool
+
+
+class ResponseFacade(BaseModel):
+    name: str
+    is_enabled: bool
+    methods: list[ResponseFacadeMethod]
+
+
 class ResponseConfigOverview(BaseModel):
-    active_project: dict[str, str | None]
+    web_dashboard_open_on_launch: bool | None
+    active_project: dict[str, str | bool | None]
     context: dict[str, str]
     modes: list[dict[str, str]]
     active_tools: list[str]
+    agent_interface: str
+    language_backend: str
+    facades: list[ResponseFacade] | None
     tool_stats_summary: dict[str, dict[str, int]]
     registered_projects: list[dict[str, str | bool]]
     available_tools: list[dict[str, str | bool]]
@@ -311,6 +330,24 @@ class SerenaDashboardAPI:
                 raise ValueError("Config overview not yet available")
             return result
 
+        @self._app.route("/save_web_dashboard_open_on_launch", methods=["POST"])
+        def save_web_dashboard_open_on_launch() -> dict[str, str]:
+            # require an explicit boolean choice
+            request_data = request.get_json()
+            value = request_data.get("web_dashboard_open_on_launch") if isinstance(request_data, dict) else None
+            if not isinstance(value, bool):
+                return {"status": "error", "message": "web_dashboard_open_on_launch must be a boolean"}
+
+            # persist the preference through the task executor
+            def run() -> None:
+                self._agent.serena_config.save_web_dashboard_open_on_launch(value)
+
+            try:
+                self._agent.issue_task(run, logged=True, name="SaveWebDashboardOpenOnLaunch")
+                return {"status": "success"}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+
         @self._app.route("/shutdown", methods=["PUT"])
         def shutdown() -> dict[str, str]:
             self._agent.shutdown()
@@ -511,10 +548,11 @@ class SerenaDashboardAPI:
         # Get active project info
         project = self._agent.get_active_project()
         active_project_name = project.project_name if project else None
-        project_info = {
+        project_info: dict[str, str | bool | None] = {
             "name": active_project_name,
-            "language": ", ".join([l.value for l in project.project_config.language_servers]) if project else None,
+            "language": ", ".join([ls_id.get_key() for ls_id in project.project_config.language_servers]) if project else None,
             "path": str(project.project_root) if project else None,
+            "is_trusted": project.is_trusted() if project else None,
         }
 
         # Get context info
@@ -601,13 +639,26 @@ class SerenaDashboardAPI:
 
         # Get available memories if ReadMemoryTool is active
         available_memories = None
-        if self._agent.tool_is_active("read_memory") and project is not None:
+        if self._agent.is_tool_function_available(ReadMemoryTool) and project is not None:
             available_memories = project.memory_manager.list_memories().get_full_list()
 
+        # Get the availability of the REPL's facades and their methods (REPL interface only)
+        facades = None
+        if self._agent.get_agent_interface().is_repl():
+            availability_info = self._agent.get_repl().entrypoint.get_facade_availability_info()
+            facades = [
+                ResponseFacade(
+                    name=facade_info.name,
+                    is_enabled=facade_info.is_enabled,
+                    methods=[ResponseFacadeMethod(name=m.name, is_enabled=m.is_enabled) for m in facade_info.methods],
+                )
+                for facade_info in availability_info.facades
+            ]
+
         # Get list of languages for the active project
-        languages = []
+        ls_ids = []
         if project is not None:
-            languages = [lang.value for lang in project.project_config.language_servers]
+            ls_ids = [ls_id.get_key() for ls_id in project.project_config.language_servers]
 
         # Get file encoding for the active project
         encoding = None
@@ -615,10 +666,14 @@ class SerenaDashboardAPI:
             encoding = project.project_config.encoding
 
         return ResponseConfigOverview(
+            web_dashboard_open_on_launch=self._agent.serena_config.web_dashboard_open_on_launch,
             active_project=project_info,
             context=context_info,
             modes=modes_info,
             active_tools=active_tools,
+            agent_interface=self._agent.get_agent_interface().value,
+            language_backend=self._agent.get_language_backend().get_key(),
+            facades=facades,
             tool_stats_summary=tool_stats_summary,
             registered_projects=registered_projects,
             available_tools=available_tools,
@@ -626,7 +681,7 @@ class SerenaDashboardAPI:
             available_contexts=available_contexts,
             available_memories=available_memories,
             jetbrains_mode=self._agent.get_language_backend().is_jetbrains(),
-            languages=languages,
+            languages=ls_ids,
             encoding=encoding,
             current_client=Tool.get_last_tool_call_client_str(),
             serena_version=self._agent.version,
@@ -637,15 +692,13 @@ class SerenaDashboardAPI:
         self._current_config_overview = self._compute_config_overview().model_dump()
 
     def _get_available_languages(self) -> ResponseAvailableLanguages:
-        from solidlsp.ls_config import LanguageServerId
-
         def run() -> ResponseAvailableLanguages:
-            all_languages = [lang.value for lang in LanguageServerId.iter_all(include_experimental=True)]
+            all_languages = LanguageServerRegistry.get_instance().get_keys()
 
             # Filter out already added languages for the active project
             project = self._agent.get_active_project()
             if project:
-                current_languages = [lang.value for lang in project.project_config.language_servers]
+                current_languages = [ls_id.get_key() for ls_id in project.project_config.language_servers]
                 available_languages = [lang for lang in all_languages if lang not in current_languages]
             else:
                 available_languages = all_languages
@@ -775,22 +828,12 @@ class SerenaDashboardAPI:
         return {}
 
     def _add_language(self, request_add_language: RequestAddLanguage) -> None:
-        from solidlsp.ls_config import LanguageServerId
-
-        try:
-            language = LanguageServerId(request_add_language.language)
-        except ValueError:
-            raise ValueError(f"Invalid language server identifier: {request_add_language.language}")
+        language = LanguageServerRegistry.get_instance().resolve(request_add_language.language)
         # add_language is already thread-safe
         self._agent.add_language_server(language)
 
     def _remove_language(self, request_remove_language: RequestRemoveLanguage) -> None:
-        from solidlsp.ls_config import LanguageServerId
-
-        try:
-            language = LanguageServerId(request_remove_language.language)
-        except ValueError:
-            raise ValueError(f"Invalid language server identifier: {request_remove_language.language}")
+        language = LanguageServerRegistry.get_instance().resolve(request_remove_language.language)
         # remove_language is already thread-safe
         self._agent.remove_language_server(language)
 
@@ -1039,9 +1082,28 @@ class SerenaDashboardTrayManager:
             log.info("Unregistered instance on port %d", port)
             return {"status": "unregistered"}
 
+    @staticmethod
+    def _run_in_ui_thread(fn: Callable[[], None]) -> None:
+        """
+        Runs a UI mutation in the thread in which the platform's UI toolkit requires it to run (where necessary).
+
+        On macOS, AppKit demands that mutations of the status item happen on the main thread, and
+        recent macOS versions terminate the process with SIGTRAP when they do not. The tray manager
+        reaches such mutations from Flask request handlers and from the alive-check thread, so the
+        call has to be marshalled. On other platforms it is made directly.
+
+        :param fn: the UI mutation to run
+        """
+        if sys.platform == "darwin":
+            from PyObjCTools import AppHelper  # ty: ignore[unresolved-import]
+
+            AppHelper.callAfter(fn)
+        else:
+            fn()
+
     def _update_menu(self) -> None:
         if self._tray_icon:
-            self._tray_icon.update_menu()
+            self._run_in_ui_thread(self._tray_icon.update_menu)
 
     def _build_menu_items(self) -> tuple[Any, ...]:
         """
@@ -1199,7 +1261,7 @@ class SerenaDashboardTrayManager:
         # set up tray icon with a dynamic menu (callable returns items on each open)
         kwargs: dict[str, Any] = {}
         if sys.platform == "darwin":
-            from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+            from AppKit import NSApplication, NSApplicationActivationPolicyAccessory  # ty: ignore[unresolved-import]  (macOS only)
 
             nsapp = NSApplication.sharedApplication()
             # run as an accessory app so that only the menu bar icon is shown (no Dock icon)

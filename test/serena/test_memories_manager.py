@@ -5,6 +5,8 @@ and :meth:`_prepare_name`).
 """
 
 import os
+import stat
+import sys
 
 import pytest
 
@@ -16,6 +18,7 @@ from serena.memories.memory_reference_analysis import (
     find_stale_reference_candidates,
 )
 from serena.project import MemoryManager
+from serena.util import file_system
 
 
 @pytest.fixture
@@ -267,6 +270,83 @@ def fs_manager(tmp_path) -> MemoryManager:
 
 def _write(manager: MemoryManager, name: str, content: str) -> None:
     manager.save_memory(name, content, is_tool_context=False)
+
+
+class TestSaveAndEditMemoryAreAtomic:
+    """Regression for issue #1958: ``save_memory``/``edit_memory`` used a plain
+    ``open(path, "w")``, which truncates the file before the new content is written. An
+    interrupted write (crash, OOM kill, disk full) then loses the previous content entirely.
+    """
+
+    @staticmethod
+    def _install_crashing_fdopen(monkeypatch) -> None:
+        real_fdopen = os.fdopen
+
+        def crashing_fdopen(fd, *args, **kwargs):
+            f = real_fdopen(fd, *args, **kwargs)
+            real_write = f.write
+
+            def crashing_write(data):
+                real_write(data[: len(data) // 4])
+                f.flush()
+                raise RuntimeError("simulated crash mid-write")
+
+            f.write = crashing_write
+            return f
+
+        monkeypatch.setattr(file_system.os, "fdopen", crashing_fdopen)
+
+    def test_save_memory_preserves_prior_content_on_interrupted_write(self, fs_manager: MemoryManager, monkeypatch) -> None:
+        _write(fs_manager, "notes", "original notes" * 20)
+        self._install_crashing_fdopen(monkeypatch)
+
+        with pytest.raises(RuntimeError, match="simulated crash mid-write"):
+            fs_manager.save_memory("notes", "new notes that never fully arrive" * 20, is_tool_context=False)
+
+        assert fs_manager.load_memory("notes") == "original notes" * 20
+
+    def test_edit_memory_preserves_prior_content_on_interrupted_write(self, fs_manager: MemoryManager, monkeypatch) -> None:
+        _write(fs_manager, "notes", "the original needle is here" * 20)
+        self._install_crashing_fdopen(monkeypatch)
+
+        with pytest.raises(RuntimeError, match="simulated crash mid-write"):
+            fs_manager.edit_memory(
+                "notes",
+                needle="original needle",
+                repl="replacement needle",
+                mode="literal",
+                allow_multiple_occurrences=True,
+                is_tool_context=False,
+            )
+
+        assert fs_manager.load_memory("notes") == "the original needle is here" * 20
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="os.chmod does not set POSIX group/other bits on Windows")
+    def test_save_memory_preserves_existing_file_permissions(self, fs_manager: MemoryManager) -> None:
+        _write(fs_manager, "notes", "original notes")
+        path = fs_manager.get_memory_file_path("notes")
+        os.chmod(path, 0o644)
+
+        fs_manager.save_memory("notes", "updated notes", is_tool_context=False)
+
+        assert stat.S_IMODE(os.stat(path).st_mode) == 0o644
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="os.chmod does not set POSIX group/other bits on Windows")
+    def test_edit_memory_preserves_existing_file_permissions(self, fs_manager: MemoryManager) -> None:
+        _write(fs_manager, "notes", "the original needle is here")
+        path = fs_manager.get_memory_file_path("notes")
+        os.chmod(path, 0o644)
+
+        fs_manager.edit_memory(
+            "notes",
+            needle="original needle",
+            repl="replacement needle",
+            mode="literal",
+            allow_multiple_occurrences=True,
+            is_tool_context=False,
+        )
+
+        assert stat.S_IMODE(os.stat(path).st_mode) == 0o644
 
 
 class TestListMemoriesFollowsSymlinks:
@@ -764,3 +844,41 @@ class TestAutoPrefixBareReferences:
         # idempotent: the second run should not touch anything
         assert second.total_replacements == 0
         assert fs_manager.load_memory("docs") == "the mem:auth/login process"
+
+
+class TestRenameMemorySparesReadOnlyMemories:
+    """Regression: a tool-context rename enumerated read-only memories, so propagating the
+    reference into one raised ``PermissionError`` after the rename itself had already been applied.
+    """
+
+    @staticmethod
+    def _manager(tmp_path, monkeypatch) -> MemoryManager:
+        manager = MemoryManager(serena_data_folder=tmp_path, read_only_memory_patterns=[r"frozen/.*"])
+        # the global memories of the machine would otherwise join the enumeration as well
+        global_dir = tmp_path / "global"
+        global_dir.mkdir()
+        monkeypatch.setattr(manager, "_global_memory_dir", global_dir)
+        _write(manager, "auth/login", "# login notes")
+        _write(manager, "frozen/notes", "see `mem:auth/login`")
+        _write(manager, "docs", "first `mem:auth/login`, then `mem:auth/login`")
+        return manager
+
+    def test_tool_context_rename_completes_and_leaves_read_only_reference_alone(self, tmp_path, monkeypatch) -> None:
+        manager = self._manager(tmp_path, monkeypatch)
+
+        message, n_updated = manager.rename_memory_and_propagate_references("auth/login", "auth/signin", is_tool_context=True)
+
+        assert "auth/signin" in message
+        assert manager.load_memory("auth/signin") == "# login notes"
+        assert manager.load_memory("docs") == "first `mem:auth/signin`, then `mem:auth/signin`"
+        assert manager.load_memory("frozen/notes") == "see `mem:auth/login`"
+        assert n_updated == 2
+
+    def test_cli_context_rename_still_propagates_into_read_only_memories(self, tmp_path, monkeypatch) -> None:
+        manager = self._manager(tmp_path, monkeypatch)
+
+        _, n_updated = manager.rename_memory_and_propagate_references("auth/login", "auth/signin", is_tool_context=False)
+
+        assert manager.load_memory("frozen/notes") == "see `mem:auth/signin`"
+        assert manager.load_memory("docs") == "first `mem:auth/signin`, then `mem:auth/signin`"
+        assert n_updated == 3

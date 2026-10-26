@@ -2,6 +2,7 @@
 Provides YAML specific instantiation of the LanguageServer class using yaml-language-server.
 Contains various configurations and settings specific to YAML files.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

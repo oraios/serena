@@ -11,6 +11,7 @@ You can configure the following options in ls_specific_settings (in serena_confi
         ls_path: '/path/to/bsl-language-server.jar'  # Custom path to BSL Language Server JAR
         bsl_ls_version: '0.29.0'  # BSL Language Server version (default: current bundled version)
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

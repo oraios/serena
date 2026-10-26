@@ -6,7 +6,7 @@ You can configure the following options in ls_specific_settings (in serena_confi
     ls_specific_settings:
       kotlin:
         ls_path: '/path/to/bin/intellij-server'  # Custom path to Kotlin Language Server executable
-        kotlin_lsp_version: '262.9593.0'  # Kotlin Language Server version (default: current bundled version)
+        kotlin_lsp_version: '263.6379.0'  # Kotlin Language Server version (default: current bundled version)
         jvm_options: '-Xmx2G'  # JVM options for Kotlin Language Server (default: -Xmx2G)
 
 Example configuration for large projects:
@@ -14,15 +14,25 @@ Example configuration for large projects:
     ls_specific_settings:
       kotlin:
         jvm_options: '-Xmx4G -XX:+UseG1GC'
+
+IntelliJ system directory:
+    KLS is built on IntelliJ's platform, which by default creates a new ~52 MB
+    idea-system<random>/ directory in /tmp for each instance. These directories
+    are never cleaned up, which can exhaust RAM on tmpfs systems after many runs.
+    Serena redirects idea.system.path to the claimed project cache's kotlin-lsp-system directory,
+    preserving the index across sessions while isolating concurrent instances.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os
 import pathlib
+import shutil
 import stat
 import threading
 from dataclasses import dataclass
 
+from filelock import FileLock, Timeout
 from overrides import override
 
 from solidlsp.dependency_provider import DownloadedDependency, DownloadedDependencyHashDatabase
@@ -41,14 +51,17 @@ log = logging.getLogger(__name__)
 # -Xmx2G: 2GB heap is sufficient for most projects; override via ls_specific_settings for large codebases
 DEFAULT_KOTLIN_JVM_OPTIONS = "-Xmx2G"
 
-KOTLIN_LSP_ALLOWED_HOSTS = ("download-cdn.jetbrains.com",)
+KOTLIN_LSP_ALLOWED_HOSTS = ("download-cdn.jetbrains.com", "download.jetbrains.com")
 
 # Version pinning convention (see eclipse_jdtls.py for the full spec):
 #   INITIAL_* — frozen forever; legacy unversioned install dir is reserved for it.
 #   DEFAULT_* — bumped on upgrades; goes into a versioned subdir.
 # NOTE: After changing either pinned version, run scripts/update_downloaded_dependency_hashes.py.
+# IMPORTANT: We have now switched back to the initial version, because all newer versions keep expiring
+#   after a short period of time and therefore cannot be reliably used.
+#   Until a new version is provided that does not expire, the DEFAULT version shall not be changed!
 INITIAL_KOTLIN_LSP_VERSION = "261.13587.0"
-DEFAULT_KOTLIN_LSP_VERSION = "262.9593.0"
+DEFAULT_KOTLIN_LSP_VERSION = INITIAL_KOTLIN_LSP_VERSION
 
 # Versions before this one use kotlin-lsp-{version}-{platform}.zip and a kotlin-lsp script.
 # Starting with 262.4739.0, JetBrains publishes kotlin-server archives with platform-specific
@@ -117,7 +130,44 @@ class KotlinLanguageServer(SolidLanguageServer):
     class DependencyProvider(LanguageServerDependencyProviderSinglePath):
         def __init__(self, custom_settings: SolidLSPSettings.CustomLSSettings, ls_resources_dir: str, project_cache_dir: str):
             super().__init__(custom_settings, ls_resources_dir)
-            self._project_cache_dir = project_cache_dir
+            self._storage_lock: FileLock | None = None
+            self._is_fallback_storage_dir = False
+            self.storage_dir = self._claim_storage_dir(project_cache_dir)
+            self._system_dir = os.path.join(self.storage_dir, "kotlin-lsp-system")
+
+        def _claim_storage_dir(self, project_cache_dir: str) -> str:
+            """Claims the on-disk directory this instance's Kotlin LSP process will use for its index storage.
+
+            Tries the shared, deterministic per-project directory first via a non-blocking file lock, so a
+            single Serena instance keeps reusing its index across restarts (the primary use case, which must
+            not regress). If another live Serena instance already holds that directory (concurrent sessions
+            on the same project, see oraios/serena#1966), falls back to a directory unique to this process
+            instead of two Kotlin LSP processes contending for the same index. That fallback directory is
+            this instance's alone, so it is removed once the instance releases it (see release_storage_lock).
+            """
+            lock = FileLock(f"{project_cache_dir}.lock")
+            try:
+                lock.acquire(timeout=0)
+            except Timeout:
+                instance_dir = f"{project_cache_dir}-instance-{os.getpid()}"
+                os.makedirs(instance_dir, exist_ok=True)
+                self._is_fallback_storage_dir = True
+                log.info(
+                    "Kotlin LSP storage directory %s is in use by another Serena instance; using %s for this instance",
+                    project_cache_dir,
+                    instance_dir,
+                )
+                return instance_dir
+            self._storage_lock = lock
+            return project_cache_dir
+
+        def release_storage_lock(self) -> None:
+            if self._is_fallback_storage_dir:
+                shutil.rmtree(self.storage_dir, ignore_errors=True)
+                self._is_fallback_storage_dir = False
+            if self._storage_lock is not None:
+                self._storage_lock.release()
+                self._storage_lock = None
 
         @classmethod
         def _create_artifact(cls, version: str, platform_id: PlatformId) -> KotlinLSPArtifact:
@@ -145,7 +195,7 @@ class KotlinLanguageServer(SolidLanguageServer):
                 cdn_path = "language-server/kotlin-server" if version_parts >= KOTLIN_SERVER_CDN_PATH_MIN_VERSION else "kotlin-lsp"
                 return KotlinLSPArtifact(
                     dependency=DownloadedDependency(
-                        url=f"https://download-cdn.jetbrains.com/{cdn_path}/{version}/{asset_name}",
+                        url=f"https://download.jetbrains.com/{cdn_path}/{version}/{asset_name}",
                         archive_type=archive_type,
                         allowed_hosts=KOTLIN_LSP_ALLOWED_HOSTS,
                         verified=verified,
@@ -159,7 +209,7 @@ class KotlinLanguageServer(SolidLanguageServer):
 
             return KotlinLSPArtifact(
                 dependency=DownloadedDependency(
-                    url=f"https://download-cdn.jetbrains.com/kotlin-lsp/{version}/kotlin-lsp-{version}-{kotlin_suffix}.zip",
+                    url=f"https://download.jetbrains.com/kotlin-lsp/{version}/kotlin-lsp-{version}-{kotlin_suffix}.zip",
                     archive_type="zip",
                     allowed_hosts=KOTLIN_LSP_ALLOWED_HOSTS,
                     verified=verified,
@@ -171,11 +221,12 @@ class KotlinLanguageServer(SolidLanguageServer):
         def update_dep_hashes(cls) -> None:
             pinned_artifacts = [
                 *(cls._create_artifact(INITIAL_KOTLIN_LSP_VERSION, PlatformId(platform)) for platform in LEGACY_PLATFORM_KOTLIN_SUFFIX),
-                *(
+            ]
+            if DEFAULT_KOTLIN_LSP_VERSION != INITIAL_KOTLIN_LSP_VERSION:
+                pinned_artifacts.extend(
                     cls._create_artifact(DEFAULT_KOTLIN_LSP_VERSION, PlatformId(platform))
                     for platform in KOTLIN_SERVER_ARTIFACT_BY_PLATFORM
-                ),
-            ]
+                )
             with DownloadedDependencyHashDatabase.get_instance().update_context() as database:
                 for artifact in pinned_artifacts:
                     database.update(artifact.dependency)
@@ -224,7 +275,7 @@ class KotlinLanguageServer(SolidLanguageServer):
             platform_id = PlatformUtils.get_platform_id()
             intellij_launcher_name = "intellij-server.exe" if platform_id.is_windows() else "intellij-server"
             if os.path.basename(core_path).lower() == intellij_launcher_name:
-                command.extend(["--system-path", os.path.join(self._project_cache_dir, "kotlin-lsp-system")])
+                command.extend(["--system-path", self._system_dir])
             return command
 
         def create_launch_command_env(self) -> dict[str, str]:
@@ -240,13 +291,27 @@ class KotlinLanguageServer(SolidLanguageServer):
             else:
                 jvm_options = DEFAULT_KOTLIN_JVM_OPTIONS
 
-            env["JAVA_TOOL_OPTIONS"] = jvm_options
+            # preserve the claimed system directory as one JVM option, including paths containing spaces
+            os.makedirs(self._system_dir, exist_ok=True)
+            idea_system_path_opt = f'-Didea.system.path="{self._system_dir}"'
+            jvm_options_full = f"{jvm_options} {idea_system_path_opt}".strip() if jvm_options else idea_system_path_opt
+
+            env["JAVA_TOOL_OPTIONS"] = jvm_options_full
             return env
+
+    @override
+    def stop(self, shutdown_timeout: float = 2.0) -> None:
+        super().stop(shutdown_timeout=shutdown_timeout)
+        if isinstance(self._dependency_provider, self.DependencyProvider):
+            self._dependency_provider.release_storage_lock()
 
     def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Kotlin Language Server.
         """
+        dependency_provider = self._get_dependency_provider()
+        assert isinstance(dependency_provider, self.DependencyProvider)
+        storage_dir = dependency_provider.storage_dir
         root_uri = pathlib.Path(self.repository_root_path).as_uri()
         initialize_params = {
             "locale": "en",
@@ -459,7 +524,7 @@ class KotlinLanguageServer(SolidLanguageServer):
             },
             "initializationOptions": {
                 "workspaceFolders": [root_uri],
-                "storagePath": None,
+                "storagePath": storage_dir,
                 "codegen": {"enabled": False},
                 "compiler": {"jvm": {"target": "default"}},
                 "completion": {"snippets": {"enabled": True}},

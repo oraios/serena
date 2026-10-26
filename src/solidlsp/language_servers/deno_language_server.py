@@ -2,6 +2,7 @@
 Provides Deno-specific instantiation of the LanguageServer class, using the
 language server built into the Deno CLI (``deno lsp``).
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import shutil

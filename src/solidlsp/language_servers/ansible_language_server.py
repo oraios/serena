@@ -2,6 +2,7 @@
 Provides Ansible specific instantiation of the LanguageServer class using ansible-language-server.
 Contains various configurations and settings specific to Ansible YAML files (playbooks, roles, etc.).
 """
+# SPDX-License-Identifier: MIT
 
 import fnmatch
 import logging
@@ -114,9 +115,17 @@ class AnsibleLanguageServer(SolidLanguageServer):
         return False
 
     @override
-    def is_ignored_path(self, relative_path: str, ignore_unsupported_files: bool = True) -> bool:
+    def is_ignored_path(
+        self,
+        relative_path: str,
+        ignore_unsupported_files: bool = True,
+        dir_entry: os.DirEntry | None = None,
+        check_path_for_ignored_dirnames: bool = True,
+    ) -> bool:
         # standard ignore rules (extension, gitignore, etc.)
-        if super().is_ignored_path(relative_path, ignore_unsupported_files):
+        if super().is_ignored_path(
+            relative_path, ignore_unsupported_files, dir_entry=dir_entry, check_path_for_ignored_dirnames=check_path_for_ignored_dirnames
+        ):
             return True
 
         # for yml/yaml files, check if they are in ansible-specific paths
@@ -127,7 +136,7 @@ class AnsibleLanguageServer(SolidLanguageServer):
         return False
 
     @override
-    def _request_document_symbols(
+    def _request_raw_document_symbols(
         self, relative_file_path: str, file_data: LSPFileBuffer | None
     ) -> list[SymbolInformation] | list[DocumentSymbol] | None:
         # ansible-language-server does not implement textDocument/documentSymbol and the

@@ -20,7 +20,7 @@ class TestSvelteLanguageServer:
     def test_svelte_language_server_root_matches_repo_path(self, language_server: SolidLanguageServer, repo_path: Path) -> None:
         assert language_server.is_running()
         assert repo_path.resolve() == svelte_test_conftest.repo_path.resolve()
-        assert Path(language_server.language_server.repo_path).resolve() == repo_path.resolve()
+        assert Path(language_server.repository_root_path).resolve() == repo_path.resolve()
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.SVELTE], indirect=True)
     def test_svelte_and_typescript_files_in_symbol_tree(self, language_server: SolidLanguageServer) -> None:
@@ -35,6 +35,24 @@ class TestSvelteLanguageServer:
         # companion TS server (unlike game/Game/words/count, which also appear in .svelte files).
         assert SymbolUtils.symbol_tree_contains_name(symbols, "GAME_VERSION"), (
             "GAME_VERSION (defined only in a .ts file) not found in symbol tree"
+        )
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.SVELTE], indirect=True)
+    def test_tsx_symbol_range_not_truncated_by_jsx(self, language_server: SolidLanguageServer) -> None:
+        """Regression: .tsx opened as typescript truncates ranges at multi-line JSX (#1436 class)."""
+        file_path = os.path.join("src", "lib", "jsx_component.tsx")
+        roots = language_server.request_document_symbols(file_path).root_symbols
+        jsx_component = next((s for s in roots if s.get("name") == "JsxComponent"), None)
+        assert jsx_component is not None, "JsxComponent not found at root level of jsx_component.tsx"
+        end_line = jsx_component["location"]["range"]["end"]["line"]
+        assert end_line >= 30, (
+            f"JsxComponent symbol range truncated at line {end_line + 1} (1-based); "
+            f"expected end at or past line 31 (1-based). "
+            f"This indicates the .tsx file was opened with the wrong languageId."
+        )
+        assert any(s.get("name") == "trailingHelper" for s in roots), (
+            "trailingHelper missing from jsx_component.tsx root symbols; "
+            "the language server likely stopped parsing at the first JSX expression."
         )
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.SVELTE], indirect=True)
@@ -74,12 +92,13 @@ class TestSvelteLanguageServer:
     def test_definition_from_component_import_to_svelte_file(self, language_server: SolidLanguageServer) -> None:
         file_path = os.path.join("src", "lib", "components", "Header.svelte")
         coords = find_text_coordinates(read_repo_file(language_server, file_path), r"(count)")
+        assert coords is not None
 
         definitions = language_server.request_definition(file_path, coords.line, coords.col)
-        definition_paths = sorted(definition["relativePath"].replace("\\", "/") for definition in definitions)
+        definition_paths = sorted(definition["relativePath"].replace("\\", "/") for definition in definitions)  # type: ignore
 
         assert len(definitions) == 1, definition_paths
-        assert definitions[0]["relativePath"].replace("\\", "/") == "src/lib/components/Counter.svelte", definition_paths
+        assert definitions[0]["relativePath"].replace("\\", "/") == "src/lib/components/Counter.svelte", definition_paths  # type: ignore
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.SVELTE], indirect=True)
     def test_diagnostics_in_typescript_file(self, language_server: SolidLanguageServer) -> None:

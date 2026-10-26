@@ -1,6 +1,7 @@
 """
 Provides Rust specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Rust.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

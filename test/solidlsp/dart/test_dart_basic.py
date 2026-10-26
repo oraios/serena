@@ -249,6 +249,7 @@ class TestDartLanguageServer:
         # Find coordinates of 'final result = a + b;' - test position on 'result'
         with language_server.open_file(file_path, open_in_ls=False) as f:
             pos = find_text_coordinates(f.contents, r"final (result) = a \+ b;")
+            assert pos is not None
 
         defining_symbol = language_server.request_defining_symbol(file_path, pos.line, pos.col)
 

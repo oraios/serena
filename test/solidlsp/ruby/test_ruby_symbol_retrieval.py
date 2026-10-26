@@ -590,7 +590,9 @@ class TestRubyLanguageServerSymbols:
             pos = find_text_coordinates(fb.contents, r"user = @service\.(create_user)")
 
         # Verify that we can find the method definition
+        assert pos is not None
         defining_symbol = language_server.request_defining_symbol(file_path, pos.line, pos.col)
+        assert defining_symbol is not None
         assert "name" in defining_symbol
         assert "kind" in defining_symbol
         assert defining_symbol.get("name") == "create_user"

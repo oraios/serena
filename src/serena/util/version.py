@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+
 class Version:
     """
     Represents a version, specifically the numeric components of a version string.

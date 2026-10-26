@@ -1,6 +1,7 @@
 """
 Prints the list of supported languages, for use in the project.yml template
 """
+# SPDX-License-Identifier: GPL-3.0-or-later
 
 from solidlsp.ls_config import LanguageServerId
 

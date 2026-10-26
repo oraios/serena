@@ -1,10 +1,10 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import logging
 import os
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Self
-
-from serena.jetbrains import jetbrains_types as jb
 
 if TYPE_CHECKING:
     from serena.project import Project
@@ -28,19 +28,15 @@ class FileProxy(ABC):
         """
 
     @staticmethod
-    def is_external_path(relative_path: str) -> bool:
+    def is_external_path(relative_path: str, project: "Project") -> bool:
         """
         :return: whether the given relative path is an encoded external path (not a local project file)
         """
-        # This is intended to be extended once we also support external paths in other backends
-        return jb.is_external_path(relative_path)
+        return project.language_backend.is_external_path(relative_path)
 
     @classmethod
     def from_project_relative_path(cls, project: "Project", relative_path: str) -> "FileProxy":
-        if cls.is_external_path(relative_path):
-            if project.language_backend.is_jetbrains():
-                return JetBrainsFileProxy(relative_path, project)
-        return LocalProjectFileProxy(relative_path, project)
+        return project.language_backend.create_file_proxy(relative_path, project)
 
 
 class LocalProjectFileProxy(FileProxy):
@@ -60,29 +56,6 @@ class LocalProjectFileProxy(FileProxy):
         return True
 
 
-class JetBrainsFileProxy(FileProxy):
-    """
-    Retrieves the contents of a file from the JetBrains plugin via the plugin client, given its relative path,
-    which may be an external path (e.g., "<ext:FileUtil.class|472e0a13>")
-    """
-
-    def __init__(self, relative_path: str, project: "Project"):
-        self._relative_path = relative_path
-        self._project = project
-
-    def get_contents(self) -> str:
-        from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
-
-        client = JetBrainsPluginClient.from_project(self._project)
-        return client.read_file(self._relative_path)
-
-    def get_relative_path(self) -> str:
-        return self._relative_path
-
-    def is_glob_supported(self):
-        return False
-
-
 class FileCollection:
     def __init__(self, file_proxies: list[FileProxy]):
         self._file_proxies = file_proxies
@@ -94,8 +67,8 @@ class FileCollection:
         return iter(self._file_proxies)
 
     @classmethod
-    def from_local_project_paths(cls, relative_paths: list[str], project: "Project") -> Self:
-        return cls([LocalProjectFileProxy(path, project) for path in relative_paths])
+    def from_project_files(cls, files: list["Project.ProjectFile"], project: "Project") -> Self:
+        return cls([LocalProjectFileProxy(f.rel_path, project) for f in files])
 
     def filter_glob(self, paths_include_glob: str | None = None, paths_exclude_glob: str | None = None) -> "FileCollection":
         """

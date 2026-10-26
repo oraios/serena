@@ -2,6 +2,7 @@
 Provides CUE-specific instantiation of the LanguageServer class, using the LSP mode of the
 ``cue`` CLI (``cue lsp``) from the official CUE distribution.
 """
+# SPDX-License-Identifier: MIT
 
 from __future__ import annotations
 

@@ -5,6 +5,7 @@ The Gleam language server is bundled with the Gleam compiler and is started via
 ``gleam lsp``. No separate language-server package is required beyond the Gleam
 compiler itself (https://gleam.run).
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import shutil

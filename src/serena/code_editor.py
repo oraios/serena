@@ -1,10 +1,13 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import json
 import logging
 import os
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator, Reversible
 from contextlib import contextmanager
-from typing import Generic, TypeVar, cast
+from types import TracebackType
+from typing import Any, Generic, Self, TypeVar, cast
 
 from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
 from serena.symbol import JetBrainsSymbol, LanguageServerSymbol, LanguageServerSymbolRetriever, PositionInFile, Symbol
@@ -14,6 +17,7 @@ from solidlsp.ls_utils import PathUtils, TextStepper, TextUtils
 
 from .project import Project
 from .util.file_proxy import FileProxy
+from .util.file_system import write_file_atomic
 
 log = logging.getLogger(__name__)
 TSymbol = TypeVar("TSymbol", bound=Symbol)
@@ -21,6 +25,7 @@ TSymbol = TypeVar("TSymbol", bound=Symbol)
 
 class CodeEditor(Generic[TSymbol], ABC):
     def __init__(self, project: Project) -> None:
+        self.project = project
         self.project_root = project.project_root
         self.encoding = project.project_config.encoding
         self.newline = project.line_ending.newline_str
@@ -79,7 +84,7 @@ class CodeEditor(Generic[TSymbol], ABC):
         """
         Context manager for editing a file.
         """
-        if FileProxy.is_external_path(relative_path):
+        if FileProxy.is_external_path(relative_path, self.project):
             raise ValueError(f"Cannot edit external file: {relative_path}")
         with self._open_file_context(relative_path) as edited_file:
             yield edited_file
@@ -89,8 +94,7 @@ class CodeEditor(Generic[TSymbol], ABC):
     def _save_edited_file(self, edited_file: "CodeEditor.EditedFile") -> None:
         abs_path = os.path.join(self.project_root, edited_file.relative_path)
         new_contents = edited_file.get_contents()
-        with open(abs_path, "w", encoding=self.encoding, newline=self.newline) as f:
-            f.write(new_contents)
+        write_file_atomic(abs_path, new_contents, encoding=self.encoding, newline=self.newline)
 
     @abstractmethod
     def _find_unique_symbol(self, name_path: str, relative_file_path: str) -> TSymbol:
@@ -227,13 +231,37 @@ class CodeEditor(Generic[TSymbol], ABC):
         :param start_line: the 0-based index of the first line to delete (inclusive)
         :param end_line: the 0-based index of the last line to delete (inclusive)
         """
-        start_col = 0
-        end_line_for_delete = end_line + 1
-        end_col = 0
         with self.edited_file_context(relative_path) as edited_file:
-            start_pos = PositionInFile(line=start_line, col=start_col)
-            end_pos = PositionInFile(line=end_line_for_delete, col=end_col)
-            edited_file.delete_text_between_positions(start_pos, end_pos)
+            self._delete_line_range(edited_file, start_line, end_line)
+
+    def replace_lines(self, relative_path: str, start_line: int, end_line: int, content: str) -> None:
+        """
+        Replaces a range of lines in the given file, writing the file once.
+
+        Deleting the range and inserting the replacement as two separate operations
+        would persist the deletion even if the insertion failed, leaving the file
+        without the lines the caller asked to replace.
+
+        :param relative_path: the relative path of the file in which to replace the lines
+        :param start_line: the 0-based index of the first line to replace (inclusive)
+        :param end_line: the 0-based index of the last line to replace (inclusive)
+        :param content: the content to insert in place of the range
+        """
+        with self.edited_file_context(relative_path) as edited_file:
+            self._delete_line_range(edited_file, start_line, end_line)
+            edited_file.insert_text_at_position(PositionInFile(line=start_line, col=0), content)
+
+    def _delete_line_range(self, edited_file: "CodeEditor.EditedFile", start_line: int, end_line: int) -> None:
+        """
+        Deletes the given inclusive line range from an open edited file.
+
+        :param edited_file: the open file to delete from
+        :param start_line: the 0-based index of the first line to delete (inclusive)
+        :param end_line: the 0-based index of the last line to delete (inclusive)
+        """
+        start_pos = PositionInFile(line=start_line, col=0)
+        end_pos = PositionInFile(line=end_line + 1, col=0)
+        edited_file.delete_text_between_positions(start_pos, end_pos)
 
     def delete_symbol(self, name_path: str, relative_file_path: str) -> None:
         """
@@ -491,3 +519,45 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
                 rename_in_text_occurrences=rename_in_text_occurrences,
             )
             return "Success"
+
+
+class EditedFileContext:
+    """
+    Context manager for file editing.
+
+    Create the context, then use `set_updated_content` to set the new content, the original content
+    being provided in `original_content`.
+    When exiting the context without an exception, the updated content will be written back to the file.
+    """
+
+    def __init__(self, relative_path: str, code_editor: CodeEditor):
+        self._relative_path = relative_path
+        self._code_editor = code_editor
+        self._edited_file: CodeEditor.EditedFile | None = None
+        self._edited_file_context: Any = None
+
+    def __enter__(self) -> Self:
+        self._edited_file_context = self._code_editor.edited_file_context(self._relative_path)
+        self._edited_file = self._edited_file_context.__enter__()
+        return self
+
+    def get_original_content(self) -> str:
+        """
+        :return: the original content of the file before any modifications.
+        """
+        assert self._edited_file is not None
+        return self._edited_file.get_contents()
+
+    def set_updated_content(self, content: str) -> None:
+        """
+        Sets the updated content of the file, which will be written back to the file
+        when the context is exited without an exception.
+
+        :param content: the updated content of the file
+        """
+        assert self._edited_file is not None
+        self._edited_file.set_contents(content)
+
+    def __exit__(self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: TracebackType | None) -> None:
+        assert self._edited_file_context is not None
+        self._edited_file_context.__exit__(exc_type, exc_value, traceback)

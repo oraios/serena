@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import logging
 import os.path
 import threading
@@ -9,7 +11,7 @@ from sensai.util.logging import LogTime
 
 from serena.config.serena_config import ProjectConfig, SerenaPaths
 from solidlsp import SolidLanguageServer
-from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
+from solidlsp.ls_config import LanguageServerConfig, LanguageServerIdLike
 from solidlsp.lsp_protocol_handler.lsp_types import DidChangeWatchedFilesParams, FileChangeType, FileEvent
 from solidlsp.settings import SolidLSPSettings
 
@@ -35,6 +37,7 @@ class LanguageServerFactory:
         ls_timeout: float | None = None,
         ls_specific_settings: dict | None = None,
         trace_lsp_communication: bool = False,
+        is_project_trusted: bool = True,
     ):
         self.project_root = project_root
         self.project_config = project_config
@@ -44,8 +47,9 @@ class LanguageServerFactory:
         self.ls_timeout = ls_timeout
         self.ls_specific_settings = ls_specific_settings
         self.trace_lsp_communication = trace_lsp_communication
+        self.is_project_trusted = is_project_trusted
 
-    def create_language_server(self, ls_id: LanguageServerId) -> SolidLanguageServer:
+    def create_language_server(self, ls_id: LanguageServerIdLike) -> SolidLanguageServer:
         ls_config = LanguageServerConfig(
             workspace_folders=self.project_config.ls_workspace_folders,
             additional_workspace_folders=self.project_config.ls_additional_workspace_folders,
@@ -53,6 +57,7 @@ class LanguageServerFactory:
             ignored_paths=self.ignored_patterns,
             trace_lsp_communication=self.trace_lsp_communication,
             encoding=self.encoding,
+            is_project_trusted=self.is_project_trusted,
         )
 
         log.info(f"Creating language server instance for {self.project_root}, language={ls_id}.")
@@ -75,7 +80,7 @@ class LanguageServerManager:
 
     def __init__(
         self,
-        language_servers: dict[LanguageServerId, SolidLanguageServer],
+        language_servers: dict[LanguageServerIdLike, SolidLanguageServer],
         language_server_factory: LanguageServerFactory,
         project: "Project",
     ) -> None:
@@ -97,7 +102,9 @@ class LanguageServerManager:
         return next(iter(self._language_servers.values()))
 
     @staticmethod
-    def from_languages(languages: list[LanguageServerId], factory: LanguageServerFactory, project: "Project") -> "LanguageServerManager":
+    def from_languages(
+        languages: list[LanguageServerIdLike], factory: LanguageServerFactory, project: "Project"
+    ) -> "LanguageServerManager":
         """
         Creates a manager with language servers for the given languages using the given factory.
         The language servers are started in parallel threads.
@@ -109,21 +116,21 @@ class LanguageServerManager:
         """
 
         class StartLSThread(threading.Thread):
-            def __init__(self, ls_id: LanguageServerId):
-                super().__init__(target=self._start_language_server, name="StartLS:" + ls_id.value)
+            def __init__(self, ls_id: LanguageServerIdLike):
+                super().__init__(target=self._start_language_server, name="StartLS:" + ls_id.get_key())
                 self.ls_id = ls_id
                 self.language_server: SolidLanguageServer | None = None
                 self.exception: Exception | None = None
 
             def _start_language_server(self) -> None:
                 try:
-                    with LogTime(f"Language server startup (language={self.ls_id.value})"):
+                    with LogTime(f"Language server startup (ls_id={self.ls_id.get_key()})"):
                         self.language_server = factory.create_language_server(self.ls_id)
                         self.language_server.start()
                         if not self.language_server.is_running():
-                            raise RuntimeError(f"Failed to start the language server for language {self.ls_id.value}")
+                            raise RuntimeError(f"Failed to start the language server {self.ls_id.get_key()}")
                 except Exception as e:
-                    log.error(f"Error starting language server for language {self.ls_id.value}: {e}", exc_info=e)
+                    log.error(f"Error starting language server {self.ls_id.get_key()}: {e}", exc_info=e)
                     self.exception = e
 
         # start language servers in parallel threads
@@ -134,8 +141,8 @@ class LanguageServerManager:
             threads.append(thread)
 
         # collect language servers and exceptions
-        language_servers: dict[LanguageServerId, SolidLanguageServer] = {}
-        exceptions: dict[LanguageServerId, Exception] = {}
+        language_servers: dict[LanguageServerIdLike, SolidLanguageServer] = {}
+        exceptions: dict[LanguageServerIdLike, Exception] = {}
         for thread in threads:
             thread.join()
             if thread.exception is not None:
@@ -154,7 +161,7 @@ class LanguageServerManager:
         if exceptions:
             for ls in language_servers.values():
                 ls.stop()
-            failure_messages = "\n".join([f"{lang.value}: {e}" for lang, e in exceptions.items()])
+            failure_messages = "\n".join([f"{ls_id.get_key()}: {e}" for ls_id, e in exceptions.items()])
             raise LanguageServerManagerInitialisationError(f"Failed to start {len(exceptions)} language server(s):\n{failure_messages}")
 
         return LanguageServerManager(language_servers, factory, project)
@@ -183,7 +190,7 @@ class LanguageServerManager:
             ls = self._default_language_server
         return self._ensure_functional_ls(ls)
 
-    def _create_and_start_language_server(self, ls_id: LanguageServerId) -> SolidLanguageServer:
+    def _create_and_start_language_server(self, ls_id: LanguageServerIdLike) -> SolidLanguageServer:
         if self._language_server_factory is None:
             raise ValueError(f"No language server factory available to create language server for {ls_id}")
         language_server = self._language_server_factory.create_language_server(ls_id)
@@ -191,19 +198,19 @@ class LanguageServerManager:
         self._language_servers[ls_id] = language_server
         return language_server
 
-    def restart_language_server(self, language: LanguageServerId) -> SolidLanguageServer:
+    def restart_language_server(self, ls_id: LanguageServerIdLike) -> SolidLanguageServer:
         """
         Forces recreation and restart of the language server for the given language.
         It is assumed that the language server for the given language is no longer running.
 
-        :param language: the language
+        :param ls_id: the language server identifier
         :return: the newly created language server
         """
-        if language not in self._language_servers:
-            raise ValueError(f"No language server for language {language.value} present; cannot restart")
-        return self._create_and_start_language_server(language)
+        if ls_id not in self._language_servers:
+            raise ValueError(f"No language server for language {ls_id.get_key()} present; cannot restart")
+        return self._create_and_start_language_server(ls_id)
 
-    def add_language_server(self, ls_id: LanguageServerId) -> SolidLanguageServer:
+    def add_language_server(self, ls_id: LanguageServerIdLike) -> SolidLanguageServer:
         """
         Dynamically adds a new language server for the given language.
 
@@ -211,21 +218,21 @@ class LanguageServerManager:
         :return: the newly created language server
         """
         if ls_id in self._language_servers:
-            raise ValueError(f"Language server for language {ls_id.value} already present")
+            raise ValueError(f"Language server {ls_id.get_key()} already present")
         return self._create_and_start_language_server(ls_id)
 
-    def remove_language_server(self, language: LanguageServerId, save_cache: bool = False) -> None:
+    def remove_language_server(self, ls_id: LanguageServerIdLike, save_cache: bool = False) -> None:
         """
         Removes the language server for the given language, stopping it if it is running.
 
-        :param language: the language
+        :param ls_id: the language
         """
-        if language not in self._language_servers:
-            raise ValueError(f"No language server for language {language.value} present; cannot remove")
-        ls = self._language_servers.pop(language)
+        if ls_id not in self._language_servers:
+            raise ValueError(f"No language server for language {ls_id.get_key()} present; cannot remove")
+        ls = self._language_servers.pop(ls_id)
         self._stop_language_server(ls, save_cache=save_cache)
 
-    def get_active_language_server_ids(self) -> list[LanguageServerId]:
+    def get_active_language_server_ids(self) -> list[LanguageServerIdLike]:
         """
         Returns the list of languages for which language servers are currently managed.
 
@@ -316,9 +323,10 @@ class LanguageServerFileChangeNotifier:
             running yet, or on the first call, which only establishes the baseline).
         """
         current: dict[str, float] = {}
-        for rel_path in self._project.gather_source_files():
+        for source_file in self._project.gather_source_files():
             try:
-                current[rel_path] = os.stat(os.path.join(self._project.project_root, rel_path)).st_mtime
+                stat = source_file.dir_entry.stat()
+                current[source_file.rel_path] = stat.st_mtime
             except OSError:
                 continue
 
@@ -362,9 +370,15 @@ class LanguageServerFileChangeNotifier:
             # (observed with pyright) to fold a brand-new file into its cross-file reference graph;
             # an open/close cycle forces the parse+bind that Serena's own file tools trigger via
             # SolidLanguageServer.open_file().
-            for rel_path in created_paths:
-                if ls.is_ignored_path(rel_path, ignore_unsupported_files=True):
-                    continue
+            relevant_created_paths = [
+                rel_path for rel_path in created_paths if not ls.is_ignored_path(rel_path, ignore_unsupported_files=True)
+            ]
+            if relevant_created_paths:
+                try:
+                    ls.notify_files_created(relevant_created_paths)
+                except Exception as e:
+                    log.error("Failed to notify language server of newly created files", exc_info=e)
+            for rel_path in relevant_created_paths:
                 try:
                     with ls.open_file(rel_path):
                         pass

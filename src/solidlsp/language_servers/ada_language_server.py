@@ -6,6 +6,7 @@ ALS handles both Ada and SPARK code transparently — SPARK is identified by
 pragmas/aspects in source rather than file extension, so a single
 ``Language.ADA`` covers both.
 """
+# SPDX-License-Identifier: MIT
 
 import logging
 import os

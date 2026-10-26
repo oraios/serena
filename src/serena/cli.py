@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 import collections
 import glob
 import json
@@ -5,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Iterator, Sequence
 from logging import Logger
@@ -21,7 +24,7 @@ from serena import serena_version
 from serena.config.client_setup import client_setup_handlers
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import (
-    LanguageBackend,
+    AgentInterface,
     ModeSelectionDefinition,
     ModeSelectionDefinitionWithAddedModes,
     ProjectConfig,
@@ -36,11 +39,13 @@ from serena.constants import (
     SERENAS_OWN_CONTEXT_YAMLS_DIR,
     SERENAS_OWN_MODE_YAMLS_DIR,
 )
+from serena.language_backend import BuiltinLanguageBackend, LanguageBackendRegistry
+from serena.project import Project
 from serena.prompt_factory import SerenaPromptFactory
 from serena.tools import ActivateProjectTool
 from serena.util.cli_util import AutoRegisteringGroup
 from serena.util.logging import MemoryLogHandler
-from solidlsp.ls_config import LanguageServerId
+from solidlsp.ls_config import LanguageServerIdLike, LanguageServerRegistry
 from solidlsp.ls_types import SymbolKind
 from solidlsp.util.subprocess_util import subprocess_kwargs
 
@@ -123,6 +128,24 @@ def _open_in_editor(path: str) -> None:
         print(f"Failed to open {path}: {e}")
 
 
+def _download_ls_dependencies(ls_id: LanguageServerIdLike, ls_specific_settings: dict, repository_root_path: str) -> None:
+    """Download dependencies for one language server without starting it."""
+    from solidlsp import SolidLanguageServer
+    from solidlsp.ls_config import LanguageServerConfig
+    from solidlsp.settings import SolidLSPSettings
+
+    language_server = SolidLanguageServer.create(
+        LanguageServerConfig(ls_id=ls_id),
+        repository_root_path,
+        solidlsp_settings=SolidLSPSettings(
+            solidlsp_dir=SerenaPaths().serena_user_home_dir,
+            project_data_path=os.path.join(repository_root_path, ".solidlsp"),
+            ls_specific_settings=ls_specific_settings,
+        ),
+    )
+    language_server.install_dependencies()
+
+
 class ProjectType(click.ParamType):
     """ParamType allowing either a project name or a path to a project directory."""
 
@@ -178,14 +201,14 @@ class TopLevelCommands(AutoRegisteringGroup):
     @click.option(
         "--language-backend",
         "-b",
-        type=click.Choice([b.value for b in LanguageBackend]),
-        default=LanguageBackend.LSP.value,
+        type=click.Choice([b.value for b in BuiltinLanguageBackend]),
+        default=BuiltinLanguageBackend.LSP.value,
         show_default=True,
         help="Default code intelligence backend (can be overridden in the project config).",
     )
     def init(language_backend: Literal["LSP", "JetBrains"] = "LSP") -> None:
         click.echo(f"\nSerena version: {serena_version()}\n")
-        serena_config = SerenaConfig.init(language_backend=LanguageBackend(language_backend))
+        serena_config = SerenaConfig.init(builtin_language_backend=BuiltinLanguageBackend(language_backend))
         click.echo(f"Configuration file: {serena_config.config_file_path}")
         click.echo(f"Language backend: {language_backend}")
 
@@ -230,6 +253,52 @@ class TopLevelCommands(AutoRegisteringGroup):
             raise SystemExit(1)
 
     @staticmethod
+    @click.command(
+        "download-ls-dependencies",
+        help="Download language-server dependencies ahead of time for environments with restricted network access.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument("language_servers", type=str, nargs=-1, required=True)
+    def download_ls_dependencies(language_servers: tuple[str, ...]) -> None:
+        """Download dependencies without starting any language server."""
+        logging.configure(level=logging.INFO)
+
+        # resolve the language server names
+        registry = LanguageServerRegistry.get_instance()
+        ls_ids: list[LanguageServerIdLike] = []
+        for name in language_servers:
+            try:
+                ls_ids.append(registry.resolve(name.lower()))
+            except ValueError as exc:
+                raise click.UsageError(f"Unknown language server '{name}'. Supported: {', '.join(registry.get_keys())}") from exc
+
+        # load the user's language server settings, if a configuration exists
+        try:
+            ls_specific_settings = dict(SerenaConfig.from_config_file(generate_if_missing=False).ls_specific_settings)
+        except FileNotFoundError:
+            ls_specific_settings = {}
+
+        # download the dependencies, continuing with the remaining language servers upon failure
+        failures: list[tuple[LanguageServerIdLike, Exception]] = []
+        with tempfile.TemporaryDirectory() as temp_dir:
+            for index, ls_id in enumerate(ls_ids, start=1):
+                click.echo(f"[{index}/{len(ls_ids)}] Downloading dependencies for '{ls_id.get_key()}' ...")
+                try:
+                    _download_ls_dependencies(ls_id, ls_specific_settings, temp_dir)
+                except Exception as exc:
+                    log.exception("Failed to download dependencies for '%s'", ls_id.get_key())
+                    failures.append((ls_id, exc))
+
+        # report the outcome
+        if failures:
+            click.echo(f"Failed to download dependencies for {len(failures)} of {len(ls_ids)} language server(s):", err=True)
+            for ls_id, exc in failures:
+                click.echo(f"  {ls_id.get_key()}: {exc}", err=True)
+            raise click.exceptions.Exit(1)
+
+        click.echo(f"Successfully downloaded dependencies for {len(ls_ids)} language server(s).")
+
+    @staticmethod
     @click.command("start-mcp-server", help="Starts the Serena MCP server.", context_settings={"max_content_width": _MAX_CONTENT_WIDTH})
     @click.option("--project", "project", type=PROJECT_TYPE, default=None, help="Path or name of project to activate at startup.")
     @click.option("--project-file", "project", type=PROJECT_TYPE, default=None, help="[DEPRECATED] Use --project instead.")
@@ -257,9 +326,16 @@ class TopLevelCommands(AutoRegisteringGroup):
     )
     @click.option(
         "--language-backend",
-        type=click.Choice([lb.value for lb in LanguageBackend]),
+        type=click.Choice(LanguageBackendRegistry.get_instance().get_keys()),
         default=None,
         help="Override the configured language backend.",
+    )
+    @click.option(
+        "--agent-interface",
+        type=click.Choice([i.value for i in AgentInterface], case_sensitive=False),
+        default=None,
+        help="Override the configured agent interface: 'tools' (one tool per operation) or "
+        "'REPL' (Python code execution via the serena_repl tool, with a fixed set of tools).",
     )
     @click.option(
         "--transport",
@@ -323,6 +399,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         default_modes: Sequence[str],
         added_modes: Sequence[str],
         language_backend: str | None,
+        agent_interface: str | None,
         transport: Literal["stdio", "sse", "streamable-http"],
         host: str,
         port: int,
@@ -333,7 +410,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         trace_lsp_communication: bool | None,
         tool_timeout: float | None,
     ) -> None:
-        from serena.mcp import SerenaMCPFactory
+        from serena.mcp import SerenaMCPFactory, uvicorn_ignore_logging_config_context
 
         # initialize logging, using INFO level initially (will later be adjusted by SerenaAgent according to the config)
         #   * memory log handler (for use by GUI/Dashboard)
@@ -379,10 +456,9 @@ class TopLevelCommands(AutoRegisteringGroup):
 
         factory = SerenaMCPFactory(transport=transport, context=context, project=project_file, memory_log_handler=memory_log_handler)
         server = factory.create_mcp_server(
-            host=host,
-            port=port,
             mode_selection_def=mode_selection_def,
-            language_backend=LanguageBackend.from_str(language_backend) if language_backend else None,
+            language_backend=LanguageBackendRegistry.get_instance().resolve(language_backend) if language_backend else None,
+            agent_interface=AgentInterface.from_str(agent_interface) if agent_interface else None,
             enable_web_dashboard=enable_web_dashboard,
             open_web_dashboard=open_web_dashboard,
             enable_gui_log_window=enable_gui_log_window,
@@ -397,7 +473,11 @@ class TopLevelCommands(AutoRegisteringGroup):
                 project_file,
             )
         log.info("Starting MCP server …")
-        server.run(transport=transport)
+        if transport == "stdio":
+            server.run(transport="stdio")
+        else:
+            with uvicorn_ignore_logging_config_context():
+                server.run(transport=transport, host=host, port=port)
 
     @staticmethod
     @click.command(
@@ -706,14 +786,15 @@ class ProjectCommands(AutoRegisteringGroup):
         if os.path.exists(yml_path):
             raise FileExistsError(f"Project file {yml_path} already exists.")
 
-        languages: list[LanguageServerId] = []
+        languages: list[LanguageServerIdLike] = []
         if language:
+            registry = LanguageServerRegistry.get_instance()
             for lang in language:
+                ls_key = lang.lower()
                 try:
-                    languages.append(LanguageServerId(lang.lower()))
+                    languages.append(registry.resolve(ls_key))
                 except ValueError:
-                    all_langs = [l.value for l in LanguageServerId]
-                    raise ValueError(f"Unknown language '{lang}'. Supported: {all_langs}")
+                    raise ValueError(f"Unknown language '{lang}'. Supported: {registry.get_keys()}")
 
         generated_conf = ProjectConfig.autogenerate(
             project_root=project_path,
@@ -722,7 +803,9 @@ class ProjectCommands(AutoRegisteringGroup):
             languages=languages if languages else None,
             interactive=True,
         )
-        languages_str = ", ".join([lang.value for lang in generated_conf.language_servers]) if generated_conf.language_servers else "N/A"
+        languages_str = (
+            ", ".join([lang.get_key() for lang in generated_conf.language_servers]) if generated_conf.language_servers else "N/A"
+        )
         click.echo(f"Generated project with language servers {{{languages_str}}} at {yml_path}.")
         registered_project = serena_config.get_registered_project(str(project_root))
         if registered_project is None:
@@ -761,6 +844,27 @@ class ProjectCommands(AutoRegisteringGroup):
             raise click.ClickException(f"Project already exists: {e}\nUse 'serena project index' to index an existing project.")
         except ValueError as e:
             raise click.ClickException(str(e))
+
+    @staticmethod
+    @click.command(
+        "remove",
+        help="Remove a project from Serena's project registry. "
+        "The project's own files, including its project configuration, are left untouched.",
+        context_settings={"max_content_width": _MAX_CONTENT_WIDTH},
+    )
+    @click.argument("project", type=PROJECT_TYPE)
+    def remove(project: str) -> None:
+        serena_config = SerenaConfig.from_config_file()
+        registered_project_names = serena_config.project_names
+        try:
+            registered_project = serena_config.get_registered_project(project)
+        except ValueError as e:
+            # raised when the name is ambiguous; the message names the candidate locations
+            raise click.ClickException(str(e))
+        if registered_project is None:
+            raise click.ClickException(f"No registered project found for '{project}'; registered project names: {registered_project_names}")
+        serena_config.remove_registered_project(registered_project)
+        click.echo(f"Removed project '{registered_project.project_name}' ({registered_project.project_root}) from the project registry.")
 
     @staticmethod
     @click.command(
@@ -813,28 +917,30 @@ class ProjectCommands(AutoRegisteringGroup):
 
             collected_exceptions: list[Exception] = []
             files_failed = []
-            language_file_counts: dict[LanguageServerId, int] = collections.defaultdict(lambda: 0)
+            language_file_counts: dict[LanguageServerIdLike, int] = collections.defaultdict(lambda: 0)
             last_save_time = time.monotonic()
-            for i, f in enumerate(tqdm(files, desc="Indexing")):
+            for i, project_file in enumerate(tqdm(files, desc="Indexing")):
+                project_file: Project.ProjectFile
+                rel_path = project_file.rel_path
                 try:
-                    ls = ls_mgr.get_language_server(f)
-                    ls.request_document_symbols(f)
+                    ls = ls_mgr.get_language_server(rel_path)
+                    ls.request_document_symbols(rel_path)
                     language_file_counts[ls.ls_id] += 1
                 except Exception as e:
-                    log.error(f"Failed to index {f}, continuing.")
+                    log.error(f"Failed to index {rel_path}, continuing.")
                     collected_exceptions.append(e)
-                    files_failed.append(f)
+                    files_failed.append(rel_path)
                 now = time.monotonic()
                 if now - last_save_time >= 30:
                     ls_mgr.save_all_caches()
                     last_save_time = now
-            reported_language_file_counts = {k.value: v for k, v in language_file_counts.items()}
+            reported_language_file_counts = {k.get_key(): v for k, v in language_file_counts.items()}
             click.echo(f"Indexed files per language: {dict_string(reported_language_file_counts, brackets=None)}")
             ls_mgr.save_all_caches()
 
             if len(files_failed) > 0:
                 os.makedirs(os.path.dirname(log_file), exist_ok=True)
-                with open(log_file, "w") as f:
+                with open(log_file, "w", encoding="utf-8") as f:
                     for file, exception in zip(files_failed, collected_exceptions, strict=True):
                         f.write(f"{file}\n")
                         f.write(f"{exception}\n")
@@ -864,7 +970,7 @@ class ProjectCommands(AutoRegisteringGroup):
         if os.path.isabs(path):
             path = os.path.relpath(path, start=proj.project_root)
         is_ignored = proj.is_ignored_path(path)
-        click.echo(f"Path '{path}' IS {'ignored' if is_ignored else 'IS NOT ignored'} by the project configuration.")
+        click.echo(f"Path '{path}' {'IS' if is_ignored else 'IS NOT'} ignored by the project configuration.")
 
     @staticmethod
     @click.command(
@@ -894,7 +1000,7 @@ class ProjectCommands(AutoRegisteringGroup):
         ls_mgr = proj.create_language_server_manager()
         try:
             ls = ls_mgr.get_language_server(file)
-            click.echo(f"Indexing for language {ls.ls_id.value} …")
+            click.echo(f"Indexing for language {ls.ls_id.get_key()} …")
             document_symbols = ls.request_document_symbols(file)
             symbols, _ = document_symbols.get_all_symbols_and_roots()
             if verbose:
@@ -928,12 +1034,12 @@ class ProjectCommands(AutoRegisteringGroup):
         # NOTE: completely written by Claude Code, only functionality was reviewed, not implementation
         from serena.agent import SerenaAgent
         from serena.project import Project
-        from serena.tools import FindReferencingSymbolsTool, FindSymbolTool, GetSymbolsOverviewTool
+        from serena.repl.api.lsp_api import LspApi
 
         logging.configure(level=logging.INFO)
         project_path = os.path.abspath(project)
         serena_config = SerenaConfig.from_config_file().with_headless_mode_overrides()
-        serena_config.language_backend = LanguageBackend.LSP
+        serena_config.set_builtin_language_backend(BuiltinLanguageBackend.LSP)
         proj = Project.load(project_path, serena_config=serena_config)
 
         # Create log file with timestamp
@@ -958,73 +1064,70 @@ class ProjectCommands(AutoRegisteringGroup):
                 # Find first non-empty file that can be analyzed
                 log.info("Searching for analyzable files...")
                 files = proj.gather_source_files()
-                target_file = None
+                target_rel_path = None
 
-                for file_path in files:
+                for source_file in files:
                     try:
-                        full_path = os.path.join(project_path, file_path)
+                        full_path = source_file.dir_entry.path
                         if os.path.getsize(full_path) > 1000:
-                            target_file = file_path
-                            log.info("Found analyzable file: %s", target_file)
+                            target_rel_path = source_file.rel_path
+                            log.info("Found analyzable file: %s", target_rel_path)
                             break
                     except (OSError, FileNotFoundError):
                         continue
 
-                if not target_file:
+                if not target_rel_path:
                     raise ProjectCommands._HealthCheckFailure("No analyzable files found")
 
-                # Get tools from agent
-                overview_tool = agent.get_tool(GetSymbolsOverviewTool)
-                find_symbol_tool = agent.get_tool(FindSymbolTool)
-                find_refs_tool = agent.get_tool(FindReferencingSymbolsTool)
+                api = LspApi(agent)
 
-                # Test 1: Get symbols overview
-                log.info("Testing GetSymbolsOverviewTool on file: %s", target_file)
-                overview_data = agent.execute_task(lambda: overview_tool.get_symbol_overview(target_file))
-                log.info(f"GetSymbolsOverviewTool returned: {overview_data}")
+                # Test 1: symbols overview
+                log.info("Testing get_symbols_overview on file: %s", target_rel_path)
+                overview = agent.execute_task(lambda: api.get_symbols_overview(target_rel_path))
+                log.info(f"get_symbols_overview returned: {overview.represent()}")
 
-                if not overview_data:
-                    raise ProjectCommands._HealthCheckFailure(f"No symbols found in target file {target_file}")
+                if len(overview) == 0:
+                    raise ProjectCommands._HealthCheckFailure(f"No symbols found in target file {target_rel_path}")
 
                 # Extract suitable symbol (prefer class or function over variables)
-                preferred_kinds = {SymbolKind.Class.name, SymbolKind.Function.name, SymbolKind.Method.name, SymbolKind.Constructor.name}
-                selected_symbol = None
-                for symbol in overview_data:
-                    if symbol.get("kind") in preferred_kinds:
-                        selected_symbol = symbol
-                        break
+                preferred_kinds = {SymbolKind.Class, SymbolKind.Function, SymbolKind.Method, SymbolKind.Constructor}
+                selected_symbol = next((s for s in overview.symbols if s.symbol_kind in preferred_kinds), None)
 
                 # If no preferred symbol found, use first available
-                if not selected_symbol:
-                    selected_symbol = overview_data[0]
+                if selected_symbol is None:
+                    selected_symbol = overview.symbols[0]
                     log.info("No class or function found, using first available symbol")
 
-                symbol_name = selected_symbol["name"]
-                symbol_kind = selected_symbol["kind"]
-                log.info("Using symbol for testing: %s (kind: %s)", symbol_name, symbol_kind)
+                symbol_name = selected_symbol.name
+                log.info("Using symbol for testing: %s (kind: %s)", symbol_name, selected_symbol.symbol_kind_name)
 
-                # Test 2: FindSymbolTool
-                log.info("Testing FindSymbolTool for symbol: %s", symbol_name)
-                with find_symbol_tool.symbol_dict_grouper.disabled_context():
+                # Test 2: find_symbol
+                log.info("Testing find_symbol for symbol: %s", symbol_name)
+                with LspApi.find_symbol_dict_grouper_.disabled_context():
                     find_symbol_result = agent.execute_task(
-                        lambda: find_symbol_tool.apply(symbol_name, relative_path=target_file, include_body=True)
+                        lambda: api.find_symbol(symbol_name, relative_path=target_rel_path, include_body=True).represent()
                     )
                 find_symbol_data = json.loads(find_symbol_result)
-                log.info("FindSymbolTool found %d matches for symbol %s", len(find_symbol_data), symbol_name)
-
-                # Test 3: FindReferencingSymbolsTool
-                log.info("Testing FindReferencingSymbolsTool for symbol: %s", symbol_name)
-                try:
-                    with find_refs_tool.symbol_dict_grouper.disabled_context():
-                        find_refs_result = agent.execute_task(lambda: find_refs_tool.apply(symbol_name, relative_path=target_file))
-                        find_refs_data = json.loads(find_refs_result)
-                        log.info("FindReferencingSymbolsTool found %d references for symbol %s", len(find_refs_data), symbol_name)
-                except Exception as e:
-                    log.warning("FindReferencingSymbolsTool failed for symbol %s: %s", symbol_name, str(e))
-
-                # Verify tools worked as expected
+                log.info("find_symbol found %d matches for symbol %s", len(find_symbol_data), symbol_name)
                 if not find_symbol_data:
                     raise ProjectCommands._HealthCheckFailure("FindSymbolTool returned no results")
+
+                # Test 3: find_referencing_symbols
+                log.info("Testing find_referencing_symbols for symbol: %s", symbol_name)
+                try:
+                    with LspApi.references_grouper_.disabled_context():
+                        find_refs_result = agent.execute_task(
+                            lambda: api.find_referencing_symbols(symbol_name, relative_path=target_rel_path).represent()
+                        )
+                        find_refs_data = json.loads(find_refs_result)
+                        log.info("find_referencing_symbols found %d references for symbol %s", len(find_refs_data), symbol_name)
+                except Exception as e:
+                    # A symbol with no references at all is a legitimate result, so the number of
+                    # references is not asserted - but a *failure* of the reference search means the
+                    # language server is not functional, which is the single thing this command is
+                    # asked to determine. Logging it as a warning let the command print
+                    # "All tools working correctly" and exit 0 after the search had already failed.
+                    raise ProjectCommands._HealthCheckFailure(f"find_referencing_symbols failed for symbol {symbol_name}: {e}") from e
 
                 log.info("Health check completed successfully")
 

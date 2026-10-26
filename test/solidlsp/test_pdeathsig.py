@@ -115,8 +115,8 @@ def test_language_server_process_survives_a_short_lived_calling_thread() -> None
         text=True,
     )
     try:
-        ready_line = driver.stdout.readline()
-        assert ready_line.strip() == "READY", f"driver failed to start the language server: {driver.stderr.read()}"
+        ready_line = driver.stdout.readline()  # type: ignore
+        assert ready_line.strip() == "READY", f"driver failed to start the language server: {driver.stderr.read()}"  # type: ignore
 
         time.sleep(2)
         # The driver's own argv also contains `marker` (it's passed as sys.argv[1]), so exclude
@@ -143,8 +143,10 @@ def test_language_server_process_dies_with_a_sigkilled_serena() -> None:
         text=True,
     )
     try:
-        ready_line = driver.stdout.readline()
-        assert ready_line.strip() == "READY", f"driver failed to start the language server: {driver.stderr.read()}"
+        ready_line = driver.stdout.readline()  # type: ignore
+        stderr = driver.stderr
+        assert stderr is not None, "stderr should be captured"
+        assert ready_line.strip() == "READY", f"driver failed to start the language server: {stderr.read()}"
         assert _find_marked_processes(marker), "language server process never started"
 
         driver.kill()  # SIGKILL: simulates Serena being killed without a chance to clean up
