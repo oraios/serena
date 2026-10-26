@@ -2,7 +2,12 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+# v2.1.0 (2026-10-19)
+
 * General:
+  - Fix: Re-establish compatibility with the Claude Desktop client in chat mode (code mode was not affected).
+    The client filters out the parameter `session_id`, which was introduced for several tools with v2.0.0.
+    The parameter was renamed to `session`.
   - Fix: the MCP registry manifest (`server.json`) declared Serena's own CLI arguments as runtime
     arguments, so clients installing Serena from the MCP registry generated a launch command with a
     stray package spec, and project auto-activation failed
@@ -13,11 +18,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     This affected both dashboard log retrieval and file logs written by Serena.
    
 * Dashboard:
+  - Add a welcome pane for users with an unset `web_dashboard_open_on_launch` preference,
+    allowing them to choose whether the dashboard opens whenever Serena starts. The dashboard
+    continues to open automatically until a preference is configured.
   - Show an `[untrusted]` indicator beside the active project name for untrusted projects,
     with a formatted tooltip explaining the limitations and a link to the trusted-projects
     documentation. Add reusable tooltip support for hover and keyboard interaction.
-  - Change the default value of `web_dashboard_open_on_launch` to false on systems that support
-    tray-based access to the dashboard.
 
 * Security:
   - Fix: typescript-language-server loaded `node_modules/typescript/lib/tsserver.js` from the project
@@ -27,6 +33,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     trust-gated feature (#2129)
 
 * Language Servers:
+  - Add VB.NET language server support (via the Roslyn-based `Microsoft.CodeAnalysis.LanguageServer`,
+    also shared with the C# language server)
   - Fix: the Intelephense settings `maxMemory` and `maxFileSize` had no effect, because they were passed
     as initialization options, which Intelephense does not read; `maxMemory` now limits the heap of the
     server process, and `maxFileSize` is passed as `intelephense.files.maxSize`
@@ -36,8 +44,12 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Project-wide symbol discovery now skips file and directory symlinks in untrusted projects.
     In trusted projects, ignore rules consistently apply to unresolved alias paths, and symlinks to
     targets outside the project root no longer cause discovery to fail (#2163).
+  - Scala: add opt-in setting `terminate_bloop_on_stop` to terminate the Bloop build-server daemons
+    that Metals leaves running after shutdown (#1816)
   - Performance: Speed up project-wide symbol discovery by reusing directory-entry metadata for ignore
     checks and avoiding repeated ancestor-directory checks for files.
+  - Add `typescript_tsgo`, which uses the native language server of TypeScript 7 (`tsc --lsp`) and installs
+    the `typescript` package automatically (#1402)
 
 # v2.0.0 (2026-10-13)
 

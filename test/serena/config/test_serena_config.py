@@ -670,6 +670,21 @@ class TestSerenaConfigLoadSave:
         assert SerenaConfig.from_config_file(generate_if_missing=False).auth_secret == "custom-secret"
         assert SerenaConfig.from_config_file(generate_if_missing=False).auth_secret == "custom-secret"
 
+    @pytest.mark.parametrize("value", [True, False])
+    def test_save_dashboard_launch_preference(self, value: bool) -> None:
+        # load a configuration and apply a transient override
+        self.master_config_path.write_text("projects: []\nweb_dashboard_open_on_launch: null\nlog_level: 20\n")
+        config = SerenaConfig.from_config_file(generate_if_missing=False)
+        assert config.web_dashboard_open_on_launch is None
+        config.log_level = 10
+
+        # persist only the launch preference and retain other settings
+        config.save_web_dashboard_open_on_launch(value)
+        reloaded = SerenaConfig.from_config_file(generate_if_missing=False)
+        assert config.web_dashboard_open_on_launch is value
+        assert reloaded.web_dashboard_open_on_launch is value
+        assert reloaded.log_level == 20
+
     def test_new_config_has_persistent_auth_secret(self) -> None:
         # generate the configuration from the template and retain its secret
         config = SerenaConfig.from_config_file()

@@ -501,6 +501,26 @@ code, pre, kbd, samp,
     color: var(--text-muted);
 }
 
+.dashboard-welcome p,
+.dashboard-welcome ul {
+    margin: 0 0 var(--space-4);
+    line-height: 1.6;
+}
+
+.dashboard-welcome ul {
+    padding-left: var(--space-5);
+}
+
+.dashboard-welcome-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.dashboard-welcome-actions .btn {
+    white-space: normal;
+}
+
 /* Collapsible Headers */
 .collapsible-header {
     margin-top: 0;

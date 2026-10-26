@@ -60,7 +60,9 @@ web_dashboard: True
 #    b) manually navigating to http://localhost:24282/dashboard/ in your web browser (actual port
 #       may be higher if you have multiple instances running; try ports 24283, 24284, etc.)
 # Further information: https://oraios.github.io/serena/02-usage/060_dashboard.html
-web_dashboard_open_on_launch: True
+# If the value is unset, the dashboard will be opened and will display a dialog asking the user to
+# configure the setting.
+web_dashboard_open_on_launch:
 
 # defines the interface (application mode) used for the web dashboard (if enabled).
 # If empty/null, use platform-dependent default. Otherwise, possible values:

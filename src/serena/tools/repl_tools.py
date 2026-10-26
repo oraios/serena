@@ -26,7 +26,7 @@ class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta, ToolMarkerCanEdit
         code = params.pop("code", "")
         return dict_string(params) + "\n" + code
 
-    def apply(self, session_id: str, code: str) -> str:
+    def apply(self, session: str, code: str) -> str:
         """
         Executes the given Python code in a REPL, which provides access to all of Serena's functionality
         (symbol & reference search, file overviews, editing, refactoring, inspections, etc.).
@@ -57,8 +57,9 @@ class SerenaReplTool(Tool, ToolMarkerOptional, ToolMarkerBeta, ToolMarkerCanEdit
         `s.vars()` lists the persisted items, `s.clear()` removes them. Do not store facades (`s.<facade>`) in
         variables; access them via `s` at call time. Do not keep large results longer than needed.
 
-        :param session_id: your Serena session id, as provided in Serena's instructions (call `initial_instructions` if you do not have one)
+        :param session: your Serena session id, as provided in Serena's instructions (call `initial_instructions` if you do not have one)
         :param code: the Python code to execute
         :return: the representation of the returned value, or the error if execution failed
         """
-        return self.agent.get_repl().execute(code, self.agent.get_session(session_id))
+        # NOTE: Parameter `session` cannot be called `session_id` because of a bug in the Claude Desktop client.
+        return self.agent.get_repl().execute(code, self.agent.get_session(session))
