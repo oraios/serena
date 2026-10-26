@@ -19,7 +19,7 @@ from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependen
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_utils import PlatformUtils
-from solidlsp.lsp_protocol_handler.lsp_types import MessageType
+from solidlsp.lsp_protocol_handler.lsp_types import InitializeResult, MessageType
 from solidlsp.settings import SolidLSPSettings
 
 from .common import RuntimeDependency, RuntimeDependencyCollection, build_npm_install_command
@@ -269,6 +269,21 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             timeout,
             self.describe_indexing_state(),
         )
+
+    def _verify_initialize_response(self, init_response: InitializeResult) -> None:
+        capabilities = init_response["capabilities"]
+        if capabilities.get("textDocumentSync") != 2:
+            raise SolidLSPException(f"Unexpected textDocumentSync capability: {capabilities.get('textDocumentSync')!r}")
+        expected_completion_provider = {"triggerCharacters": [".", '"', "'", "/", "@", "<"], "resolveProvider": True}
+        if capabilities.get("completionProvider") != expected_completion_provider:
+            raise SolidLSPException(f"Unexpected completionProvider capability: {capabilities.get('completionProvider')!r}")
+
+    def _wait_for_server_ready(self) -> None:
+        server_ready_timeout = self._get_server_ready_timeout()
+        if self.server_ready.wait(timeout=server_ready_timeout):
+            log.info("TypeScript server is ready")
+        else:
+            self._handle_server_ready_timeout(server_ready_timeout)
 
     def _create_dependency_provider(self) -> LanguageServerDependencyProvider:
         return self.DependencyProvider(self._custom_settings, self._ls_resources_dir)
@@ -541,21 +556,10 @@ class TypeScriptLanguageServer(SolidLanguageServer):
             "Sending initialize request from LSP client to LSP server and awaiting response",
         )
         init_response = self.server.send.initialize(initialize_params)
-
-        # TypeScript-specific capability checks
-        assert init_response["capabilities"]["textDocumentSync"] == 2
-        assert "completionProvider" in init_response["capabilities"]
-        assert init_response["capabilities"]["completionProvider"] == {
-            "triggerCharacters": [".", '"', "'", "/", "@", "<"],
-            "resolveProvider": True,
-        }
+        self._verify_initialize_response(init_response)
 
         self.server.notify.initialized({})
-        server_ready_timeout = self._get_server_ready_timeout()
-        if self.server_ready.wait(timeout=server_ready_timeout):
-            log.info("TypeScript server is ready")
-        else:
-            self._handle_server_ready_timeout(server_ready_timeout)
+        self._wait_for_server_ready()
 
         # Wait for any async project loading to complete.
         # typescript-language-server may send $/progress for "Initializing JS/TS

@@ -416,12 +416,6 @@ class DashboardManager:
             else:
                 return True
 
-        def provides_ui_for_opening_dashboard(self) -> bool:
-            """
-            :return: whether the mode provides a visible user interface through which the user can open the dashboard
-            """
-            return self in {DashboardManager.Mode.WEBVIEW, DashboardManager.Mode.TRAY_MANAGER}
-
     def __init__(
         self,
         port: int,
@@ -743,7 +737,7 @@ class SerenaAgent:
             self._dashboard_manager = DashboardManager(
                 port,
                 self.serena_config.web_dashboard_listen_address,
-                self.serena_config.web_dashboard_open_on_launch,
+                self.serena_config.is_dashboard_opened_on_launch(),
                 self._active_project,
                 mode_str=self.serena_config.web_dashboard_interface,
             )
@@ -782,7 +776,7 @@ class SerenaAgent:
         :return: whether the web dashboard is available and opening it is a meaningful operation
             (i.e. it is enabled and not opened automatically)
         """
-        return serena_config.web_dashboard and not serena_config.web_dashboard_open_on_launch and not serena_config.gui_log_window
+        return serena_config.web_dashboard and not serena_config.is_dashboard_opened_on_launch() and not serena_config.gui_log_window
 
     @classmethod
     def _create_base_toolset(
@@ -1210,7 +1204,7 @@ class SerenaAgent:
 
         # inform about the session id
         system_prompt += "\n\n" + self._format_prompt_tag(
-            f"Your Serena session id is `{session_id}`. Pass it as the `session_id` parameter to tools which require it.",
+            f"Your Serena session id is `{session_id}`. Pass it as the `session` parameter to tools which require it.",
             tag="session",
         )
 

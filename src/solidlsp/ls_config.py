@@ -196,6 +196,7 @@ class LanguageServerId(Enum):
     """
 
     CSHARP = "csharp"
+    VBNET = "vbnet"
     PYTHON = "python"
     RUST = "rust"
     JAVA = "java"
@@ -315,6 +316,8 @@ class LanguageServerId(Enum):
     # Experimental or deprecated Language Servers
     TYPESCRIPT_VTS = "typescript_vts"
     """Use the typescript language server through the natively bundled vscode extension via https://github.com/yioneko/vtsls"""
+    TYPESCRIPT_TSGO = "typescript_tsgo"
+    """Native language server of TypeScript 7 (``tsc --lsp``) for TypeScript (instead of typescript-language-server, which is the default)"""
     PYTHON_JEDI = "python_jedi"
     """Jedi language server for Python (instead of pyright, which is the default)"""
     PYTHON_TY = "python_ty"
@@ -443,6 +446,7 @@ class LanguageServerId(Enum):
         """
         return self in {
             self.TYPESCRIPT_VTS,
+            self.TYPESCRIPT_TSGO,
             self.PYTHON_JEDI,
             self.PYTHON_TY,
             self.PYTHON_PYREFLY,
@@ -481,6 +485,7 @@ class LanguageServerId(Enum):
             self.VUE,  # superset of TypeScript/JavaScript
             self.SVELTE,  # superset of TypeScript/JavaScript
             self.ASTRO,  # superset of TypeScript/JavaScript
+            self.VBNET,  # also matches .cs so mixed VB/C# solutions share one Roslyn instance; C# takes precedence on ties
             self.ANGULAR,  # superset of TypeScript/JavaScript
         }
 
@@ -523,7 +528,7 @@ class LanguageServerId(Enum):
                 return FilenameMatcher(".py", ".pyi", shebang_interpreters=("python", "pypy"))
             case self.JAVA:
                 return FilenameMatcher(".java")
-            case self.TYPESCRIPT | self.TYPESCRIPT_VTS:
+            case self.TYPESCRIPT | self.TYPESCRIPT_VTS | self.TYPESCRIPT_TSGO:
                 # see https://github.com/oraios/serena/issues/204
                 path_patterns = []
                 for prefix in ["c", "m", ""]:
@@ -533,6 +538,8 @@ class LanguageServerId(Enum):
                 return FilenameMatcher(*path_patterns)
             case self.CSHARP | self.CSHARP_OMNISHARP:
                 return FilenameMatcher(".cs")
+            case self.VBNET:
+                return FilenameMatcher(".vb", ".cs")
             case self.RUST:
                 return FilenameMatcher(".rs")
             case self.GO:
@@ -811,6 +818,10 @@ class LanguageServerId(Enum):
                 from solidlsp.language_servers.csharp_language_server import CSharpLanguageServer
 
                 return CSharpLanguageServer
+            case self.VBNET:
+                from solidlsp.language_servers.vbnet_language_server import VBNetLanguageServer
+
+                return VBNetLanguageServer
             case self.CSHARP_OMNISHARP:
                 from solidlsp.language_servers.omnisharp import OmniSharp
 
@@ -823,6 +834,10 @@ class LanguageServerId(Enum):
                 from solidlsp.language_servers.vts_language_server import VtsLanguageServer
 
                 return VtsLanguageServer
+            case self.TYPESCRIPT_TSGO:
+                from solidlsp.language_servers.tsgo_language_server import TsgoLanguageServer
+
+                return TsgoLanguageServer
             case self.VUE:
                 from solidlsp.language_servers.vue_language_server import VueLanguageServer
 
