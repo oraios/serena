@@ -2,6 +2,10 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Language Servers:
+  - Extend allowed types in persisted symbol caches, fixing cache loading issues with `clangd`
+    when overriding values like `ls_path`, `clangd_version` or `compile_commands_dir`
+
 # v2.1.0 (2026-10-19)
 
 * General:
