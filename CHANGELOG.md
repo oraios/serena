@@ -41,7 +41,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     conversation, although the Serena Instructions Manual was still in context (#2293)
 
 * Security:
-  - Update the pinned filelock dependency to a release with the current security fixes.
+  - Update pinned runtime and development dependencies with current security fixes.
 
 * JetBrains:
   - Fix: When applying a non-symbolic edit, do not raise a post-edit exception during IDE file refresh
