@@ -2,7 +2,11 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
-* JetBrains
+* General:
+  - Allow tool exclusions/inclusions to use tool marker names (e.g. `ToolMarkerCanEdit`) 
+  - Fix: `planning` mode now correctly excludes all editing tools (#2210)
+
+* JetBrains:
   - Fix: When applying a non-symbolic edit, do not raise a post-edit exception during IDE file refresh
     if the IDE's plugin server is not reachable.
 
