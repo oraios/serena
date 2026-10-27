@@ -29,6 +29,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     `ls_extra_args` sets `--log` or Serena logs at debug level
   - Fix: every line a language server wrote to stderr was followed by an empty line in Serena's log
 
+* Tools:
+  - Fix: the `planning` mode, despite being described as read-only, still exposed `rename_symbol`
+    and accepted symbol renames. The tool is now excluded like the other code-modifying tools.
+
 # v2.1.0 (2026-10-19)
 
 * General:

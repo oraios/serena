@@ -12,3 +12,4 @@ excluded_tools:
   - insert_at_line
   - execute_shell_command
   - replace_content
+  - rename_symbol
