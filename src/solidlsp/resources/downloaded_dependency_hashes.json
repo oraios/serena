@@ -44,5 +44,6 @@
   "https://github.com/LaunchCG/roslyn-vbnet-languageserver/releases/download/v1.1.0/roslyn-vbnet-osx-x64.tar.gz": "3dcd476a406142dc2344f71c4c3a1c205803db4d939d74a74a682d173ef0baa7",
   "https://github.com/LaunchCG/roslyn-vbnet-languageserver/releases/download/v1.1.0/roslyn-vbnet-osx-arm64.tar.gz": "d7db801deb2f1c11256e714d3fd82266a0226ad55e1223c9d100670df09cdaec",
   "https://github.com/LaunchCG/roslyn-vbnet-languageserver/releases/download/v1.1.0/roslyn-vbnet-linux-x64.tar.gz": "f09f10f5ca79a2860c18bebff613a15677d8b50b24e542df06d88d577ac2f451",
-  "https://github.com/LaunchCG/roslyn-vbnet-languageserver/releases/download/v1.1.0/roslyn-vbnet-linux-arm64.tar.gz": "76bd9cf1e7b8c0a6d07b662304f20ee1d173450a861ac66ae7c533568fa2ebdd"
+  "https://github.com/LaunchCG/roslyn-vbnet-languageserver/releases/download/v1.1.0/roslyn-vbnet-linux-arm64.tar.gz": "76bd9cf1e7b8c0a6d07b662304f20ee1d173450a861ac66ae7c533568fa2ebdd",
+  "https://github.com/1c-syntax/bsl-language-server/releases/download/v1.0.7/bsl-language-server-1.0.7-exec.jar": "9f62765edd344d66456da24c906eaf623a03c56e90e5aafee466200100909f64"
 }
