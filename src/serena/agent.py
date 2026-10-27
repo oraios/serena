@@ -24,7 +24,7 @@ import webview
 from sensai.util import logging
 from sensai.util.helper import mark_used
 from sensai.util.logging import LogTime
-from sensai.util.string import dict_string
+from sensai.util.string import ToStringMixin, dict_string, list_string
 
 from interprompt.jinja_template import JinjaTemplate
 from serena import serena_version
@@ -92,7 +92,7 @@ class ProjectNotFoundError(Exception):
     pass
 
 
-class AvailableTools:
+class AvailableTools(ToStringMixin):
     """
     Represents the set of available/exposed tools of a SerenaAgent.
     """
@@ -115,6 +115,9 @@ class AvailableTools:
 
     def __len__(self) -> int:
         return len(self.tools)
+
+    def _tostring_object_info(self) -> str:
+        return list_string(self.tool_names, brackets=None)
 
     def contains_tool_name(self, tool_name: str) -> bool:
         return tool_name in self._tool_name_set
