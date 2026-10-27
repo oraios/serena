@@ -13,7 +13,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     replacement behaviour is unchanged, but the global keys hidden by a project block are now logged (#2188).
 
 * Security:
-  - Update the pinned filelock dependency to a release with the current security fixes.
+  - Update pinned runtime and development dependencies with current security fixes.
 
 * JetBrains:
   - Fix: When applying a non-symbolic edit, do not raise a post-edit exception during IDE file refresh
