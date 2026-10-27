@@ -42,7 +42,9 @@ from serena.config.serena_config import (
     SerenaPaths,
     ToolInclusionDefinition,
 )
-from serena.dashboard import SerenaDashboardAPI, SerenaDashboardTrayManager, SerenaDashboardViewer, open_url_in_browser
+from serena.dashboard.dashboard_api import SerenaDashboardAPI
+from serena.dashboard.dashboard_tray_manager import SerenaDashboardTrayManager
+from serena.dashboard.dashboard_viewer import SerenaDashboardViewer, open_url_in_browser
 from serena.language_backend import BuiltinLanguageBackend, LanguageBackend
 from serena.ls_manager import LanguageServerManager
 from serena.memories.memory_manager import MemoryManager
