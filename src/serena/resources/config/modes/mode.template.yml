@@ -11,11 +11,12 @@ prompt: |
   Leave it undefined if no prompt is needed, i.e.
      prompt: null
 
-# tools to be excluded in this context.
+# list of tool names (and tool markers) to exclude.
 # Find the list of tools here: https://oraios.github.io/serena/01-about/035_tools.html
 excluded_tools: []
 
-# included tools that would otherwise be excluded (particularly optional tools that are disabled by default).
+# list of tools (and tool markers) to include that would otherwise be disabled (particularly optional tools
+# that are disabled by default).
 # Find the list of tools here: https://oraios.github.io/serena/01-about/035_tools.html
 included_optional_tools: []
 

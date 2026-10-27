@@ -157,10 +157,10 @@ ignored_memory_patterns: []
 # timeout, in seconds, after which tool executions are terminated
 tool_timeout: 240
 
-# list of tools to be globally excluded
+# list of tools (and tool markers) to be globally excluded
 excluded_tools: []
 
-# list of optional tools (which are disabled by default) to be included
+# list of optional tools (which are disabled by default) and tool markers to be included
 included_optional_tools: []
 
 # fixed set of tools to use as the base tool set (if non-empty), replacing Serena's default set of tools.

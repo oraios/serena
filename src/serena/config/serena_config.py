@@ -153,11 +153,11 @@ class ToolInclusionDefinition:
 
     excluded_tools: Sequence[str] = ()
     """
-    the names of tools to exclude from use [incremental mode]
+    the names of tools (or markers) to exclude from use [incremental mode]
     """
     included_optional_tools: Sequence[str] = ()
     """
-    the names of optional tools to include [incremental mode]
+    the names of (optional/disabled) tools (or markers) to include [incremental mode]
     """
     fixed_tools: Sequence[str] = ()
     """
