@@ -66,11 +66,11 @@ class ToolInclusionDefinition:
 
     excluded_tools: Sequence[str] = ()
     """
-    the names of tools to exclude from use [incremental mode]
+    the names of tools (or markers) to exclude from use [incremental mode]
     """
     included_optional_tools: Sequence[str] = ()
     """
-    the names of optional tools to include [incremental mode]
+    the names of (optional/disabled) tools (or markers) to include [incremental mode]
     """
     fixed_tools: Sequence[str] = ()
     """
@@ -99,7 +99,10 @@ class ApiInclusionDefinition:
     Defines which APIs to include/exclude in Serena's operation.
     A single API inclusion/exclusion can either be a full facade (facade name, which encompasses all of its methods, e.g. "lsp")
     or a method of a facade (facade name + method name, e.g. "lsp.find_symbol").
+    Exclusions can additionally define `marker:editing` to exclude functions capable of modifying the project.
     """
+
+    MARKER_EDITING = "marker:editing"
 
     included_apis: Sequence[str] = ()
     excluded_apis: Sequence[str] = ()

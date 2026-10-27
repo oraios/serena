@@ -2,7 +2,13 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
-* JetBrains
+* General:
+  - More flexible inclusion/exclusion definitions: 
+    - Allow tool exclusions/inclusions to use tool marker names (e.g. `ToolMarkerCanEdit`)
+    - Allow API exclusions to include `marker:editing` to exclude all editing functionality
+  - Fix: `planning` mode now correctly excludes all editing tools/functions (#2210)
+
+* JetBrains:
   - Fix: When applying a non-symbolic edit, do not raise a post-edit exception during IDE file refresh
     if the IDE's plugin server is not reachable.
 
