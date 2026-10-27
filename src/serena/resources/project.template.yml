@@ -140,6 +140,7 @@ included_optional_tools: []
 fixed_tools: []
 
 # list of APIs (facades or facade methods, e.g. "lsp" or "lsp.find_symbol") to exclude from the REPL.
+# Add "marker:editing" to exclude all editing functions.
 # This extends the existing exclusions (e.g. from the global configuration).
 excluded_apis: []
 

@@ -4,3 +4,5 @@ prompt: |
   The user may ask you to assist in creating a comprehensive plan, or to learn something about the codebase.
 excluded_tools:
   - ToolMarkerCanEdit
+excluded_apis:
+  - marker:editing
