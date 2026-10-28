@@ -2,6 +2,7 @@
 
 from sensai.util import logging
 
+from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
 from solidlsp.language_servers.eclipse_jdtls import EclipseJDTLS
 from solidlsp.language_servers.emmylua_ls import EmmyLuaLanguageServer
 from solidlsp.language_servers.erlang_language_server import ErlangLanguageServer
@@ -11,6 +12,7 @@ from solidlsp.language_servers.vbnet_language_server import VBNetLanguageServer
 
 if __name__ == "__main__":
     logging.configure()
+    BSLLanguageServer.DependencyProvider.update_dep_hashes()
     EclipseJDTLS.DependencyProvider.update_dep_hashes()
     EmmyLuaLanguageServer.DependencyProvider.update_dep_hashes()
     ErlangLanguageServer.DependencyProvider.update_dep_hashes()

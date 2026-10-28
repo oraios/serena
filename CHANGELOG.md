@@ -34,6 +34,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - C/C++ (clangd) logs errors only (`--log=error`) instead of a line for every request and parse, unless
     `ls_extra_args` sets `--log` or Serena logs at debug level
   - Fix: every line a language server wrote to stderr was followed by an empty line in Serena's log
+  - BSL: upgrade to bsl-language-server 1.0.7; wait for the server's initial indexing instead
+    of a fixed delay before the first cross-file request; add `jvm_options` setting (e.g. `-Xmx`).
 
 # v2.1.0 (2026-10-19)
 
