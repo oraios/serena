@@ -11,6 +11,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     silently. Since the replacement is per language rather than per key, a project block that only set
     `ls_path`, for example, dropped every global key such as `ls_extra_args`, leaving no trace. The
     replacement behaviour is unchanged, but the global keys hidden by a project block are now logged (#2188).
+  - Fix: a language server request that timed out stayed registered in the pending-request table,
+    since entries were only removed when a response arrived; a server that is running but not
+    answering therefore leaked one entry per timed-out request for the lifetime of the server, and
+    a later cancellation counted those abandoned requests as live (#2003)
 
 * JetBrains:
   - Fix: When applying a non-symbolic edit, do not raise a post-edit exception during IDE file refresh
