@@ -1436,13 +1436,15 @@ class TestSerenaAgent:
 
 
 class TestPromptProvision:
+    SESSION_ID_PARAM_NAME = "session"
+
     @classmethod
     def _call_tool(cls, agent: SerenaAgent, tool_class: type[Tool], session_id: str = "global", **kwargs) -> str:
         old_method = SessionRegistry._next_session_id
         if tool_class == InitialInstructionsTool:
             SessionRegistry._next_session_id = lambda x: session_id  # type: ignore
         else:
-            kwargs["session_id"] = session_id
+            kwargs[cls.SESSION_ID_PARAM_NAME] = session_id
         try:
             result = agent.get_tool(tool_class).apply_ex(catch_exceptions=False, **kwargs)
         finally:

@@ -410,7 +410,7 @@ class TopLevelCommands(AutoRegisteringGroup):
         trace_lsp_communication: bool | None,
         tool_timeout: float | None,
     ) -> None:
-        from serena.mcp import SerenaMCPFactory
+        from serena.mcp import SerenaMCPFactory, uvicorn_ignore_logging_config_context
 
         # initialize logging, using INFO level initially (will later be adjusted by SerenaAgent according to the config)
         #   * memory log handler (for use by GUI/Dashboard)
@@ -473,11 +473,11 @@ class TopLevelCommands(AutoRegisteringGroup):
                 project_file,
             )
         log.info("Starting MCP server …")
-        kwargs = {}
-        if transport != "stdio":
-            kwargs["host"] = host
-            kwargs["port"] = port
-        server.run(transport=transport, **kwargs)
+        if transport == "stdio":
+            server.run(transport="stdio")
+        else:
+            with uvicorn_ignore_logging_config_context():
+                server.run(transport=transport, host=host, port=port)
 
     @staticmethod
     @click.command(
@@ -582,7 +582,7 @@ class TopLevelCommands(AutoRegisteringGroup):
     @click.option("--width", type=int, default=1400, show_default=True, help="Window width.")
     @click.option("--height", type=int, default=900, show_default=True, help="Window height.")
     def dashboard_viewer(url: str, width: int, height: int) -> None:
-        from serena.dashboard import SerenaDashboardViewer
+        from serena.dashboard.dashboard_viewer import SerenaDashboardViewer
 
         viewer = SerenaDashboardViewer(url, width=width, height=height)
         viewer.run()

@@ -22,7 +22,7 @@ import yaml
 from filelock import FileLock
 from ruamel.yaml.comments import CommentedMap
 from sensai.util import logging
-from sensai.util.logging import LogTime, datetime_tag
+from sensai.util.logging import LogTime
 from sensai.util.string import ToStringMixin
 
 from serena.constants import (
@@ -30,7 +30,6 @@ from serena.constants import (
     PROJECT_LOCAL_TEMPLATE_FILE,
     PROJECT_TEMPLATE_FILE,
     REPO_ROOT,
-    RESOURCES_DIR,
     SERENA_CONFIG_TEMPLATE_FILE,
     SERENA_FILE_ENCODING,
     SERENA_MANAGED_DIR_NAME,
@@ -42,9 +41,9 @@ from solidlsp.ls_config import LanguageServerIdLike, LanguageServerRegistry
 
 from ..analytics import RegisteredTokenCountEstimator
 from ..language_backend import BuiltinLanguageBackend, LanguageBackend, LanguageBackendRegistry
-from ..util.class_decorators import singleton
 from ..util.cli_util import ask_yes_no
 from ..util.dataclass import get_dataclass_default
+from .serena_paths import SerenaPaths
 
 if TYPE_CHECKING:
     from ..project import Project
@@ -54,92 +53,6 @@ T = TypeVar("T")
 DEFAULT_TOOL_TIMEOUT: float = 240
 DictType = dict | CommentedMap
 TDict = TypeVar("TDict", bound=DictType)
-
-
-@singleton
-class SerenaPaths:
-    """
-    Provides paths to various Serena-related directories and files.
-    """
-
-    def __init__(self) -> None:
-        home_dir = os.getenv("SERENA_HOME")
-        if home_dir is None or home_dir.strip() == "":
-            home_dir = str(Path.home() / SERENA_MANAGED_DIR_NAME)
-        else:
-            home_dir = home_dir.strip()
-        self.resources_dir: str = RESOURCES_DIR
-        """
-        the resources directory (within the `serena` package) 
-        """
-        self.serena_user_home_dir: str = home_dir
-        """
-        the path to the Serena home directory, where the user's configuration/data is stored.
-        This is ~/.serena by default, but it can be overridden via the SERENA_HOME environment variable.
-        """
-        self.user_prompt_templates_dir: str = os.path.join(self.serena_user_home_dir, "prompt_templates")
-        """
-        directory containing prompt templates defined by the user.
-        Prompts defined by the user take precedence over Serena's built-in prompt templates.
-        """
-        self.user_contexts_dir: str = os.path.join(self.serena_user_home_dir, "contexts")
-        """
-        directory containing contexts defined by the user. 
-        If a name of a context matches a name of a context in SERENAS_OWN_CONTEXT_YAMLS_DIR, 
-        the user context will override the default context definition.
-        """
-        self.user_modes_dir: str = os.path.join(self.serena_user_home_dir, "modes")
-        """
-        directory containing modes defined by the user.
-        If a name of a mode matches a name of a mode in SERENAS_OWN_MODES_YAML_DIR,
-        the user mode will override the default mode definition.
-        """
-        self.news_legacy_last_read_id_file: str = os.path.join(self.serena_user_home_dir, "last_read_news_snippet_id.txt")
-        """
-        file containing the ID of the last read news snippet
-        """
-        self.news_read_items_file: str = os.path.join(self.serena_user_home_dir, "news_read.pkl")
-        """
-        file containing the ID of the last read news snippet
-        """
-        self.news_etag_file: str = os.path.join(self.serena_user_home_dir, "news_etag.txt")
-        """
-        file containing the ETag of the last fetched remote news JSON
-        """
-        self.news_file: str = os.path.join(self.serena_user_home_dir, "news.json")
-        """
-        local cache of the remote news JSON file
-        """
-        self.news_dir: str = os.path.join(REPO_ROOT, "news")
-        """
-        repository news directory containing the source HTML snippets and generated news.json
-        """
-        global_memories_path = Path(os.path.join(self.serena_user_home_dir, "memories", "global"))
-        global_memories_path.mkdir(parents=True, exist_ok=True)
-        self.global_memories_path = global_memories_path
-        """
-        directory where global memories are stored, i.e. memories that are available across all projects
-        """
-        self.last_returned_log_file_path: str | None = None
-        """
-        the path to the last log file returned by `get_next_log_file_path`. If this is not None, the logs
-        are currently being written to this file
-        """
-
-    def get_next_log_file_path(self, prefix: str) -> str:
-        """
-        :param prefix: the filename prefix indicating the type of the log file
-        :return: the full path to the log file to use
-        """
-        log_dir = os.path.join(self.serena_user_home_dir, "logs", datetime.now().strftime("%Y-%m-%d"))
-        os.makedirs(log_dir, exist_ok=True)
-        self.last_returned_log_file_path = os.path.join(log_dir, prefix + "_" + datetime_tag() + f"_{os.getpid()}" + ".txt")
-        return self.last_returned_log_file_path
-
-    def get_resource_path(self, *path_elems: str) -> Path:
-        return Path(os.path.join(self.resources_dir, *path_elems))
-
-    # TODO: Paths from constants.py should be moved here
 
 
 @dataclass
@@ -153,11 +66,11 @@ class ToolInclusionDefinition:
 
     excluded_tools: Sequence[str] = ()
     """
-    the names of tools to exclude from use [incremental mode]
+    the names of tools (or markers) to exclude from use [incremental mode]
     """
     included_optional_tools: Sequence[str] = ()
     """
-    the names of optional tools to include [incremental mode]
+    the names of (optional/disabled) tools (or markers) to include [incremental mode]
     """
     fixed_tools: Sequence[str] = ()
     """
@@ -186,7 +99,10 @@ class ApiInclusionDefinition:
     Defines which APIs to include/exclude in Serena's operation.
     A single API inclusion/exclusion can either be a full facade (facade name, which encompasses all of its methods, e.g. "lsp")
     or a method of a facade (facade name + method name, e.g. "lsp.find_symbol").
+    Exclusions can additionally define `marker:editing` to exclude functions capable of modifying the project.
     """
+
+    MARKER_EDITING = "marker:editing"
 
     included_apis: Sequence[str] = ()
     excluded_apis: Sequence[str] = ()
@@ -897,7 +813,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
     log_level: int = logging.INFO
     trace_lsp_communication: bool = False
     web_dashboard: bool = True
-    web_dashboard_open_on_launch: bool = True
+    web_dashboard_open_on_launch: bool | None = None
     web_dashboard_interface: str | None = None
     web_dashboard_listen_address: str = "127.0.0.1"
     web_dashboard_trusted_hosts: list[str] = field(default_factory=lambda: ["127.0.0.1", "localhost"])
@@ -1029,17 +945,8 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
 
         :param config_file_path: the path where the configuration file should be generated
         """
-        from serena.agent import DashboardManager
-
         log.info(f"Auto-generating Serena configuration file in {config_file_path}")
         loaded_commented_yaml = load_yaml(SERENA_CONFIG_TEMPLATE_FILE)
-
-        # update default settings depending on platform:
-        # set dashboard opening behaviour depending on whether a UI for accessing the dashboard is available
-        web_dashboard_open_key = "web_dashboard_open_on_launch"
-        if web_dashboard_open_key in loaded_commented_yaml:
-            loaded_commented_yaml[web_dashboard_open_key] = not DashboardManager.Mode.from_platform().provides_ui_for_opening_dashboard()
-
         save_yaml(config_file_path, loaded_commented_yaml)
 
     @classmethod
@@ -1379,6 +1286,26 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
         else:
             raise ValueError(f"Project '{project_name}' not found in Serena configuration; valid project names: {self.project_names}")
         self._persist_projects()
+
+    def is_dashboard_opened_on_launch(self) -> bool:
+        """
+        Returns whether the web dashboard is to be opened on launch
+        """
+        if self.web_dashboard_open_on_launch is None:  # not yet configured, so show on first launch
+            return True
+        return self.web_dashboard_open_on_launch
+
+    def save_web_dashboard_open_on_launch(self, value: bool) -> None:
+        """Save the dashboard launch preference without persisting transient configuration overrides."""
+        # persist against the latest disk configuration under the shared file lock
+        if self.config_file_path is not None:
+            with FileLock(self.config_file_path + ".lock"):
+                persisted = SerenaConfig.from_config_file()
+                persisted.web_dashboard_open_on_launch = value
+                persisted._save()
+
+        # update the running configuration only after persistence succeeds
+        self.web_dashboard_open_on_launch = value
 
     def _persist_projects(self) -> None:
         """Persist this instance's project-list changes without undoing concurrent edits.

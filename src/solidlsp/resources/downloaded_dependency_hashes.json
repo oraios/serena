@@ -38,5 +38,11 @@
   "https://github.com/EmmyLuaLs/emmylua-analyzer-rust/releases/download/0.25.1/emmylua_ls-darwin-x64.tar.gz": "abc9cbe2e8d28624e0d441fa55055b1196f73251b034356d717b0e58b562f182",
   "https://github.com/EmmyLuaLs/emmylua-analyzer-rust/releases/download/0.25.1/emmylua_ls-darwin-arm64.tar.gz": "335023043cbc9ad683a13b24eb79f709a370215daf53673276b9a9663df96504",
   "https://github.com/EmmyLuaLs/emmylua-analyzer-rust/releases/download/0.25.1/emmylua_ls-win32-x64.zip": "82efa133287f67be09e1a624d8efecd8063832ec2b9bf9279c37afc5f42118bd",
-  "https://github.com/EmmyLuaLs/emmylua-analyzer-rust/releases/download/0.25.1/emmylua_ls-win32-arm64.zip": "f6f335f01fccca6f000a6240fb78c6fbab069230b1bb4347361ef3f64550390a"
+  "https://github.com/EmmyLuaLs/emmylua-analyzer-rust/releases/download/0.25.1/emmylua_ls-win32-arm64.zip": "f6f335f01fccca6f000a6240fb78c6fbab069230b1bb4347361ef3f64550390a",
+  "https://github.com/LaunchCG/roslyn-vbnet-languageserver/releases/download/v1.1.0/roslyn-vbnet-win-x64.zip": "9aabaa5a62e616506fb5e3029315fc25e9baf5d5a551e68864d2cfebd811d4ca",
+  "https://github.com/LaunchCG/roslyn-vbnet-languageserver/releases/download/v1.1.0/roslyn-vbnet-win-arm64.zip": "1ba8b1f43cc0a0c19e474321f8541dbba28043ebc99d58df863f1d0486026b2a",
+  "https://github.com/LaunchCG/roslyn-vbnet-languageserver/releases/download/v1.1.0/roslyn-vbnet-osx-x64.tar.gz": "3dcd476a406142dc2344f71c4c3a1c205803db4d939d74a74a682d173ef0baa7",
+  "https://github.com/LaunchCG/roslyn-vbnet-languageserver/releases/download/v1.1.0/roslyn-vbnet-osx-arm64.tar.gz": "d7db801deb2f1c11256e714d3fd82266a0226ad55e1223c9d100670df09cdaec",
+  "https://github.com/LaunchCG/roslyn-vbnet-languageserver/releases/download/v1.1.0/roslyn-vbnet-linux-x64.tar.gz": "f09f10f5ca79a2860c18bebff613a15677d8b50b24e542df06d88d577ac2f451",
+  "https://github.com/LaunchCG/roslyn-vbnet-languageserver/releases/download/v1.1.0/roslyn-vbnet-linux-arm64.tar.gz": "76bd9cf1e7b8c0a6d07b662304f20ee1d173450a861ac66ae7c533568fa2ebdd"
 }

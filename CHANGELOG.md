@@ -2,9 +2,65 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* General:
+  - More flexible inclusion/exclusion definitions: 
+    - Allow tool exclusions/inclusions to use tool marker names (e.g. `ToolMarkerCanEdit`)
+    - Allow API exclusions to include `marker:editing` to exclude all editing functionality
+  - Fix: `planning` mode now correctly excludes all editing tools/functions (#2210)
+
+* JetBrains:
+  - Fix: When applying a non-symbolic edit, do not raise a post-edit exception during IDE file refresh
+    if the IDE's plugin server is not reachable.
+
+* Language Servers:
+  - F#: startup now waits for FsAutoComplete to report its workspace load as finished
+    (`fsharp/notifyWorkspace`, kind `workspaceLoad`) instead of returning as soon as
+    `initialized` has been sent, so requests are no longer answered from a project graph
+    that is still loading (#1209)
+  - Extend allowed types in persisted symbol caches, fixing cache loading issues with `clangd`
+    when overriding values like `ls_path`, `clangd_version` or `compile_commands_dir`
+  - Add GraphQL language server support (experimental) via `graphql-language-service-cli` (`graphql-lsp`) for
+    `.graphql`/`.gql` files. Document symbols, hover and cross-file go-to-definition require a graphql-config file
+    (`.graphqlrc.yml` / `graphql.config.*`) at the repository root; without one, Serena logs an actionable message
+    instead of waiting out the startup timeout. Find-references is unsupported (not implemented by the upstream server)
+  - Fix: tsserver reports the range of a single top-level `const`/`let`/`var` declaration starting
+    at the identifier and ending before the statement's semicolon, excluding a leading `export`,
+    the keyword, and the trailing `;` (unlike `function`/`class` declarations, whose range already
+    includes their keyword). `replace_symbol_body` then dropped the prefix and the semicolon from
+    the body and replacement range, so re-supplying them in a full-statement edit either duplicated
+    the prefix and produced invalid syntax (`export const twice = ...` became `export const export
+    const twice = ...`, returned as `OK`) or, once only the prefix was fixed, left a harmless but
+    incorrect double semicolon behind (`... n * 3;;`). Mirrors the range-start fix already applied
+    to Go's `type`/`var`/`const` declarations, and the range-end fix already applied to Nix's
+    attribute declarations (#1956)
+  - Fix: C/C++ (clangd) reference searches returned at most 1000 references; clangd is now started with
+    `--limit-references=0` unless `ls_extra_args` already sets a limit
+  - C/C++ (clangd) logs errors only (`--log=error`) instead of a line for every request and parse, unless
+    `ls_extra_args` sets `--log` or Serena logs at debug level
+  - Fix: every line a language server wrote to stderr was followed by an empty line in Serena's log
+
+# v2.1.0 (2026-10-19)
+
+* General:
+  - Fix: Re-establish compatibility with the Claude Desktop client in chat mode (code mode was not affected).
+    The client filters out the parameter `session_id`, which was introduced for several tools with v2.0.0.
+    The parameter was renamed to `session`.
+  - Fix: the MCP registry manifest (`server.json`) declared Serena's own CLI arguments as runtime
+    arguments, so clients installing Serena from the MCP registry generated a launch command with a
+    stray package spec, and project auto-activation failed
+  - Fix: logs stopped updating when using SSE or streamable HTTP because Uvicorn's logging
+    configuration closed the Serena's log handlers. This is due to a bug in the MCP SDK,
+    in which the logging configuration override was effectively hard-coded.
+    We now patch Uvicorn's log config constructor to prevent this.
+    This affected both dashboard log retrieval and file logs written by Serena.
+   
 * Dashboard:
-  - Change the default value of `web_dashboard_open_on_launch` to false on systems that support
-    tray-based access to the dashboard.
+  - Add a welcome pane for users with an unset `web_dashboard_open_on_launch` preference,
+    allowing them to choose whether the dashboard opens whenever Serena starts. The dashboard
+    continues to open automatically until a preference is configured.
+  - Show an `[untrusted]` indicator beside the active project name for untrusted projects,
+    with a formatted tooltip explaining the limitations and a link to the trusted-projects
+    documentation. Add reusable tooltip support for hover and keyboard interaction.
 
 * Security:
   - Fix: typescript-language-server loaded `node_modules/typescript/lib/tsserver.js` from the project
@@ -14,13 +70,23 @@ Status of the `main` branch. Changes prior to the next official version change w
     trust-gated feature (#2129)
 
 * Language Servers:
-  - F#: startup now waits for FsAutoComplete to report its workspace load as finished
-    (`fsharp/notifyWorkspace`, kind `workspaceLoad`) instead of returning as soon as
-    `initialized` has been sent, so requests are no longer answered from a project graph
-    that is still loading (#1209)
+  - Add VB.NET language server support (via the Roslyn-based `Microsoft.CodeAnalysis.LanguageServer`,
+    also shared with the C# language server)
   - Fix: the Intelephense settings `maxMemory` and `maxFileSize` had no effect, because they were passed
     as initialization options, which Intelephense does not read; `maxMemory` now limits the heap of the
     server process, and `maxFileSize` is passed as `intelephense.files.maxSize`
+  - Fix: Explicit symbol and diagnostics requests now validate their input paths against the project's
+    trust policy. Symlinks to files outside the project root are rejected in untrusted projects;
+    links within the project and outside-root links in trusted projects remain supported (#2163).
+  - Fix: Project-wide symbol discovery now skips file and directory symlinks in untrusted projects.
+    In trusted projects, ignore rules consistently apply to unresolved alias paths, and symlinks to
+    targets outside the project root no longer cause discovery to fail (#2163).
+  - Scala: add opt-in setting `terminate_bloop_on_stop` to terminate the Bloop build-server daemons
+    that Metals leaves running after shutdown (#1816)
+  - Performance: Speed up project-wide symbol discovery by reusing directory-entry metadata for ignore
+    checks and avoiding repeated ancestor-directory checks for files.
+  - Add `typescript_tsgo`, which uses the native language server of TypeScript 7 (`tsc --lsp`) and installs
+    the `typescript` package automatically (#1402)
 
 # v2.0.0 (2026-10-13)
 

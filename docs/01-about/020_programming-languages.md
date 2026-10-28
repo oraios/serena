@@ -84,6 +84,14 @@ Some languages require additional installations or setup steps, as noted.
   (requires the [Gleam compiler](https://gleam.run) on PATH; the language server is bundled with the compiler and started via `gleam lsp`)
 * **Go**  
   (requires installation of `gopls`)
+* **GraphQL**  
+  (experimental; requires Node.js and npm; automatically installs `graphql-language-service-cli` (`graphql-lsp`) and its
+  `graphql` peer dependency; handles `.graphql` and `.gql` files; must be explicitly specified in the `languages` entry
+  in the `project.yml`. Cross-file navigation — go-to-definition from an operation field into the schema type that
+  declares it — requires a [graphql-config](https://the-guild.dev/graphql/config) file
+  (`.graphqlrc.yml` / `graphql.config.{yml,yaml,json}`) at the repository root pointing at the schema; without it only
+  single-file document symbols are available. Note: the upstream server does not implement `textDocument/references`,
+  so find-references is unsupported.)
 * **Groovy**  
   (requires a local groovy-language-server.jar, configured via `ls_jar_path` in `ls_specific_settings`;
   see the [Groovy Setup Guide](../03-special-guides/groovy_setup_guide_for_serena) for details)
@@ -152,7 +160,7 @@ Some languages require additional installations or setup steps, as noted.
   alternatives: [BasedPyright](https://github.com/DetachHead/basedpyright) (language `python_basedpyright`),
   [ty](https://github.com/astral-sh/ty) (language `python_ty`),
   [pyrefly](https://github.com/facebook/pyrefly) (language `python_pyrefly`),
-  [Jedi](https://github.com/palotas/jedi-language-server) (language `python_jedi`);
+  [Jedi](https://github.com/pappasam/jedi-language-server) (language `python_jedi`);
   Pyright, BasedPyright, ty, and pyrefly require `uv`/`uvx` in PATH)
 * **QML**
   (requires Qt 6, provides `qmlls` or `qmlls6` on PATH; see the [Qt qmlls documentation](https://doc.qt.io/qt-6/qtqml-tool-qmlls.html))
@@ -181,13 +189,19 @@ Some languages require additional installations or setup steps, as noted.
   (uses `terraform-ls` 0.36.5, which Serena downloads automatically; requires Terraform on PATH)
 * **TOML**  
   (experimental; uses Taplo 0.10.0, taken from PATH if present, otherwise downloaded automatically)
-* **TypeScript**
+* **TypeScript**  
+  (by default, uses typescript-language-server (language `typescript`); the native language server of
+  TypeScript 7 (language `typescript_tsgo`) is installed automatically via npm, requiring Node.js and npm
+  only for the installation)
 * **Deno**  
   (experimental; requires the `deno` CLI on PATH — it bundles the language server used here;
   serves Deno TypeScript/JavaScript and understands `npm:` / `jsr:` / `https:` imports and the `Deno.*`
   globals, which the plain TypeScript language server does not; overlaps `typescript` on file extensions,
   so it is not auto-detected and must be set as the language explicitly — do not also enable `typescript`
   for the same files)
+* **VB.NET**  
+  (uses the community Roslyn-based [roslyn-vbnet-languageserver](https://github.com/LaunchCG/roslyn-vbnet-languageserver) (language `vbnet`), requiring [.NET v10+](https://dotnet.microsoft.com/en-us/download/dotnet) and, on Windows, `pwsh` ([PowerShell 7+](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows?view=powershell-7.5));
+  also handles `.cs` files so mixed VB.NET/C# solutions share one language server instance; for pure C# projects, `csharp` takes precedence)
 * **Vue**
   (3.x with TypeScript; requires Node.js v18+ and npm; supports .vue Single File Components with monorepo detection)
 * **Wolfram Language**

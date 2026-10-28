@@ -49,6 +49,10 @@ General documentation principles:
 Read `mem:repl` before working on `serena.repl` (the code-execution paradigm and its facade APIs) or on tools
 delegating to it: structure, exposure/naming principles, configuration of the API scope and the availability policy.
 
+# Project trust
+
+Read `mem:trusted_projects` when changing symlink handling, project-path validation, or features restricted by project trust.
+
 # Commits & pull requests
 
 * Commit messages:
