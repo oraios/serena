@@ -101,3 +101,75 @@ def test_from_languages_stops_process_of_server_that_raises_after_spawning(_clea
     assert set(pids) == {ok_id, failing_id}
     assert not _pid_alive(pids[ok_id]), "the successfully-started server's process should be stopped"
     assert not _pid_alive(pids[failing_id]), "the process spawned by the server that raised post-spawn must not leak"
+
+
+class _CacheSavingLanguageServer:
+    def __init__(self, ls_id: LanguageServerId):
+        self.ls_id = ls_id
+        self.cache_saves = 0
+        self._running = False
+
+    def start(self) -> "_CacheSavingLanguageServer":
+        self._running = True
+        return self
+
+    def is_running(self) -> bool:
+        return self._running
+
+    def stop(self, shutdown_timeout: float = 2.0) -> None:
+        self._running = False
+
+    def save_cache(self) -> None:
+        self.cache_saves += 1
+
+
+class _CacheSavingLanguageServerFactory:
+    def __init__(self) -> None:
+        self.created: list[_CacheSavingLanguageServer] = []
+
+    def create_language_server(self, ls_id: LanguageServerId) -> _CacheSavingLanguageServer:
+        ls = _CacheSavingLanguageServer(ls_id)
+        self.created.append(ls)
+        return ls
+
+
+class _ProjectWithoutFiles:
+    def gather_source_files(self) -> list:
+        return []
+
+
+def _manager_with_one_server() -> tuple[LanguageServerManager, _CacheSavingLanguageServerFactory]:
+    factory = _CacheSavingLanguageServerFactory()
+    manager = LanguageServerManager.from_languages([LanguageServerId("python")], factory, project=_ProjectWithoutFiles())
+    return manager, factory
+
+
+def test_cache_is_saved_at_most_once_per_interval_after_tool_calls() -> None:
+    manager, factory = _manager_with_one_server()
+
+    for _ in range(3):
+        manager.save_all_caches_if_due()
+
+    assert factory.created[0].cache_saves == 1
+
+
+def test_cache_is_saved_again_once_the_interval_has_passed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(LanguageServerManager, "_CACHE_SAVE_INTERVAL", 0.05)
+    manager, factory = _manager_with_one_server()
+    manager.save_all_caches_if_due()
+
+    time.sleep(0.1)
+    manager.save_all_caches_if_due()
+
+    assert factory.created[0].cache_saves == 2
+
+
+def test_restart_saves_the_cache_of_the_replaced_server() -> None:
+    manager, factory = _manager_with_one_server()
+    manager.save_all_caches_if_due()
+    replaced_server = factory.created[0]
+    replaced_server.stop()
+
+    manager.restart_language_server(LanguageServerId("python"))
+
+    assert replaced_server.cache_saves == 2

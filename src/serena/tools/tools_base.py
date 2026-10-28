@@ -379,7 +379,7 @@ class Tool(Component):
             try:
                 ls_manager = self.agent.get_language_server_manager()
                 if ls_manager is not None:
-                    ls_manager.save_all_caches()
+                    ls_manager.save_all_caches_if_due()
             except Exception as e:
                 log.error(f"Error saving language server cache: {e}")
 
