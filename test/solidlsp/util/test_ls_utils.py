@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from solidlsp.ls_exceptions import SolidLSPException
-from solidlsp.ls_utils import FileUtils, PlatformId, PlatformUtils
+from solidlsp.ls_utils import FileUtils, PlatformId, PlatformUtils, TextUtils
 
 
 class _FakeResponse:
@@ -144,3 +144,42 @@ def test_get_platform_id_unknown_platform_still_raises() -> None:
     ):
         with pytest.raises(SolidLSPException):
             PlatformUtils.get_platform_id()
+
+
+# U+10400 (the LSP spec's own example character for this, see Position's docstring) is one
+# Python code point but, like every character outside the Basic Multilingual Plane, 2 UTF-16
+# code units (a surrogate pair). LSP `character` offsets are defined in UTF-16 code units;
+# TextUtils otherwise indexes by code point.
+_ASTRAL_LINE = "\U00010400AB"
+
+
+@pytest.mark.parametrize(
+    ("utf16_offset", "expected_codepoint_offset"),
+    [
+        (0, 0),  # before the astral character: no conversion needed
+        (2, 1),  # right after it (it occupies units 0-1): 1 code point consumed
+        (3, 2),  # after it and "A"
+        (4, 3),  # end of line
+    ],
+)
+def test_utf16_offset_to_codepoint_offset_astral_character(utf16_offset: int, expected_codepoint_offset: int) -> None:
+    assert TextUtils.utf16_offset_to_codepoint_offset(_ASTRAL_LINE, utf16_offset) == expected_codepoint_offset
+
+
+@pytest.mark.parametrize("codepoint_offset", [0, 1, 2, 3])
+def test_utf16_codepoint_round_trip_astral_character(codepoint_offset: int) -> None:
+    """Codepoint -> utf16 -> codepoint must be the identity for any offset that lands on a real character boundary."""
+    utf16_offset = TextUtils.codepoint_offset_to_utf16_offset(_ASTRAL_LINE, codepoint_offset)
+    assert TextUtils.utf16_offset_to_codepoint_offset(_ASTRAL_LINE, utf16_offset) == codepoint_offset
+
+
+def test_utf16_offset_to_codepoint_offset_no_astral_characters_is_identity() -> None:
+    """Without any character outside the BMP, UTF-16 and code-point offsets coincide."""
+    line = "plain ascii line"
+    for offset in range(len(line) + 1):
+        assert TextUtils.utf16_offset_to_codepoint_offset(line, offset) == offset
+        assert TextUtils.codepoint_offset_to_utf16_offset(line, offset) == offset
+
+
+def test_utf16_offset_to_codepoint_offset_empty_line() -> None:
+    assert TextUtils.utf16_offset_to_codepoint_offset("", 0) == 0
