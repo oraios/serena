@@ -3,10 +3,42 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - More flexible inclusion/exclusion definitions: 
+    - Allow tool exclusions/inclusions to use tool marker names (e.g. `ToolMarkerCanEdit`)
+    - Allow API exclusions to include `marker:editing` to exclude all editing functionality
+  - Fix: `planning` mode now correctly excludes all editing tools/functions (#2210)
   - Fix: project-level `ls_specific_settings` replaced the global settings for the same language server
     silently. Since the replacement is per language rather than per key, a project block that only set
     `ls_path`, for example, dropped every global key such as `ls_extra_args`, leaving no trace. The
     replacement behaviour is unchanged, but the global keys hidden by a project block are now logged (#2188).
+
+* JetBrains:
+  - Fix: When applying a non-symbolic edit, do not raise a post-edit exception during IDE file refresh
+    if the IDE's plugin server is not reachable.
+
+* Language Servers:
+  - Fix: detect Elixir installed via a Windows batch launcher
+  - Extend allowed types in persisted symbol caches, fixing cache loading issues with `clangd`
+    when overriding values like `ls_path`, `clangd_version` or `compile_commands_dir`
+  - Add GraphQL language server support (experimental) via `graphql-language-service-cli` (`graphql-lsp`) for
+    `.graphql`/`.gql` files. Document symbols, hover and cross-file go-to-definition require a graphql-config file
+    (`.graphqlrc.yml` / `graphql.config.*`) at the repository root; without one, Serena logs an actionable message
+    instead of waiting out the startup timeout. Find-references is unsupported (not implemented by the upstream server)
+  - Fix: tsserver reports the range of a single top-level `const`/`let`/`var` declaration starting
+    at the identifier and ending before the statement's semicolon, excluding a leading `export`,
+    the keyword, and the trailing `;` (unlike `function`/`class` declarations, whose range already
+    includes their keyword). `replace_symbol_body` then dropped the prefix and the semicolon from
+    the body and replacement range, so re-supplying them in a full-statement edit either duplicated
+    the prefix and produced invalid syntax (`export const twice = ...` became `export const export
+    const twice = ...`, returned as `OK`) or, once only the prefix was fixed, left a harmless but
+    incorrect double semicolon behind (`... n * 3;;`). Mirrors the range-start fix already applied
+    to Go's `type`/`var`/`const` declarations, and the range-end fix already applied to Nix's
+    attribute declarations (#1956)
+  - Fix: C/C++ (clangd) reference searches returned at most 1000 references; clangd is now started with
+    `--limit-references=0` unless `ls_extra_args` already sets a limit
+  - C/C++ (clangd) logs errors only (`--log=error`) instead of a line for every request and parse, unless
+    `ls_extra_args` sets `--log` or Serena logs at debug level
+  - Fix: every line a language server wrote to stderr was followed by an empty line in Serena's log
 
 # v2.1.0 (2026-10-19)
 

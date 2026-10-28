@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from types import TracebackType
 from typing import Any, Generic, Self, TypeVar, cast
 
-from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient
+from serena.jetbrains.jetbrains_plugin_client import JetBrainsPluginClient, ServerNotFoundError
 from serena.symbol import JetBrainsSymbol, LanguageServerSymbol, LanguageServerSymbolRetriever, PositionInFile, Symbol
 from solidlsp import SolidLanguageServer, ls_types
 from solidlsp.ls import LSPFileBuffer
@@ -475,8 +475,11 @@ class JetBrainsCodeEditor(CodeEditor[JetBrainsSymbol]):
 
     def _save_edited_file(self, edited_file: "CodeEditor.EditedFile") -> None:
         super()._save_edited_file(edited_file)
-        with JetBrainsPluginClient.from_project(self._project) as client:
-            client.refresh_file(edited_file.relative_path)
+        try:
+            with JetBrainsPluginClient.from_project(self._project) as client:
+                client.refresh_file(edited_file.relative_path)
+        except ServerNotFoundError:
+            log.debug("JetBrains plugin server not found; file refresh skipped for %s", edited_file.relative_path)
 
     def _find_unique_symbol(self, name_path: str, relative_file_path: str) -> JetBrainsSymbol:
         with JetBrainsPluginClient.from_project(self._project) as client:
