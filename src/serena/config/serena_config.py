@@ -215,6 +215,45 @@ class SerenaConfigError(Exception):
     pass
 
 
+def expand_home_in_path_setting(value: str) -> str:
+    """
+    Expands a leading ``~`` (or ``~user``) in a path value read from a configuration file.
+
+    A configuration file is meant to be carried between machines and accounts, whose home
+    directories differ. ``~`` is the only spelling of a home-relative path that survives
+    being copied, so it must be expanded before the value is used as a path; otherwise it is
+    silently interpreted relative to the current working directory.
+
+    Values not starting with ``~`` are returned unchanged.
+
+    :param value: the configured value
+    :return: the value with a leading ``~`` expanded to the user's home directory
+    """
+    return os.path.expanduser(value)
+
+
+def expand_home_in_settings(value: Any) -> Any:
+    """
+    Recursively expands a leading ``~`` in all string values of a (nested) settings structure.
+
+    Used for language-server-specific settings, which contain path-valued options
+    (e.g. ``maven_user_settings``, ``gradle_user_home``) alongside non-path options.
+    Since :func:`expand_home_in_path_setting` leaves every value not starting with ``~``
+    untouched, applying it uniformly to all string values is safe and keeps a single
+    semantics for every consumer.
+
+    :param value: a string, dict, list or any other value
+    :return: a copy with all string values expanded; non-container, non-string values are returned as is
+    """
+    if isinstance(value, str):
+        return expand_home_in_path_setting(value)
+    if isinstance(value, dict):
+        return {k: expand_home_in_settings(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [expand_home_in_settings(v) for v in value]
+    return value
+
+
 DEFAULT_PROJECT_SERENA_FOLDER_LOCATION = "$projectDir/" + SERENA_MANAGED_DIR_NAME
 """
 The default template for the project Serena folder location.
@@ -1023,7 +1062,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
             raise SerenaConfigError("`projects` key not found in Serena configuration. Please update your `serena_config.yml` file.")
         instance.projects = []
         for path in loaded_commented_yaml["projects"] or []:
-            path = Path(path).resolve()
+            path = Path(expand_home_in_path_setting(str(path))).resolve()
             try:
                 path_exists = path.exists()
             except OSError as e:
@@ -1410,7 +1449,7 @@ class SerenaConfig(SharedConfig, ModeSelectionDefinitionWithBaseModes):
             return placeholders[name]
 
         result = re.sub(r"\$([A-Za-z_]\w*)", _replace, template)
-        return os.path.abspath(result)
+        return os.path.abspath(expand_home_in_path_setting(result))
 
     def get_configured_project_serena_folder(self, project_root: str | Path) -> str:
         """
