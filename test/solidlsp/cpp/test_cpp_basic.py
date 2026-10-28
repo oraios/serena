@@ -236,3 +236,33 @@ class TestCppDocumentSymbolCache:
 
             _ = ls_alt.request_document_symbols(main_cpp)
             _assert_caches_modified(ls_alt)
+
+    @pytest.mark.parametrize("older_backup_exists", [False, True])
+    def test_unreadable_cache_file_is_kept_as_backup(self, tmp_path: Path, older_backup_exists: bool) -> None:
+        repo_path = self._copy_cpp_fixture(tmp_path)
+        unreadable_content = b"not a cache"
+        main_cpp = "a.cpp"
+
+        with start_ls_context(LanguageServerId.CPP, repo_path=str(repo_path), solidlsp_dir=tmp_path) as ls:
+            _ = ls.request_document_symbols(main_cpp)
+            ls.save_cache()
+            cache_files = [
+                ls.cache_dir / SolidLanguageServer.RAW_DOCUMENT_SYMBOL_CACHE_FILENAME,
+                ls.cache_dir / SolidLanguageServer.DOCUMENT_SYMBOL_CACHE_FILENAME,
+            ]
+        backup_files = [cache_file.with_name(cache_file.name + ".bak") for cache_file in cache_files]
+        for cache_file, backup_file in zip(cache_files, backup_files, strict=True):
+            cache_file.write_bytes(unreadable_content)
+            if older_backup_exists:
+                backup_file.write_bytes(b"older backup")
+
+        with start_ls_context(LanguageServerId.CPP, repo_path=str(repo_path), solidlsp_dir=tmp_path) as ls_after_failure:
+            _ = ls_after_failure.request_document_symbols(main_cpp)
+            ls_after_failure.save_cache()
+
+        assert all(backup_file.is_file() for backup_file in backup_files)
+        assert [backup_file.read_bytes() for backup_file in backup_files] == [unreadable_content, unreadable_content]
+
+        with start_ls_context(LanguageServerId.CPP, repo_path=str(repo_path), solidlsp_dir=tmp_path) as ls_again:
+            assert main_cpp in ls_again._raw_document_symbols_cache
+            assert main_cpp in ls_again._document_symbols_cache
