@@ -313,7 +313,28 @@ class ClangdLanguageServer(SolidLanguageServer):
         def _create_launch_command(self, core_path: str) -> list[str]:
             # --background-index enables clangd to index all files in the project,
             # which is required for finding cross-file references
-            return [core_path, "--background-index"]
+            command = [core_path, "--background-index"]
+
+            # return all references instead of clangd's default of at most 1000, unless the user sets a limit
+            if not self._user_sets_option("limit-references"):
+                command.append("--limit-references=0")
+
+            # log errors only instead of a line for every request and parse, unless the user sets a log level or
+            # Serena itself logs at debug level
+            if not self._user_sets_option("log") and not log.isEnabledFor(logging.DEBUG):
+                command.append("--log=error")
+
+            return command
+
+        def _user_sets_option(self, option_name: str) -> bool:
+            """
+            :param option_name: the name of a clangd option without leading dashes, e.g. "log"
+            :return: whether the user-provided extra arguments (`ls_extra_args`) already set the given option
+            """
+            extra_args = self._custom_settings.get("ls_extra_args", [])
+            if not isinstance(extra_args, list):
+                return False
+            return any(str(arg).lstrip("-").split("=", 1)[0] == option_name for arg in extra_args)
 
     def _create_base_initialize_params(self) -> dict:
         """
