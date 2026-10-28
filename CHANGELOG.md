@@ -88,6 +88,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     checks and avoiding repeated ancestor-directory checks for files.
   - Add `typescript_tsgo`, which uses the native language server of TypeScript 7 (`tsc --lsp`) and installs
     the `typescript` package automatically (#1402)
+  - Fix: Intelephense indexed all PHP files below the project root, including directories matched by
+    the ignored paths (`ignored_paths`, `.gitignore`); such directories are now excluded from its index,
+    except for `vendor` directories, which are needed to resolve the types used in the project (#450)
 
 # v2.0.0 (2026-10-13)
 
