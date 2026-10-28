@@ -35,6 +35,12 @@ Status of the `main` branch. Changes prior to the next official version change w
   - C/C++ (clangd) logs errors only (`--log=error`) instead of a line for every request and parse, unless
     `ls_extra_args` sets `--log` or Serena logs at debug level
   - Fix: every line a language server wrote to stderr was followed by an empty line in Serena's log
+  - Fix: Python (Pyright, BasedPyright): the body of a variable or field defined by an assignment
+    statement was only its name, so `replace_symbol_body` with a full statement silently produced a
+    chained assignment ending with the old right-hand side, and `insert_after_symbol` was refused.
+    For all Python language servers, the body of such a symbol now covers the entire statement
+    (including annotations, multi-line values and the `type` keyword of type alias statements);
+    names bound by the same statement (`a = b = 1`, `a, b = f()`) share its body
 
 # v2.1.0 (2026-10-19)
 
