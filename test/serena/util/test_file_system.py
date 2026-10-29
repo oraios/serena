@@ -182,6 +182,16 @@ def test_whitespace_gitignore_directory(tmp_path: Path, directory_name: str):
     _assert_linear_equivalence(parser, tmp_path)
 
 
+def test_gitignore_with_utf8_bom(tmp_path: Path):
+    # Windows editors and PowerShell's "-Encoding utf8" write a byte order mark, which git skips
+    (tmp_path / ".gitignore").write_bytes(b"\xef\xbb\xbfsecret.txt\nbuild/\n")
+    (tmp_path / "secret.txt").touch()
+    (tmp_path / "build").mkdir()
+    parser = GitignoreParser(str(tmp_path))
+    assert parser.should_ignore("secret.txt")
+    assert parser.should_ignore("build")
+
+
 def test_discovery_prune_spec(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     for name in ("build/sub", "outside"):
         directory = tmp_path / name

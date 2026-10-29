@@ -11,6 +11,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     silently. Since the replacement is per language rather than per key, a project block that only set
     `ls_path`, for example, dropped every global key such as `ls_extra_args`, leaving no trace. The
     replacement behaviour is unchanged, but the global keys hidden by a project block are now logged (#2188).
+  - Fix: the first pattern of a `.gitignore` file saved with a UTF-8 byte order mark (as written by some
+    Windows editors and PowerShell) was not applied
 
 * JetBrains:
   - Fix: When applying a non-symbolic edit, do not raise a post-edit exception during IDE file refresh

@@ -362,7 +362,7 @@ class GitignoreParser:
         :return: GitignoreSpec object for the gitignore patterns
         """
         try:
-            with open(gitignore_file_path, encoding="utf-8") as f:
+            with open(gitignore_file_path, encoding="utf-8-sig") as f:
                 content = f.read()
         except (OSError, UnicodeDecodeError):
             # If we can't read the file, return an empty spec
