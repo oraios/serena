@@ -17,6 +17,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     if the IDE's plugin server is not reachable.
 
 * Language Servers:
+  - Fix: Vue reference searches no longer count declarations as usages, allowing `safe_delete_symbol`
+    to delete unused symbols (#2219)
   - Fix: detect Elixir installed via a Windows batch launcher
   - Extend allowed types in persisted symbol caches, fixing cache loading issues with `clangd`
     when overriding values like `ls_path`, `clangd_version` or `compile_commands_dir`

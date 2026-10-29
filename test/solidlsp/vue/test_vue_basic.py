@@ -54,8 +54,8 @@ class TestVueLanguageServer:
         sel_start = store_symbol["selectionRange"]["start"]
         refs = language_server.request_references(store_file, sel_start["line"], sel_start["character"])
 
-        # Should have multiple references: definition + usage in App.vue, CalculatorInput.vue, CalculatorDisplay.vue
-        assert len(refs) >= 4, f"useCalculatorStore should have at least 4 references (definition + 3 usages), got {len(refs)}"
+        # Should have usages in App.vue, CalculatorInput.vue, CalculatorDisplay.vue
+        assert len(refs) >= 3, f"useCalculatorStore should have at least 3 usages, got {len(refs)}"
 
         # Verify we have references from .vue files
         vue_refs = [ref for ref in refs if ".vue" in ref.get("relativePath", "")]
@@ -99,8 +99,8 @@ class TestVueDualLspArchitecture:
         sel_start = store_symbol["selectionRange"]["start"]
         refs = language_server.request_references(store_file, sel_start["line"], sel_start["character"])
 
-        # Verify we found references: definition + usage in App.vue, CalculatorInput.vue, CalculatorDisplay.vue
-        assert len(refs) >= 4, f"useCalculatorStore should have at least 4 references (definition + 3 usages), found {len(refs)} references"
+        # Verify usages in App.vue, CalculatorInput.vue, CalculatorDisplay.vue
+        assert len(refs) >= 3, f"useCalculatorStore should have at least 3 usages, found {len(refs)} references"
 
         # Verify references include .vue files (components that import the store)
         vue_refs = [ref for ref in refs if ".vue" in ref.get("uri", "")]
@@ -143,8 +143,8 @@ class TestVueDualLspArchitecture:
         sel_start = operation_symbol["selectionRange"]["start"]
         refs = language_server.request_references(types_file, sel_start["line"], sel_start["character"])
 
-        # Verify we found references: definition + usage in calculator.ts and Vue files
-        assert len(refs) >= 2, f"Operation type should have at least 2 references (definition + usages), found {len(refs)} references"
+        # Verify usages in calculator.ts and Vue files
+        assert len(refs) >= 2, f"Operation type should have at least 2 usages, found {len(refs)} references"
 
         # The Operation type should be referenced in both .ts files (calculator.ts) and potentially .vue files
         all_ref_uris = [ref.get("uri", "") for ref in refs]
