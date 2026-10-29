@@ -14,6 +14,7 @@ from typing import NamedTuple
 
 import pathspec
 from pathspec import PathSpec
+from pathspec.patterns.gitwildmatch import GitWildMatchPatternError
 from sensai.util.logging import LogTime
 
 log = logging.getLogger(__name__)
@@ -456,6 +457,14 @@ class GitignoreParser:
             # Re-add negation if needed
             if is_negation:
                 adjusted_pattern = "!" + adjusted_pattern
+
+            # skip patterns that cannot be compiled (e.g. a trailing backslash, as in a Windows-style "bin\");
+            # git never matches such a pattern, and keeping it would invalidate the project's entire ignore spec
+            try:
+                pathspec.patterns.GitWildMatchPattern(adjusted_pattern)
+            except GitWildMatchPatternError:
+                log.warning("Skipping invalid pattern %r in %s", line, os.path.join(gitignore_dir, ".gitignore"))
+                continue
 
             patterns.append(adjusted_pattern)
 

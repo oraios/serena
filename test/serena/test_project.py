@@ -76,6 +76,25 @@ class TestProject:
         non_ignored_files = project.gather_project_files(skip_ignored_files=True)
         assert len(non_ignored_files) == 5
 
+    def test_invalid_gitignore_pattern_is_skipped(self, tmp_path: Path) -> None:
+        # a trailing backslash (Windows-style "bin\") is an invalid pattern that git never matches
+        (tmp_path / ".gitignore").write_text("bin\\\nsecret.txt\n", encoding="utf-8")
+        (tmp_path / "bin").mkdir()
+        (tmp_path / "bin" / "app.dll").touch()
+        (tmp_path / "secret.txt").touch()
+        (tmp_path / "main.py").touch()
+
+        project = Project(
+            project_root=str(tmp_path),
+            project_config=ProjectConfig(project_name="test_project", language_servers=[LanguageServerId.PYTHON]),
+            serena_config=SerenaConfig().with_headless_mode_overrides(),
+        )
+
+        # the remaining patterns still apply
+        assert project.is_ignored_path("secret.txt")
+        assert not project.is_ignored_path("bin/app.dll")
+        assert [f.rel_path for f in project.gather_source_files()] == ["main.py"]
+
 
 class TestProjectRespectsGlobalIgnoredPaths:
     """Tests that projects consider globally defined ignored paths."""
