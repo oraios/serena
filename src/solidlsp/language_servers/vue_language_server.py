@@ -165,6 +165,10 @@ class VueLanguageServer(SolidLanguageServer):
     TS_SERVER_READY_TIMEOUT = 5.0
     VUE_SERVER_READY_TIMEOUT = 3.0
 
+    @classmethod
+    def supports_implementation_request(cls) -> bool:
+        return True
+
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         vue_lsp_executable_path, self.tsdk_path, self._ts_ls_cmd = self._setup_runtime_dependencies(config, solidlsp_settings)
         self._vue_ls_dir = os.path.join(self.ls_resources_dir(solidlsp_settings), "vue-lsp")
@@ -447,6 +451,13 @@ class VueLanguageServer(SolidLanguageServer):
         assert self._ts_server is not None
         with self._ts_server.open_file(relative_file_path):
             return self._ts_server.request_definition(relative_file_path, line, column)
+
+    @override
+    def request_implementation(self, relative_file_path: str, line: int, column: int) -> list[ls_types.Location]:
+        self._ensure_ls_operational()
+        assert self._ts_server is not None
+        with self._ts_server.open_file(relative_file_path):
+            return self._ts_server.request_implementation(relative_file_path, line, column)
 
     @override
     def request_rename_symbol_edit(self, relative_file_path: str, line: int, column: int, new_name: str) -> ls_types.WorkspaceEdit | None:
