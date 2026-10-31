@@ -538,36 +538,52 @@ class StdioLanguageServer(LanguageServerInterface):
             # Process has already terminated
             stderr_data = process.stderr.read() if process.stderr else b""
             error_message = stderr_data.decode("utf-8", errors="replace")
+            for pipe in (process.stdin, process.stdout, process.stderr):
+                self._safely_close_pipe(pipe)
+            self._process = None
             raise RuntimeError(f"Process terminated immediately with code {process.returncode}. Error: {error_message}")
 
         # start threads to read stdout and stderr of the process
         threading.Thread(
             target=self._read_ls_process_stdout,
+            args=(process,),
             name=f"LSP-stdout-reader:{self.ls_id.get_key()}",
             daemon=True,
         ).start()
         threading.Thread(
             target=self._read_ls_process_stderr,
+            args=(process,),
             name=f"LSP-stderr-reader:{self.ls_id.get_key()}",
             daemon=True,
         ).start()
 
-    def _stop(self, timeout: float) -> None:
+    def stop(self, timeout: float = 5.0) -> None:
+        """Release subprocess resources, including after an unexpected process exit."""
         if self._process is None:
+            return
+        self._is_stopping = True
+        log.info(f"Initiating shutdown with a {timeout}s timeout...")
+        self._stop(timeout)
+
+    def _stop(self, timeout: float) -> None:
+        process = self._process
+        if process is None:
             log.debug("Server process is None, cannot shutdown.")
             return
 
         try:
             # send LSP shutdown and close stdin to signal no more input
-            try:
-                self._send_shutdown_in_thread()
-                self._safely_close_pipe(self._process.stdin)
-            except Exception as e:
-                log.debug(f"Exception during graceful shutdown: {e}")
-                # Ignore errors here, we are proceeding to terminate anyway.
+            if process.poll() is None:
+                try:
+                    self._send_shutdown_in_thread()
+                    self._safely_close_pipe(process.stdin)
+                except Exception as e:
+                    log.debug(f"Exception during graceful shutdown: {e}")
+                    # Ignore errors here, we are proceeding to terminate anyway.
             # terminate the process
-            self._process.terminate(timeout=timeout)
+            process.terminate(timeout=timeout)
         finally:
+            self._safely_close_pipe(process.stdin)
             self._process = None
 
     @staticmethod
@@ -596,17 +612,21 @@ class StdioLanguageServer(LanguageServerInterface):
             data += chunk
         return data
 
-    def _read_ls_process_stdout(self) -> None:
+    def _read_ls_process_stdout(self, process: ManagedSubprocess[bytes] | None = None) -> None:
         """
         Continuously read from the language server process stdout and handle the messages
         invoking the registered response and notification handlers
         """
+        process = process if process is not None else self._process
+        if process is None or process.stdout is None:
+            return
+        stdout = process.stdout
         exception: Exception | None = None
         try:
-            while self._process and self._process.stdout:
-                if self._process.poll() is not None:  # process has terminated
+            while True:
+                if process.poll() is not None:  # process has terminated
                     break
-                line = self._process.stdout.readline()
+                line = stdout.readline()
                 if not line:
                     continue
                 try:
@@ -616,10 +636,10 @@ class StdioLanguageServer(LanguageServerInterface):
                 if num_bytes is None:
                     continue
                 while line and line.strip():
-                    line = self._process.stdout.readline()
+                    line = stdout.readline()
                 if not line:
                     continue
-                body = self._read_bytes_from_process(self._process, self._process.stdout, num_bytes)
+                body = self._read_bytes_from_process(process, stdout, num_bytes)
 
                 self._handle_body(body)
         except LanguageServerTerminatedException as e:
@@ -630,23 +650,29 @@ class StdioLanguageServer(LanguageServerInterface):
             exception = LanguageServerTerminatedException(
                 "Unexpected error while reading stdout from language server process", self.ls_id, cause=e
             )
+        finally:
+            self._safely_close_pipe(stdout)
         log.info("Language server stdout reader thread has terminated")
-        if not self._is_stopping:
+        if not self._is_stopping and self._process is process:
             if exception is None:
                 exception = LanguageServerTerminatedException("Language server stdout read process terminated unexpectedly", self.ls_id)
             log.error(str(exception))
             self._cancel_pending_requests(exception)
 
-    def _read_ls_process_stderr(self) -> None:
+    def _read_ls_process_stderr(self, process: ManagedSubprocess[bytes] | None = None) -> None:
         """
         Continuously read from the language server process stderr and log the messages
         """
+        process = process if process is not None else self._process
+        if process is None or process.stderr is None:
+            return
+        stderr = process.stderr
         try:
-            while self._process and self._process.stderr:
-                if self._process.poll() is not None:
+            while True:
+                if process.poll() is not None:
                     # process has terminated
                     break
-                line = self._process.stderr.readline()
+                line = stderr.readline()
                 if not line:
                     continue
                 line_str = line.decode(ENCODING, errors="replace").rstrip("\r\n")
@@ -656,7 +682,9 @@ class StdioLanguageServer(LanguageServerInterface):
                 log.log(level, line_str)
         except Exception as e:
             log.error("Error while reading stderr from language server process: %s", e, exc_info=e)
-        if not self._is_stopping:
+        finally:
+            self._safely_close_pipe(stderr)
+        if not self._is_stopping and self._process is process:
             log.error("Language server stderr reader thread terminated unexpectedly")
         else:
             log.info("Language server stderr reader thread has terminated")
