@@ -17,6 +17,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     if the IDE's plugin server is not reachable.
 
 * Language Servers:
+  - Fix: Vue component reference searches now find importing files and report query failures instead of returning empty results (#2217).
   - Fix: detect Elixir installed via a Windows batch launcher
   - Extend allowed types in persisted symbol caches, fixing cache loading issues with `clangd`
     when overriding values like `ls_path`, `clangd_version` or `compile_commands_dir`
