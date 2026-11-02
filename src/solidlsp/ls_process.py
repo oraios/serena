@@ -522,7 +522,7 @@ class StdioLanguageServer(LanguageServerInterface):
         self._stdin_lock = threading.Lock()
 
     def is_running(self) -> bool:
-        return self._process is not None and self._process.returncode is None
+        return self._process is not None and self._process.poll() is None
 
     def _start(self) -> None:
         log.info("Starting language server process via command: %s", self._process_launch_info.cmd)

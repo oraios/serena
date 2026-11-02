@@ -10,11 +10,18 @@ what the stdout-reader death path and ``TCPLanguageServer`` already emit.
 
 Two kinds of failed write matter. A pipe that broke raises from the ``OSError``
 family; a stdin that ``_stop`` already closed raises ``ValueError``.
+
+A write can also succeed although the server is gone, when processes it started outlive it and
+keep the inherited pipes open; ``is_running()`` must then report the exit, so that the server
+is restarted before a request is sent.
 """
 
 import logging
+import platform
 import subprocess
 import sys
+import textwrap
+import time
 from collections.abc import Iterator
 from unittest.mock import MagicMock
 
@@ -26,6 +33,7 @@ from solidlsp.ls_process import (
     Request,
     StdioLanguageServer,
 )
+from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.util.subprocess_util import ManagedSubprocess
 
 
@@ -133,3 +141,32 @@ def test_healthy_write_leaves_request_pending() -> None:
         pass
     else:
         raise AssertionError("healthy write should leave the request pending")
+
+
+@pytest.mark.skipif(platform.system() == "Windows", reason="relies on POSIX process groups for cleanup")
+def test_is_running_is_false_once_process_exits_while_child_holds_pipes() -> None:
+    """Launchers such as ``uvx``, or ``typescript-language-server`` with its ``tsserver`` children,
+    leave the pipes open when only the launcher dies.
+    """
+    exits_leaving_child_on_pipes = textwrap.dedent(
+        """
+        import subprocess, sys
+        subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        """
+    )
+    server = StdioLanguageServer(
+        ProcessLaunchInfo(cmd=[sys.executable, "-c", exits_leaving_child_on_pipes]),
+        ls_id=LanguageServerId.PYTHON,
+        determine_log_level=lambda _line: logging.INFO,
+    )
+    server.start()
+    process = server._process
+    assert process is not None
+
+    try:
+        deadline = time.monotonic() + 5
+        while server.is_running() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert not server.is_running()
+    finally:
+        process.terminate(timeout=1.0)
