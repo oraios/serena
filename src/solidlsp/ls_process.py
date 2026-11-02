@@ -649,7 +649,9 @@ class StdioLanguageServer(LanguageServerInterface):
                 line = self._process.stderr.readline()
                 if not line:
                     continue
-                line_str = line.decode(ENCODING, errors="replace")
+                line_str = line.decode(ENCODING, errors="replace").rstrip("\r\n")
+                if not line_str:
+                    continue
                 level = self._determine_log_level(line_str)
                 log.log(level, line_str)
         except Exception as e:

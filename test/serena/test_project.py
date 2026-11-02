@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 import sys
@@ -7,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from serena.config.serena_config import ProjectConfig, SerenaConfig
-from serena.project import Project
+from serena.project import Project, merge_ls_specific_settings
 from solidlsp.ls_config import LanguageServerId
 
 
@@ -370,3 +371,83 @@ class TestProjectIgnoreRulesWithGlobalPathsAndGitignore:
         assert project.is_ignored_path(str(self.project_path / "dist" / "bundle.js"))
         # Non-ignored file
         assert not project.is_ignored_path(str(self.project_path / "main.py"))
+
+
+class TestMergeLsSpecificSettings:
+    """The per-language replacement of global LS settings must not happen silently."""
+
+    def test_project_block_replaces_global_block(self) -> None:
+        merged = merge_ls_specific_settings(
+            {"cpp": {"ls_extra_args": ["-j=6"], "ls_path": "/usr/bin/clangd"}},
+            {"cpp": {"ls_path": "/opt/clangd"}},
+        )
+        assert merged == {"cpp": {"ls_path": "/opt/clangd"}}
+
+    def test_hidden_global_keys_are_logged(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.WARNING, logger="serena.project"):
+            merge_ls_specific_settings(
+                {"cpp": {"ls_extra_args": ["-j=6"], "ls_path": "/usr/bin/clangd", "ls_timeout": 30}},
+                {"cpp": {"ls_path": "/opt/clangd"}},
+            )
+        warnings = [record.getMessage() for record in caplog.records if record.levelno == logging.WARNING]
+        assert len(warnings) == 1
+        assert "cpp" in warnings[0]
+        assert "ls_extra_args" in warnings[0]
+        assert "ls_timeout" in warnings[0]
+        assert "ls_path" not in warnings[0]
+
+    def test_no_warning_when_project_block_is_a_superset(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.WARNING, logger="serena.project"):
+            merge_ls_specific_settings(
+                {"cpp": {"ls_path": "/usr/bin/clangd"}},
+                {"cpp": {"ls_path": "/opt/clangd", "ls_extra_args": ["-j=6"]}},
+            )
+        assert not [record for record in caplog.records if record.levelno == logging.WARNING]
+
+    def test_languages_only_present_in_one_side_are_kept(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.WARNING, logger="serena.project"):
+            merged = merge_ls_specific_settings(
+                {"python": {"foo": 1}},
+                {"cpp": {"ls_path": "/opt/clangd"}},
+            )
+        assert merged == {"python": {"foo": 1}, "cpp": {"ls_path": "/opt/clangd"}}
+        assert not [record for record in caplog.records if record.levelno == logging.WARNING]
+
+    def test_non_mapping_settings_are_not_inspected(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.WARNING, logger="serena.project"):
+            merged = merge_ls_specific_settings({"cpp": None}, {"cpp": {"ls_path": "/opt/clangd"}})
+        assert merged == {"cpp": {"ls_path": "/opt/clangd"}}
+        assert not [record for record in caplog.records if record.levelno == logging.WARNING]
+
+    def test_warning_is_emitted_when_creating_the_language_server_manager(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from serena import project as project_module
+
+        monkeypatch.setattr(
+            project_module.LanguageServerManager,
+            "from_languages",
+            classmethod(lambda cls, *args, **kwargs: object()),
+        )
+        serena_config = SerenaConfig(
+            gui_log_window=False,
+            web_dashboard=False,
+            trusted_project_path_patterns=["**"],
+            ls_specific_settings={"cpp": {"ls_extra_args": ["-j=6"], "ls_path": "/usr/bin/clangd"}},
+        )
+        project_config = ProjectConfig(
+            project_name="test_project",
+            language_servers=[LanguageServerId.PYTHON],
+            ls_specific_settings={"cpp": {"ls_path": "/opt/clangd"}},
+        )
+        project = Project(
+            project_root=str(tmp_path),
+            project_config=project_config,
+            serena_config=serena_config,
+        )
+
+        with caplog.at_level(logging.WARNING, logger="serena.project"):
+            project.create_language_server_manager()
+
+        assert "cpp" in caplog.text
+        assert "ls_extra_args" in caplog.text
