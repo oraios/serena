@@ -3,7 +3,7 @@
 import inspect
 import json
 from abc import ABC
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
@@ -469,6 +469,13 @@ class RegisteredTool:
         """
         return self.tool_class.get_tool_description()
 
+    def has_marker(self, marker_cls: type[ToolMarker]) -> bool:
+        """
+        :param marker_cls: the marker class to check for
+        :return: whether the tool class has the given marker class
+        """
+        return issubclass(self.tool_class, marker_cls)
+
 
 tool_packages = ["serena.tools"]
 
@@ -544,11 +551,22 @@ class ToolRegistry:
         """
         return [t.tool_name for t in self._tool_dict.values() if t.is_optional]
 
+    def get_registered_tool_by_name(self, tool_name: str) -> RegisteredTool:
+        if tool_name not in self._tool_dict:
+            raise ValueError(f"Tool named '{tool_name}' not found.")
+        return self._tool_dict[tool_name]
+
     def get_tool_names(self) -> list[str]:
         """
         :return: the list of all tool names.
         """
         return list(self._tool_dict.keys())
+
+    def iter_registered_tools(self) -> Iterator[RegisteredTool]:
+        """
+        :return: an iterator over all registered tools.
+        """
+        return iter(self._tool_dict.values())
 
     def print_tool_overview(
         self, tools: Iterable[type[Tool] | Tool] | None = None, include_optional: bool = False, only_optional: bool = False
