@@ -11,11 +11,12 @@ prompt: |
   Leave it undefined if no prompt is needed, i.e.
      prompt: null
 
-# tools to be excluded in this context.
+# list of tool names (and tool markers) to exclude.
 # Find the list of tools here: https://oraios.github.io/serena/01-about/035_tools.html
 excluded_tools: []
 
-# included tools that would otherwise be excluded (particularly optional tools that are disabled by default).
+# list of tools (and tool markers) to include that would otherwise be disabled (particularly optional tools
+# that are disabled by default).
 # Find the list of tools here: https://oraios.github.io/serena/01-about/035_tools.html
 included_optional_tools: []
 
@@ -25,6 +26,7 @@ included_optional_tools: []
 fixed_tools: []
 
 # APIs (facades or facade methods, e.g. "lsp" or "lsp.find_symbol") to be excluded from the REPL in this mode.
+# Add "marker:editing" to exclude all editing functions.
 excluded_apis: []
 
 # included APIs that would otherwise be excluded (particularly optional facade methods, which are disabled by default),
