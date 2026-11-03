@@ -168,22 +168,27 @@ class _ExitedLauncher:
 @pytest.fixture()
 def exited_launcher(tmp_path: Path) -> Iterator[_ExitedLauncher]:
     child_pid_file = tmp_path / "child.pid"
-    launcher = textwrap.dedent(
-        f"""
-        import subprocess, sys
-        child = subprocess.Popen(
-            [sys.executable, "-c", "import time; time.sleep(60)"], stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr
+    launcher = tmp_path / "launcher.py"
+    launcher.write_text(
+        textwrap.dedent(
+            """
+            import subprocess, sys
+            child = subprocess.Popen(
+                [sys.executable, "-c", "import time; time.sleep(60)"], stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr
+            )
+            open(sys.argv[1], "w").write(str(child.pid))
+            """
         )
-        open({str(child_pid_file)!r}, "w").write(str(child.pid))
-        """
     )
     server = StdioLanguageServer(
-        ProcessLaunchInfo(cmd=[sys.executable, "-c", launcher]),
+        ProcessLaunchInfo(cmd=[sys.executable, str(launcher), str(child_pid_file)]),
         ls_id=LanguageServerId.PYTHON,
         determine_log_level=lambda _line: logging.INFO,
     )
     server.start()
-    assert _wait_until(lambda: child_pid_file.exists() and child_pid_file.read_text() != "")
+    if not _wait_until(lambda: child_pid_file.exists() and child_pid_file.read_text() != ""):
+        server.stop(timeout=1.0)
+        pytest.fail("the launcher did not report its child's pid")
     child_pid = int(child_pid_file.read_text())
 
     yield _ExitedLauncher(server, child_pid)
@@ -202,6 +207,7 @@ def test_is_running_is_false_once_process_exits_while_child_holds_pipes(exited_l
 @pytest.mark.xfail(
     platform.system() == "Windows",
     reason="without POSIX process groups, cleanup finds children only through the exited launcher, so they leak",
+    raises=AssertionError,
     strict=True,
 )
 def test_stop_terminates_surviving_children_of_exited_process(exited_launcher: _ExitedLauncher) -> None:
