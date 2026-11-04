@@ -3,12 +3,26 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - More flexible inclusion/exclusion definitions: 
+    - Allow tool exclusions/inclusions to use tool marker names (e.g. `ToolMarkerCanEdit`)
+    - Allow API exclusions to include `marker:editing` to exclude all editing functionality
+  - Fix: `planning` mode now correctly excludes all editing tools/functions (#2210)
+  - Fix: project-level `ls_specific_settings` replaced the global settings for the same language server
+    silently. Since the replacement is per language rather than per key, a project block that only set
+    `ls_path`, for example, dropped every global key such as `ls_extra_args`, leaving no trace. The
+    replacement behaviour is unchanged, but the global keys hidden by a project block are now logged (#2188).
   - Fix: under the `sse` and `streamable-http` transports, stopping the MCP server with SIGINT/SIGTERM
     did not shut the agent down, so language servers were left to be killed and the symbol caches they
     had built were never saved (the server lifespan runs per connection under these transports, and
     uvicorn re-raises the signal right after its loop ends). The CLI now shuts the agent down on the
-    signal and when the server loop ends for any other reason, as the `stdio` transport already did
+    signal and when the server loop ends for any other reason, as the `stdio` transport already did (#2221).
+
+* JetBrains:
+  - Fix: When applying a non-symbolic edit, do not raise a post-edit exception during IDE file refresh
+    if the IDE's plugin server is not reachable.
+
 * Language Servers:
+  - Fix: detect Elixir installed via a Windows batch launcher
   - Extend allowed types in persisted symbol caches, fixing cache loading issues with `clangd`
     when overriding values like `ls_path`, `clangd_version` or `compile_commands_dir`
   - Add GraphQL language server support (experimental) via `graphql-language-service-cli` (`graphql-lsp`) for
@@ -25,6 +39,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     incorrect double semicolon behind (`... n * 3;;`). Mirrors the range-start fix already applied
     to Go's `type`/`var`/`const` declarations, and the range-end fix already applied to Nix's
     attribute declarations (#1956)
+  - Fix: C/C++ (clangd) reference searches returned at most 1000 references; clangd is now started with
+    `--limit-references=0` unless `ls_extra_args` already sets a limit
+  - C/C++ (clangd) logs errors only (`--log=error`) instead of a line for every request and parse, unless
+    `ls_extra_args` sets `--log` or Serena logs at debug level
+  - Fix: every line a language server wrote to stderr was followed by an empty line in Serena's log
 
 # v2.1.0 (2026-10-19)
 

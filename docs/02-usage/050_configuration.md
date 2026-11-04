@@ -521,6 +521,9 @@ Supported settings:
 | `compile_commands_dir` | `.serena` | Directory where Serena writes a transformed `compile_commands.json` if the project's original database uses relative `directory` entries. |
 | `clangd_version` | `19.1.2` | Override the `clangd` version Serena downloads when `ls_path` is not set. |
 
+Serena starts `clangd` with `--limit-references=0` (all references) and `--log=error` (errors only; omitted when Serena itself logs at debug level).
+Setting either option in `ls_extra_args` replaces Serena's value, e.g. `ls_extra_args: ["--log=info"]`.
+
 #### C/C++ via `ccls`
 
 Serena uses the `cpp_ccls` language key for `ccls`.

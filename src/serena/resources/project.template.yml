@@ -123,12 +123,13 @@ ignored_paths: []
 # Added on 2025-04-18
 read_only: false
 
-# list of tool names to exclude.
+# list of tool names (and tool markers) to exclude.
 # This extends the existing exclusions (e.g. from the global configuration)
 # Find the list of tools here: https://oraios.github.io/serena/01-about/035_tools.html
 excluded_tools: []
 
-# list of tools to include that would otherwise be disabled (particularly optional tools that are disabled by default).
+# list of tools (and tool markers) to include that would otherwise be disabled (particularly optional tools
+# that are disabled by default).
 # This extends the existing inclusions (e.g. from the global configuration).
 # Find the list of tools here: https://oraios.github.io/serena/01-about/035_tools.html
 included_optional_tools: []
@@ -139,6 +140,7 @@ included_optional_tools: []
 fixed_tools: []
 
 # list of APIs (facades or facade methods, e.g. "lsp" or "lsp.find_symbol") to exclude from the REPL.
+# Add "marker:editing" to exclude all editing functions.
 # This extends the existing exclusions (e.g. from the global configuration).
 excluded_apis: []
 
