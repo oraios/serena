@@ -4,14 +4,25 @@ from solidlsp.ls import SolidLanguageServer
 
 
 class DummyLanguageServer(SolidLanguageServer):
+    events: list[str]
+
     def _start_server(self) -> None:
         raise AssertionError("Not used in this test")
 
     def _create_base_initialize_params(self) -> dict:
         return {}
 
+    def _pre_open_for_cross_file_references(self) -> None:
+        self.events.append("preOpenForCrossFileReferences")
 
-def test_request_rename_symbol_edit_opens_file_before_rename(tmp_path) -> None:
+    def _wait_for_cross_file_references_if_needed(self) -> None:
+        self.events.append("waitForCrossFileReferences")
+
+
+def test_request_rename_symbol_edit_waits_for_cross_file_references_before_rename(tmp_path) -> None:
+    # A rename edits every reference, so it must not be sent before the server is ready for cross-file
+    # requests; otherwise e.g. typescript-language-server answers from the open files only while it is
+    # still loading the project.
     (tmp_path / "index.ts").write_text("export const x = 1;\n", encoding="utf-8")
 
     events: list[str] = []
@@ -28,6 +39,7 @@ def test_request_rename_symbol_edit_opens_file_before_rename(tmp_path) -> None:
     server.send = send
 
     language_server = object.__new__(DummyLanguageServer)
+    language_server.events = events
     language_server.repository_root_path = str(tmp_path)
     language_server.server_started = True
     language_server.open_file_buffers = {}
@@ -42,4 +54,4 @@ def test_request_rename_symbol_edit_opens_file_before_rename(tmp_path) -> None:
         new_name="y",
     )
     assert result is None
-    assert events == ["didOpen", "rename", "didClose"]
+    assert events == ["preOpenForCrossFileReferences", "didOpen", "waitForCrossFileReferences", "rename", "didClose"]

@@ -12,6 +12,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     `ls_path`, for example, dropped every global key such as `ls_extra_args`, leaving no trace. The
     replacement behaviour is unchanged, but the global keys hidden by a project block are now logged (#2188).
 
+* Language Servers:
+  - Fix: `rename_symbol` did not wait for the language server to be ready for cross-file requests, so with
+    the TypeScript language server a rename issued before any reference lookup could change only the open
+    files (often just the definition) while still reporting success. Renames now wait the same way
+    reference lookups do.
+
 * JetBrains:
   - Fix: When applying a non-symbolic edit, do not raise a post-edit exception during IDE file refresh
     if the IDE's plugin server is not reachable.
