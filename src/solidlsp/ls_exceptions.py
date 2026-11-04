@@ -29,6 +29,16 @@ class SolidLSPException(Exception):
 
         return isinstance(self.cause, LanguageServerTerminatedException)
 
+    def is_method_not_found(self) -> bool:
+        """
+        :return: True if the exception is caused by the language server not implementing the requested method,
+            as indicated by the causing exception being an LSPError with the code MethodNotFound (-32601).
+        """
+        from .lsp_protocol_handler.lsp_types import ErrorCodes
+        from .lsp_protocol_handler.server import LSPError
+
+        return isinstance(self.cause, LSPError) and self.cause.code == ErrorCodes.MethodNotFound
+
     def get_affected_language(self) -> LanguageServerIdLike | None:
         """
         :return: the affected language for the case where the exception is caused by the language server having terminated

@@ -46,6 +46,7 @@ from serena.tools import ActivateProjectTool
 from serena.util.cli_util import AutoRegisteringGroup
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import LanguageServerIdLike, LanguageServerRegistry
+from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.ls_types import SymbolKind
 from solidlsp.util.subprocess_util import subprocess_kwargs
 
@@ -1050,6 +1051,8 @@ class ProjectCommands(AutoRegisteringGroup):
 
         # the check's verdict: the explanation of the failure, or None if the check passed (see below)
         failure_reason: str | None = None
+        # the explanation of a test that was skipped because the language server does not support it, if any
+        skip_reason: str | None = None
 
         with FileLoggerContext(log_file, append=False, enabled=True):
             log.info("Starting health check for project: %s", project_path)
@@ -1127,7 +1130,12 @@ class ProjectCommands(AutoRegisteringGroup):
                     # language server is not functional, which is the single thing this command is
                     # asked to determine. Logging it as a warning let the command print
                     # "All tools working correctly" and exit 0 after the search had already failed.
-                    raise ProjectCommands._HealthCheckFailure(f"find_referencing_symbols failed for symbol {symbol_name}: {e}") from e
+                    # A server that does not implement the search at all (MethodNotFound) is not
+                    # malfunctioning, however, e.g. vscode-json-languageserver: the test is skipped.
+                    if not (isinstance(e, SolidLSPException) and e.is_method_not_found()):
+                        raise ProjectCommands._HealthCheckFailure(f"find_referencing_symbols failed for symbol {symbol_name}: {e}") from e
+                    skip_reason = "find_referencing_symbols skipped, as the language server does not support it"
+                    log.warning("%s: %s", skip_reason, e.cause)
 
                 log.info("Health check completed successfully")
 
@@ -1144,7 +1152,11 @@ class ProjectCommands(AutoRegisteringGroup):
         # cannot be mistaken for a failure of the check itself; the exit code lets callers
         # (CI, scripts) act on the verdict
         if failure_reason is None:
-            click.echo("✅ Health check passed - All tools working correctly")
+            if skip_reason is None:
+                click.echo("✅ Health check passed - All tools working correctly")
+            else:
+                click.echo(f"⚠️ {skip_reason}")
+                click.echo("✅ Health check passed - All tools supported by the language server working correctly")
         else:
             click.echo(f"❌ Health check failed: {failure_reason}")
             raise SystemExit(1)

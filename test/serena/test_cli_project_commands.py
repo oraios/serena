@@ -1,5 +1,7 @@
 """Tests for CLI project commands (create, index)."""
 
+import glob
+import json
 import os
 import shutil
 import tempfile
@@ -387,6 +389,66 @@ class TestFindProjectRoot:
             assert os.path.samefile(result, worktree)
         finally:
             os.chdir(original_cwd)
+
+
+@pytest.fixture
+def temp_json_project_dir(cli_runner):
+    """Create a temporary JSON-only Serena project containing a file large enough to be health-checked."""
+    tmpdir = tempfile.mkdtemp()
+    try:
+        package = {
+            "$schema": "https://json.schemastore.org/package.json",
+            "name": "health-check-json",
+            "scripts": {f"script{i}": f"echo running script number {i}" for i in range(30)},
+        }
+        with open(os.path.join(tmpdir, "package.json"), "w", encoding="utf-8") as f:
+            json.dump(package, f, indent=2)
+        result = cli_runner.invoke(ProjectCommands.create, [tmpdir, "--language", "json"])
+        assert result.exit_code == 0, f"Project creation failed: {result.output}"
+        yield tmpdir
+    finally:
+        # if windows, wait a bit to avoid PermissionError on cleanup
+        if os.name == "nt":
+            time.sleep(0.2)
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _read_health_check_log(project_dir: str) -> str:
+    (log_file,) = glob.glob(os.path.join(project_dir, ".serena", "logs", "health-checks", "health_check_*.log"))
+    with open(log_file, encoding="utf-8") as f:
+        return f.read()
+
+
+@pytest.mark.json
+class TestProjectHealthCheck:
+    """Tests for 'project health-check' command."""
+
+    def test_reference_check_is_skipped_with_warning_when_unsupported(self, cli_runner, temp_json_project_dir):
+        """vscode-json-languageserver answers textDocument/references with MethodNotFound (-32601)."""
+        result = cli_runner.invoke(ProjectCommands.health_check, [temp_json_project_dir])
+
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+        assert "Health check passed" in result.output
+        assert "find_referencing_symbols skipped" in result.output
+        log_content = _read_health_check_log(temp_json_project_dir)
+        warnings = [line for line in log_content.splitlines() if line.startswith("WARNING") and "find_referencing_symbols skipped" in line]
+        assert warnings, f"No warning about the skipped test in the log:\n{log_content}"
+        assert "-32601" in warnings[0]
+
+    def test_other_reference_search_failures_still_fail_the_check(self, cli_runner, temp_json_project_dir, monkeypatch):
+        from solidlsp.ls import SolidLanguageServer
+        from solidlsp.ls_exceptions import SolidLSPException
+        from solidlsp.lsp_protocol_handler.lsp_types import ErrorCodes
+        from solidlsp.lsp_protocol_handler.server import LSPError
+
+        def fail(self, relative_file_path, line, column):
+            raise SolidLSPException("Error processing request textDocument/references", cause=LSPError(ErrorCodes.InvalidParams, "boom"))
+
+        monkeypatch.setattr(SolidLanguageServer, "_send_references_request", fail)
+        result = cli_runner.invoke(ProjectCommands.health_check, [temp_json_project_dir])
+
+        assert result.exit_code == 1, f"Command unexpectedly passed: {result.output}"
+        assert "Health check failed: find_referencing_symbols failed" in result.output
 
 
 class TestProjectFromCwdMutualExclusivity:
