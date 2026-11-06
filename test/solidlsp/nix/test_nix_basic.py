@@ -320,6 +320,9 @@ class TestNixLanguageServer:
             '${"dynamic"} = 5;',
             "lineComment # before the equals sign\n    = 6;",
             "blockComment /* over\n    two lines */ = 7;",
+            "tight=8;",
+            "splitValue\n    = {\n      e = 5;\n    };",
+            "e = 5;",
         }
         bodies = {s["body"].get_text() for s in all_symbols}
         # lambdas inside bindings, including ones whose text contains `=`, and inherited names

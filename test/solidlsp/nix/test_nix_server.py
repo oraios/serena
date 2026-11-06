@@ -9,7 +9,7 @@ from unittest.mock import Mock, call, patch
 
 import pytest
 
-from solidlsp.language_servers.nixd_ls import NixLanguageServer
+from solidlsp.language_servers.nixd_ls import NixLanguageServer, _utf16_column_to_index
 from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.settings import SolidLSPSettings
 
@@ -275,6 +275,8 @@ def _symbol_for(source: str, range_text: str, name: str) -> dict[str, Any]:
         ("{ split\n  = 1; }", "split\n  = 1", "split", True),
         ("{ c /* comment */ = 1; }", "c /* comment */ = 1", "c", True),
         ("{ c # comment\n  = 1; }", "c # comment\n  = 1", "c", True),
+        ("{ tight=1; }", "tight=1", "tight", True),
+        ("{ s\n  =\n  { e = 5; }; }", "s\n  =\n  { e = 5; }", "s", True),
         ('{ "🚀🚀" = { a = 1; }; }', '"🚀🚀" = { a = 1; }', '"🚀🚀"', True),
         ("{ f = x: x; }", "x: x", "x", False),
         ("{ inherit (b) toString; }", "toString", "toString", False),
@@ -298,3 +300,14 @@ def test_is_nix_binding_does_not_backtrack_through_long_comments() -> None:
     started = time.monotonic()
     assert NixLanguageServer._is_nix_binding(cast(Any, symbol), source.split("\n")) is False
     assert time.monotonic() - started < 0.1
+
+
+@pytest.mark.parametrize("prefix", ["", "\U0001f680"])
+def test_utf16_columns_of_a_long_line_are_converted_quickly(prefix: str) -> None:
+    # Two conversions run per symbol. Walking the line from its start for each one took minutes on a generated
+    # one-line file; a line of 20k characters keeps a regression to seconds rather than hanging the run.
+    line = prefix + "{ " + " ".join(f"a{i} = {i};" for i in range(2000)) + " }"
+    started = time.monotonic()
+    indices = [_utf16_column_to_index(line, column) for column in range(0, len(line), 7)]
+    assert time.monotonic() - started < 0.5
+    assert indices[1] == (7 if not prefix else 6)
