@@ -2,6 +2,7 @@
 
 import json
 import re
+import time
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import Mock, call, patch
@@ -247,3 +248,53 @@ def test_hover_stops_after_bounded_retries(tmp_path: Path) -> None:
     assert cast(Any, server.server.send.hover).call_count == NixLanguageServer._HOVER_RETRY_COUNT + 1
     assert wait.call_count == NixLanguageServer._HOVER_RETRY_COUNT
     wait.assert_called_with(NixLanguageServer._HOVER_RETRY_DELAY_SECONDS)
+
+
+def _symbol_for(source: str, range_text: str, name: str) -> dict[str, Any]:
+    """A hand-built nixd-style symbol whose range covers `range_text` and whose selectionRange covers its leading `name`."""
+    assert range_text.startswith(name)
+    start = source.index(range_text)
+
+    def position(offset: int) -> dict[str, int]:
+        before = source[:offset]
+        column_text = before[before.rfind("\n") + 1 :]
+        return {"line": before.count("\n"), "character": len(column_text.encode("utf-16-le")) // 2}
+
+    return {
+        "range": {"start": position(start), "end": position(start + len(range_text))},
+        "selectionRange": {"start": position(start), "end": position(start + len(name))},
+    }
+
+
+@pytest.mark.parametrize(
+    ("source", "range_text", "name", "is_binding"),
+    [
+        ("{ plain = 1; }", "plain = 1", "plain", True),
+        ('{ "quoted" = 1; }', '"quoted" = 1', '"quoted"', True),
+        ('{ ${"dyn"} = 1; }', '${"dyn"} = 1', '${"dyn"}', True),
+        ("{ split\n  = 1; }", "split\n  = 1", "split", True),
+        ("{ c /* comment */ = 1; }", "c /* comment */ = 1", "c", True),
+        ("{ c # comment\n  = 1; }", "c # comment\n  = 1", "c", True),
+        ('{ "🚀🚀" = { a = 1; }; }', '"🚀🚀" = { a = 1; }', '"🚀🚀"', True),
+        ("{ f = x: x; }", "x: x", "x", False),
+        ("{ inherit (b) toString; }", "toString", "toString", False),
+        ("{ same = a == b; }", "a == b", "a", False),
+        # an `=` inside a comment, or a second comment further on, must not make a lambda look like a binding
+        ("{ f = x # = note\n: x; }", "x # = note\n: x", "x", False),
+        ("{ f = x /* first */ : let y /* second */ = 1; in y; }", "x /* first */ : let y /* second */ = 1; in y", "x", False),
+    ],
+)
+def test_is_nix_binding(source: str, range_text: str, name: str, is_binding: bool) -> None:
+    symbol = _symbol_for(source, range_text, name)
+    assert NixLanguageServer._is_nix_binding(cast(Any, symbol), source.split("\n")) is is_binding
+
+
+def test_is_nix_binding_does_not_backtrack_through_long_comments() -> None:
+    # A lambda with a comment before its `:` used to take time exponential in the comment's `#` count: 22 took
+    # about half a second, each further `#` doubled it. The comment is kept short so that a regression fails
+    # here instead of hanging the test run.
+    source = "{ pkgs, ... }\n" + "#" * 22 + "\n: { a = 1; }"
+    symbol = _symbol_for(source, source, "{ pkgs, ... }")
+    started = time.monotonic()
+    assert NixLanguageServer._is_nix_binding(cast(Any, symbol), source.split("\n")) is False
+    assert time.monotonic() - started < 0.1

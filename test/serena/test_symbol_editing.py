@@ -511,7 +511,18 @@ def test_nix_binding_body_written_back_unchanged():
     Writing back each binding's body exactly as find_symbol shows it must leave the file unchanged.
     It used to delete the semicolon: the replaced range included it, but the shown body did not.
     """
-    name_paths = ["plain", "quoted-name", "split", "commented", "services/web/hosts/web-host", "lambda"]
+    name_paths = [
+        "plain",
+        "quoted-name",
+        "split",
+        "commented",
+        "services/web/hosts/web-host",
+        "lambda",
+        "formals",
+        "compare",
+        "lineComment",
+        "blockComment",
+    ]
     NixBindingEditTest("bindings.nix", [(name, None) for name in name_paths], replacements=[]).run_test(None)
 
 
