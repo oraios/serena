@@ -295,6 +295,8 @@ class TestNixLanguageServer:
         all_symbols, _ = language_server.request_document_symbols(rel_path).get_all_symbols_and_roots()
         mismatched = [s["name"] for s in all_symbols if s["body"].get_text() != range_text(s["location"]["range"])]
         assert not mismatched, f"Symbols in {rel_path} whose body differs from their range: {mismatched}"
+        diverged = [s["name"] for s in all_symbols if s["range"] != s["location"]["range"]]
+        assert not diverged, f"Symbols in {rel_path} whose range differs from their location's: {diverged}"
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
     def test_bindings_own_their_semicolon(self, language_server: SolidLanguageServer) -> None:
@@ -328,3 +330,5 @@ class TestNixLanguageServer:
         # lambdas inside bindings, including ones whose text contains `=`, and inherited names
         for inner in ["x: x", "{ a }: { b = a; }", "y: y == 1", "toString"]:
             assert inner in bodies, f"{inner!r} should be a symbol without the binding's semicolon"
+        # a range ending at the end of its line, with the semicolon on the next one
+        assert "nextLine = 1" in bodies
