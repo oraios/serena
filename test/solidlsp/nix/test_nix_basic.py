@@ -271,7 +271,7 @@ class TestNixLanguageServer:
         assert language_server.is_running()
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
-    @pytest.mark.parametrize("rel_path", ["default.nix", "flake.nix", "lib/utils.nix", "modules/example.nix", "bindings.nix"])
+    @pytest.mark.parametrize("rel_path", ["default.nix", "flake.nix", "lib/utils.nix", "modules/example.nix", "bindings.nix", "astral.nix"])
     def test_symbol_body_matches_its_range(self, language_server: SolidLanguageServer, rel_path: str) -> None:
         """
         find_symbol shows a symbol's body and replace_symbol_body overwrites the symbol's range, so the two
@@ -297,6 +297,8 @@ class TestNixLanguageServer:
         assert not mismatched, f"Symbols in {rel_path} whose body differs from their range: {mismatched}"
         diverged = [s["name"] for s in all_symbols if s["range"] != s["location"]["range"]]
         assert not diverged, f"Symbols in {rel_path} whose range differs from their location's: {diverged}"
+        stale = [c["name"] for s in all_symbols for c in s.get("children", []) if c.get("parent") is not s]
+        assert not stale, f"Symbols in {rel_path} whose parent is not the symbol listing them: {stale}"
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
     def test_bindings_own_their_semicolon(self, language_server: SolidLanguageServer) -> None:

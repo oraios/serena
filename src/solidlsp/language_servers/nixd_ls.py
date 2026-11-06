@@ -225,10 +225,11 @@ class NixLanguageServer(SolidLanguageServer):
             return symbol
 
         line = lines[end_line]
-        end_index = _utf16_column_to_index(line, end_char)
 
-        # Check if there's a semicolon immediately after the current range end (a `;` is one UTF-16 unit)
-        if end_index < len(line) and line[end_index] == ";":
+        # Check if there's a semicolon immediately after the current range end. The column is used as a string
+        # index, as Serena's symbol bodies and editor use it; converted from UTF-16 here alone, a write-back of a
+        # body after an astral character would delete the character after the semicolon.
+        if end_char < len(line) and line[end_char] == ";":
             # Extend range to include the semicolon
             new_range = {"start": range_info["start"], "end": {"line": end_line, "character": end_char + 1}}
 
@@ -280,6 +281,8 @@ class NixLanguageServer(SolidLanguageServer):
             # Extend children recursively
             if extended.get("children"):
                 extended["children"] = [extend_symbol_and_children(child) for child in extended["children"]]
+                for child in extended["children"]:  # the container lookup returns the parent, with its body
+                    child["parent"] = extended
 
             return extended
 
