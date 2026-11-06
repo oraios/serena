@@ -244,7 +244,7 @@ class TestNixLanguageServer:
             # that actually have declaration names.
             if s["kind"] in {SymbolKind.String, SymbolKind.Array}:
                 continue
-            if s["name"] in {"(anonymous lambda)", "(dynamic string)", "{anonymous}", "(dynamic attribute name)"}:
+            if s["name"] in {"(anonymous lambda)", "(dynamic string)", "{anonymous}", "(dynamic attribute name)", "${dynamic attribute}"}:
                 continue
             if s["kind"] in {SymbolKind.Field, SymbolKind.Property} and "." in s["name"]:
                 continue
@@ -314,7 +314,14 @@ class TestNixLanguageServer:
             '"web-host" = { root = "/srv"; };',
             'root = "/srv";',
             "lambda = x: x;",
+            "formals = { a }: { b = a; };",
+            "b = a;",
+            "compare = y: y == 1;",
+            '${"dynamic"} = 5;',
+            "lineComment # before the equals sign\n    = 6;",
+            "blockComment /* over\n    two lines */ = 7;",
         }
         bodies = {s["body"].get_text() for s in all_symbols}
-        assert "x: x" in bodies, "the lambda bound to `lambda` should be a symbol without the semicolon"
-        assert "toString" in bodies, "the inherited name should be a symbol without the semicolon"
+        # lambdas inside bindings, including ones whose text contains `=`, and inherited names
+        for inner in ["x: x", "{ a }: { b = a; }", "y: y == 1", "toString"]:
+            assert inner in bodies, f"{inner!r} should be a symbol without the binding's semicolon"

@@ -29,11 +29,21 @@ from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
 
-# What may come between a binding's name and its `=`: whitespace, comments, and the rest of an attribute path
-# (`.b`, `."c"`, `.${d}`). `==` is a comparison, not a binding.
-_NIX_TRIVIA = r"(?:\s|#[^\n]*|/\*.*?\*/)*"
-_NIX_ATTR = r"""(?:[A-Za-z_][A-Za-z0-9_'-]*|"(?:[^"\\]|\\.)*"|\$\{[^}]*\})"""
-_NIX_BINDING_TAIL = re.compile(rf"{_NIX_TRIVIA}(?:\.{_NIX_TRIVIA}{_NIX_ATTR}{_NIX_TRIVIA})*=(?!=)", re.DOTALL)
+# What may come between a binding's name and its `=`: whitespace and comments. `==` is a comparison, not a
+# binding. The group is atomic so a comment is consumed whole: backtracking into one could otherwise expose
+# an `=` written inside it, or let `/* */` run past its own end, and made long comments take exponential time.
+# nixd puts a binding's range on the last component of an attribute path, so no path follows the name.
+_NIX_BINDING_TAIL = re.compile(r"(?>(?:\s|#[^\n]*|/\*.*?\*/)*)=(?!=)", re.DOTALL)
+
+
+def _utf16_column_to_index(line: str, column: int) -> int:
+    """The Python string index of an LSP column, which counts UTF-16 code units, on `line`."""
+    units = 0
+    for index, char in enumerate(line):
+        if units >= column:
+            return index
+        units += 2 if ord(char) > 0xFFFF else 1
+    return len(line)
 
 
 class NixLanguageServer(SolidLanguageServer):
@@ -160,9 +170,9 @@ class NixLanguageServer(SolidLanguageServer):
     def _is_nix_binding(symbol: ls_types.UnifiedSymbolInformation, lines: list[str]) -> bool:
         """
         Whether the symbol is a binding (`name = value`), judged by what follows its name: nixd's selectionRange
-        covers the name as written (`plain`, `"quoted"`, `${dynamic}`), and in a binding only whitespace,
-        comments and the rest of an attribute path come between it and the `=`. The displayed symbol name is
-        no use for this, since nixd strips the quotes from it and labels dynamic names generically.
+        covers the name as written (`plain`, `"quoted"`, `${dynamic}`), and in a binding only whitespace and
+        comments come between it and the `=`. The displayed symbol name is no use for this, since nixd strips
+        the quotes from it and labels dynamic names generically.
         """
         selection = symbol.get("selectionRange")
         if selection is None:
@@ -170,16 +180,13 @@ class NixLanguageServer(SolidLanguageServer):
         name_end, symbol_end = selection["end"], symbol["range"]["end"]
         if symbol_end["line"] >= len(lines) or name_end["line"] > symbol_end["line"]:
             return False
+        name_line, end_line = lines[name_end["line"]], lines[symbol_end["line"]]
+        name_end_index = _utf16_column_to_index(name_line, name_end["character"])
+        symbol_end_index = _utf16_column_to_index(end_line, symbol_end["character"])
         if name_end["line"] == symbol_end["line"]:
-            tail = lines[name_end["line"]][name_end["character"] : symbol_end["character"]]
+            tail = name_line[name_end_index:symbol_end_index]
         else:
-            tail = "\n".join(
-                [
-                    lines[name_end["line"]][name_end["character"] :],
-                    *lines[name_end["line"] + 1 : symbol_end["line"]],
-                    lines[symbol_end["line"]][: symbol_end["character"]],
-                ]
-            )
+            tail = "\n".join([name_line[name_end_index:], *lines[name_end["line"] + 1 : symbol_end["line"]], end_line[:symbol_end_index]])
         return _NIX_BINDING_TAIL.match(tail) is not None
 
     def _extend_nix_symbol_range_to_include_semicolon(
