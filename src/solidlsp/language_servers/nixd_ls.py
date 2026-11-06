@@ -29,6 +29,12 @@ from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
 
+# What may come between a binding's name and its `=`: whitespace, comments, and the rest of an attribute path
+# (`.b`, `."c"`, `.${d}`). `==` is a comparison, not a binding.
+_NIX_TRIVIA = r"(?:\s|#[^\n]*|/\*.*?\*/)*"
+_NIX_ATTR = r"""(?:[A-Za-z_][A-Za-z0-9_'-]*|"(?:[^"\\]|\\.)*"|\$\{[^}]*\})"""
+_NIX_BINDING_TAIL = re.compile(rf"{_NIX_TRIVIA}(?:\.{_NIX_TRIVIA}{_NIX_ATTR}{_NIX_TRIVIA})*=(?!=)", re.DOTALL)
+
 
 class NixLanguageServer(SolidLanguageServer):
     """
@@ -150,6 +156,32 @@ class NixLanguageServer(SolidLanguageServer):
             """Return the nixd stdio launch command."""
             return [core_path]
 
+    @staticmethod
+    def _is_nix_binding(symbol: ls_types.UnifiedSymbolInformation, lines: list[str]) -> bool:
+        """
+        Whether the symbol is a binding (`name = value`), judged by what follows its name: nixd's selectionRange
+        covers the name as written (`plain`, `"quoted"`, `${dynamic}`), and in a binding only whitespace,
+        comments and the rest of an attribute path come between it and the `=`. The displayed symbol name is
+        no use for this, since nixd strips the quotes from it and labels dynamic names generically.
+        """
+        selection = symbol.get("selectionRange")
+        if selection is None:
+            return False
+        name_end, symbol_end = selection["end"], symbol["range"]["end"]
+        if symbol_end["line"] >= len(lines) or name_end["line"] > symbol_end["line"]:
+            return False
+        if name_end["line"] == symbol_end["line"]:
+            tail = lines[name_end["line"]][name_end["character"] : symbol_end["character"]]
+        else:
+            tail = "\n".join(
+                [
+                    lines[name_end["line"]][name_end["character"] :],
+                    *lines[name_end["line"] + 1 : symbol_end["line"]],
+                    lines[symbol_end["line"]][: symbol_end["character"]],
+                ]
+            )
+        return _NIX_BINDING_TAIL.match(tail) is not None
+
     def _extend_nix_symbol_range_to_include_semicolon(
         self, symbol: ls_types.UnifiedSymbolInformation, file_content: str
     ) -> ls_types.UnifiedSymbolInformation:
@@ -159,23 +191,22 @@ class NixLanguageServer(SolidLanguageServer):
         nixd provides ranges that exclude semicolons (expression-level), but serena needs
         statement-level ranges that include semicolons for proper replacement.
 
-        Only bindings (`name = value;`, `a.b = value;`) are extended. An inner expression that merely
-        ends right before the binding's semicolon (a lambda body, the last identifier in `a + b;`) does
-        not own it, and extending it would make an edit of that expression delete the semicolon.
-        The extended symbol carries no precomputed body, so the caller must create one from the new range.
+        Only bindings (`name = value;`, `"quoted" = value;`, `a.b = value;`) are extended. An inner
+        expression that merely ends right before the binding's semicolon (a lambda body, the last
+        identifier in `a + b;`, an `inherit` name) does not own it, and extending it would make an edit of
+        that expression delete the semicolon. The extended symbol carries no precomputed body, so the
+        caller must create one from the new range.
         """
         range_info = symbol["range"]
-        start_line, start_char = range_info["start"]["line"], range_info["start"]["character"]
         end_line = range_info["end"]["line"]
         end_char = range_info["end"]["character"]
 
         # Split file content into lines
         lines = file_content.split("\n")
-        if end_line >= len(lines) or start_line >= len(lines):
+        if end_line >= len(lines):
             return symbol
 
-        binding = re.compile(rf"{re.escape(symbol['name'])}(?:\s*\.\s*[^\s=.;]+)*\s*=(?!=)")
-        if not binding.match(lines[start_line], start_char):
+        if not self._is_nix_binding(symbol, lines):
             return symbol
 
         line = lines[end_line]
