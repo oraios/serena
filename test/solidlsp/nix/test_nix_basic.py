@@ -271,14 +271,14 @@ class TestNixLanguageServer:
         assert language_server.is_running()
 
     @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
-    def test_symbol_body_matches_its_range(self, language_server: SolidLanguageServer) -> None:
+    @pytest.mark.parametrize("rel_path", ["default.nix", "flake.nix", "lib/utils.nix", "modules/example.nix", "bindings.nix"])
+    def test_symbol_body_matches_its_range(self, language_server: SolidLanguageServer, rel_path: str) -> None:
         """
         find_symbol shows a symbol's body and replace_symbol_body overwrites the symbol's range, so the two
         must cover the same text. When they differed, writing back a body as shown deleted the binding's
-        trailing semicolon. Only a binding owns that semicolon: an expression ending right before it
-        (here the lambda bound to makeGreeting) must not include it.
+        trailing semicolon.
         """
-        lines = read_repo_file(language_server, "default.nix").split("\n")
+        lines = read_repo_file(language_server, rel_path).split("\n")
 
         def range_text(symbol_range: dict) -> str:
             start, end = symbol_range["start"], symbol_range["end"]
@@ -292,10 +292,29 @@ class TestNixLanguageServer:
                 ]
             )
 
-        all_symbols, _ = language_server.request_document_symbols("default.nix").get_all_symbols_and_roots()
+        all_symbols, _ = language_server.request_document_symbols(rel_path).get_all_symbols_and_roots()
         mismatched = [s["name"] for s in all_symbols if s["body"].get_text() != range_text(s["location"]["range"])]
-        assert not mismatched, f"Symbols whose body differs from their range: {mismatched}"
+        assert not mismatched, f"Symbols in {rel_path} whose body differs from their range: {mismatched}"
 
+    @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
+    def test_bindings_own_their_semicolon(self, language_server: SolidLanguageServer) -> None:
+        """
+        A binding's body includes its trailing semicolon however its name is written: plain, quoted, split
+        from the `=` by a line break or a comment, or as the last part of an attribute path. The expressions
+        inside a binding (the lambda of `lambda = x: x;`) and inherited names do not include it, since an
+        edit of them would otherwise delete the binding's semicolon.
+        """
+        all_symbols, _ = language_server.request_document_symbols("bindings.nix").get_all_symbols_and_roots()
+        bodies_with_semicolon = {s["body"].get_text() for s in all_symbols if s["body"].get_text().endswith(";")}
+        assert bodies_with_semicolon == {
+            "plain = 1;",
+            '"quoted-name" = 2;',
+            "split\n    = 3;",
+            "commented /* before the equals sign */ = 4;",
+            '"web-host" = { root = "/srv"; };',
+            'root = "/srv";',
+            "lambda = x: x;",
+        }
         bodies = {s["body"].get_text() for s in all_symbols}
-        assert 'makeGreeting = name: "Hello, ${name}!";' in bodies, "the binding should include its semicolon"
-        assert 'name: "Hello, ${name}!"' in bodies, "the lambda it binds should not include the semicolon"
+        assert "x: x" in bodies, "the lambda bound to `lambda` should be a symbol without the semicolon"
+        assert "toString" in bodies, "the inherited name should be a symbol without the semicolon"

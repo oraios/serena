@@ -475,6 +475,62 @@ def test_nix_symbol_replacement_no_double_semicolon(snapshot: SnapshotAssertion)
     test_case.run_test(content_after_ground_truth=snapshot)
 
 
+class NixBindingEditTest(EditingTest):
+    """Replaces the bodies of Nix bindings and checks the file for exactly the expected text replacements."""
+
+    def __init__(self, rel_path: str, edits: list[tuple[str, str | None]], replacements: list[tuple[str, str]]):
+        """
+        :param rel_path: the relative path of the edited file
+        :param edits: (name path, new body) per binding; a new body of None writes back the body as shown
+        :param replacements: the (old text, new text) replacements the edits must amount to
+        """
+        super().__init__(LanguageServerId.NIX, rel_path)
+        self.edits = edits
+        self.replacements = replacements
+
+    def _apply_edit(self, code_editor: CodeEditor) -> None:
+        for name_path, new_body in self.edits:
+            if new_body is None:
+                new_body = code_editor._find_unique_symbol(name_path, self.rel_path).body
+                assert new_body is not None
+            code_editor.replace_body(name_path, self.rel_path, new_body)
+
+    @overrides
+    def _test_diff(self, code_diff: CodeDiff, snapshot: SnapshotAssertion | None) -> None:
+        expected = code_diff.original_content
+        for old_text, new_text in self.replacements:
+            assert expected.count(old_text) == 1, f"{old_text!r} should occur exactly once in the file"
+            expected = expected.replace(old_text, new_text)
+        assert code_diff.modified_content == expected
+
+
+@pytest.mark.nix
+@pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.NIX), reason="Nix tests are disabled (nixd not available)")
+def test_nix_binding_body_written_back_unchanged():
+    """
+    Writing back each binding's body exactly as find_symbol shows it must leave the file unchanged.
+    It used to delete the semicolon: the replaced range included it, but the shown body did not.
+    """
+    name_paths = ["plain", "quoted-name", "split", "commented", "services/web/hosts/web-host", "lambda"]
+    NixBindingEditTest("bindings.nix", [(name, None) for name in name_paths], replacements=[]).run_test(None)
+
+
+@pytest.mark.nix
+@pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.NIX), reason="Nix tests are disabled (nixd not available)")
+def test_nix_binding_replaced_in_shown_shape():
+    """A new body in the shape find_symbol shows replaces exactly the binding, with neither a lost nor a doubled `;`."""
+    edits = [
+        ("quoted-name", '"quoted-name" = 2;', '"quoted-name" = 20;'),
+        ("split", "split\n    = 3;", "split = 30;"),
+        ("lambda", "lambda = x: x;", "lambda = y: y;"),
+    ]
+    NixBindingEditTest(
+        "bindings.nix",
+        [(name, new_body) for name, _, new_body in edits],
+        replacements=[(old_body, new_body) for _, old_body, new_body in edits],
+    ).run_test(None)
+
+
 # A single `type` declaration body that re-supplies the leading `type` keyword, as a user would
 # after copying the body returned by find_symbol. Replacing the body with this must not duplicate
 # the keyword.
