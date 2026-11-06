@@ -6,6 +6,9 @@ Note: Windows is not supported as Nix itself doesn't support Windows natively.
 """
 # SPDX-License-Identifier: MIT
 
+import bisect
+import functools
+import itertools
 import json
 import logging
 import platform
@@ -36,14 +39,21 @@ log = logging.getLogger(__name__)
 _NIX_BINDING_TAIL = re.compile(r"(?>(?:\s|#[^\n]*|/\*.*?\*/)*)=(?!=)", re.DOTALL)
 
 
+@functools.lru_cache(maxsize=16)
+def _utf16_offsets(line: str) -> tuple[int, ...]:
+    """The UTF-16 code-unit offset at which each character of `line` starts, followed by the line's length in units."""
+    return tuple(itertools.accumulate((2 if ord(char) > 0xFFFF else 1 for char in line), initial=0))
+
+
 def _utf16_column_to_index(line: str, column: int) -> int:
-    """The Python string index of an LSP column, which counts UTF-16 code units, on `line`."""
-    units = 0
-    for index, char in enumerate(line):
-        if units >= column:
-            return index
-        units += 2 if ord(char) > 0xFFFF else 1
-    return len(line)
+    """
+    The Python string index of an LSP column, which counts UTF-16 code units, on `line`. A column inside an
+    astral character rounds to after it. This runs twice per symbol, so a long line is measured once (cached),
+    not walked again for each symbol on it.
+    """
+    if line.isascii():
+        return min(column, len(line))
+    return min(bisect.bisect_left(_utf16_offsets(line), column), len(line))
 
 
 class NixLanguageServer(SolidLanguageServer):

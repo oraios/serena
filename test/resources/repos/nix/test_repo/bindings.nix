@@ -15,5 +15,10 @@
     = 6;
   blockComment /* over
     two lines */ = 7;
+  tight=8;
+  splitValue
+    = {
+      e = 5;
+    };
   inherit (builtins) toString;
 }

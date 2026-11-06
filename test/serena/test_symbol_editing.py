@@ -522,6 +522,8 @@ def test_nix_binding_body_written_back_unchanged():
         "compare",
         "lineComment",
         "blockComment",
+        "tight",
+        "splitValue",
     ]
     NixBindingEditTest("bindings.nix", [(name, None) for name in name_paths], replacements=[]).run_test(None)
 
