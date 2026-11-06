@@ -17,6 +17,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     if the IDE's plugin server is not reachable.
 
 * Language Servers:
+  - Fix: Nix `replace_symbol_body` deleted a binding's trailing semicolon. The symbol range was extended to
+    include the `;`, but the body (what `find_symbol` shows) was not, so writing back a body in the shape
+    shown removed it, and the tool still returned `OK`. Expressions that merely end before a binding's `;`
+    (e.g. the lambda in `f = x: x;`) no longer take the semicolon either.
   - Fix: detect Elixir installed via a Windows batch launcher
   - Extend allowed types in persisted symbol caches, fixing cache loading issues with `clangd`
     when overriding values like `ls_path`, `clangd_version` or `compile_commands_dir`
