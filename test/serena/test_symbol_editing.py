@@ -531,6 +531,19 @@ def test_nix_binding_body_written_back_unchanged():
 
 @pytest.mark.nix
 @pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.NIX), reason="Nix tests are disabled (nixd not available)")
+def test_nix_binding_after_an_astral_character_written_back_unchanged():
+    """
+    Serena applies a column as a string index, so the semicolon a binding owns is found the same way: converted
+    from UTF-16 alone, a write-back after an astral character also deleted the character after the semicolon.
+    """
+    # not `inline/y`: a symbol that starts after an astral character on its line is shifted by Serena's column
+    # handling for every language, whatever its semicolon
+    name_paths = ["astral", "next", "inline", "inline/x", "last", "last/z"]
+    NixBindingEditTest("astral.nix", [(name, None) for name in name_paths], replacements=[]).run_test(None)
+
+
+@pytest.mark.nix
+@pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.NIX), reason="Nix tests are disabled (nixd not available)")
 def test_nix_binding_replaced_in_shown_shape():
     """A new body in the shape find_symbol shows replaces exactly the binding, with neither a lost nor a doubled `;`."""
     edits = [
