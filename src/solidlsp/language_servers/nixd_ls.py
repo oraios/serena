@@ -200,7 +200,7 @@ class NixLanguageServer(SolidLanguageServer):
         return _NIX_BINDING_TAIL.match(tail) is not None
 
     def _extend_nix_symbol_range_to_include_semicolon(
-        self, symbol: ls_types.UnifiedSymbolInformation, file_content: str
+        self, symbol: ls_types.UnifiedSymbolInformation, lines: list[str]
     ) -> ls_types.UnifiedSymbolInformation:
         """
         Extend symbol range to include trailing semicolon for Nix attribute symbols.
@@ -218,8 +218,6 @@ class NixLanguageServer(SolidLanguageServer):
         end_line = range_info["end"]["line"]
         end_char = range_info["end"]["character"]
 
-        # Split file content into lines
-        lines = file_content.split("\n")
         if end_line >= len(lines):
             return symbol
 
@@ -227,9 +225,10 @@ class NixLanguageServer(SolidLanguageServer):
             return symbol
 
         line = lines[end_line]
+        end_index = _utf16_column_to_index(line, end_char)
 
-        # Check if there's a semicolon immediately after the current range end
-        if end_char < len(line) and line[end_char] == ";":
+        # Check if there's a semicolon immediately after the current range end (a `;` is one UTF-16 unit)
+        if end_index < len(line) and line[end_index] == ";":
             # Extend range to include the semicolon
             new_range = {"start": range_info["start"], "end": {"line": end_line, "character": end_char + 1}}
 
@@ -253,7 +252,7 @@ class NixLanguageServer(SolidLanguageServer):
 
     @override
     def _document_symbols_cache_fingerprint(self) -> Hashable | None:
-        build_document_symbols_version = 3
+        build_document_symbols_version = 4
         return build_document_symbols_version
 
     @override
@@ -266,16 +265,17 @@ class NixLanguageServer(SolidLanguageServer):
         # Get symbols from parent implementation
         document_symbols = super()._build_document_symbols_from_raw_symbols(relative_file_path, file_buffer=file_buffer)
 
-        # Get file content for range extension
-        file_content = file_buffer.contents
+        # Split once per document: a fresh copy of a long line per symbol would be rehashed for each lookup
+        lines = file_buffer.split_lines()
         body_factory = SymbolBodyFactory(file_buffer)
 
         # Extend ranges for all symbols recursively
         def extend_symbol_and_children(symbol: ls_types.UnifiedSymbolInformation) -> ls_types.UnifiedSymbolInformation:
             # Extend this symbol's range
-            extended = self._extend_nix_symbol_range_to_include_semicolon(symbol, file_content)
-            if "body" not in extended:
-                extended["body"] = body_factory.create_symbol_body(extended)
+            extended = self._extend_nix_symbol_range_to_include_semicolon(symbol, lines)
+            # every body from one factory, so that the document keeps a single copy of its lines
+            extended.pop("body", None)
+            extended["body"] = body_factory.create_symbol_body(extended)
 
             # Extend children recursively
             if extended.get("children"):
@@ -284,7 +284,10 @@ class NixLanguageServer(SolidLanguageServer):
             return extended
 
         # Apply range extension to all symbols
-        extended_root_symbols = [extend_symbol_and_children(sym) for sym in document_symbols.root_symbols]
+        try:
+            extended_root_symbols = [extend_symbol_and_children(sym) for sym in document_symbols.root_symbols]
+        finally:
+            _utf16_offsets.cache_clear()  # its tables are several times their lines' size
 
         return DocumentSymbols(extended_root_symbols)
 

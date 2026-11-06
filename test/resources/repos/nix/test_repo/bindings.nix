@@ -20,5 +20,7 @@
     = {
       e = 5;
     };
+  nextLine = 1
+    ;
   inherit (builtins) toString;
 }
