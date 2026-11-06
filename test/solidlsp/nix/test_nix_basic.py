@@ -269,3 +269,33 @@ class TestNixLanguageServer:
             min_count=1,
         )
         assert language_server.is_running()
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
+    def test_symbol_body_matches_its_range(self, language_server: SolidLanguageServer) -> None:
+        """
+        find_symbol shows a symbol's body and replace_symbol_body overwrites the symbol's range, so the two
+        must cover the same text. When they differed, writing back a body as shown deleted the binding's
+        trailing semicolon. Only a binding owns that semicolon: an expression ending right before it
+        (here the lambda bound to makeGreeting) must not include it.
+        """
+        lines = read_repo_file(language_server, "default.nix").split("\n")
+
+        def range_text(symbol_range: dict) -> str:
+            start, end = symbol_range["start"], symbol_range["end"]
+            if start["line"] == end["line"]:
+                return lines[start["line"]][start["character"] : end["character"]]
+            return "\n".join(
+                [
+                    lines[start["line"]][start["character"] :],
+                    *lines[start["line"] + 1 : end["line"]],
+                    lines[end["line"]][: end["character"]],
+                ]
+            )
+
+        all_symbols, _ = language_server.request_document_symbols("default.nix").get_all_symbols_and_roots()
+        mismatched = [s["name"] for s in all_symbols if s["body"].get_text() != range_text(s["location"]["range"])]
+        assert not mismatched, f"Symbols whose body differs from their range: {mismatched}"
+
+        bodies = {s["body"].get_text() for s in all_symbols}
+        assert 'makeGreeting = name: "Hello, ${name}!";' in bodies, "the binding should include its semicolon"
+        assert 'name: "Hello, ${name}!"' in bodies, "the lambda it binds should not include the semicolon"

@@ -9,6 +9,7 @@ Note: Windows is not supported as Nix itself doesn't support Windows natively.
 import json
 import logging
 import platform
+import re
 import shutil
 import subprocess
 from collections.abc import Hashable
@@ -21,7 +22,7 @@ from overrides import override
 
 from solidlsp import ls_types
 from solidlsp.dependency_provider import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath
-from solidlsp.ls import DocumentSymbols, LSPFileBuffer, SolidLanguageServer
+from solidlsp.ls import DocumentSymbols, LSPFileBuffer, SolidLanguageServer, SymbolBodyFactory
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
 from solidlsp.util.subprocess_util import subprocess_run
@@ -157,14 +158,24 @@ class NixLanguageServer(SolidLanguageServer):
 
         nixd provides ranges that exclude semicolons (expression-level), but serena needs
         statement-level ranges that include semicolons for proper replacement.
+
+        Only bindings (`name = value;`, `a.b = value;`) are extended. An inner expression that merely
+        ends right before the binding's semicolon (a lambda body, the last identifier in `a + b;`) does
+        not own it, and extending it would make an edit of that expression delete the semicolon.
+        The extended symbol carries no precomputed body, so the caller must create one from the new range.
         """
         range_info = symbol["range"]
+        start_line, start_char = range_info["start"]["line"], range_info["start"]["character"]
         end_line = range_info["end"]["line"]
         end_char = range_info["end"]["character"]
 
         # Split file content into lines
         lines = file_content.split("\n")
-        if end_line >= len(lines):
+        if end_line >= len(lines) or start_line >= len(lines):
+            return symbol
+
+        binding = re.compile(rf"{re.escape(symbol['name'])}(?:\s*\.\s*[^\s=.;]+)*\s*=(?!=)")
+        if not binding.match(lines[start_line], start_char):
             return symbol
 
         line = lines[end_line]
@@ -174,8 +185,11 @@ class NixLanguageServer(SolidLanguageServer):
             # Extend range to include the semicolon
             new_range = {"start": range_info["start"], "end": {"line": end_line, "character": end_char + 1}}
 
-            # Create modified symbol with extended range
+            # Create modified symbol with extended range. The body the parent computed covers the old
+            # range; left in place, find_symbol would show it without the semicolon while
+            # replace_symbol_body overwrites the extended range, deleting the semicolon.
             extended_symbol = symbol.copy()
+            extended_symbol.pop("body", None)
             extended_symbol["range"] = new_range
 
             # CRITICAL: Also update the location.range if it exists
@@ -191,7 +205,7 @@ class NixLanguageServer(SolidLanguageServer):
 
     @override
     def _document_symbols_cache_fingerprint(self) -> Hashable | None:
-        build_document_symbols_version = 2
+        build_document_symbols_version = 3
         return build_document_symbols_version
 
     @override
@@ -206,11 +220,14 @@ class NixLanguageServer(SolidLanguageServer):
 
         # Get file content for range extension
         file_content = file_buffer.contents
+        body_factory = SymbolBodyFactory(file_buffer)
 
         # Extend ranges for all symbols recursively
         def extend_symbol_and_children(symbol: ls_types.UnifiedSymbolInformation) -> ls_types.UnifiedSymbolInformation:
             # Extend this symbol's range
             extended = self._extend_nix_symbol_range_to_include_semicolon(symbol, file_content)
+            if "body" not in extended:
+                extended["body"] = body_factory.create_symbol_body(extended)
 
             # Extend children recursively
             if extended.get("children"):
