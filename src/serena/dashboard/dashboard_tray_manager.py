@@ -320,6 +320,7 @@ class SerenaDashboardTrayManager:
         alive_thread.start()
 
         # set up tray icon with a dynamic menu (callable returns items on each open)
+        icon_class: type[pystray.Icon] = pystray.Icon
         kwargs: dict[str, Any] = {}
         if sys.platform == "darwin":
             from AppKit import NSApplication, NSApplicationActivationPolicyAccessory  # ty: ignore[unresolved-import]  (macOS only)
@@ -329,7 +330,11 @@ class SerenaDashboardTrayManager:
             nsapp.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
             kwargs["darwin_nsapplication"] = nsapp
 
-        self._tray_icon = pystray.Icon(
+            from serena.util.macos_tray_icon import MacOSTrayIcon
+
+            icon_class = MacOSTrayIcon
+
+        self._tray_icon = icon_class(
             "serena_tray_manager",
             icon_img,
             "Serena",
