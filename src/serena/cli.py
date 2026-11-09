@@ -5,11 +5,13 @@ import glob
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
 import time
 from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from logging import Logger
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -50,6 +52,7 @@ from solidlsp.ls_types import SymbolKind
 from solidlsp.util.subprocess_util import subprocess_kwargs
 
 if TYPE_CHECKING:
+    from serena.mcp import SerenaMCPFactory
     from serena.memories.memory_manager import MemoryManager
 
 log = logging.getLogger(__name__)
@@ -159,6 +162,31 @@ class ProjectType(click.ParamType):
 
 
 PROJECT_TYPE = ProjectType()
+
+
+@contextmanager
+def agent_shutdown_on_signal(factory: "SerenaMCPFactory") -> Iterator[None]:
+    """
+    Shuts the factory's agent down when the process is told to stop while an SSE/streamable-HTTP server is running.
+
+    uvicorn captures SIGINT/SIGTERM while it serves, restores the handlers it found once its loop has ended, and
+    then re-raises the captured signal — so with the default handlers in place the process dies right after the
+    server stops and nothing after `server.run` ever runs. The handler installed here is what uvicorn restores and
+    re-raises into: it shuts the agent down (stopping language servers and saving their caches, like the stdio
+    lifespan does), then hands the signal to the default handler so the process still exits the conventional way.
+    """
+
+    def handler(signum: int, _frame: object) -> None:
+        factory.shutdown_agent()
+        signal.signal(signum, signal.SIG_DFL)
+        signal.raise_signal(signum)
+
+    previous = {sig: signal.signal(sig, handler) for sig in (signal.SIGINT, signal.SIGTERM)}
+    try:
+        yield
+    finally:
+        for sig, previous_handler in previous.items():
+            signal.signal(sig, previous_handler)
 
 
 class TopLevelCommands(AutoRegisteringGroup):
@@ -473,11 +501,18 @@ class TopLevelCommands(AutoRegisteringGroup):
                 project_file,
             )
         log.info("Starting MCP server …")
-        if transport == "stdio":
-            server.run(transport="stdio")
-        else:
-            with uvicorn_ignore_logging_config_context():
-                server.run(transport=transport, host=host, port=port)
+        try:
+            if transport == "stdio":
+                server.run(transport="stdio")
+            else:
+                with agent_shutdown_on_signal(factory), uvicorn_ignore_logging_config_context():
+                    server.run(transport=transport, host=host, port=port)
+        finally:
+            # For stdio, the server lifespan has already shut the agent down (this is a no-op then).
+            # For SSE/streamable-HTTP, the lifespan runs per connection and leaves the agent alone:
+            # a signal reaches `agent_shutdown_on_signal` above, and this covers the server loop
+            # ending any other way (e.g. a failure to start).
+            factory.shutdown_agent()
 
     @staticmethod
     @click.command(

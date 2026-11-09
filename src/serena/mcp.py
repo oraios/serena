@@ -425,7 +425,8 @@ class SerenaMCPFactory:
         """
         Manages the lifespan of MCP server instances and performs necessary setup and teardown.
         For stdio transport, there is a single server instance.
-        For other transports, this is called once per connection!
+        For other transports, this is called once per connection, so the agent is shut down
+        by `shutdown_agent` once the server loop has ended instead.
 
         :param mcp_server: the MCP server instance to configure
         """
@@ -437,14 +438,24 @@ class SerenaMCPFactory:
         try:
             yield
         finally:
-            # Shut down the server if we are running in stdio mode.
-            # For other transports, we do nothing; the singleton agent instance remains active.
+            # Shut down the agent if we are running in stdio mode (one connection, one server).
+            # For other transports, we do nothing here; the singleton agent instance remains active
+            # across connections and is shut down by `shutdown_agent` when the server loop ends.
             if self.transport == "stdio":
-                log.info("MCP server shutting down")
-                if self.agent is not None:
-                    self.agent.on_shutdown()
+                self.shutdown_agent()
             else:
                 log.info("Client disconnected")
+
+    def shutdown_agent(self) -> None:
+        """
+        Shuts down the agent (stopping language servers and saving their caches), if one is active.
+        Safe to call more than once; only the first call does anything.
+        """
+        if self.agent is None:
+            return
+        log.info("MCP server shutting down")
+        agent, self.agent = self.agent, None
+        agent.on_shutdown()
 
     def _get_initial_instructions(self) -> str:
         assert self.agent is not None

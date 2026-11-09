@@ -11,6 +11,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     silently. Since the replacement is per language rather than per key, a project block that only set
     `ls_path`, for example, dropped every global key such as `ls_extra_args`, leaving no trace. The
     replacement behaviour is unchanged, but the global keys hidden by a project block are now logged (#2188).
+  - Fix: under the `sse` and `streamable-http` transports, stopping the MCP server with SIGINT/SIGTERM
+    did not shut the agent down, so language servers were left to be killed and the symbol caches they
+    had built were never saved (the server lifespan runs per connection under these transports, and
+    uvicorn re-raises the signal right after its loop ends). The CLI now shuts the agent down on the
+    signal and when the server loop ends for any other reason, as the `stdio` transport already did (#2221).
 
 * JetBrains:
   - Fix: When applying a non-symbolic edit, do not raise a post-edit exception during IDE file refresh
