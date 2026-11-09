@@ -12,6 +12,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     `ls_path`, for example, dropped every global key such as `ls_extra_args`, leaving no trace. The
     replacement behaviour is unchanged, but the global keys hidden by a project block are now logged (#2188).
 
+* Tools:
+  - Fix: full-text `search_for_pattern` honors `skip_ignored_files=False` when targeting a single ignored file.
+
 * JetBrains:
   - Fix: When applying a non-symbolic edit, do not raise a post-edit exception during IDE file refresh
     if the IDE's plugin server is not reachable.
