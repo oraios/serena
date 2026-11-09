@@ -22,7 +22,7 @@ class QmlLanguageServer(SolidLanguageServer):
     Provides QML specific instantiation of the LanguageServer class using qmlls.
 
     qmlls is the official QML language server shipped with Qt 6.
-    It must be installed separately; see https://doc.qt.io/qt-6/qtqml-tool-qmlls.html
+    It must be installed separately; see https://doc.qt.io/qt-6/qtqml-tooling-qmlls.html
     for installation instructions.
 
     The dependency provider looks for ``qmlls6`` first, then falls back to ``qmlls``.
@@ -50,7 +50,7 @@ class QmlLanguageServer(SolidLanguageServer):
                 raise FileNotFoundError(
                     "qmlls (QML language server) is not installed or not in PATH.\n"
                     "Please install Qt 6 and ensure 'qmlls' (or 'qmlls6') is available on your PATH.\n"
-                    "See: https://doc.qt.io/qt-6/qtqml-tool-qmlls.html"
+                    "See: https://doc.qt.io/qt-6/qtqml-tooling-qmlls.html"
                 )
             return qmlls_binary
 
