@@ -74,7 +74,7 @@ class TextStepper:
         """
         self.prev_line_start_idx = 0
         """
-        start index of the last fully processed line (inclusive)    
+        start index of the last fully processed line (inclusive), the final one included if it has no line break
         """
         self.prev_line_end_idx = 0
         """
@@ -130,6 +130,8 @@ class TextStepper:
             self.idx = self._len
             self.col = self._len - self.line_start_idx
             self.is_newline = False
+            self.prev_line_start_idx = self.line_start_idx
+            self.prev_line_end_idx = self._len
         return True
 
     def step_to(self, line: int, col: int):
@@ -159,7 +161,7 @@ class TextStepper:
         Returns the last line processed, optionally including the newline character(s) at the end
         """
         start_idx = self.prev_line_start_idx
-        end_idx = self.prev_line_end_idx if not with_end else self.line_start_idx
+        end_idx = self.line_start_idx if with_end and self.is_newline else self.prev_line_end_idx
         return self._chars[start_idx:end_idx]
 
     def process_all_gather_lines(self, with_ends: bool) -> list[str]:

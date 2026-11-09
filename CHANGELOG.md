@@ -33,6 +33,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     language servers are stopped or restarted
   - Fix: the default connection prompt made some agents call `initial_instructions` again for every new task in a
     conversation, although the Serena Instructions Manual was still in context (#2293)
+  - Fix: `safe_delete_symbol` also deleted what remained on the last line of a file without a final line
+    break, e.g. deleting `first` from `{ first = 1; keep = 2; }` left the file empty
 
 * JetBrains:
   - Fix: When applying a non-symbolic edit, do not raise a post-edit exception during IDE file refresh
