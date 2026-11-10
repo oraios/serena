@@ -217,6 +217,7 @@ class WebViewWithTray:
             Item("Quit", quit_app),
         )
 
+        icon_class: type[pystray.Icon] = pystray.Icon
         kwargs: dict[str, Any] = {}
         if sys.platform == "darwin":
             # Passing darwin_nsapplication integrates pystray with the NSApplication
@@ -226,7 +227,11 @@ class WebViewWithTray:
 
             kwargs["darwin_nsapplication"] = NSApplication.sharedApplication()
 
-        self._tray_icon = pystray.Icon("dashboard_viewer", icon_img, self._title, menu, **kwargs)
+            from serena.util.macos_tray_icon import MacOSTrayIcon
+
+            icon_class = MacOSTrayIcon
+
+        self._tray_icon = icon_class("dashboard_viewer", icon_img, self._title, menu, **kwargs)
 
         # On Windows/Linux, run_detached spawns pystray's own internal thread and
         # returns immediately.  On macOS it hooks into the NSApplication run loop

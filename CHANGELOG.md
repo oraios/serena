@@ -2,6 +2,9 @@
 
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
+* Dashboard:
+  - Fix: the macOS menu bar (tray) icon was blurry on Retina displays
+
 * General:
   - More flexible inclusion/exclusion definitions: 
     - Allow tool exclusions/inclusions to use tool marker names (e.g. `ToolMarkerCanEdit`)
