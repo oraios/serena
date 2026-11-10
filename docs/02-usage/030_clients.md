@@ -920,7 +920,7 @@ Some of the leading open source GUI applications are
 
   * [Jan](https://jan.ai/docs/mcp), 
   * [OpenHands](https://github.com/All-Hands-AI/OpenHands/),
-  * [OpenWebUI](https://docs.openwebui.com/openapi-servers/mcp) and 
+  * [OpenWebUI](https://docs.openwebui.com/features/extensibility/plugin/tools/openapi-servers/mcp) and 
   * [Agno](https://docs.agno.com/introduction/playground).
 
 These applications allow combining Serena with almost any LLM (including locally running ones) 
