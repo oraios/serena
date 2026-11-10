@@ -39,6 +39,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - C/C++ (clangd) logs errors only (`--log=error`) instead of a line for every request and parse, unless
     `ls_extra_args` sets `--log` or Serena logs at debug level
   - Fix: every line a language server wrote to stderr was followed by an empty line in Serena's log
+  - Fix: a symbol cache file that could not be loaded was overwritten by the next save, losing the whole
+    index; it is now kept next to the cache as `*.bak`
 
 # v2.1.0 (2026-10-19)
 
