@@ -1,11 +1,73 @@
 import os
+from pathlib import Path
 
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerId
+from solidlsp.ls_types import SymbolKind
 from solidlsp.ls_utils import SymbolUtils
+from test.conftest import find_identifier_position, get_repo_path
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
+
+
+@pytest.mark.vue
+@pytest.mark.parametrize("language_server", [LanguageServerId.VUE], indirect=True)
+class TestVueImplementations:
+    @pytest.mark.parametrize(
+        ("source_file", "interface_name", "expected"),
+        [
+            (
+                "src/types/implementation_sample.ts",
+                "Shape",
+                [("src/types/implementation_sample.ts", "Square"), ("src/types/implementation_other.ts", "Circle")],
+            ),
+            (
+                "src/types/implementation_sample.ts",
+                "CrossFileShape",
+                [("src/types/implementation_other.ts", "Rectangle"), ("src/types/ImplementationSample.vue", "VueRectangle")],
+            ),
+            (
+                "src/types/ImplementationSample.vue",
+                "EmbeddedShape",
+                [("src/types/ImplementationSample.vue", "EmbeddedSquare")],
+            ),
+            ("src/types/implementation_sample.ts", "UnimplementedShape", []),
+        ],
+        ids=["multiple-ts-implementations", "cross-file-ts-and-vue", "embedded-typescript", "no-implementation"],
+    )
+    def test_implementation_locations_and_symbols(
+        self,
+        language_server: SolidLanguageServer,
+        source_file: str,
+        interface_name: str,
+        expected: list[tuple[str, str]],
+    ) -> None:
+        repo = get_repo_path(LanguageServerId.VUE)
+        position = find_identifier_position(repo / source_file, interface_name)
+        assert position is not None
+
+        locations = language_server.request_implementation(source_file, *position)
+        expected_locations = set()
+        for path, name in expected:
+            implementation_position = find_identifier_position(repo / path, name)
+            assert implementation_position is not None
+            expected_locations.add((path, *implementation_position))
+        assert {
+            (Path(location["relativePath"]).as_posix(), location["range"]["start"]["line"], location["range"]["start"]["character"])
+            for location in locations
+        } == expected_locations
+        for location in locations:
+            start, end = location["range"]["start"], location["range"]["end"]
+            source_line = (repo / location["relativePath"]).read_text(encoding="utf-8").splitlines()[start["line"]]
+            assert end["line"] == start["line"]
+            assert (Path(location["relativePath"]).as_posix(), source_line[start["character"] : end["character"]]) in expected
+
+        symbols = language_server.request_implementing_symbols(source_file, *position, include_body=True)
+        assert {(Path(symbol["location"]["relativePath"]).as_posix(), symbol["name"]) for symbol in symbols} == set(expected)
+        for symbol in symbols:
+            assert symbol["kind"] == SymbolKind.Class
+            assert f"class {symbol['name']} implements {interface_name}" in symbol["body"].get_text()
 
 
 @pytest.mark.vue
