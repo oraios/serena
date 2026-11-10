@@ -12,6 +12,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     `ls_path`, for example, dropped every global key such as `ls_extra_args`, leaving no trace. The
     replacement behaviour is unchanged, but the global keys hidden by a project block are now logged (#2188).
 
+* CLI:
+  - Fix: `project health-check` failed for projects whose language server does not implement reference
+    search, e.g. JSON-only projects (`vscode-json-languageserver`). The reference test is now skipped with
+    a warning in this case; any other reference-search failure still fails the check (#2253)
+
 * JetBrains:
   - Fix: When applying a non-symbolic edit, do not raise a post-edit exception during IDE file refresh
     if the IDE's plugin server is not reachable.
