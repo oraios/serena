@@ -2,13 +2,15 @@
 
 import json
 import re
+import time
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import Mock, call, patch
 
 import pytest
 
-from solidlsp.language_servers.nixd_ls import NixLanguageServer
+from solidlsp.language_servers.nixd_ls import NixLanguageServer, _utf16_column_to_index, _utf16_offsets
+from solidlsp.ls import DocumentSymbols, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig, LanguageServerId
 from solidlsp.settings import SolidLSPSettings
 
@@ -247,3 +249,93 @@ def test_hover_stops_after_bounded_retries(tmp_path: Path) -> None:
     assert cast(Any, server.server.send.hover).call_count == NixLanguageServer._HOVER_RETRY_COUNT + 1
     assert wait.call_count == NixLanguageServer._HOVER_RETRY_COUNT
     wait.assert_called_with(NixLanguageServer._HOVER_RETRY_DELAY_SECONDS)
+
+
+def _symbol_for(source: str, range_text: str, name: str) -> dict[str, Any]:
+    """A hand-built nixd-style symbol whose range covers `range_text` and whose selectionRange covers its leading `name`."""
+    assert range_text.startswith(name)
+    start = source.index(range_text)
+
+    def position(offset: int) -> dict[str, int]:
+        before = source[:offset]
+        column_text = before[before.rfind("\n") + 1 :]
+        return {"line": before.count("\n"), "character": len(column_text.encode("utf-16-le")) // 2}
+
+    return {
+        "range": {"start": position(start), "end": position(start + len(range_text))},
+        "selectionRange": {"start": position(start), "end": position(start + len(name))},
+    }
+
+
+@pytest.mark.parametrize(
+    ("source", "range_text", "name", "is_binding"),
+    [
+        ("{ plain = 1; }", "plain = 1", "plain", True),
+        ('{ "é" = { a = 1; }; }', '"é" = { a = 1; }', '"é"', True),
+        ('{ "quoted" = 1; }', '"quoted" = 1', '"quoted"', True),
+        ('{ ${"dyn"} = 1; }', '${"dyn"} = 1', '${"dyn"}', True),
+        ("{ split\n  = 1; }", "split\n  = 1", "split", True),
+        ("{ c /* comment */ = 1; }", "c /* comment */ = 1", "c", True),
+        ("{ c # comment\n  = 1; }", "c # comment\n  = 1", "c", True),
+        ("{ tight=1; }", "tight=1", "tight", True),
+        ("{ s\n  =\n  { e = 5; }; }", "s\n  =\n  { e = 5; }", "s", True),
+        ('{ "🚀🚀" = { a = 1; }; }', '"🚀🚀" = { a = 1; }', '"🚀🚀"', True),
+        ("{ f = x: x; }", "x: x", "x", False),
+        ("{ inherit (b) toString; }", "toString", "toString", False),
+        ("{ same = a == b; }", "a == b", "a", False),
+        # an `=` inside a comment, or a second comment further on, must not make a lambda look like a binding
+        ("{ f = x # = note\n: x; }", "x # = note\n: x", "x", False),
+        ("{ f = x /* first */ : let y /* second */ = 1; in y; }", "x /* first */ : let y /* second */ = 1; in y", "x", False),
+    ],
+)
+def test_is_nix_binding(source: str, range_text: str, name: str, is_binding: bool) -> None:
+    symbol = _symbol_for(source, range_text, name)
+    assert NixLanguageServer._is_nix_binding(cast(Any, symbol), source.split("\n")) is is_binding
+
+
+def test_is_nix_binding_does_not_backtrack_through_long_comments() -> None:
+    # A lambda with a comment before its `:` used to take time exponential in the comment's `#` count: each
+    # further `#` doubled it, and 25 took over a second. The comment is kept short so that a regression fails
+    # here instead of hanging the test run.
+    source = "{ pkgs, ... }\n" + "#" * 25 + "\n: { a = 1; }"
+    symbol = _symbol_for(source, source, "{ pkgs, ... }")
+    started = time.monotonic()
+    assert NixLanguageServer._is_nix_binding(cast(Any, symbol), source.split("\n")) is False
+    assert time.monotonic() - started < 0.1
+
+
+@pytest.mark.parametrize("prefix", ["", "\U0001f680"])
+def test_utf16_columns_of_a_long_line_are_converted_quickly(prefix: str) -> None:
+    # Two conversions run per symbol. Walking the line from its start for each one took minutes on a generated
+    # one-line file; a line of 20k characters keeps a regression to seconds rather than hanging the run.
+    line = prefix + "{ " + " ".join(f"a{i} = {i};" for i in range(2000)) + " }"
+    started = time.monotonic()
+    indices = [_utf16_column_to_index(line, column) for column in range(0, len(line), 7)]
+    assert time.monotonic() - started < 0.5
+    assert indices[1] == (7 if not prefix else 6)
+
+
+def test_document_symbols_of_a_long_line_are_built_quickly(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A generated one-line file with thousands of bindings: the line must be split once per document, not once
+    # per symbol, which took 2 s here. The leading astral character keeps the line off the ASCII fast path.
+    prefix = '{ _ = "\U0001f680"; '
+    pieces, symbols, index = [prefix], [], len(prefix)
+    for i in range(20000):
+        binding, name = f"a{i} = {i}", f"a{i}"
+        column = index + 1  # the astral character before it takes two UTF-16 units
+        range_ = {"start": {"line": 0, "character": column}, "end": {"line": 0, "character": column + len(binding)}}
+        selection = {"start": range_["start"], "end": {"line": 0, "character": column + len(name)}}
+        symbols.append({"name": name, "range": range_, "selectionRange": selection, "location": {"range": range_}})
+        pieces.append(binding + "; ")
+        index += len(binding) + 2
+    line = "".join(pieces) + "}"
+    buffer = Mock(contents=line, split_lines=lambda: line.split("\n"))
+    monkeypatch.setattr(
+        SolidLanguageServer, "_build_document_symbols_from_raw_symbols", lambda self, path, file_buffer: DocumentSymbols(symbols)
+    )
+    ls = NixLanguageServer.__new__(NixLanguageServer)
+    started = time.monotonic()
+    result = ls._build_document_symbols_from_raw_symbols("generated.nix", buffer)
+    assert time.monotonic() - started < 1.0
+    assert len({id(symbol["body"]._lines) for symbol in result.root_symbols}) == 1, "one copy of the lines per document"
+    assert _utf16_offsets.cache_info().currsize == 0, "the line's offsets table is not kept after the build"

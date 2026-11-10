@@ -244,7 +244,7 @@ class TestNixLanguageServer:
             # that actually have declaration names.
             if s["kind"] in {SymbolKind.String, SymbolKind.Array}:
                 continue
-            if s["name"] in {"(anonymous lambda)", "(dynamic string)", "{anonymous}", "(dynamic attribute name)"}:
+            if s["name"] in {"(anonymous lambda)", "(dynamic string)", "{anonymous}", "(dynamic attribute name)", "${dynamic attribute}"}:
                 continue
             if s["kind"] in {SymbolKind.Field, SymbolKind.Property} and "." in s["name"]:
                 continue
@@ -269,3 +269,68 @@ class TestNixLanguageServer:
             min_count=1,
         )
         assert language_server.is_running()
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
+    @pytest.mark.parametrize("rel_path", ["default.nix", "flake.nix", "lib/utils.nix", "modules/example.nix", "bindings.nix", "astral.nix"])
+    def test_symbol_body_matches_its_range(self, language_server: SolidLanguageServer, rel_path: str) -> None:
+        """
+        find_symbol shows a symbol's body and replace_symbol_body overwrites the symbol's range, so the two
+        must cover the same text. When they differed, writing back a body as shown deleted the binding's
+        trailing semicolon.
+        """
+        lines = read_repo_file(language_server, rel_path).split("\n")
+
+        def range_text(symbol_range: dict) -> str:
+            start, end = symbol_range["start"], symbol_range["end"]
+            if start["line"] == end["line"]:
+                return lines[start["line"]][start["character"] : end["character"]]
+            return "\n".join(
+                [
+                    lines[start["line"]][start["character"] :],
+                    *lines[start["line"] + 1 : end["line"]],
+                    lines[end["line"]][: end["character"]],
+                ]
+            )
+
+        all_symbols, _ = language_server.request_document_symbols(rel_path).get_all_symbols_and_roots()
+        mismatched = [s["name"] for s in all_symbols if s["body"].get_text() != range_text(s["location"]["range"])]
+        assert not mismatched, f"Symbols in {rel_path} whose body differs from their range: {mismatched}"
+        diverged = [s["name"] for s in all_symbols if s["range"] != s["location"]["range"]]
+        assert not diverged, f"Symbols in {rel_path} whose range differs from their location's: {diverged}"
+        stale = [c["name"] for s in all_symbols for c in s.get("children", []) if c.get("parent") is not s]
+        assert not stale, f"Symbols in {rel_path} whose parent is not the symbol listing them: {stale}"
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.NIX], indirect=True)
+    def test_bindings_own_their_semicolon(self, language_server: SolidLanguageServer) -> None:
+        """
+        A binding's body includes its trailing semicolon however its name is written: plain, quoted, split
+        from the `=` by a line break or a comment, or as the last part of an attribute path. The expressions
+        inside a binding (the lambda of `lambda = x: x;`) and inherited names do not include it, since an
+        edit of them would otherwise delete the binding's semicolon.
+        """
+        all_symbols, _ = language_server.request_document_symbols("bindings.nix").get_all_symbols_and_roots()
+        bodies_with_semicolon = {s["body"].get_text() for s in all_symbols if s["body"].get_text().endswith(";")}
+        assert bodies_with_semicolon == {
+            "plain = 1;",
+            '"quoted-name" = 2;',
+            "split\n    = 3;",
+            "commented /* before the equals sign */ = 4;",
+            '"web-host" = { root = "/srv"; };',
+            'root = "/srv";',
+            "lambda = x: x;",
+            "formals = { a }: { b = a; };",
+            "b = a;",
+            "compare = y: y == 1;",
+            '${"dynamic"} = 5;',
+            "lineComment # before the equals sign\n    = 6;",
+            "blockComment /* over\n    two lines */ = 7;",
+            "tight=8;",
+            "splitValue\n    = {\n      e = 5;\n    };",
+            "e = 5;",
+        }
+        bodies = {s["body"].get_text() for s in all_symbols}
+        # lambdas inside bindings, including ones whose text contains `=`, and inherited names
+        for inner in ["x: x", "{ a }: { b = a; }", "y: y == 1", "toString"]:
+            assert inner in bodies, f"{inner!r} should be a symbol without the binding's semicolon"
+        # a range ending at the end of its line, with the semicolon on the next one
+        assert "nextLine = 1" in bodies
