@@ -3,6 +3,7 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - Fix: line-level edits (`delete_lines`, `replace_lines`, `insert_at_line`) now reject negative line indices instead of silently targeting the start of the file.
   - More flexible inclusion/exclusion definitions: 
     - Allow tool exclusions/inclusions to use tool marker names (e.g. `ToolMarkerCanEdit`)
     - Allow API exclusions to include `marker:editing` to exclude all editing functionality

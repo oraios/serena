@@ -141,6 +141,52 @@ def test_replace_lines_replaces_the_range(line_editing_api: tuple[EditApi, _Line
     assert (tmp_path / "a.py").read_text(encoding="utf-8") == "one\nTWO\nTHREE\nfour\n"
 
 
+def test_delete_lines_rejects_negative_line_indices(line_editing_api: tuple[EditApi, _LineEditingCodeEditor], tmp_path: Path) -> None:
+    """Negative indices must not silently address line 0.
+
+    ``read_file`` documents negative indices as counting from the end of the file, and the
+    line-level edits document that the range must have been read with ``read_file`` first.
+    ``TextUtils.get_index_from_line_col`` maps a negative line to the start of the file, so
+    without an explicit check ``delete_lines(-1, -1)`` deletes nothing and reports success.
+    """
+    api, _ = line_editing_api
+    source = tmp_path / "a.py"
+    original = source.read_text(encoding="utf-8")
+
+    with pytest.raises(ValueError, match="non-negative"):
+        api.delete_lines("a.py", start_line=-1, end_line=-1)
+
+    assert source.read_text(encoding="utf-8") == original
+
+
+def test_replace_lines_rejects_negative_line_indices(line_editing_api: tuple[EditApi, _LineEditingCodeEditor], tmp_path: Path) -> None:
+    """A negative range must not be applied at the start of the file.
+
+    ``replace_lines(-2, -1, ...)`` is mapped to a zero-width range at the start of the file and
+    inserts the replacement there, reporting success instead of replacing the final two lines.
+    """
+    api, _ = line_editing_api
+    source = tmp_path / "a.py"
+    original = source.read_text(encoding="utf-8")
+
+    with pytest.raises(ValueError, match="non-negative"):
+        api.replace_lines("a.py", start_line=-2, end_line=-1, content="X")
+
+    assert source.read_text(encoding="utf-8") == original
+
+
+def test_insert_at_line_rejects_negative_line_index(line_editing_api: tuple[EditApi, _LineEditingCodeEditor], tmp_path: Path) -> None:
+    """A negative insertion line must not silently insert at the start of the file."""
+    api, _ = line_editing_api
+    source = tmp_path / "a.py"
+    original = source.read_text(encoding="utf-8")
+
+    with pytest.raises(ValueError, match="non-negative"):
+        api.insert_at_line("a.py", line=-1, content="X")
+
+    assert source.read_text(encoding="utf-8") == original
+
+
 def test_replace_lines_keeps_the_file_when_the_insert_fails(
     line_editing_api: tuple[EditApi, _LineEditingCodeEditor], tmp_path: Path
 ) -> None:
