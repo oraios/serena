@@ -18,12 +18,63 @@ from serena.config.serena_config import (
     RegisteredProject,
     SerenaConfig,
     SerenaConfigError,
+    expand_home_in_path_setting,
+    expand_home_in_settings,
 )
 from serena.constants import PROJECT_TEMPLATE_FILE, SERENA_MANAGED_DIR_NAME
 from serena.language_backend import BuiltinLanguageBackend
 from serena.project import MemoryManager, Project
 from solidlsp.ls_config import LanguageServerId
 from test.conftest import create_default_serena_config
+
+
+def _set_fake_home(monkeypatch, home: Path) -> None:
+    """Point ``os.path.expanduser("~")`` at ``home`` on both POSIX and Windows."""
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+
+
+def _norm(path: str | Path) -> str:
+    """Normalise a path for comparison, making the tests independent of the path separator."""
+    return os.path.normpath(str(path))
+
+
+class TestHomeExpansion:
+    """Tests for the expansion of a leading ``~`` in configuration path values."""
+
+    def test_expands_tilde_only_and_tilde_path(self, monkeypatch, tmp_path):
+        home = tmp_path / "home"
+        _set_fake_home(monkeypatch, home)
+        assert expand_home_in_path_setting("~") == str(home)
+        assert _norm(expand_home_in_path_setting("~/.m2/settings.xml")) == _norm(os.path.join(str(home), ".m2", "settings.xml"))
+
+    def test_leaves_non_tilde_values_untouched(self):
+        # absolute and relative paths, bare command names and strings containing '~' are not expanded
+        for value in ["/home/user/.m2/settings.xml", "settings.xml", "ansible", "a~b/c", ""]:
+            assert expand_home_in_path_setting(value) == value
+
+    def test_expand_home_in_settings_is_recursive(self, monkeypatch, tmp_path):
+        home = tmp_path / "home"
+        _set_fake_home(monkeypatch, home)
+        settings = {
+            "java": {
+                "maven_user_settings": "~/.m2/settings.xml",
+                "gradle_user_home": "~/.gradle",
+                "jdtls_xmx": "3G",
+                "nested": [{"path": "~/x"}, "plain", 42],
+            },
+            "unrelated": 7,
+        }
+        expanded = expand_home_in_settings(settings)
+        assert _norm(expanded["java"]["maven_user_settings"]) == _norm(os.path.join(str(home), ".m2", "settings.xml"))
+        assert _norm(expanded["java"]["gradle_user_home"]) == _norm(os.path.join(str(home), ".gradle"))
+        assert _norm(expanded["java"]["nested"][0]["path"]) == _norm(os.path.join(str(home), "x"))
+        # non-path values and non-string values are passed through
+        assert expanded["java"]["jdtls_xmx"] == "3G"
+        assert expanded["java"]["nested"][1:] == ["plain", 42]
+        assert expanded["unrelated"] == 7
+        # the input is not modified
+        assert settings["java"]["maven_user_settings"] == "~/.m2/settings.xml"
 
 
 class TestProjectConfigAutogenerate:
@@ -484,6 +535,26 @@ class TestGetConfiguredProjectSerenaFolder:
         with pytest.raises(SerenaConfigError, match=r"Unknown placeholder '\$unknownVar'"):
             config.get_configured_project_serena_folder("/home/user/myproject")
 
+    def test_home_relative_location_is_expanded(self, monkeypatch, tmp_path):
+        """A leading ``~`` in the template refers to the home directory, not to <cwd>/~."""
+        home = tmp_path / "home"
+        _set_fake_home(monkeypatch, home)
+        config = SerenaConfig(
+            project_serena_folder_location="~/.serena/projects/$projectFolderName/.serena",
+        ).with_headless_mode_overrides()
+        result = config.get_configured_project_serena_folder("/home/user/myproject")
+        assert result == os.path.join(str(home), ".serena", "projects", "myproject", ".serena")
+
+    def test_home_relative_placeholder_value_is_not_expanded_twice(self, monkeypatch, tmp_path):
+        """A placeholder value that is itself absolute must be used verbatim."""
+        home = tmp_path / "home"
+        _set_fake_home(monkeypatch, home)
+        config = SerenaConfig(
+            project_serena_folder_location="$projectDir/.serena",
+        ).with_headless_mode_overrides()
+        result = config.get_configured_project_serena_folder("/home/user/myproject")
+        assert result == os.path.abspath("/home/user/myproject/.serena")
+
     def test_rejects_typo_projectDirs(self):
         """$projectDirs should not be silently treated as $projectDir + 's'."""
         config = SerenaConfig(
@@ -639,6 +710,19 @@ class TestSerenaConfigLoadSave:
         self.master_config_path.write_text("projects:\n")
         config = SerenaConfig.from_config_file(generate_if_missing=False)
         assert config.projects == []
+
+    def test_project_path_with_tilde_is_expanded(self, monkeypatch):
+        """``~`` in a ``projects`` entry refers to the home directory, not to <cwd>/~."""
+        home = self.test_dir / "fakehome"
+        project_dir = home / "dev" / "repos" / "proj"
+        (project_dir / SERENA_MANAGED_DIR_NAME).mkdir(parents=True)
+        (project_dir / SERENA_MANAGED_DIR_NAME / "project.yml").write_text('project_name: "proj"\nlanguages: ["python"]\n')
+        _set_fake_home(monkeypatch, home)
+        self._write_master_config(['"~/dev/repos/proj"'])
+
+        config = SerenaConfig.from_config_file(generate_if_missing=False)
+
+        assert [str(project.project_root) for project in config.projects] == [str(project_dir.resolve())]
 
     @pytest.mark.parametrize("setting", ["", "auth_secret: null\n", 'auth_secret: ""\n'])
     def test_unset_auth_secret_is_generated_and_persisted(self, setting: str) -> None:
