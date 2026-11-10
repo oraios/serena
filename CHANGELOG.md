@@ -18,6 +18,10 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Language Servers:
   - Fix: detect Elixir installed via a Windows batch launcher
+  - F#: startup now waits for FsAutoComplete to report its workspace load as finished
+    (`fsharp/notifyWorkspace`, kind `workspaceLoad`) instead of returning as soon as
+    `initialized` has been sent, so requests are no longer answered from a project graph
+    that is still loading (#1209)
   - Extend allowed types in persisted symbol caches, fixing cache loading issues with `clangd`
     when overriding values like `ls_path`, `clangd_version` or `compile_commands_dir`
   - Add GraphQL language server support (experimental) via `graphql-language-service-cli` (`graphql-lsp`) for
