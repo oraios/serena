@@ -12,7 +12,8 @@ import logging
 
 from typing_extensions import override
 
-from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderUvx, SolidLanguageServer
+from solidlsp.language_servers.python_ls_base import PythonLanguageServerBase
+from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderUvx
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
 
@@ -21,7 +22,7 @@ log = logging.getLogger(__name__)
 TY_VERSION = "0.0.25"
 
 
-class TyLanguageServer(SolidLanguageServer):
+class TyLanguageServer(PythonLanguageServerBase):
     """
     Provides Python specific instantiation of the LanguageServer class using ``ty``.
     """

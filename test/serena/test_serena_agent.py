@@ -1177,6 +1177,39 @@ class TestSerenaAgent:
         symbols = json.loads(result)
         assert not symbols, f"Expected to find no symbols for {case.name_path}. Symbols found: {symbols}"
 
+    @pytest.mark.parametrize(
+        "serena_agent",
+        [pytest.param(LanguageServerId.PYTHON, marks=get_pytest_markers(LanguageServerId.PYTHON))],
+        indirect=True,
+    )
+    @pytest.mark.parametrize(
+        "name_path,expected_body,expected_body_location",
+        [
+            (
+                "TriageRationale",
+                'TriageRationale = Annotated[\n    str,\n    Field(\n        description=(\n            "Shown to the developer in the decision log."\n        )\n    ),\n]',
+                {"start_line": 9, "end_line": 16},
+            ),
+            (
+                "EscalateCall/why_escalated",
+                'why_escalated: str = Field(\n        description=(\n            "One sentence shown to the developer."\n        )\n    )',
+                {"start_line": 41, "end_line": 45},
+            ),
+        ],
+    )
+    def test_find_symbol_body_of_assignment_is_entire_statement(
+        self, serena_agent: SerenaAgent, name_path: str, expected_body: str, expected_body_location: dict[str, int]
+    ) -> None:
+        find_symbol_tool = serena_agent.get_tool(FindSymbolTool)
+        result = find_symbol_tool.apply(
+            name_path_pattern=name_path, relative_path=os.path.join("test_repo", "symbol_body.py"), include_body=True
+        )
+
+        symbols = json.loads(result)
+        assert len(symbols) == 1, f"Expected exactly one symbol for {name_path}. Symbols found: {symbols}"
+        assert symbols[0]["body"] == expected_body
+        assert symbols[0]["body_location"] == expected_body_location
+
     @pytest.mark.parametrize("serena_agent,case", FIND_SYMBOL_OVERLOADED_FUNCTION_CASES, indirect=["serena_agent"])
     def test_find_symbol_overloaded_function(self, serena_agent: SerenaAgent, case: FindSymbolOverloadedCase) -> None:
         """

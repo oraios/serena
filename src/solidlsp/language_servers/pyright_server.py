@@ -10,7 +10,8 @@ from typing import cast
 
 from overrides import override
 
-from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderUvx, SolidLanguageServer
+from solidlsp.language_servers.python_ls_base import PythonLanguageServerBase
+from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderUvx
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
 
@@ -19,7 +20,7 @@ log = logging.getLogger(__name__)
 PYRIGHT_VERSION = "1.1.403"
 
 
-class PyrightServer(SolidLanguageServer):
+class PyrightServer(PythonLanguageServerBase):
     """
     Provides Python specific instantiation of the LanguageServer class using Pyright.
     Contains various configurations and settings specific to Python.

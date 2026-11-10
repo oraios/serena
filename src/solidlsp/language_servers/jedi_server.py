@@ -8,7 +8,7 @@ import threading
 
 from overrides import override
 
-from solidlsp.ls import SolidLanguageServer
+from solidlsp.language_servers.python_ls_base import PythonLanguageServerBase
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.settings import SolidLSPSettings
@@ -16,7 +16,7 @@ from solidlsp.settings import SolidLSPSettings
 log = logging.getLogger(__name__)
 
 
-class JediServer(SolidLanguageServer):
+class JediServer(PythonLanguageServerBase):
     """
     Provides Python specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Python.
     """

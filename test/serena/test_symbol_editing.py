@@ -3,6 +3,7 @@ Snapshot tests using the (awesome) syrupy pytest plugin https://github.com/syrup
 Recreate the snapshots with `pytest --snapshot-update`.
 """
 
+import ast
 import logging
 import os
 import shutil
@@ -591,6 +592,85 @@ def test_typescript_symbol_replacement_no_double_keyword(snapshot: SnapshotAsser
         "twice",
         TS_DECL_REPLACEMENT,
     )
+    test_case.run_test(content_after_ground_truth=snapshot)
+
+
+PYTHON_SYMBOL_BODY_REL_FILE_PATH = os.path.join("test_repo", "symbol_body.py")
+
+
+class PythonAssignmentReplacementTest(ReplaceBodyTest):
+    """Test for replacing a Python assignment statement with an entire new statement, which must replace the
+    entire original statement rather than only the assigned name (which would silently turn the result into a
+    chained assignment ending with the original right-hand side).
+    """
+
+    def __init__(self, name_path: str, new_body: str, original_text_fragment: str):
+        """
+        :param name_path: the name path of the assigned symbol
+        :param new_body: the new assignment statement
+        :param original_text_fragment: a fragment of the original statement's right-hand side
+        """
+        super().__init__(LanguageServerId.PYTHON, PYTHON_SYMBOL_BODY_REL_FILE_PATH, name_path, new_body)
+        self.original_text_fragment = original_text_fragment
+
+    @overrides
+    def _test_diff(self, code_diff: CodeDiff, snapshot: SnapshotAssertion | None) -> None:
+        assert code_diff.modified_content.count(self.new_body) == 1
+        assert self.original_text_fragment not in code_diff.modified_content
+        ast.parse(code_diff.modified_content)
+        return super()._test_diff(code_diff, snapshot)
+
+
+@pytest.mark.python
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        pytest.param(
+            PythonAssignmentReplacementTest(
+                "TriageRationale",
+                'TriageRationale = Annotated[\n    str,\n    Field(description="Shown in the decision log."),\n]',
+                "Shown to the developer in the decision log.",
+            ),
+            id="module_level_assignment",
+        ),
+        pytest.param(
+            PythonAssignmentReplacementTest(
+                "EscalateCall/why_escalated",
+                'why_escalated: str = Field(description="Shown to the developer.")',
+                "One sentence shown to the developer.",
+            ),
+            id="annotated_class_field",
+        ),
+    ],
+)
+def test_python_assignment_replacement_replaces_entire_statement(test_case: PythonAssignmentReplacementTest, snapshot: SnapshotAssertion):
+    test_case.run_test(content_after_ground_truth=snapshot)
+
+
+class PythonAssignmentInsertionTest(InsertInRelToSymbolTest):
+    """Test for inserting a statement before/after a Python assignment statement, which must be placed relative to
+    the entire statement rather than to the assigned name.
+    """
+
+    @overrides
+    def _test_diff(self, code_diff: CodeDiff, snapshot: SnapshotAssertion | None) -> None:
+        ast.parse(code_diff.modified_content)
+        return super()._test_diff(code_diff, snapshot)
+
+
+@pytest.mark.python
+@pytest.mark.parametrize("mode", ["before", "after"])
+@pytest.mark.parametrize(
+    "name_path,new_content",
+    [
+        pytest.param("TriageRationale", 'INSERTED_CONSTANT = "inserted"', id="module_level_assignment"),
+        pytest.param("EscalateCall/why_escalated", "    inserted_field: int = 0", id="annotated_class_field"),
+    ],
+)
+def test_python_assignment_insertion_is_relative_to_entire_statement(
+    name_path: str, new_content: str, mode: Literal["before", "after"], snapshot: SnapshotAssertion
+):
+    test_case = PythonAssignmentInsertionTest(LanguageServerId.PYTHON, PYTHON_SYMBOL_BODY_REL_FILE_PATH, name_path, new_content, mode)
     test_case.run_test(content_after_ground_truth=snapshot)
 
 

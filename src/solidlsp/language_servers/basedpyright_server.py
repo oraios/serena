@@ -10,7 +10,8 @@ from typing import cast
 
 from overrides import override
 
-from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderUvx, SolidLanguageServer
+from solidlsp.language_servers.python_ls_base import PythonLanguageServerBase
+from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderUvx
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
 
@@ -19,7 +20,7 @@ log = logging.getLogger(__name__)
 BASEDPYRIGHT_VERSION = "1.39.9"
 
 
-class BasedPyrightLanguageServer(SolidLanguageServer):
+class BasedPyrightLanguageServer(PythonLanguageServerBase):
     """Provides Python language support using BasedPyright."""
 
     _TIMEOUT_FOR_INITIAL_ANALYSIS = 60.0

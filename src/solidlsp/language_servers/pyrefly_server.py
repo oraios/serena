@@ -21,7 +21,8 @@ from typing import Any
 from typing_extensions import override
 
 from solidlsp import ls_types
-from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderUvx, SolidLanguageServer
+from solidlsp.language_servers.python_ls_base import PythonLanguageServerBase
+from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderUvx
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.lsp_protocol_handler.lsp_types import LSPErrorCodes
@@ -38,7 +39,7 @@ PYREFLY_CONFIG_DOC_URL = "https://pyrefly.org/en/docs/configuration/"
 _MUTATION_RETRY_ERROR_CODES = (LSPErrorCodes.RequestCancelled, LSPErrorCodes.ContentModified)
 
 
-class PyreflyLanguageServer(SolidLanguageServer):
+class PyreflyLanguageServer(PythonLanguageServerBase):
     """
     Provides Python specific instantiation of the LanguageServer class using ``pyrefly``.
     """
