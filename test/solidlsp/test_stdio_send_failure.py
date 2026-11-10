@@ -62,8 +62,13 @@ def server_with_live_process() -> Iterator[StdioLanguageServer]:
         stderr=subprocess.PIPE,
     )
     server._process = ManagedSubprocess(popen, name="Test ls", start_new_session=False)
-    yield server
-    server._process.terminate(timeout=2)
+    try:
+        yield server
+    finally:
+        server._process.terminate(timeout=2)
+        for pipe in (popen.stdin, popen.stdout, popen.stderr):
+            if pipe is not None:
+                pipe.close()
 
 
 def test_broken_pipe_fails_pending_request_with_terminated() -> None:
