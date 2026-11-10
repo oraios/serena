@@ -327,7 +327,7 @@ class VueLanguageServer(SolidLanguageServer):
         request_params = {
             "textDocument": {"uri": uri},
             "position": {"line": line, "character": column},
-            "context": {"includeDeclaration": True},
+            "context": {"includeDeclaration": False},
         }
 
         with self._ts_server.open_file(relative_file_path):
