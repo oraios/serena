@@ -17,6 +17,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     if the IDE's plugin server is not reachable.
 
 * Language Servers:
+  - Fix: after the LSP `exit` notification, wait for the language server to exit by itself (up to the shutdown
+    timeout) before terminating it. On Windows terminating kills the process at once, so JDTLS never saved
+    its workspace and ran Eclipse's crash recovery on every start (#2235)
   - Fix: detect Elixir installed via a Windows batch launcher
   - Extend allowed types in persisted symbol caches, fixing cache loading issues with `clangd`
     when overriding values like `ls_path`, `clangd_version` or `compile_commands_dir`
