@@ -11,6 +11,29 @@ if TYPE_CHECKING:
 class LanguageServerRequest:
     def __init__(self, handler: "LanguageServerInterface"):
         self.handler = handler
+        self._text_document_sync_kind: lsp_types.TextDocumentSyncKind | None = None
+
+    @property
+    def text_document_sync_kind(self) -> lsp_types.TextDocumentSyncKind | None:
+        """
+        The kind of text document synchronisation the server negotiated in its response to :meth:`initialize`.
+        None if the server has not been initialized or did not state a kind.
+        """
+        return self._text_document_sync_kind
+
+    @staticmethod
+    def _parse_text_document_sync_kind(result: Any) -> lsp_types.TextDocumentSyncKind | None:
+        """
+        :param result: the server's response to the initialize request
+        :return: the change kind stated in the result's ``textDocumentSync`` capability, which is either a kind
+            or a ``TextDocumentSyncOptions`` object; None if no valid kind is stated
+        """
+        capabilities = result.get("capabilities") if isinstance(result, dict) else None
+        sync = capabilities.get("textDocumentSync") if isinstance(capabilities, dict) else None
+        change_kind = sync.get("change") if isinstance(sync, dict) else sync
+        if change_kind in tuple(lsp_types.TextDocumentSyncKind):
+            return lsp_types.TextDocumentSyncKind(change_kind)
+        return None
 
     def _send_request(self, method: str, params: Any | None = None) -> Any:
         return self.handler.send_request(method, params)
@@ -217,8 +240,11 @@ class LanguageServerRequest:
         The requests parameter is of type {@link InitializeParams}
         the response if of type {@link InitializeResult} of a Thenable that
         resolves to such.
+        The text document synchronisation kind stated in the result is recorded in :attr:`text_document_sync_kind`.
         """
-        return self._send_request("initialize", params)
+        result = self._send_request("initialize", params)
+        self._text_document_sync_kind = self._parse_text_document_sync_kind(result)
+        return result
 
     def shutdown(self) -> None:
         """A shutdown request is sent from the client to the server.
