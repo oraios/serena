@@ -1,4 +1,5 @@
 import os
+import shutil
 from pathlib import Path
 from unittest import mock
 
@@ -8,14 +9,11 @@ from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerId
 from solidlsp.ls_utils import SymbolUtils
 from solidlsp.settings import SolidLSPSettings
-from test.conftest import language_server_tests_enabled
+from test.conftest import language_server_tests_enabled, start_ls_context
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
 
-pytestmark = pytest.mark.skipif(
-    not language_server_tests_enabled(LanguageServerId.BSL), reason="BSL tests are disabled (niche, slow and flaky)"
-)
 
-
+@pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.BSL), reason="BSL tests require Java")
 @pytest.mark.bsl
 class TestBSLLanguageServer:
     @pytest.mark.parametrize("language_server", [LanguageServerId.BSL], indirect=True)
@@ -118,6 +116,30 @@ class TestBSLLanguageServer:
         target_lines = [d["range"]["start"]["line"] for d in definitions if "ОбщийМодуль1" in d.get("relativePath", "")]
         assert 2 in target_lines, f"Expected the definition to point at ОбщийМодуль1/Module.bsl line 2, got: {target_lines}"
 
+    @pytest.mark.timeout(180)
+    @pytest.mark.parametrize("repo_path", [LanguageServerId.BSL], indirect=True)
+    def test_cold_cross_file_references_and_definition(self, repo_path: Path, tmp_path: Path) -> None:
+        """The first semantic request resolves cross-module references without a warm-up."""
+        cold_repo = tmp_path / "repo"
+        shutil.copytree(repo_path, cold_repo, ignore=shutil.ignore_patterns(".serena"))
+        with start_ls_context(LanguageServerId.BSL, repo_path=str(cold_repo)) as ls:
+            refs = ls.request_references(self._CROSS_REF_MODULE1, line=2, column=10)
+            assert len(refs) == 1
+            assert refs[0]["relativePath"] == self._CROSS_REF_MODULE2
+            assert refs[0]["range"] == {"start": {"line": 3, "character": 17}, "end": {"line": 3, "character": 33}}
+            definitions = ls.request_definition(self._CROSS_REF_MODULE2, line=3, column=17)
+            assert len(definitions) == 1
+            assert definitions[0]["relativePath"] == self._CROSS_REF_MODULE1
+            assert definitions[0]["range"] == {"start": {"line": 2, "character": 10}, "end": {"line": 2, "character": 26}}
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.BSL], indirect=True)
+    def test_onescript_symbols(self, language_server: SolidLanguageServer) -> None:
+        symbols, _ = language_server.request_document_symbols("script.os").get_all_symbols_and_roots()
+        assert [symbol["name"] for symbol in symbols] == ["ПробаOneScript"]
+        assert symbols[0]["selectionRange"]["start"] == {"line": 0, "character": 10}
+        tree = language_server.request_full_symbol_tree()
+        assert SymbolUtils.symbol_tree_contains_name(tree, "ПробаOneScript")
+
     @pytest.mark.parametrize("language_server", [LanguageServerId.BSL], indirect=True)
     def test_bare_symbol_names(self, language_server: SolidLanguageServer) -> None:
         all_symbols = request_all_symbols(language_server)
@@ -146,107 +168,74 @@ def test_bsl_enum_registration() -> None:
     assert LanguageServerId.BSL.get_ls_class().__name__ == "BSLLanguageServer"
 
 
-def test_bsl_dependency_provider_default_version() -> None:
-    """DependencyProvider resolves the default version to the expected versioned JAR path."""
+@pytest.mark.parametrize("version", [None, "0.29.0"])
+def test_bsl_dependency_provider_download(tmp_path: Path, version: str | None) -> None:
+    """Managed downloads select the versioned path and verify only the pinned release."""
+    from solidlsp.dependency_provider import DownloadedDependency, DownloadedDependencyHashDatabase
     from solidlsp.language_servers.bsl_language_server import (
+        BSL_LS_ALLOWED_HOSTS,
         DEFAULT_BSL_LS_VERSION,
         BSLLanguageServer,
     )
+    from solidlsp.ls_utils import FileUtils
 
-    settings = SolidLSPSettings()
-    provider = BSLLanguageServer.DependencyProvider(
-        settings.get_ls_specific_settings(LanguageServerId.BSL),
-        "/tmp/ls_resources",
+    settings = {}
+    if version is not None:
+        settings["bsl_ls_version"] = version
+    provider = BSLLanguageServer.DependencyProvider(SolidLSPSettings.CustomLSSettings(settings), str(tmp_path))
+    selected_version = version or DEFAULT_BSL_LS_VERSION
+    expected_path = tmp_path / f"bsl-ls-{selected_version}" / f"bsl-language-server-{selected_version}-exec.jar"
+    url = (
+        f"https://github.com/1c-syntax/bsl-language-server/releases/download/"
+        f"v{selected_version}/bsl-language-server-{selected_version}-exec.jar"
     )
 
-    expected_version = DEFAULT_BSL_LS_VERSION
-    expected_jar_dir = os.path.join("/tmp/ls_resources", f"bsl-ls-{expected_version}")
-    expected_jar_path = os.path.join(expected_jar_dir, f"bsl-language-server-{expected_version}-exec.jar")
+    def download(url, target_path, **kwargs):
+        Path(target_path).write_bytes(b"test JAR")
 
-    # pretend JAR is already on disk so no download is attempted
-    with mock.patch("os.path.exists", return_value=True):
-        jar_path = provider._get_or_install_core_dependency()
+    with (
+        mock.patch("solidlsp.language_servers.bsl_language_server._verify_java_available"),
+        mock.patch.object(FileUtils, "download_and_extract_archive_verified", side_effect=download) as downloaded,
+    ):
+        assert provider.create_launch_command() == ["java", "-jar", str(expected_path)]
+        assert expected_path.read_bytes() == b"test JAR"
+        provider.create_launch_command()
 
-    assert jar_path == expected_jar_path
-
-
-def test_bsl_dependency_provider_custom_version_no_sha() -> None:
-    """User-overridden versions must install without SHA256 verification."""
-    from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
-    from solidlsp.language_servers.common import RuntimeDependencyCollection
-
-    settings = SolidLSPSettings()
-    settings.ls_specific_settings[LanguageServerId.BSL.get_key()] = {"bsl_ls_version": "0.28.0"}
-    provider = BSLLanguageServer.DependencyProvider(
-        settings.get_ls_specific_settings(LanguageServerId.BSL),
-        "/tmp/ls_resources",
+    expected_hash = DownloadedDependencyHashDatabase.get_instance().get_sha256(DownloadedDependency(url)) if version is None else None
+    if version is None:
+        assert expected_hash is not None
+    downloaded.assert_called_once_with(
+        url, str(expected_path), archive_type="binary", expected_sha256=expected_hash, allowed_hosts=BSL_LS_ALLOWED_HOSTS
     )
 
-    custom_version = "0.28.0"
-    expected_jar_dir = os.path.join("/tmp/ls_resources", f"bsl-ls-{custom_version}")
-    expected_jar_path = os.path.join(expected_jar_dir, f"bsl-language-server-{custom_version}-exec.jar")
 
-    installed_deps = []
-
-    def fake_install(self_inner, install_dir):
-        installed_deps.extend(self_inner.get_dependencies_for_current_platform())
-        os.makedirs(install_dir, exist_ok=True)
-        open(expected_jar_path, "w").close()
-
-    with mock.patch.object(RuntimeDependencyCollection, "install", fake_install):
-        jar_path = provider._get_or_install_core_dependency()
-
-    assert jar_path == expected_jar_path
-    assert len(installed_deps) == 1
-    assert installed_deps[0].sha256 is None, "SHA256 must be None for user-overridden version"
-
-    if os.path.exists(expected_jar_path):
-        os.remove(expected_jar_path)
-    if os.path.exists(expected_jar_dir):
-        os.rmdir(expected_jar_dir)
-
-
-def test_bsl_launch_command_uses_ls_path_without_download() -> None:
-    """
-    When ``ls_path`` is set, the public launch-command flow must return the user's JAR
-    unchanged and must NOT invoke the download / install path. This covers the real
-    code path used at runtime (``create_launch_command``), not just private helpers.
-    """
+def test_bsl_launch_command_uses_ls_path_without_download(tmp_path: Path) -> None:
+    """An explicit JAR path is launched directly without downloading a managed release."""
     from solidlsp.language_servers import bsl_language_server
     from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
 
-    settings = SolidLSPSettings()
-    settings.ls_specific_settings[LanguageServerId.BSL.get_key()] = {"ls_path": "/custom/path/bsl-language-server.jar"}
     provider = BSLLanguageServer.DependencyProvider(
-        settings.get_ls_specific_settings(LanguageServerId.BSL),
-        "/tmp/ls_resources",
+        SolidLSPSettings.CustomLSSettings({"ls_path": "/custom/path/bsl-language-server.jar"}), str(tmp_path)
     )
 
     with (
         mock.patch.object(bsl_language_server.shutil, "which", return_value="/usr/bin/java"),
         mock.patch.object(bsl_language_server, "_get_java_major_version", return_value=21),
-        mock.patch.object(
-            BSLLanguageServer.DependencyProvider,
-            "_get_or_install_core_dependency",
-            side_effect=AssertionError("must not be called when ls_path is provided"),
-        ) as install_mock,
+        mock.patch("solidlsp.dependency_provider.DownloadedDependency.download_to") as download_mock,
     ):
         cmd = provider.create_launch_command()
 
     assert cmd == ["java", "-jar", "/custom/path/bsl-language-server.jar"]
-    install_mock.assert_not_called()
+    download_mock.assert_not_called()
 
 
-def test_bsl_launch_command_requires_java() -> None:
+def test_bsl_launch_command_requires_java(tmp_path: Path) -> None:
     """Launch command construction must fail fast when Java is missing."""
     from solidlsp.language_servers import bsl_language_server
     from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
 
-    settings = SolidLSPSettings()
-    settings.ls_specific_settings[LanguageServerId.BSL.get_key()] = {"ls_path": "/custom/path/bsl-language-server.jar"}
     provider = BSLLanguageServer.DependencyProvider(
-        settings.get_ls_specific_settings(LanguageServerId.BSL),
-        "/tmp/ls_resources",
+        SolidLSPSettings.CustomLSSettings({"ls_path": "/custom/path/bsl-language-server.jar"}), str(tmp_path)
     )
 
     with mock.patch.object(bsl_language_server.shutil, "which", return_value=None):
@@ -254,16 +243,13 @@ def test_bsl_launch_command_requires_java() -> None:
             provider.create_launch_command()
 
 
-def test_bsl_launch_command_rejects_old_java() -> None:
+def test_bsl_launch_command_rejects_old_java(tmp_path: Path) -> None:
     """Java older than the minimum supported major version must be rejected up front."""
     from solidlsp.language_servers import bsl_language_server
     from solidlsp.language_servers.bsl_language_server import BSL_LS_MIN_JAVA_VERSION, BSLLanguageServer
 
-    settings = SolidLSPSettings()
-    settings.ls_specific_settings[LanguageServerId.BSL.get_key()] = {"ls_path": "/custom/path/bsl-language-server.jar"}
     provider = BSLLanguageServer.DependencyProvider(
-        settings.get_ls_specific_settings(LanguageServerId.BSL),
-        "/tmp/ls_resources",
+        SolidLSPSettings.CustomLSSettings({"ls_path": "/custom/path/bsl-language-server.jar"}), str(tmp_path)
     )
 
     with (
@@ -272,3 +258,28 @@ def test_bsl_launch_command_rejects_old_java() -> None:
     ):
         with pytest.raises(RuntimeError, match=f"Java {BSL_LS_MIN_JAVA_VERSION}\\+"):
             provider.create_launch_command()
+
+
+@pytest.mark.parametrize("jvm_options", [None, [], ["-Xmx1g", "-Xms64m"]])
+def test_bsl_jvm_options(tmp_path: Path, jvm_options: list[str] | None) -> None:
+    """JVM options precede the JAR argument; a null setting uses no options."""
+    from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
+
+    jar = str(tmp_path / "custom.jar")
+    provider = BSLLanguageServer.DependencyProvider(
+        SolidLSPSettings.CustomLSSettings({"ls_path": jar, "jvm_options": jvm_options}), str(tmp_path)
+    )
+    with mock.patch("solidlsp.language_servers.bsl_language_server._verify_java_available"):
+        assert provider.create_launch_command() == ["java", *(jvm_options or []), "-jar", jar]
+
+
+@pytest.mark.parametrize("jvm_options", ["-Xmx1g", [1], ["-Xmx1g", None], {}])
+def test_bsl_invalid_jvm_options(tmp_path: Path, jvm_options) -> None:
+    """Invalid JVM option types fail before Java is launched."""
+    from solidlsp.language_servers.bsl_language_server import BSLLanguageServer
+
+    provider = BSLLanguageServer.DependencyProvider(
+        SolidLSPSettings.CustomLSSettings({"ls_path": str(tmp_path / "custom.jar"), "jvm_options": jvm_options}), str(tmp_path)
+    )
+    with pytest.raises(ValueError, match="jvm_options must be a list of strings"):
+        provider.create_launch_command()
