@@ -3,13 +3,14 @@
 import logging
 import os.path
 import threading
+from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from sensai.util.logging import LogTime
 
-from serena.config.serena_config import ProjectConfig, SerenaPaths
+from serena.config.serena_config import LanguageServerFileSystemSyncStrategy, ProjectConfig, SerenaPaths
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig, LanguageServerIdLike
 from solidlsp.lsp_protocol_handler.lsp_types import DidChangeWatchedFilesParams, FileChangeType, FileEvent
@@ -281,10 +282,8 @@ class LanguageServerManager:
 
         :return: the number of individual file change events detected (0 if nothing changed).
         """
-        log.info("Polling file system for changes to source files ...")
-        num_changes = self._file_change_notifier.poll_and_notify()
-        log.info(f"File system polling complete; {num_changes} change events sent to language servers.")
-        return num_changes
+        with LogTime("File system synchronization", logger=log):
+            return self._file_change_notifier.poll_and_notify()
 
 
 class LanguageServerFileChangeNotifier:
@@ -295,12 +294,16 @@ class LanguageServerFileChangeNotifier:
     def __init__(self, project: "Project", language_server_manager: LanguageServerManager, initial_poll: bool = True) -> None:
         self._project = project
         self._language_server_manager = language_server_manager
-        self._freshness_last_seen_mtimes: dict[str, float] | None = None
-        self._freshness_lock = threading.Lock()
+        if project.ls_file_system_sync_strategy == LanguageServerFileSystemSyncStrategy.FULL:
+            self._event_detector: _LanguageServerFileChangeEventDetector = _FullLanguageServerFileChangeEventDetector(project)
+        elif project.ls_file_system_sync_strategy == LanguageServerFileSystemSyncStrategy.NONE:
+            self._event_detector = _DisabledLanguageServerFileChangeEventDetector()
+        else:
+            raise ValueError(f"Unsupported language-server file-system synchronization strategy: {project.ls_file_system_sync_strategy}")
 
         if initial_poll:
-            # Establish the baseline for the first poll; no notifications are sent on the first call.
-            with LogTime("Initialising file change notifier (polling for baseline)"):
+            # initialize change detection; full synchronization establishes its baseline on the first call
+            with LogTime("Initialising file change notifier"):
                 self.poll_and_notify()
 
     def poll_and_notify(self) -> int:
@@ -314,40 +317,10 @@ class LanguageServerFileChangeNotifier:
         channel (another editor, a second agent, a git checkout, a build step) are otherwise
         invisible to a warm language server, causing symbolic queries to answer from a stale index.
 
-        The set of files considered is exactly the set Serena itself tracks (see
-        :meth:`gather_source_files`), so no separate file-discovery logic has to be kept in sync.
-        The dominant cost is the directory walk plus one ``os.stat`` per tracked file; this is
-        intended to be called before symbolic tool invocations rather than on a timer.
-
         :return: the number of change events sent (0 if nothing changed, if no language server is
-            running yet, or on the first call, which only establishes the baseline).
+            running yet, or while full synchronization establishes its baseline).
         """
-        current: dict[str, float] = {}
-        for source_file in self._project.gather_source_files():
-            try:
-                stat = source_file.dir_entry.stat()
-                current[source_file.rel_path] = stat.st_mtime
-            except OSError:
-                continue
-
-        # Read-diff-swap under the lock only; the filesystem walk above and the LSP notifications
-        # below stay outside it so concurrent callers do not serialize on I/O.
-        with self._freshness_lock:
-            previous = self._freshness_last_seen_mtimes
-            self._freshness_last_seen_mtimes = current
-
-            if previous is None:
-                return 0
-
-            # compute the set of individual events (created, changed, deleted)
-            events: list[tuple[str, FileChangeType]] = []
-            for rel_path, mtime in current.items():
-                prev_mtime = previous.get(rel_path)
-                if prev_mtime is None:
-                    events.append((rel_path, FileChangeType.Created))
-                elif mtime > prev_mtime:
-                    events.append((rel_path, FileChangeType.Changed))
-            events.extend((rel_path, FileChangeType.Deleted) for rel_path in previous if rel_path not in current)
+        events = self._event_detector.get_events()
 
         if not events:
             return 0
@@ -386,3 +359,65 @@ class LanguageServerFileChangeNotifier:
                     log.error(f"Failed to refresh newly created file {rel_path!r} in language server", exc_info=e)
 
         return len(events)
+
+
+class _LanguageServerFileChangeEventDetector(ABC):
+    """Detects source-file changes made outside Serena."""
+
+    @abstractmethod
+    def get_events(self) -> list[tuple[str, FileChangeType]]:
+        """
+        Gets source-file changes since the previous call.
+
+        :return: pairs containing each changed file's project-relative path and change type.
+        """
+
+
+class _FullLanguageServerFileChangeEventDetector(_LanguageServerFileChangeEventDetector):
+    """Detects source-file changes by comparing full file-system snapshots.
+
+    The snapshots contain exactly the files returned by the project's source-file discovery, so no
+    separate file-discovery logic has to be kept in sync. Creating a snapshot requires a directory
+    walk and one ``os.stat`` call per tracked file.
+    """
+
+    def __init__(self, project: "Project") -> None:
+        self._project = project
+        self._last_seen_mtimes: dict[str, float] | None = None
+        self._lock = threading.Lock()
+
+    def get_events(self) -> list[tuple[str, FileChangeType]]:
+        # gather the current source-file snapshot
+        current: dict[str, float] = {}
+        for source_file in self._project.gather_source_files():
+            try:
+                stat = source_file.dir_entry.stat()
+                current[source_file.rel_path] = stat.st_mtime
+            except OSError:
+                continue
+
+        # read, compare and replace snapshots under the lock only
+        with self._lock:
+            previous = self._last_seen_mtimes
+            self._last_seen_mtimes = current
+
+            if previous is None:
+                return []
+
+            events: list[tuple[str, FileChangeType]] = []
+            for rel_path, mtime in current.items():
+                prev_mtime = previous.get(rel_path)
+                if prev_mtime is None:
+                    events.append((rel_path, FileChangeType.Created))
+                elif mtime > prev_mtime:
+                    events.append((rel_path, FileChangeType.Changed))
+            events.extend((rel_path, FileChangeType.Deleted) for rel_path in previous if rel_path not in current)
+
+        return events
+
+
+class _DisabledLanguageServerFileChangeEventDetector(_LanguageServerFileChangeEventDetector):
+    """Disables detection of source-file changes made outside Serena."""
+
+    def get_events(self) -> list[tuple[str, FileChangeType]]:
+        return []

@@ -57,6 +57,21 @@ Some of the settings it contains can, however, be *extended* or *overridden* in 
 For detailed information on the parameters and possible settings, see the
 [template file](https://github.com/oraios/serena/blob/main/src/serena/resources/serena_config.template.yml).
 
+(ls-file-system-sync)=
+#### Language-Server File-System Synchronization
+
+With the LSP backend, Serena normally walks the project's source files before symbolic operations and notifies
+the language server about changes made outside Serena. This keeps the language-server index current after edits
+from another editor or agent, git operations, and build steps.
+
+The `ls_file_system_sync_strategy` setting can be configured globally in `serena_config.yml` or per project in
+`project.yml` and the untracked `project.local.yml`. If it is unset at both levels, Serena uses the recommended
+strategy for reliable results, which is currently `full`.
+
+For a checkout that is not changed externally, set the strategy to `none` to avoid the file-system walk. With
+`none`, changes made by another editor or agent, git operations, or build steps are not detected, so
+language-server results may remain stale until the server is restarted or otherwise refreshed.
+
 (agent-interfaces)=
 #### Agent Interfaces
 
