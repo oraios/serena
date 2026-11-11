@@ -1,0 +1,45 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "serena",
+  "version": "0.1.0",
+  "description": "Semantic code navigation, editing, refactoring, and project memories with Serena. Requires uvx to be available on the host.",
+  "author": {
+    "name": "Oraios AI",
+    "url": "https://oraios-ai.de"
+  },
+  "homepage": "https://github.com/oraios/serena",
+  "license": "GPL-3.0-or-later",
+  "keywords": [
+    "serena",
+    "mcp",
+    "coding",
+    "language server",
+    "code intelligence",
+    "refactoring"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Serena",
+        "shortDescription": "Semantic coding tools",
+        "longDescription": "Serena provides semantic code navigation, editing, refactoring, and project memories for coding agents. Runs locally through uvx with Python 3.13 and the latest serena-agent release from PyPI, using the Codex context and automatic project detection.",
+        "developerName": "Oraios AI",
+        "category": "Developer Tools",
+        "capabilities": [
+          "Read",
+          "Write"
+        ],
+        "websiteURL": "https://github.com/oraios/serena",
+        "defaultPrompt": "Activate the current project with Serena and read its initial instructions.",
+        "composerIcon": "./assets/serena-icon-64.png",
+        "logo": "./assets/serena-icon-1024-mac.png",
+        "privacyPolicyURL": "https://oraios.github.io/serena/01-about/070_privacy.html",
+        "supportURL": "https://oraios-ai.de/contact.php"
+      },
+      "publication": {
+        "release_notes": "Initial release of the Serena OpenAI Plugin."
+      }
+    }
+  },
+  "repository": "https://github.com/oraios/serena"
+}
