@@ -639,29 +639,19 @@ class SvelteLanguageServer(SolidLanguageServer):
 
     @override
     def request_references(self, relative_file_path: str, line: int, column: int) -> list[ls_types.Location]:
-        """Combine references from svelte LS and companion TS server.
+        """Delegate TS/JS references to the companion so the svelte plugin finds usages in .svelte files.
 
         For .svelte files: svelte LS + ``$/getComponentReferences``.
-        For .ts/.js files: companion TS server (svelte-plugin-aware) merged with
-        svelte LS ``$/getFileReferences`` to maximise cross-file coverage.
-        Falls back to svelte-LS-only behaviour when companion is unavailable.
+        Falls back to the svelte LS when the companion is unavailable. For .ts/.js files the svelte LS
+        is not merged in, as its results can belong to a different symbol of the same module.
         """
+        if _is_ts_file(relative_file_path) and self._ts_server is not None:
+            with self._ts_server.open_file(relative_file_path):
+                return self._ts_server.request_references(relative_file_path, line, column)
+
         symbol_refs = super().request_references(relative_file_path, line, column)
-        normalize_helper = self.ReferencesLocationRequest(self, relative_file_path, line, column)
-
-        if _is_ts_file(relative_file_path):
-            # augment with svelte LS file-level references
-            raw = self.server.send_request("$/getFileReferences", cast(Any, self._resolve_file_uri(relative_file_path)))
-            file_refs = normalize_helper.normalize_response(raw if isinstance(raw, list) else [])
-            symbol_refs = self._deduplicate_reference_locations(symbol_refs, file_refs)
-
-            # augment with companion TS server (typescript-svelte-plugin gives .svelte awareness)
-            if self._ts_server is not None:
-                with self._ts_server.open_file(relative_file_path):
-                    ts_refs = self._ts_server.request_references(relative_file_path, line, column)
-                symbol_refs = self._deduplicate_reference_locations(symbol_refs, ts_refs)
-
-        elif _is_svelte_file(relative_file_path):
+        if _is_svelte_file(relative_file_path):
+            normalize_helper = self.ReferencesLocationRequest(self, relative_file_path, line, column)
             raw = self.server.send_request("$/getComponentReferences", cast(Any, self._resolve_file_uri(relative_file_path)))
             comp_refs = normalize_helper.normalize_response(raw if isinstance(raw, list) else [])
             symbol_refs = self._deduplicate_reference_locations(symbol_refs, comp_refs)

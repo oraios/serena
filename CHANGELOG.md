@@ -82,6 +82,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: Project-wide symbol discovery now skips file and directory symlinks in untrusted projects.
     In trusted projects, ignore rules consistently apply to unresolved alias paths, and symlinks to
     targets outside the project root no longer cause discovery to fail (#2163).
+  - Fix: Svelte: references to a symbol defined in a `.ts`/`.js` file also included imports and usages of
+    other symbols of the same module. References for these files now come from the companion TypeScript
+    server only (#2120)
   - Scala: add opt-in setting `terminate_bloop_on_stop` to terminate the Bloop build-server daemons
     that Metals leaves running after shutdown (#1816)
   - Performance: Speed up project-wide symbol discovery by reusing directory-entry metadata for ignore
