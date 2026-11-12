@@ -44,7 +44,7 @@ class RestartLanguageServerTool(Tool, ToolMarkerOptional, LspApiMixin):
 
 class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, LspApiMixin):
     """
-    Gets an overview of the top-level symbols defined in a given file.
+    Gets an overview of the top-level symbols defined in a given file or directory.
     """
 
     @property
@@ -53,21 +53,30 @@ class GetSymbolsOverviewTool(Tool, ToolMarkerSymbolicRead, LspApiMixin):
 
         return LspApi.overview_grouper_
 
-    def apply(self, relative_path: str, depth: int = -1, max_answer_chars: int = -1) -> str:
+    def apply(self, relative_path: str, depth: int = -1, max_answer_chars: int = -1, max_files: int = 20) -> str:
         """
-        Use this tool to get a high-level understanding of the code symbols in a file.
+        Use this tool to get a high-level understanding of the code symbols in a file or directory.
         This should be the first tool to call when you want to understand a new file, unless you already know
         what you are looking for.
+        When given a directory path, returns top-level symbols for every analyzable file in the directory.
 
-        :param relative_path: the relative path to the file to get the overview of
-        :param depth: depth up to which descendants shall be retrieved.
-            Default (-1) results in a language specific choice: 1 for java and kotlin and 0 for other languages
+        :param relative_path: the relative path to the file or directory to get the overview of
+        :param depth: depth up to which descendants of top-level symbols shall be retrieved
+            (e.g. 1 retrieves immediate children). Default (-1) results in a language specific
+            choice: 1 for java and kotlin and 0 for other languages.
         :param max_answer_chars: if the overview is longer than this number of characters,
             no content will be returned. -1 means the default value from the config will be used.
             Don't adjust unless there is really no other way to get the content required for the task.
+        :param max_files: only used when relative_path is a directory. If the directory contains more
+            analyzable files than this limit, the tool raises ValueError instead of returning a partial
+            overview — narrow the path to a subdirectory, or learn the layout from memories first.
+            Default 20. Don't increase unless you really need a broad sweep and accept the token cost.
         :return: a JSON object containing symbols grouped by kind in a compact format.
+            For directories, returns a mapping of file paths to their grouped symbols.
         """
-        return self._api().get_symbols_overview(relative_path, depth=depth, max_answer_chars=max_answer_chars).represent()
+        return (
+            self._api().get_symbols_overview(relative_path, depth=depth, max_answer_chars=max_answer_chars, max_files=max_files).represent()
+        )
 
 
 class FindSymbolTool(Tool, ToolMarkerSymbolicRead, LspApiMixin):
