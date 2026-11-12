@@ -62,17 +62,13 @@ def test_adding_graphql_config_invalidates_the_stale_empty_cache(
     tmp_path_factory: pytest.TempPathFactory, config_filename: str, config_content: str
 ) -> None:
     """
-    Regression test: `_raw_document_symbols_cache_fingerprint` must account for the resolved
-    graphql-config, or Serena's own on-disk document-symbols cache -- keyed only on each file's
-    content hash -- keeps serving the empty result computed while no config existed, even after
-    a config is added later and the language server itself starts resolving symbols correctly.
+    Serena's on-disk document-symbols cache must not keep serving the empty result computed while no
+    graphql-config existed, after a config is added later without the document itself being changed.
     Reproduces a real-world case: enabling the `graphql` language server on a project that had no
     graphql-config, then adding one later without ever touching schema.graphql itself.
     """
-    # Deliberately not `tmp_path`: that directory is named after this test, and a path containing
-    # "graphql_config" makes the server skip the file entirely. It detects config files with
-    # `uri.match("graphql.config")`, where the string is used as a regex, so the "." also matches
-    # "_" and every document under such a directory is treated as a config file and never cached.
+    # Deliberately not `tmp_path`: that directory is named after this test, which contains "graphql_config",
+    # a name the server mistakes for a config file name (see GraphQLLanguageServer._CONFIG_FILE_URI_PATTERN).
     repo_path = tmp_path_factory.mktemp("repo") / "test_repo"
     shutil.copytree(_FIXTURE_REPO, repo_path)
 

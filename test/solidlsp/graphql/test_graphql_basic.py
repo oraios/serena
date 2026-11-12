@@ -88,6 +88,49 @@ class TestGraphqlLanguageServerBasics:
 
 
 @pytest.mark.graphql
+class TestGraphqlSymbolHierarchy:
+    """Document symbols are nested according to the structure of the document."""
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.GRAPHQL], indirect=True)
+    def test_schema_types_are_roots_with_their_fields_as_children(self, language_server: SolidLanguageServer) -> None:
+        roots = language_server.request_document_symbols("schema.graphql").root_symbols
+        assert [s["name"] for s in roots] == ["Query", "Mutation", "User", "Post", "Role", "CreateUserInput"]
+        user = next(s for s in roots if s["name"] == "User")
+        assert [c["name"] for c in user.get("children", [])] == ["id", "name", "email", "role", "posts"]
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.GRAPHQL], indirect=True)
+    def test_selections_are_nested_within_their_operation(self, language_server: SolidLanguageServer) -> None:
+        roots = language_server.request_document_symbols("operations/queries.graphql").root_symbols
+        assert [s["name"] for s in roots] == ["GetUser", "GetPosts", "SearchUsers"]
+        user = next(c for c in roots[0].get("children", []) if c["name"] == "user")
+        assert [c["name"] for c in user.get("children", [])] == ["id", "name", "email", "role"]
+
+    @pytest.mark.parametrize("language_server", [LanguageServerId.GRAPHQL], indirect=True)
+    @pytest.mark.parametrize(
+        ("path", "name_path", "name_in_context"),
+        [
+            ("schema.graphql", ["User"], "type (User) {"),
+            ("schema.graphql", ["Query", "user"], r"  (user)\(id: ID!\)"),
+            ("operations/queries.graphql", ["GetUser"], r"query (GetUser)\("),
+        ],
+    )
+    def test_selection_range_is_the_name(
+        self, language_server: SolidLanguageServer, path: str, name_path: list[str], name_in_context: str
+    ) -> None:
+        """The selection range of a (possibly described) definition must be its name, not the start of its range."""
+        symbols = language_server.request_document_symbols(path).root_symbols
+        symbol = None
+        for name in name_path:
+            symbol = next(s for s in symbols if s["name"] == name)
+            symbols = symbol.get("children", [])
+        assert symbol is not None
+        coords = find_text_coordinates(read_repo_file(language_server, path), name_in_context)
+        assert coords is not None, f"Could not find {name_in_context!r} in {path}"
+        start = symbol["selectionRange"]["start"]
+        assert (start["line"], start["character"]) == (coords.line, coords.col)
+
+
+@pytest.mark.graphql
 class TestGraphqlDefinition:
     """graphql-config links operations to the schema, enabling cross-file go-to-definition."""
 
