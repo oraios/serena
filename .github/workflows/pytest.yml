@@ -657,6 +657,9 @@ jobs:
         uses: leanprover/lean-action@v1
         with:
           lake-package-directory: test/resources/repos/lean4/test_repo
+          # the fixture defines no test or lint driver, so auto-detecting them can only cost time
+          test: "false"
+          lint: "false"
       # --- niche batch: R, Julia, Perl ---
       - name: Install R
         if: matrix.batch == 'niche'
