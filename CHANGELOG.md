@@ -18,6 +18,9 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Language Servers:
   - Fix: detect Elixir installed via a Windows batch launcher
+  - Fix: a language server process that exited while its child processes kept running (e.g. after being
+    killed) was still considered running, so it was not restarted and the next request hung until the
+    tool timeout
   - Extend allowed types in persisted symbol caches, fixing cache loading issues with `clangd`
     when overriding values like `ls_path`, `clangd_version` or `compile_commands_dir`
   - Add GraphQL language server support (experimental) via `graphql-language-service-cli` (`graphql-lsp`) for
