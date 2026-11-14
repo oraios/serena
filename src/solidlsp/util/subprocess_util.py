@@ -341,9 +341,27 @@ def _signal_process_group(pgid: int, terminate: bool = True) -> None:
         # the group is already gone; nothing left to signal
         pass
     except PermissionError as e:
-        log.warning(f"Permission denied signaling process group {pgid} with {sig.name}: {e}")
+        if _is_unreaped_zombie(pgid):
+            # macOS reports EPERM instead of ESRCH for a group whose only remaining member is its
+            # unreaped zombie leader; a group that still has a live member is signalable.
+            log.debug(f"Process group {pgid} has already exited; nothing left to signal with {sig.name}.")
+        else:
+            log.warning(f"Permission denied signaling process group {pgid} with {sig.name}: {e}")
     except Exception as e:
         log.warning(f"Unexpected error signaling process group {pgid} with {sig.name}: {e}")
+
+
+def _is_unreaped_zombie(pid: int) -> bool:
+    """
+    Whether the given process has exited but has not yet been reaped by its parent.
+
+    :param pid: the process ID to inspect
+    :return: True if the process is a zombie; False if it is alive, gone, or cannot be inspected
+    """
+    try:
+        return psutil.Process(pid).status() == psutil.STATUS_ZOMBIE
+    except (psutil.Error, OSError):
+        return False
 
 
 def _get_process_descendants(process: subprocess.Popen) -> list[psutil.Process]:
