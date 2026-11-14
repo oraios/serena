@@ -43,6 +43,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     `ls_extra_args` sets `--log` or Serena logs at debug level
   - Fix: every line a language server wrote to stderr was followed by an empty line in Serena's log
 
+* Hooks:
+  - Fix: `remind` counted a search program which only filters the output of another command, such as
+    `grep` in `python script.py | grep error`, as a code search (#2269)
+
 * Dashboard:
   - Fix: on macOS, the tray icon stayed white on a light menu bar instead of adapting to the menu bar's
     appearance like other menu bar icons (#2263)
