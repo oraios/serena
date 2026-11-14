@@ -22,6 +22,7 @@ from sensai.util import logging
 from serena.config.serena_paths import SerenaPaths
 from serena.constants import SERENA_DASHBOARD_DIR, SerenaPorts
 from serena.dashboard.dashboard_viewer import SerenaDashboardViewer, open_url_in_browser
+from serena.util.tray import create_tray_icon
 
 log = logging.getLogger(__name__)
 
@@ -329,7 +330,7 @@ class SerenaDashboardTrayManager:
             nsapp.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
             kwargs["darwin_nsapplication"] = nsapp
 
-        self._tray_icon = pystray.Icon(
+        self._tray_icon = create_tray_icon(
             "serena_tray_manager",
             icon_img,
             "Serena",

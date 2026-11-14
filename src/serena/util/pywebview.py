@@ -11,6 +11,8 @@ import psutil
 import webview
 from PIL import Image
 
+from serena.util.tray import create_tray_icon
+
 log = logging.getLogger(__name__)
 
 
@@ -226,7 +228,7 @@ class WebViewWithTray:
 
             kwargs["darwin_nsapplication"] = NSApplication.sharedApplication()
 
-        self._tray_icon = pystray.Icon("dashboard_viewer", icon_img, self._title, menu, **kwargs)
+        self._tray_icon = create_tray_icon("dashboard_viewer", icon_img, self._title, menu, **kwargs)
 
         # On Windows/Linux, run_detached spawns pystray's own internal thread and
         # returns immediately.  On macOS it hooks into the NSApplication run loop

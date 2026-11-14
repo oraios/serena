@@ -40,6 +40,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     `ls_extra_args` sets `--log` or Serena logs at debug level
   - Fix: every line a language server wrote to stderr was followed by an empty line in Serena's log
 
+* Dashboard:
+  - Fix: on macOS, the tray icon stayed white on a light menu bar instead of adapting to the menu bar's
+    appearance like other menu bar icons (#2263)
+
 # v2.1.0 (2026-10-19)
 
 * General:
