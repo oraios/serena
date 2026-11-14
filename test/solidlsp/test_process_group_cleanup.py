@@ -14,6 +14,7 @@ instead of walking the tree with ``psutil``. No language markers: these exercise
 
 from __future__ import annotations
 
+import logging
 import os
 import platform
 import signal
@@ -64,6 +65,13 @@ def _pid_is_gone(pid: int) -> bool:
         return True
 
 
+def _pid_is_zombie(pid: int) -> bool:
+    try:
+        return psutil.Process(pid).status() == psutil.STATUS_ZOMBIE
+    except psutil.Error:
+        return False
+
+
 class _DenyingProcess:
     """Stand-in for ``psutil.Process`` that always raises ``AccessDenied``, used to simulate
     a sandboxed environment denying process-table enumeration without needing one. A real class
@@ -98,6 +106,41 @@ class TestSignalProcessGroup:
 
         monkeypatch.setattr(os, "killpg", raise_eperm)
         _signal_process_group(12345, terminate=True)  # must not raise
+
+    def test_exited_but_unreaped_group_is_not_reported_as_permission_denied(self, caplog: pytest.LogCaptureFixture) -> None:
+        """A leader that exited without being reaped leaves no live member in its group.
+
+        macOS reports EPERM for ``killpg`` in that state where Linux reports ESRCH, so cleanup
+        must treat the group as already clean rather than warn about a permission denial.
+        """
+        proc = subprocess.Popen([sys.executable, "-c", "pass"], start_new_session=True)
+        try:
+            assert _wait_until(lambda: _pid_is_zombie(proc.pid)), "leader should have exited but stayed unreaped"
+
+            with caplog.at_level(logging.WARNING, logger="solidlsp.util.subprocess_util"):
+                _signal_process_group(proc.pid, terminate=True)
+
+            assert [record.getMessage() for record in caplog.records if record.levelno >= logging.WARNING] == []
+        finally:
+            proc.wait(timeout=5.0)
+
+    def test_permission_denied_on_a_live_group_is_logged(self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
+        """A denial that an exited leader does not explain must still reach the user."""
+        proc = _spawn_ready("import time; print('READY', flush=True); time.sleep(300)")
+        try:
+
+            def raise_eperm(pgid: int, sig: int) -> None:
+                raise PermissionError("simulated sandbox denial")
+
+            monkeypatch.setattr(os, "killpg", raise_eperm)
+
+            with caplog.at_level(logging.WARNING, logger="solidlsp.util.subprocess_util"):
+                _signal_process_group(proc.pid, terminate=True)
+
+            assert any("Permission denied signaling process group" in record.getMessage() for record in caplog.records)
+        finally:
+            proc.kill()
+            proc.wait(timeout=5.0)
 
 
 class TestTerminateProcessTreeWithKillFallback:
