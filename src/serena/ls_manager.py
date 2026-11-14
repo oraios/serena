@@ -3,6 +3,7 @@
 import logging
 import os.path
 import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -78,6 +79,11 @@ class LanguageServerManager:
     Manages one or more language servers for a project.
     """
 
+    _CACHE_SAVE_INTERVAL = 30.0
+    """
+    the minimum time, in seconds, between two cache saves triggered by tool calls (see `save_all_caches_if_due`)
+    """
+
     def __init__(
         self,
         language_servers: dict[LanguageServerIdLike, SolidLanguageServer],
@@ -93,6 +99,7 @@ class LanguageServerManager:
         """
         self._language_servers = language_servers
         self._language_server_factory = language_server_factory
+        self._last_cache_save_time: float | None = None
         self._file_change_notifier = LanguageServerFileChangeNotifier(project, self)
 
     @property
@@ -208,6 +215,10 @@ class LanguageServerManager:
         """
         if ls_id not in self._language_servers:
             raise ValueError(f"No language server for language {ls_id.get_key()} present; cannot restart")
+
+        # keep the cache entries of the replaced server, which the new server loads from disk
+        self._language_servers[ls_id].save_cache()
+
         return self._create_and_start_language_server(ls_id)
 
     def add_language_server(self, ls_id: LanguageServerIdLike) -> SolidLanguageServer:
@@ -269,6 +280,17 @@ class LanguageServerManager:
         for ls in self.iter_language_servers():
             if ls.is_running():
                 ls.save_cache()
+        self._last_cache_save_time = time.monotonic()
+
+    def save_all_caches_if_due(self) -> None:
+        """
+        Saves the caches of all managed language servers unless they were saved less than `_CACHE_SAVE_INTERVAL`
+        seconds ago, such that frequent tool calls do not rewrite large caches every time.
+        Changes not saved yet are saved when the language servers are stopped or restarted.
+        """
+        if self._last_cache_save_time is not None and time.monotonic() - self._last_cache_save_time < self._CACHE_SAVE_INTERVAL:
+            return
+        self.save_all_caches()
 
     def has_suitable_ls_for_file(self, relative_file_path: str) -> bool:
         return self._get_suitable_language_server(relative_file_path) is not None
