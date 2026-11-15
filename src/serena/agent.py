@@ -1541,6 +1541,7 @@ class SerenaAgent:
                     cmd,
                     shell=True,
                     cwd=project.project_root,
+                    stdin=subprocess.DEVNULL,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     **subprocess_util.subprocess_kwargs(),

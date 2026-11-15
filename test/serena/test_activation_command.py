@@ -1,6 +1,7 @@
 """Tests for SerenaAgent._run_activation_command."""
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -98,3 +99,26 @@ class TestRunActivationCommand:
         with caplog.at_level(logging.ERROR):
             agent._run_project_activation_command(project)  # must not hang or raise
         assert any("timed out" in r.message.lower() for r in caplog.records if r.levelno == logging.ERROR)
+
+    def test_command_does_not_inherit_caller_stdin(self, tmp_path: Path, caplog):
+        """A command reading stdin must not block on the caller's (MCP) stdin pipe."""
+        reader = tmp_path / "read_stdin.py"
+        reader.write_text("import sys\nsys.stdin.readline()\n", encoding="utf-8")
+        cmd = f'"{sys.executable}" {reader.name}'
+        project = _make_project(tmp_path, activation_command=cmd, activation_command_timeout=2.0, trusted=True)
+        agent = self._make_agent(project)
+
+        # give the child an open, never-ending stdin pipe, as an MCP stdio harness does
+        saved_stdin = os.dup(0)
+        read_end, write_end = os.pipe()
+        try:
+            os.dup2(read_end, 0)
+            os.close(read_end)
+            with caplog.at_level(logging.ERROR):
+                agent._run_project_activation_command(project)
+        finally:
+            os.dup2(saved_stdin, 0)
+            os.close(saved_stdin)
+            os.close(write_end)
+
+        assert not any("timed out" in r.message.lower() for r in caplog.records)

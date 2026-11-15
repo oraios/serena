@@ -14,6 +14,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Performance: the symbol caches were rewritten in full after every tool call that fetched new symbols,
     which takes noticeable time for large projects; they are now saved at most every 30 s, and always when
     language servers are stopped or restarted
+  - Fix: `activation_command` inherited Serena's stdin, so commands that read stdin never terminated and
+    project activation always waited out `activation_command_timeout` when Serena ran as a stdio MCP server
+    (observed on Windows, where even `bash -c "exit 0"` hangs); the command is now started with stdin
+    attached to the null device (#2270)
 
 * JetBrains:
   - Fix: When applying a non-symbolic edit, do not raise a post-edit exception during IDE file refresh
