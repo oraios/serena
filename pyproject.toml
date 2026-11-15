@@ -55,6 +55,7 @@ dependencies = [
   "oslex==2.0.0",
   "pillow==13.0.0",
   "anyio==4.14.2",
+  "opentelemetry-api==1.45.2",
   "certifi==2026.10.23",
 ]
 
