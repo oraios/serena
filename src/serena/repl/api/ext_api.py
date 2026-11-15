@@ -59,7 +59,7 @@ class ExternalProjectContextManager:
 
 class ExternalProjectsApi(FacadeApi):
     def __init__(self, agent: "SerenaAgent") -> None:
-        super().__init__(agent, name="ext", description="read-only access to external projects (projects other than the active one)")
+        super().__init__(agent, name="ext", description="access to external projects (projects other than the active one)")
 
     @facade_method(corresponding_tool=ListQueryableProjectsTool)
     def list_projects(self, symbol_access: bool = True) -> JsonObject:

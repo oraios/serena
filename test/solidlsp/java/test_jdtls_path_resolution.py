@@ -301,32 +301,32 @@ class TestInspectJava:
             'openjdk version "21.0.10" 2026-01-20 LTS\n'
             "OpenJDK Runtime Environment Temurin-21.0.10+7 (build 21.0.10+7-LTS)\n"
         )
-        with patch("subprocess.run", return_value=self._fake_subprocess_result(stderr)):
+        with patch("solidlsp.language_servers.eclipse_jdtls.subprocess_run", return_value=self._fake_subprocess_result(stderr)):
             home, major = EclipseJDTLS.DependencyProvider._inspect_java("/usr/bin/java")
         assert home == "/Users/me/Library/Java/JavaVirtualMachines/temurin-21.0.10/Contents/Home"
         assert major == 21
 
     def test_parses_openjdk_17_output(self) -> None:
         stderr = 'Property settings:\n    java.home = /usr/lib/jvm/java-17-openjdk-amd64\nopenjdk version "17.0.5" 2023-10-17\n'
-        with patch("subprocess.run", return_value=self._fake_subprocess_result(stderr)):
+        with patch("solidlsp.language_servers.eclipse_jdtls.subprocess_run", return_value=self._fake_subprocess_result(stderr)):
             home, major = EclipseJDTLS.DependencyProvider._inspect_java("/usr/bin/java")
         assert home == "/usr/lib/jvm/java-17-openjdk-amd64"
         assert major == 17
 
     def test_raises_when_java_home_property_missing(self) -> None:
         stderr = 'java version "21.0.0"\n'
-        with patch("subprocess.run", return_value=self._fake_subprocess_result(stderr)):
+        with patch("solidlsp.language_servers.eclipse_jdtls.subprocess_run", return_value=self._fake_subprocess_result(stderr)):
             with pytest.raises(SolidLSPException, match="Could not parse java.home"):
                 EclipseJDTLS.DependencyProvider._inspect_java("/usr/bin/fakejava")
 
     def test_raises_when_version_string_missing(self) -> None:
         stderr = "    java.home = /opt/jdk\n"
-        with patch("subprocess.run", return_value=self._fake_subprocess_result(stderr)):
+        with patch("solidlsp.language_servers.eclipse_jdtls.subprocess_run", return_value=self._fake_subprocess_result(stderr)):
             with pytest.raises(SolidLSPException, match="Could not parse Java version"):
                 EclipseJDTLS.DependencyProvider._inspect_java("/usr/bin/fakejava")
 
     def test_raises_on_subprocess_error(self) -> None:
-        with patch("subprocess.run", side_effect=OSError("permission denied")):
+        with patch("solidlsp.language_servers.eclipse_jdtls.subprocess_run", side_effect=OSError("permission denied")):
             with pytest.raises(SolidLSPException, match="Failed to run"):
                 EclipseJDTLS.DependencyProvider._inspect_java("/nonexistent/java")
 
