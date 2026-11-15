@@ -21,6 +21,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Security:
   - Update pinned runtime and development dependencies with current security fixes.
+  - Fix excessive CPU use when parsing malformed trace context in MCP requests.
 
 * JetBrains:
   - Fix: When applying a non-symbolic edit, do not raise a post-edit exception during IDE file refresh
