@@ -46,6 +46,7 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Dashboard:
   - Fix: on macOS, the tray icon stayed white on a light menu bar instead of adapting to the menu bar's
     appearance like other menu bar icons (#2263)
+  - Fix: on macOS, the tray icon was blurry on Retina displays
 
 # v2.1.0 (2026-10-19)
 
