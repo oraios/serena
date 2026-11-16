@@ -79,7 +79,7 @@ from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import LanguageServerIdLike
 from solidlsp.util import subprocess_util
-from solidlsp.util.subprocess_util import terminate_process_tree_with_kill_fallback
+from solidlsp.util.subprocess_util import subprocess_run
 
 if TYPE_CHECKING:
     from serena.gui_log_viewer import GuiLogViewer
@@ -1537,24 +1537,22 @@ class SerenaAgent:
         log.info(f"Running activation_command for project '{project.project_name}': {cmd}")
         try:
             with LogTime("Project activation command", logger=log):
-                p = subprocess.Popen(
-                    cmd,
-                    shell=True,
-                    cwd=project.project_root,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    **subprocess_util.subprocess_kwargs(),
-                )
                 try:
-                    _, stderr = p.communicate(timeout=timeout)
+                    p = subprocess_run(
+                        cmd,
+                        shell=True,
+                        cwd=project.project_root,
+                        timeout=timeout,
+                    )
                     if p.returncode != 0:
-                        log.error(f"activation_command for project '{project.project_name}' failed (exit {p.returncode}): {stderr.strip()}")
+                        log.error(
+                            f"activation_command for project '{project.project_name}' failed (exit {p.returncode}): {p.stderr.strip()}"
+                        )
                 except subprocess.TimeoutExpired:
                     log.error(
                         f"Activation_command for project '{project.project_name}' timed out after "
-                        f"{timeout}s; terminating process and continuing with backend initialisation."
+                        f"{timeout}s; continuing with backend initialisation."
                     )
-                    terminate_process_tree_with_kill_fallback(p, terminate_timeout=5.0, process_name="activation_command")
         except Exception:
             log.exception(f"Unexpected error running activation_command for project '{project.project_name}'")
 

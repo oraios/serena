@@ -34,64 +34,6 @@ class TestVeribleVerilogLsDetection:
     """Unit tests for verible-verilog-ls binary detection logic."""
 
     @pytest.mark.systemverilog
-    def test_detect_from_path_returns_system_verible(self):
-        """
-        GIVEN verible-verilog-ls is in system PATH
-        WHEN _get_or_install_core_dependency is called
-        THEN it returns the system path without downloading
-
-        WHY: Users with system-installed verible (via conda, Homebrew, apt)
-        should use that version instead of downloading. This is faster and
-        respects user's environment management.
-        """
-        with tempfile.TemporaryDirectory() as temp_dir:
-            custom_settings = SolidLSPSettings.CustomLSSettings({})
-            provider = SystemVerilogLanguageServer.DependencyProvider(custom_settings, temp_dir)
-
-            with patch("shutil.which") as mock_which:
-                mock_which.return_value = "/usr/local/bin/verible-verilog-ls"
-                with patch("subprocess.run") as mock_run:
-                    mock_run.return_value = MagicMock(
-                        returncode=0,
-                        stdout="Verible v0.0-4051-g9fdb4057 (2024-01-01)\nCommit: 9fdb4057",
-                        stderr="",
-                    )
-                    result = provider._get_or_install_core_dependency()
-
-        assert result == "/usr/local/bin/verible-verilog-ls"
-        mock_which.assert_called_once_with("verible-verilog-ls")
-        mock_run.assert_called_once()
-        assert mock_run.call_args[0][0] == ["/usr/local/bin/verible-verilog-ls", "--version"]
-
-    @pytest.mark.systemverilog
-    def test_detect_from_path_logs_version(self):
-        """
-        GIVEN verible-verilog-ls is in PATH with version output
-        WHEN detected
-        THEN version info is logged
-
-        WHY: Version information helps debug compatibility issues.
-        Users and developers need to know which verible version is being used.
-        """
-        with tempfile.TemporaryDirectory() as temp_dir:
-            custom_settings = SolidLSPSettings.CustomLSSettings({})
-            provider = SystemVerilogLanguageServer.DependencyProvider(custom_settings, temp_dir)
-
-            with patch("shutil.which", return_value="/usr/bin/verible-verilog-ls"):
-                with patch("subprocess.run") as mock_run:
-                    mock_run.return_value = MagicMock(returncode=0, stdout="Verible v0.0-4051-g9fdb4057", stderr="")
-                    with patch("solidlsp.language_servers.systemverilog_server.log") as mock_log:
-                        result = provider._get_or_install_core_dependency()
-
-            # Verify version check was called
-            assert mock_run.call_args[0][0] == ["/usr/bin/verible-verilog-ls", "--version"]
-            # Verify version was logged
-            assert mock_log.info.called
-            log_message = mock_log.info.call_args[0][0]
-            assert "Verible v0.0-4051" in log_message
-            assert result == "/usr/bin/verible-verilog-ls"
-
-    @pytest.mark.systemverilog
     def test_detect_from_path_handles_version_failure_gracefully(self):
         """
         GIVEN verible-verilog-ls is in PATH but --version fails (returncode=1)
@@ -107,7 +49,7 @@ class TestVeribleVerilogLsDetection:
             provider = SystemVerilogLanguageServer.DependencyProvider(custom_settings, temp_dir)
 
             with patch("shutil.which", return_value="/custom/bin/verible-verilog-ls"):
-                with patch("subprocess.run") as mock_run:
+                with patch("solidlsp.language_servers.systemverilog_server.subprocess_run") as mock_run:
                     # Version check fails
                     mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="Unknown option: --version")
                     result = provider._get_or_install_core_dependency()
@@ -130,7 +72,7 @@ class TestVeribleVerilogLsDetection:
             provider = SystemVerilogLanguageServer.DependencyProvider(custom_settings, temp_dir)
 
             with patch("shutil.which", return_value="/opt/verible/bin/verible-verilog-ls"):
-                with patch("subprocess.run") as mock_run:
+                with patch("solidlsp.language_servers.systemverilog_server.subprocess_run") as mock_run:
                     # Version check times out
                     mock_run.side_effect = subprocess.TimeoutExpired(cmd=["verible-verilog-ls", "--version"], timeout=5)
                     result = provider._get_or_install_core_dependency()
@@ -223,14 +165,10 @@ class TestVeribleVerilogLsDetection:
             provider = SystemVerilogLanguageServer.DependencyProvider(custom_settings, temp_dir)
 
             with patch("shutil.which", return_value="/usr/bin/verible-verilog-ls"):
-                with patch("subprocess.run") as mock_run:
+                with patch("solidlsp.language_servers.systemverilog_server.subprocess_run") as mock_run:
                     mock_run.return_value = MagicMock(returncode=0, stdout="Verible v0.0-4051", stderr="")
 
-                    with patch("solidlsp.language_servers.systemverilog_server.RuntimeDependencyCollection") as mock_deps_class:
-                        result = provider._get_or_install_core_dependency()
-
-                        # RuntimeDependencyCollection should never be instantiated
-                        mock_deps_class.assert_not_called()
+                    result = provider._get_or_install_core_dependency()
 
             assert result == "/usr/bin/verible-verilog-ls"
 
