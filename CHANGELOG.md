@@ -3,6 +3,7 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - Fix: project activation commands could hang on Windows when Serena uses the stdio transport (#2270)
   - More flexible inclusion/exclusion definitions: 
     - Allow tool exclusions/inclusions to use tool marker names (e.g. `ToolMarkerCanEdit`)
     - Allow API exclusions to include `marker:editing` to exclude all editing functionality
@@ -11,6 +12,12 @@ Status of the `main` branch. Changes prior to the next official version change w
     silently. Since the replacement is per language rather than per key, a project block that only set
     `ls_path`, for example, dropped every global key such as `ls_extra_args`, leaving no trace. The
     replacement behaviour is unchanged, but the global keys hidden by a project block are now logged (#2188).
+  - Fix: on macOS, cleaning up a language server that had already exited logged a spurious
+    "Permission denied signaling process group" warning; an exited process group is now treated
+    as already clean (#2237)
+  - Performance: the symbol caches were rewritten in full after every tool call that fetched new symbols,
+    which takes noticeable time for large projects; they are now saved at most every 30 s, and always when
+    language servers are stopped or restarted
 
 * JetBrains:
   - Fix: When applying a non-symbolic edit, do not raise a post-edit exception during IDE file refresh
@@ -39,6 +46,11 @@ Status of the `main` branch. Changes prior to the next official version change w
   - C/C++ (clangd) logs errors only (`--log=error`) instead of a line for every request and parse, unless
     `ls_extra_args` sets `--log` or Serena logs at debug level
   - Fix: every line a language server wrote to stderr was followed by an empty line in Serena's log
+
+* Dashboard:
+  - Fix: on macOS, the tray icon stayed white on a light menu bar instead of adapting to the menu bar's
+    appearance like other menu bar icons (#2263)
+  - Fix: on macOS, the tray icon was blurry on Retina displays
 
 # v2.1.0 (2026-10-19)
 
