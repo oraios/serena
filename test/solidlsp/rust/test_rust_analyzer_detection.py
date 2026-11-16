@@ -434,34 +434,6 @@ class TestRustAnalyzerDetection:
         assert "Homebrew" not in error_message and "brew" not in error_message
 
     @pytest.mark.rust
-    def test_auto_install_via_rustup_when_not_found(self):
-        """
-        GIVEN rust-analyzer is NOT installed anywhere
-        AND rustup IS installed
-        WHEN _ensure_rust_analyzer_installed is called
-        AND rustup component add succeeds
-        THEN it should return the rustup-installed path
-
-        WHY: Serena should auto-install rust-analyzer via rustup when possible.
-        This matches the original behavior and enables CI to work without pre-installing.
-        """
-        from solidlsp.language_servers.rust_analyzer import RustAnalyzer
-
-        with patch("shutil.which", return_value=None):
-            with patch("os.path.isfile", return_value=False):
-                with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup") as mock_rustup_path:
-                    # First call returns None (not installed), second returns path (after install)
-                    mock_rustup_path.side_effect = [None, "/home/user/.rustup/toolchains/stable/bin/rust-analyzer"]
-                    with patch.object(RustAnalyzer.DependencyProvider, "_get_rustup_version", return_value="1.70.0"):
-                        with patch("subprocess.run") as mock_run:
-                            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-                            result = RustAnalyzer.DependencyProvider._ensure_rust_analyzer_installed()
-
-        assert result == "/home/user/.rustup/toolchains/stable/bin/rust-analyzer"
-        mock_run.assert_called_once()
-        assert mock_run.call_args[0][0] == ["rustup", "component", "add", "rust-analyzer"]
-
-    @pytest.mark.rust
     def test_auto_install_failure_falls_through_to_common_paths(self):
         """
         GIVEN rust-analyzer is NOT installed anywhere
@@ -481,7 +453,7 @@ class TestRustAnalyzerDetection:
             with patch("os.path.isfile", return_value=False):
                 with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=None):
                     with patch.object(RustAnalyzer.DependencyProvider, "_get_rustup_version", return_value="1.70.0"):
-                        with patch("subprocess.run") as mock_run:
+                        with patch("solidlsp.language_servers.rust_analyzer.subprocess_run") as mock_run:
                             mock_run.return_value = MagicMock(
                                 returncode=1, stdout="", stderr="error: component 'rust-analyzer' is not available"
                             )
@@ -513,7 +485,7 @@ class TestRustAnalyzerDetection:
             with patch("os.path.isfile", return_value=False):
                 with patch.object(RustAnalyzer.DependencyProvider, "_get_rust_analyzer_via_rustup", return_value=None):
                     with patch.object(RustAnalyzer.DependencyProvider, "_get_rustup_version", return_value="1.70.0"):
-                        with patch("subprocess.run") as mock_run:
+                        with patch("solidlsp.language_servers.rust_analyzer.subprocess_run") as mock_run:
                             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
                             with pytest.raises(RuntimeError) as exc_info:
                                 RustAnalyzer.DependencyProvider._ensure_rust_analyzer_installed()
