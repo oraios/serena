@@ -36,7 +36,14 @@ def subprocess_kwargs() -> dict:
 
 
 def subprocess_run(
-    cmd: list[str] | str, timeout: int | None = None, check: bool = False, capture_output: bool = True, text: bool = True, **kwargs
+    cmd: list[str] | str,
+    timeout: float | None = None,
+    check: bool = False,
+    capture_output: bool = True,
+    text: bool = True,
+    *,
+    terminate_timeout: float = 2.0,
+    **kwargs,
 ) -> subprocess.CompletedProcess:
     """
     Runs a command in a subprocess, applying safe default settings.
@@ -44,24 +51,74 @@ def subprocess_run(
     The stdin of the subprocess is set to DEVNULL to avoid interference with the parent process' stdin;
     this cannot be overridden by passing a different value for stdin in kwargs.
 
+    On timeout or an exception during communication (including KeyboardInterrupt), cleanup is attempted
+    through :func:`terminate_process_tree_with_kill_fallback` before re-raising the original exception.
+    Unlike :func:`subprocess.run`, which immediately kills only the direct child, this allows a grace
+    period and also attempts to stop descendants. On POSIX, termination requests graceful shutdown;
+    on Windows, it is already forceful.
+
     :param cmd: the command to run, specified as a list of arguments or a string
-    :param timeout: the timeout in seconds for the command to complete; if None, no timeout is applied
+    :param timeout: the communication timeout in seconds, after which cleanup starts and TimeoutExpired
+        is raised; None disables this timeout. This is not a total wall-clock limit: process creation,
+        termination and final output collection may take additional time.
     :param check: if True, raises CalledProcessError if the command exits with a non-zero status
     :param capture_output: if True, captures stdout and stderr; otherwise, they are not captured
     :param text: if True, captures output as text (str); otherwise, captures as bytes
+    :param terminate_timeout: the shared wait budget in seconds for the process and its discovered
+        descendants to exit after the initial termination request, before escalating to forceful killing.
+        Defaults to 2 seconds; zero requests immediate escalation. Applies only during error cleanup,
+        independently of timeout. The termination helper uses an additional wait budget after killing.
     :return: a CompletedProcess instance containing information about the completed process
     """
+    # apply subprocess defaults
     kwargs = dict(kwargs)
     kwargs.update(subprocess_kwargs())
     kwargs.update(
         {
-            "timeout": timeout,
-            "capture_output": capture_output,
             "text": text,
             "stdin": subprocess.DEVNULL,  # important to avoid interference with parent process' stdin
         }
     )
-    return subprocess.run(cmd, check=check, **kwargs)
+
+    # Note: The code below is adapted from subprocess.run() in the Python standard library,
+    # with modifications to handle process tree termination on timeout or interruption.
+
+    # prepare input and output as in subprocess.run
+    input = kwargs.pop("input", None)
+    if input is not None:
+        if kwargs.get("stdin") is not None:
+            raise ValueError("stdin and input arguments may not both be used.")
+        kwargs["stdin"] = subprocess.PIPE
+
+    if capture_output:
+        if kwargs.get("stdout") is not None or kwargs.get("stderr") is not None:
+            raise ValueError("stdout and stderr arguments may not be used with capture_output.")
+        kwargs["stdout"] = subprocess.PIPE
+        kwargs["stderr"] = subprocess.PIPE
+
+    # run the command and collect output
+    with subprocess.Popen(cmd, **kwargs) as process:
+        try:
+            stdout, stderr = process.communicate(input, timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            terminate_process_tree_with_kill_fallback(process, terminate_timeout=terminate_timeout)
+            if platform.system() == "Windows":
+                # collect Windows reader output, which can be str despite TimeoutExpired's bytes annotations
+                exc.stdout, exc.stderr = process.communicate()  # ty: ignore[invalid-assignment]
+            else:
+                # retain the output already collected in the POSIX timeout exception
+                process.wait()
+            raise
+        except:  # including KeyboardInterrupt, communicate handled that
+            terminate_process_tree_with_kill_fallback(process, terminate_timeout=terminate_timeout)
+            # let the context manager wait for the process
+            raise
+
+        # report the exit status and captured output
+        retcode = cast(int, process.poll())
+        if check and retcode:
+            raise subprocess.CalledProcessError(retcode, process.args, output=stdout, stderr=stderr)
+    return subprocess.CompletedProcess(process.args, retcode, stdout, stderr)
 
 
 def convert_shell_cmd(cmd: str | list[str]) -> str:
@@ -341,9 +398,27 @@ def _signal_process_group(pgid: int, terminate: bool = True) -> None:
         # the group is already gone; nothing left to signal
         pass
     except PermissionError as e:
-        log.warning(f"Permission denied signaling process group {pgid} with {sig.name}: {e}")
+        if _is_unreaped_zombie(pgid):
+            # macOS reports EPERM instead of ESRCH for a group whose only remaining member is its
+            # unreaped zombie leader; a group that still has a live member is signalable.
+            log.debug(f"Process group {pgid} has already exited; nothing left to signal with {sig.name}.")
+        else:
+            log.warning(f"Permission denied signaling process group {pgid} with {sig.name}: {e}")
     except Exception as e:
         log.warning(f"Unexpected error signaling process group {pgid} with {sig.name}: {e}")
+
+
+def _is_unreaped_zombie(pid: int) -> bool:
+    """
+    Whether the given process has exited but has not yet been reaped by its parent.
+
+    :param pid: the process ID to inspect
+    :return: True if the process is a zombie; False if it is alive, gone, or cannot be inspected
+    """
+    try:
+        return psutil.Process(pid).status() == psutil.STATUS_ZOMBIE
+    except (psutil.Error, OSError):
+        return False
 
 
 def _get_process_descendants(process: subprocess.Popen) -> list[psutil.Process]:
@@ -387,13 +462,23 @@ def terminate_process_tree_with_kill_fallback(
     process_group_id: int | None = None,
 ) -> None:
     """
-    Attempts to terminate the given process and its children by signaling them to terminate,
-    and if that fails (i.e. they don't exit within the given timeout), forcefully kills them.
+    Attempts to stop the given process and its descendants, escalating from termination to forceful killing.
 
-    The termination is logged.
+    Sends the initial termination request, then waits for the descendants and process to exit using one
+    shared terminate_timeout budget. On POSIX this sends SIGTERM, allowing graceful shutdown; on Windows
+    terminate() already stops the process forcefully. Zero skips the grace period and escalates immediately.
+
+    If the initial wait expires, sends SIGKILL on POSIX (kill() on Windows) and waits using a separate,
+    shared two-second budget, with a minimum final process wait of 0.1 seconds. These budgets cover waiting,
+    not process discovery or signaling, and therefore do not impose a strict total wall-clock limit.
+
+    Descendant discovery is best-effort: without a process group, children created or reparented during
+    cleanup may escape termination. Shutdown failures are logged rather than raised, so returning does not
+    guarantee that every process has exited.
 
     :param process: the process to terminate
-    :param terminate_timeout: the time to wait for the process to terminate gracefully before killing it
+    :param terminate_timeout: the shared initial wait budget in seconds for descendants and the process;
+        zero escalates immediately to forceful killing. Does not include the subsequent kill wait budget.
     :param process_name: the name of the process (used for logging purposes); should start with capital letter
     :param process_group_id: if given, the POSIX process group ID that ``process`` leads (i.e. it was
         launched with ``start_new_session=True``, so its PGID equals its PID). When set, cleanup

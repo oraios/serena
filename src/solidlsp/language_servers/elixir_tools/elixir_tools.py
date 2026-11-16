@@ -87,7 +87,8 @@ class ElixirTools(SolidLanguageServer):
     def _get_elixir_version(cls) -> str | None:
         """Get the installed Elixir version or None if not found."""
         try:
-            result = subprocess_run(["elixir", "--version"], capture_output=True, text=True, check=False)
+            command = ["cmd.exe", "/d", "/c", "elixir", "--version"] if os.name == "nt" else ["elixir", "--version"]
+            result = subprocess_run(command, capture_output=True, text=True, check=False)
             if result.returncode == 0:
                 return result.stdout.strip()
         except FileNotFoundError:
