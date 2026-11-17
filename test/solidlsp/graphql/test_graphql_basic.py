@@ -111,6 +111,7 @@ class TestGraphqlSymbolHierarchy:
         [
             ("schema.graphql", ["User"], "type (User) {"),
             ("schema.graphql", ["Query", "user"], r"  (user)\(id: ID!\)"),
+            ("schema.graphql", ["Role"], "enum (Role) {"),
             ("operations/queries.graphql", ["GetUser"], r"query (GetUser)\("),
         ],
     )

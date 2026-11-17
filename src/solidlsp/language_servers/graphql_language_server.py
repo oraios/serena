@@ -175,13 +175,25 @@ class GraphQLLanguageServer(SolidLanguageServer):
         and fragment spreads) as a ``SymbolInformation`` whose range spans the node's entire source text, so the nesting
         of the nodes is given by the containment of their ranges. (The ``containerName`` cannot serve for this: it is
         unset for the selections of anonymous operations, and it does not disambiguate between equally named parents.)
-        A symbol's range starts with the description of the definition, if any, and the name is located after it.
+        A symbol's range starts with the description of the definition, if any, and the name is located among the
+        tokens following it.
 
         Positions are treated as character offsets within lines, as everywhere in Serena.
         """
 
         _LINE_BREAK = re.compile(r"\r\n|[\n\r]")
         _LEADING_DESCRIPTION = re.compile(r'\s*(?:"""(?:\\"""|(?!""")[\s\S])*"""|"(?:\\.|[^"\\\n\r])*")')
+        _IGNORED_TOKENS = re.compile(r"(?:[ \t\n\r,\ufeff]|#[^\n\r]*)*")
+        """
+        the source text which is insignificant between tokens: whitespace, commas and comments.
+        """
+        _TOKEN = re.compile(r"(?P<name>[_A-Za-z][_0-9A-Za-z]*)|\.\.\.|\S")
+        _MAX_TOKENS_UP_TO_NAME = 3
+        """
+        the maximum number of tokens from the start of a symbol's source text (after its description) up to and including
+        its name: the name is preceded by at most an alias and its colon (alternatively, by the keyword of a definition
+        or the dots of a fragment spread).
+        """
 
         def __init__(self, contents: str):
             """
@@ -225,7 +237,7 @@ class GraphQLLanguageServer(SolidLanguageServer):
         def _locate_name(self, name: str, symbol_range: Range) -> Range:
             """
             :return: the range of the given symbol name within the given symbol range, or the symbol range itself if the
-                name does not occur in it (as for anonymous operations, which are reported under a placeholder name).
+                name is not found in it (as for anonymous operations, which are reported under a placeholder name).
             """
             start = self._offset(symbol_range["start"])
             end = self._offset(symbol_range["end"])
@@ -235,11 +247,26 @@ class GraphQLLanguageServer(SolidLanguageServer):
             if description is not None:
                 start = description.end()
 
-            name_pattern = re.compile(rf"(?<![_0-9A-Za-z]){re.escape(name)}(?![_0-9A-Za-z])")
-            match = name_pattern.search(self._contents, start, end)
-            if match is None:
-                return symbol_range
-            return Range(start=self._position(match.start()), end=self._position(match.end()))
+            # read the leading tokens, which include the name
+            tokens: list[re.Match[str]] = []
+            while len(tokens) < self._MAX_TOKENS_UP_TO_NAME:
+                start = cast(re.Match[str], self._IGNORED_TOKENS.match(self._contents, start, end)).end()
+                token = self._TOKEN.match(self._contents, start, end)
+                if token is None:
+                    break
+                tokens.append(token)
+                start = token.end()
+
+            # select the name tokens that can be the symbol's name: a name directly following another name is
+            # the name of a definition (following its keyword), which may be equal to the keyword
+            name_tokens = [token for token in tokens if token.group("name") is not None]
+            if len(tokens) >= 2 and tokens[0] in name_tokens and tokens[1] in name_tokens:
+                name_tokens = [tokens[1]]
+
+            for token in name_tokens:
+                if token.group() == name:
+                    return Range(start=self._position(token.start()), end=self._position(token.end()))
+            return symbol_range
 
         def _offset(self, position: Position) -> int:
             line = min(position["line"], len(self._line_starts) - 1)

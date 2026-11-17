@@ -36,6 +36,7 @@ type Post {
 }
 
 """Permission level granted to a User."""
+# The Role of a User is assigned upon creation.
 enum Role {
   ADMIN
   EDITOR
