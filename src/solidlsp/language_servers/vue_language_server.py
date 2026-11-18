@@ -354,74 +354,78 @@ class VueLanguageServer(SolidLanguageServer):
 
         return result
 
-    def request_file_references(self, relative_file_path: str) -> list:
-        self._ensure_ls_operational()
+    def request_file_references(self, relative_file_path: str) -> list[Location]:
+        """Find component import locations through the companion TypeScript server.
 
-        absolute_file_path = os.path.join(self.repository_root_path, relative_file_path)
-        uri = PathUtils.path_to_uri(absolute_file_path)
-
-        request_params = {"textDocument": {"uri": uri}}
-
-        log.info(f"Sending volar/client/findFileReference request for {relative_file_path}")
-        log.info(f"Request URI: {uri}")
-        log.info(f"Request params: {request_params}")
-
+        :raises SolidLSPException: if the request fails or its response is invalid.
+        """
         try:
-            with self.open_file(relative_file_path):
-                log.debug(f"Sending volar/client/findFileReference for {relative_file_path}")
-                log.debug(f"Request params: {request_params}")
+            # prepare the companion and keep the queried file open
+            self._ensure_ls_operational()
+            if self._ts_server is None:
+                raise SolidLSPException("Companion TypeScript server is not available")
+            absolute_file_path = os.path.join(self.repository_root_path, relative_file_path)
+            request_params: ExecuteCommandParams = {
+                "command": "typescript.tsserverRequest",
+                "arguments": ["fileReferences", {"file": absolute_file_path}],
+            }
+            with self._ts_server.open_file(relative_file_path):
+                response = self._ts_server.handler.send.execute_command(request_params)
 
-                response = self.server.send_request("volar/client/findFileReference", request_params)
+            # require a successful response with an explicit reference collection
+            if not isinstance(response, dict) or response.get("success") is not True:
+                raise ValueError(f"Unsuccessful fileReferences response: {response!r}")
+            body = response.get("body")
+            if not isinstance(body, dict) or not isinstance(body.get("refs"), list):
+                raise ValueError(f"Invalid fileReferences response body: {body!r}")
 
-                log.debug(f"Received response type: {type(response)}")
-
-            log.info(f"Received file references response: {response}")
-            log.info(f"Response type: {type(response)}")
-
-            if response is None:
-                log.debug(f"No file references found for {relative_file_path}")
-                return []
-
-            # Response should be an array of Location objects
-            if not isinstance(response, list):
-                log.warning(f"Unexpected response format from volar/client/findFileReference: {type(response)}")
-                return []
-
-            ret: list[Location] = []
-            for item in response:
-                if not isinstance(item, dict) or "uri" not in item:
-                    log.debug(f"Skipping invalid location item: {item}")
+            # convert tsserver's one-based UTF-16 locations to LSP locations
+            references: list[Location] = []
+            for item in body["refs"]:
+                if not isinstance(item, dict) or not isinstance(item.get("file"), str):
+                    raise ValueError(f"Invalid fileReferences location: {item!r}")
+                abs_path = Path(item["file"])
+                if not abs_path.is_absolute():
+                    raise ValueError(f"Non-absolute fileReferences path: {abs_path}")
+                start = self._file_reference_position(item.get("start"))
+                end = self._file_reference_position(item.get("end"))
+                if (end["line"], end["character"]) < (start["line"], start["character"]):
+                    raise ValueError(f"Reversed fileReferences range: {item!r}")
+                if not abs_path.is_relative_to(self.repository_root_path):
+                    log.debug(f"Found file reference outside repository: {abs_path}, skipping")
                     continue
-
-                abs_path = PathUtils.uri_to_path(item["uri"])
-                if not Path(abs_path).is_relative_to(self.repository_root_path):
-                    log.warning(f"Found file reference outside repository: {abs_path}, skipping")
+                rel_path = str(abs_path.relative_to(self.repository_root_path))
+                if self.is_ignored_path(rel_path):
                     continue
-
-                rel_path = Path(abs_path).relative_to(self.repository_root_path)
-                if self.is_ignored_path(str(rel_path)):
-                    log.debug(f"Ignoring file reference in {rel_path}")
-                    continue
-
-                new_item: dict = {}
-                new_item.update(item)
-                new_item["absolutePath"] = str(abs_path)
-                new_item["relativePath"] = str(rel_path)
-                ret.append(Location(**new_item))  # type: ignore
-
-            log.debug(f"Found {len(ret)} file references for {relative_file_path}")
-            return ret
-
+                references.append(
+                    Location(
+                        uri=PathUtils.path_to_uri(str(abs_path)),
+                        range=ls_types.Range(start=start, end=end),
+                        absolutePath=str(abs_path),
+                        relativePath=rel_path,
+                    )
+                )
+            return references
         except Exception as e:
-            log.warning(f"Error requesting file references for {relative_file_path}: {e}")
-            return []
+            cause = e.cause if isinstance(e, SolidLSPException) and e.cause is not None else e
+            raise SolidLSPException(f"Error requesting fileReferences for {relative_file_path}: {e}", cause=cause) from e
+
+    @staticmethod
+    def _file_reference_position(position: Any) -> ls_types.Position:
+        """Convert a one-based tsserver line and UTF-16 offset to an LSP position."""
+        if not isinstance(position, dict):
+            raise ValueError(f"Invalid fileReferences position: {position!r}")
+        line, offset = position.get("line"), position.get("offset")
+        if type(line) is not int or type(offset) is not int or line < 1 or offset < 1:
+            raise ValueError(f"Invalid fileReferences position: {position!r}")
+        return ls_types.Position(line=line - 1, character=offset - 1)
 
     @override
     def request_references(self, relative_file_path: str, line: int, column: int) -> list[ls_types.Location]:
         self._ensure_ls_operational()
         symbol_refs = self._send_ts_references_request(relative_file_path, line=line, column=column)
 
-        if relative_file_path.endswith(".vue"):
+        if relative_file_path.endswith(".vue") and line >= 0 and column >= 0:
             log.info(f"Attempting to find file-level references for Vue component {relative_file_path}")
             file_refs = self.request_file_references(relative_file_path)
             log.info(f"file_refs result: {len(file_refs)} references found")
