@@ -24,6 +24,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     if the IDE's plugin server is not reachable.
 
 * Language Servers:
+  - Fix: language servers no longer inherit `PYTHONHOME` from Serena's own process. When Serena was started
+    through a launcher that sets it (e.g. uv), a Python-based language server running on another Python version,
+    such as Pyright via `uvx -p 3.13`, loaded Serena's standard library and crashed at startup
+    (`AssertionError: SRE module mismatch`)
   - Fix: detect Elixir installed via a Windows batch launcher
   - Extend allowed types in persisted symbol caches, fixing cache loading issues with `clangd`
     when overriding values like `ls_path`, `clangd_version` or `compile_commands_dir`

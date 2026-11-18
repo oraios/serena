@@ -9,7 +9,6 @@ compiler itself (https://gleam.run).
 
 import logging
 import shutil
-import subprocess
 import threading
 
 from overrides import override
@@ -21,6 +20,7 @@ from solidlsp.ls import (
 )
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
 
@@ -144,7 +144,7 @@ class GleamLanguageServer(SolidLanguageServer):
         if gleam_path is None:
             return  # _get_or_install_core_dependency will raise a clear error when the server starts
         try:
-            result = subprocess.run(
+            result = subprocess_run(
                 [gleam_path, "deps", "download"],
                 cwd=self.repository_root_path,
                 capture_output=True,

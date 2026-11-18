@@ -23,6 +23,33 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 TStream = TypeVar("TStream", bound=str | bytes)
 
+_PARENT_PYTHON_ENV_VARS = ("PYTHONHOME", "UV_INTERNAL__PYTHONHOME")
+"""
+names of the environment variables that are not inherited by child processes.
+They describe Serena's own interpreter (uv's launcher sets them), and another interpreter that inherits them
+loads Serena's standard library instead of its own and fails at startup (e.g. "SRE module mismatch").
+"""
+
+
+def _build_child_environment(overrides: dict[str, str] | None = None) -> dict[str, str]:
+    """
+    Builds the environment of a child process from Serena's environment.
+
+    :param overrides: the variables explicitly set for the child process; they take precedence over the
+        inherited ones, including those in ``_PARENT_PYTHON_ENV_VARS``
+    :return: Serena's environment without the variables in ``_PARENT_PYTHON_ENV_VARS``, updated with ``overrides``
+    """
+    # inherit Serena's environment without its interpreter's variables
+    # (on Windows, where names are case-insensitive, os.environ yields upper-case keys, so e.g. PythonHome matches)
+    env = os.environ.copy()
+    for name in _PARENT_PYTHON_ENV_VARS:
+        env.pop(name, None)
+
+    # apply the explicitly set variables
+    if overrides is not None:
+        env.update(overrides)
+    return env
+
 
 def subprocess_kwargs() -> dict:
     """
@@ -50,6 +77,8 @@ def subprocess_run(
 
     The stdin of the subprocess is set to DEVNULL to avoid interference with the parent process' stdin;
     this cannot be overridden by passing a different value for stdin in kwargs.
+    Unless ``env`` is passed in kwargs, the subprocess receives the environment built by ``_build_child_environment``;
+    an explicit ``env`` mapping is used as is.
 
     On timeout or an exception during communication (including KeyboardInterrupt), cleanup is attempted
     through :func:`terminate_process_tree_with_kill_fallback` before re-raising the original exception.
@@ -73,6 +102,8 @@ def subprocess_run(
     # apply subprocess defaults
     kwargs = dict(kwargs)
     kwargs.update(subprocess_kwargs())
+    if kwargs.get("env") is None:
+        kwargs["env"] = _build_child_environment()
     kwargs.update(
         {
             "text": text,
@@ -265,9 +296,8 @@ class ManagedSubprocessLauncher:
         :param start_new_session: whether to start the process in its own session (own process
             group, detached from ours)
         """
-        # build the child environment from ours, overridden by the launch info's entries
-        child_proc_env = os.environ.copy()
-        child_proc_env.update(process_launch_info.env)
+        # build the child environment
+        child_proc_env = _build_child_environment(process_launch_info.env)
 
         # convert the command for shell=True execution, prefixing `exec` when pdeathsig applies
         use_pdeathsig = start_new_session and self._libc is not None

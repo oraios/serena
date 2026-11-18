@@ -89,10 +89,9 @@ class HaskellLanguageServer(SolidLanguageServer):
             working_dir = repository_root_path
 
         # Set up environment with GHCup bin in PATH
-        env = dict(os.environ)
+        path = os.environ.get("PATH", "")
         ghcup_bin = os.path.expanduser("~/.ghcup/bin")
-        if ghcup_bin not in env.get("PATH", ""):
-            env["PATH"] = f"{ghcup_bin}{os.pathsep}{env.get('PATH', '')}"
+        env = {"PATH": f"{ghcup_bin}{os.pathsep}{path}"} if ghcup_bin not in path else {}
 
         super().__init__(
             config,
