@@ -80,7 +80,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-24.04, windows-latest, macos-latest]
         python-version: ["3.11"]
         # 5 batches, each installs ONLY the toolchains its languages need (steps gated by matrix.batch).
         # Python/uv stay in every batch; Node is limited to other-langs and catch-all.
