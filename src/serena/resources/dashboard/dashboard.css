@@ -422,6 +422,21 @@ code, pre, kbd, samp,
     object-fit: contain;
 }
 
+.gold-banner-slide .banner-html {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 400px;
+    border-radius: var(--border-radius);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.gold-banner-slide:has(.banner-html) > a {
+    display: block;
+    color: inherit;
+    text-decoration: none;
+}
+
 /* Banner Arrow Navigation */
 .banner-arrow {
     position: absolute;
