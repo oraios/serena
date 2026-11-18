@@ -106,9 +106,16 @@ class FortranLanguageServer(SolidLanguageServer):
             identifier_name = match.group(1)
             identifier_start = match.start(1)
         else:
-            # Try standard keywords pattern
-            standard_pattern = r"^\s*(function|subroutine|module|program|interface)\s+([a-zA-Z_]\w*)"
-            match = re.match(standard_pattern, line, re.IGNORECASE)
+            # Locate procedure names after optional type and prefix specifiers
+            match = None
+            if symbol["kind"] in (ls_types.SymbolKind.Function, ls_types.SymbolKind.Method):
+                procedure_pattern = r"\b(function|subroutine)\s+([a-zA-Z_]\w*)"
+                match = re.search(procedure_pattern, line, re.IGNORECASE)
+
+            if not match:
+                # Try standard keywords pattern
+                standard_pattern = r"^\s*(function|subroutine|module|program|interface)\s+([a-zA-Z_]\w*)"
+                match = re.match(standard_pattern, line, re.IGNORECASE)
 
             if not match:
                 # Try submodule pattern
@@ -142,7 +149,7 @@ class FortranLanguageServer(SolidLanguageServer):
 
     @override
     def _document_symbols_cache_fingerprint(self) -> Hashable | None:
-        build_document_symbols_version = 2
+        build_document_symbols_version = 3
         return build_document_symbols_version
 
     @override
