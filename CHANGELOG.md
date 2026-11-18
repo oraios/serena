@@ -8,6 +8,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     - Allow tool exclusions/inclusions to use tool marker names (e.g. `ToolMarkerCanEdit`)
     - Allow API exclusions to include `marker:editing` to exclude all editing functionality
   - Fix: `planning` mode now correctly excludes all editing tools/functions (#2210)
+  - Fix: `read_file`, `search_for_pattern` and `replace_in_files` failed with a `UnicodeDecodeError` on a
+    project file whose encoding differs from the project's configured `encoding` (e.g. a UTF-16 file saved
+    by Notepad or PowerShell, or a latin-1 export), although Serena documents a fallback to detected
+    encoding for such files. These tools now use the documented read path, so the file is read instead of
+    rejected (#2274)
   - Fix: project-level `ls_specific_settings` replaced the global settings for the same language server
     silently. Since the replacement is per language rather than per key, a project block that only set
     `ls_path`, for example, dropped every global key such as `ls_extra_args`, leaving no trace. The
