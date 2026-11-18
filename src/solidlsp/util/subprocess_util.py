@@ -182,17 +182,20 @@ class ManagedSubprocess(Generic[TStream], ToStringMixin):
         """
         return self._popen.poll()
 
-    def terminate(self, timeout: float) -> None:
+    def terminate(self, timeout: float, exit_grace_period: float = 0.0) -> None:
         """
         Terminates the process and its children, forcefully killing them if they do not exit in time.
 
         :param timeout: the time, in seconds, to wait for the process to terminate gracefully before killing it
+        :param exit_grace_period: the time, in seconds, to wait for the process to exit by itself before it is signaled
+            (see :func:`terminate_process_tree_with_kill_fallback`)
         """
         terminate_process_tree_with_kill_fallback(
             self._popen,
             terminate_timeout=timeout,
             process_name=self._name,
             process_group_id=self._process_group_id,
+            exit_grace_period=exit_grace_period,
         )
 
 
@@ -460,6 +463,7 @@ def terminate_process_tree_with_kill_fallback(
     terminate_timeout: float,
     process_name: str = "Process",
     process_group_id: int | None = None,
+    exit_grace_period: float = 0.0,
 ) -> None:
     """
     Attempts to stop the given process and its descendants, escalating from termination to forceful killing.
@@ -480,6 +484,11 @@ def terminate_process_tree_with_kill_fallback(
     :param terminate_timeout: the shared initial wait budget in seconds for descendants and the process;
         zero escalates immediately to forceful killing. Does not include the subsequent kill wait budget.
     :param process_name: the name of the process (used for logging purposes); should start with capital letter
+    :param exit_grace_period: the time, in seconds, to wait for the process and its children to exit by themselves
+        before any signal is sent. This is for a process that was already asked to shut down (e.g. a language server
+        that received the LSP ``exit`` notification) and needs some time to finish, for example to save its state.
+        On Windows, signaling a process terminates it at once, so without a grace period such a process never
+        gets to finish. If the process does not exit in time, it is signaled as usual.
     :param process_group_id: if given, the POSIX process group ID that ``process`` leads (i.e. it was
         launched with ``start_new_session=True``, so its PGID equals its PID). When set, cleanup
         signals the whole group directly via ``os.killpg`` rather than walking the process tree to
@@ -491,6 +500,17 @@ def terminate_process_tree_with_kill_fallback(
     """
     log.debug(f"Terminating process {process.pid}, current status: {process.poll()}")
     descendants = _get_process_descendants(process)
+
+    if exit_grace_period > 0:
+        log.debug(f"Waiting up to {exit_grace_period}s for process {process.pid} to exit by itself...")
+        grace_deadline = monotonic() + exit_grace_period
+        try:
+            exit_code = process.wait(timeout=exit_grace_period)
+            if _wait_for_processes_until(descendants, grace_deadline):
+                log.info(f"{process_name} exited by itself with exit code {exit_code}.")
+                return
+        except subprocess.TimeoutExpired:
+            log.debug(f"{process_name} (pid={process.pid}) did not exit by itself within {exit_grace_period}s.")
 
     def signal_tree(terminate: bool) -> None:
         if process_group_id is not None:

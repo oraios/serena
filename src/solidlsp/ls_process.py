@@ -565,8 +565,9 @@ class StdioLanguageServer(LanguageServerInterface):
             except Exception as e:
                 log.debug(f"Exception during graceful shutdown: {e}")
                 # Ignore errors here, we are proceeding to terminate anyway.
-            # terminate the process
-            self._process.terminate(timeout=timeout)
+            # give the server time to finish shutting down by itself (e.g. JDTLS saves its workspace
+            # after the exit notification) before terminating the process, which kills it on Windows
+            self._process.terminate(timeout=timeout, exit_grace_period=timeout)
         finally:
             self._process = None
 
