@@ -3,6 +3,7 @@ Provides F# specific instantiation of the LanguageServer class.
 """
 # SPDX-License-Identifier: MIT
 
+import json
 import logging
 import os
 import re
@@ -47,6 +48,12 @@ class FSharpLanguageServer(SolidLanguageServer):
         - fsautocomplete_version: Override the pinned FsAutoComplete version
           installed by Serena (default: the bundled Serena version).
     """
+
+    WORKSPACE_LOAD_TIMEOUT = 60.0
+    """time to wait for FsAutoComplete to report that it has loaded the workspace's projects"""
+
+    PROJECT_FILE_SUFFIXES = (".fsproj", ".sln", ".slnx", ".slnf")
+    """suffixes of the files whose presence makes FsAutoComplete load a project graph"""
 
     def __init__(self, config: LanguageServerConfig, repository_root_path: str, solidlsp_settings: SolidLSPSettings):
         """
@@ -402,9 +409,27 @@ class FSharpLanguageServer(SolidLanguageServer):
             # Just acknowledge the request - we don't need to track progress for now
             return
 
+        def handle_notify_workspace(params: dict) -> None:
+            """
+            Handle fsharp/notifyWorkspace, FsAutoComplete's project loading notification.
+
+            Its ``content`` is a JSON document of the form ``{"Kind": ..., "Data": ...}``;
+            kind ``workspaceLoad`` with status ``finished`` is sent once every project of the
+            workspace has been loaded.
+            """
+            try:
+                content = json.loads(params.get("content", ""))
+            except (TypeError, ValueError):
+                return
+            if isinstance(content, dict) and content.get("Kind") == "workspaceLoad":
+                if (content.get("Data") or {}).get("Status") == "finished":
+                    log.info("FsAutoComplete finished loading the workspace")
+                    self.server_ready.set()
+
         # Register custom handlers
         self.server.on_notification("window/logMessage", handle_window_log_message)
         self.server.on_notification("window/showMessage", handle_window_show_message)
+        self.server.on_notification("fsharp/notifyWorkspace", handle_notify_workspace)
         self.server.on_request("workspace/configuration", handle_workspace_configuration)
         self.server.on_request("client/registerCapability", handle_client_register_capability)
         self.server.on_request("client/unregisterCapability", handle_client_unregister_capability)
@@ -431,7 +456,26 @@ class FSharpLanguageServer(SolidLanguageServer):
         # Complete initialization
         self.server.notify.initialized({})
 
+        # await the project load that `initialized` triggers; until it has finished, FsAutoComplete
+        # answers requests from an empty project graph
+        if not self._has_project_to_load():
+            log.info("No F# project or solution found; skipping the workspace load wait")
+        elif not self.server_ready.wait(timeout=self.WORKSPACE_LOAD_TIMEOUT):
+            log.warning("Timeout waiting for the FsAutoComplete workspace load; proceeding anyway")
+            self.server_ready.set()
+
         log.info("F# language server initialized successfully")
+
+    def _has_project_to_load(self) -> bool:
+        """
+        :return: whether the repository contains an F# project or solution file, i.e. whether
+            FsAutoComplete will load a project (and thus report having loaded one) at all
+        """
+        for _, dirnames, filenames in os.walk(self.repository_root_path):
+            dirnames[:] = [dirname for dirname in dirnames if not self.is_ignored_dirname(dirname)]
+            if any(filename.endswith(self.PROJECT_FILE_SUFFIXES) for filename in filenames):
+                return True
+        return False
 
     @override
     def _get_wait_time_for_cross_file_referencing(self) -> float:
