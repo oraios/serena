@@ -6,9 +6,13 @@ Note: Windows is not supported as Nix itself doesn't support Windows natively.
 """
 # SPDX-License-Identifier: MIT
 
+import bisect
+import functools
+import itertools
 import json
 import logging
 import platform
+import re
 import shutil
 import subprocess
 from collections.abc import Hashable
@@ -21,12 +25,35 @@ from overrides import override
 
 from solidlsp import ls_types
 from solidlsp.dependency_provider import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath
-from solidlsp.ls import DocumentSymbols, LSPFileBuffer, SolidLanguageServer
+from solidlsp.ls import DocumentSymbols, LSPFileBuffer, SolidLanguageServer, SymbolBodyFactory
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.settings import SolidLSPSettings
 from solidlsp.util.subprocess_util import subprocess_run
 
 log = logging.getLogger(__name__)
+
+# What may come between a binding's name and its `=`: whitespace and comments. `==` is a comparison, not a
+# binding. The group is atomic so a comment is consumed whole: backtracking into one could otherwise expose
+# an `=` written inside it, or let `/* */` run past its own end, and made long comments take exponential time.
+# nixd puts a binding's range on the last component of an attribute path, so no path follows the name.
+_NIX_BINDING_TAIL = re.compile(r"(?>(?:\s|#[^\n]*|/\*.*?\*/)*)=(?!=)", re.DOTALL)
+
+
+@functools.lru_cache(maxsize=16)
+def _utf16_offsets(line: str) -> tuple[int, ...]:
+    """The UTF-16 code-unit offset at which each character of `line` starts, followed by the line's length in units."""
+    return tuple(itertools.accumulate((2 if ord(char) > 0xFFFF else 1 for char in line), initial=0))
+
+
+def _utf16_column_to_index(line: str, column: int) -> int:
+    """
+    The Python string index of an LSP column, which counts UTF-16 code units, on `line`. A column inside an
+    astral character rounds to after it. This runs twice per symbol, so a long line is measured once (cached),
+    not walked again for each symbol on it.
+    """
+    if line.isascii():
+        return min(column, len(line))
+    return min(bisect.bisect_left(_utf16_offsets(line), column), len(line))
 
 
 class NixLanguageServer(SolidLanguageServer):
@@ -149,33 +176,68 @@ class NixLanguageServer(SolidLanguageServer):
             """Return the nixd stdio launch command."""
             return [core_path]
 
+    @staticmethod
+    def _is_nix_binding(symbol: ls_types.UnifiedSymbolInformation, lines: list[str]) -> bool:
+        """
+        Whether the symbol is a binding (`name = value`), judged by what follows its name: nixd's selectionRange
+        covers the name as written (`plain`, `"quoted"`, `${dynamic}`), and in a binding only whitespace and
+        comments come between it and the `=`. The displayed symbol name is no use for this, since nixd strips
+        the quotes from it and labels dynamic names generically.
+        """
+        selection = symbol.get("selectionRange")
+        if selection is None:
+            return False
+        name_end, symbol_end = selection["end"], symbol["range"]["end"]
+        if symbol_end["line"] >= len(lines) or name_end["line"] > symbol_end["line"]:
+            return False
+        name_line, end_line = lines[name_end["line"]], lines[symbol_end["line"]]
+        name_end_index = _utf16_column_to_index(name_line, name_end["character"])
+        symbol_end_index = _utf16_column_to_index(end_line, symbol_end["character"])
+        if name_end["line"] == symbol_end["line"]:
+            tail = name_line[name_end_index:symbol_end_index]
+        else:
+            tail = "\n".join([name_line[name_end_index:], *lines[name_end["line"] + 1 : symbol_end["line"]], end_line[:symbol_end_index]])
+        return _NIX_BINDING_TAIL.match(tail) is not None
+
     def _extend_nix_symbol_range_to_include_semicolon(
-        self, symbol: ls_types.UnifiedSymbolInformation, file_content: str
+        self, symbol: ls_types.UnifiedSymbolInformation, lines: list[str]
     ) -> ls_types.UnifiedSymbolInformation:
         """
         Extend symbol range to include trailing semicolon for Nix attribute symbols.
 
         nixd provides ranges that exclude semicolons (expression-level), but serena needs
         statement-level ranges that include semicolons for proper replacement.
+
+        Only bindings (`name = value;`, `"quoted" = value;`, `a.b = value;`) are extended. An inner
+        expression that merely ends right before the binding's semicolon (a lambda body, the last
+        identifier in `a + b;`, an `inherit` name) does not own it, and extending it would make an edit of
+        that expression delete the semicolon. The extended symbol carries no precomputed body, so the
+        caller must create one from the new range.
         """
         range_info = symbol["range"]
         end_line = range_info["end"]["line"]
         end_char = range_info["end"]["character"]
 
-        # Split file content into lines
-        lines = file_content.split("\n")
         if end_line >= len(lines):
+            return symbol
+
+        if not self._is_nix_binding(symbol, lines):
             return symbol
 
         line = lines[end_line]
 
-        # Check if there's a semicolon immediately after the current range end
+        # Check if there's a semicolon immediately after the current range end. The column is used as a string
+        # index, as Serena's symbol bodies and editor use it; converted from UTF-16 here alone, a write-back of a
+        # body after an astral character would delete the character after the semicolon.
         if end_char < len(line) and line[end_char] == ";":
             # Extend range to include the semicolon
             new_range = {"start": range_info["start"], "end": {"line": end_line, "character": end_char + 1}}
 
-            # Create modified symbol with extended range
+            # Create modified symbol with extended range. The body the parent computed covers the old
+            # range; left in place, find_symbol would show it without the semicolon while
+            # replace_symbol_body overwrites the extended range, deleting the semicolon.
             extended_symbol = symbol.copy()
+            extended_symbol.pop("body", None)
             extended_symbol["range"] = new_range
 
             # CRITICAL: Also update the location.range if it exists
@@ -191,7 +253,7 @@ class NixLanguageServer(SolidLanguageServer):
 
     @override
     def _document_symbols_cache_fingerprint(self) -> Hashable | None:
-        build_document_symbols_version = 2
+        build_document_symbols_version = 4
         return build_document_symbols_version
 
     @override
@@ -204,22 +266,31 @@ class NixLanguageServer(SolidLanguageServer):
         # Get symbols from parent implementation
         document_symbols = super()._build_document_symbols_from_raw_symbols(relative_file_path, file_buffer=file_buffer)
 
-        # Get file content for range extension
-        file_content = file_buffer.contents
+        # Split once per document: a fresh copy of a long line per symbol would be rehashed for each lookup
+        lines = file_buffer.split_lines()
+        body_factory = SymbolBodyFactory(file_buffer)
 
         # Extend ranges for all symbols recursively
         def extend_symbol_and_children(symbol: ls_types.UnifiedSymbolInformation) -> ls_types.UnifiedSymbolInformation:
             # Extend this symbol's range
-            extended = self._extend_nix_symbol_range_to_include_semicolon(symbol, file_content)
+            extended = self._extend_nix_symbol_range_to_include_semicolon(symbol, lines)
+            # every body from one factory, so that the document keeps a single copy of its lines
+            extended.pop("body", None)
+            extended["body"] = body_factory.create_symbol_body(extended)
 
             # Extend children recursively
             if extended.get("children"):
                 extended["children"] = [extend_symbol_and_children(child) for child in extended["children"]]
+                for child in extended["children"]:  # the container lookup returns the parent, with its body
+                    child["parent"] = extended
 
             return extended
 
         # Apply range extension to all symbols
-        extended_root_symbols = [extend_symbol_and_children(sym) for sym in document_symbols.root_symbols]
+        try:
+            extended_root_symbols = [extend_symbol_and_children(sym) for sym in document_symbols.root_symbols]
+        finally:
+            _utf16_offsets.cache_clear()  # its tables are several times their lines' size
 
         return DocumentSymbols(extended_root_symbols)
 
