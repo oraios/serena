@@ -58,6 +58,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     incorrect double semicolon behind (`... n * 3;;`). Mirrors the range-start fix already applied
     to Go's `type`/`var`/`const` declarations, and the range-end fix already applied to Nix's
     attribute declarations (#1956)
+  - Fix: C# solution discovery aborted with ``ValueError: path is on mount '\\.\nul'`` when the repository
+    contained a file with a reserved DOS device name (e.g. ``nul``, typically created accidentally by
+    `... > nul` in Git Bash), failing the C# language server startup. Reserved-name entries are now skipped
+    per entry instead of aborting the whole directory scan
   - Fix: C/C++ (clangd) reference searches returned at most 1000 references; clangd is now started with
     `--limit-references=0` unless `ls_extra_args` already sets a limit
   - C/C++ (clangd) logs errors only (`--log=error`) instead of a line for every request and parse, unless
