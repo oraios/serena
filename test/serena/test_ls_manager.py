@@ -1,6 +1,8 @@
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
+from unittest.mock import MagicMock
 
 import psutil
 import pytest
@@ -43,6 +45,13 @@ class _FakeLanguageServer:
 
     def is_running(self) -> bool:
         return self._running
+
+    def save_cache(self) -> None:
+        pass
+
+    def simulate_exit_leaving_processes(self) -> None:
+        """Reports the server as no longer running while its process stays alive, like the children of an exited launcher."""
+        self._running = False
 
     def stop(self, shutdown_timeout: float = 2.0) -> None:
         if self.proc is not None and self.proc.poll() is None:
@@ -101,3 +110,130 @@ def test_from_languages_stops_process_of_server_that_raises_after_spawning(_clea
     assert set(pids) == {ok_id, failing_id}
     assert not _pid_alive(pids[ok_id]), "the successfully-started server's process should be stopped"
     assert not _pid_alive(pids[failing_id]), "the process spawned by the server that raised post-spawn must not leak"
+
+
+class _CacheSavingLanguageServer:
+    def __init__(self, ls_id: LanguageServerId):
+        self.ls_id = ls_id
+        self.cache_saves = 0
+        self._running = False
+
+    def start(self) -> "_CacheSavingLanguageServer":
+        self._running = True
+        return self
+
+    def is_running(self) -> bool:
+        return self._running
+
+    def stop(self, shutdown_timeout: float = 2.0) -> None:
+        self._running = False
+
+    def save_cache(self) -> None:
+        self.cache_saves += 1
+
+
+class _CacheSavingLanguageServerFactory:
+    def __init__(self) -> None:
+        self.created: list[_CacheSavingLanguageServer] = []
+
+    def create_language_server(self, ls_id: LanguageServerId) -> _CacheSavingLanguageServer:
+        ls = _CacheSavingLanguageServer(ls_id)
+        self.created.append(ls)
+        return ls
+
+
+class _ProjectWithoutFiles:
+    def gather_source_files(self) -> list:
+        return []
+
+
+def _manager_with_one_server() -> tuple[LanguageServerManager, _CacheSavingLanguageServerFactory]:
+    factory = _CacheSavingLanguageServerFactory()
+    manager = LanguageServerManager.from_languages([LanguageServerId("python")], factory, project=_ProjectWithoutFiles())
+    return manager, factory
+
+
+def test_cache_is_saved_at_most_once_per_interval_after_tool_calls() -> None:
+    manager, factory = _manager_with_one_server()
+
+    for _ in range(3):
+        manager.save_all_caches_if_due()
+
+    assert factory.created[0].cache_saves == 1
+
+
+def test_cache_is_saved_again_once_the_interval_has_passed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(LanguageServerManager, "_CACHE_SAVE_INTERVAL", 0.05)
+    manager, factory = _manager_with_one_server()
+    manager.save_all_caches_if_due()
+
+    time.sleep(0.1)
+    manager.save_all_caches_if_due()
+
+    assert factory.created[0].cache_saves == 2
+
+
+def test_restart_saves_the_cache_of_the_replaced_server() -> None:
+    manager, factory = _manager_with_one_server()
+    manager.save_all_caches_if_due()
+    replaced_server = factory.created[0]
+    replaced_server.stop()
+
+    manager.restart_language_server(LanguageServerId("python"))
+
+    assert replaced_server.cache_saves == 2
+
+
+@dataclass
+class _ManagerWithExitedServer:
+    """A manager whose single language server is no longer running but still has a live process."""
+
+    manager: LanguageServerManager
+    factory: _FakeLanguageServerFactory
+    ls_id: LanguageServerId
+    exited: _FakeLanguageServer
+    exited_proc: subprocess.Popen
+
+
+@pytest.fixture
+def manager_with_exited_server(_cleanup_leftover_pids) -> _ManagerWithExitedServer:
+    ls_id = LanguageServerId("python")
+    factory = _FakeLanguageServerFactory(fail_ids=set())
+    manager = LanguageServerManager.from_languages([ls_id], factory, project=MagicMock())
+    exited = factory.created[ls_id]
+    assert exited.proc is not None
+    _cleanup_leftover_pids.append(exited.proc.pid)
+    exited.simulate_exit_leaving_processes()
+    return _ManagerWithExitedServer(manager, factory, ls_id, exited, exited.proc)
+
+
+def test_restart_stops_previous_instance_whose_processes_outlive_it(manager_with_exited_server, _cleanup_leftover_pids):
+    """A language server that is no longer running may still have processes alive (e.g. children of
+    an exited launcher); restarting it must release them rather than leak them.
+    """
+    m = manager_with_exited_server
+
+    m.manager.restart_language_server(m.ls_id)
+
+    restarted = m.factory.created[m.ls_id]
+    assert restarted is not m.exited
+    assert restarted.proc is not None
+    _cleanup_leftover_pids.append(restarted.proc.pid)
+    assert m.exited_proc.poll() is not None, "the previous instance's surviving process should be stopped"
+
+
+def test_stop_all_releases_processes_of_exited_server_without_restarting_it(manager_with_exited_server):
+    m = manager_with_exited_server
+
+    m.manager.stop_all()
+
+    assert m.factory.created[m.ls_id] is m.exited, "an exited server should not be restarted only to be stopped"
+    assert m.exited_proc.poll() is not None, "the exited server's surviving process should be stopped"
+
+
+def test_remove_releases_processes_of_exited_server(manager_with_exited_server):
+    m = manager_with_exited_server
+
+    m.manager.remove_language_server(m.ls_id)
+
+    assert m.exited_proc.poll() is not None, "the removed server's surviving process should be stopped"

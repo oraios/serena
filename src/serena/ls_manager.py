@@ -3,6 +3,7 @@
 import logging
 import os.path
 import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -78,6 +79,11 @@ class LanguageServerManager:
     Manages one or more language servers for a project.
     """
 
+    _CACHE_SAVE_INTERVAL = 30.0
+    """
+    the minimum time, in seconds, between two cache saves triggered by tool calls (see `save_all_caches_if_due`)
+    """
+
     def __init__(
         self,
         language_servers: dict[LanguageServerIdLike, SolidLanguageServer],
@@ -93,6 +99,7 @@ class LanguageServerManager:
         """
         self._language_servers = language_servers
         self._language_server_factory = language_server_factory
+        self._last_cache_save_time: float | None = None
         self._file_change_notifier = LanguageServerFileChangeNotifier(project, self)
 
     @property
@@ -201,13 +208,19 @@ class LanguageServerManager:
     def restart_language_server(self, ls_id: LanguageServerIdLike) -> SolidLanguageServer:
         """
         Forces recreation and restart of the language server for the given language.
-        It is assumed that the language server for the given language is no longer running.
+        The previous instance is stopped first, releasing any processes it left behind.
 
         :param ls_id: the language server identifier
         :return: the newly created language server
         """
         if ls_id not in self._language_servers:
             raise ValueError(f"No language server for language {ls_id.get_key()} present; cannot restart")
+
+        # keep the cache entries of the replaced server, which the new server loads from disk
+        self._language_servers[ls_id].save_cache()
+
+        self._stop_language_server(self._language_servers[ls_id])
+
         return self._create_and_start_language_server(ls_id)
 
     def add_language_server(self, ls_id: LanguageServerIdLike) -> SolidLanguageServer:
@@ -242,11 +255,10 @@ class LanguageServerManager:
 
     @staticmethod
     def _stop_language_server(ls: SolidLanguageServer, save_cache: bool = False, timeout: float = 2.0) -> None:
-        if ls.is_running():
-            if save_cache:
-                ls.save_cache()
-            log.info(f"Stopping language server for language {ls.ls_id} ...")
-            ls.stop(shutdown_timeout=timeout)
+        if save_cache and ls.is_running():
+            ls.save_cache()
+        log.info(f"Stopping language server for language {ls.ls_id} ...")
+        ls.stop(shutdown_timeout=timeout)
 
     def iter_language_servers(self) -> Iterator[SolidLanguageServer]:
         for ls in self._language_servers.values():
@@ -259,7 +271,7 @@ class LanguageServerManager:
         :param save_cache: whether to save the cache before stopping
         :param timeout: timeout for shutdown of each language server
         """
-        for ls in self.iter_language_servers():
+        for ls in self._language_servers.values():
             self._stop_language_server(ls, save_cache=save_cache, timeout=timeout)
 
     def save_all_caches(self) -> None:
@@ -269,6 +281,17 @@ class LanguageServerManager:
         for ls in self.iter_language_servers():
             if ls.is_running():
                 ls.save_cache()
+        self._last_cache_save_time = time.monotonic()
+
+    def save_all_caches_if_due(self) -> None:
+        """
+        Saves the caches of all managed language servers unless they were saved less than `_CACHE_SAVE_INTERVAL`
+        seconds ago, such that frequent tool calls do not rewrite large caches every time.
+        Changes not saved yet are saved when the language servers are stopped or restarted.
+        """
+        if self._last_cache_save_time is not None and time.monotonic() - self._last_cache_save_time < self._CACHE_SAVE_INTERVAL:
+            return
+        self.save_all_caches()
 
     def has_suitable_ls_for_file(self, relative_file_path: str) -> bool:
         return self._get_suitable_language_server(relative_file_path) is not None

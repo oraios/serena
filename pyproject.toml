@@ -53,6 +53,9 @@ dependencies = [
   "regex==2026.2.28",
   "pythonnet==3.1.0 ; sys_platform == 'win32'",
   "oslex==2.0.0",
+  "pillow==13.0.0",
+  "anyio==4.14.2",
+  "certifi==2026.10.18",
 ]
 
 
