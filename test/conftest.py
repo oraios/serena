@@ -463,10 +463,11 @@ def _determine_disabled_language_servers() -> list[LanguageServerId]:
     result: list[LanguageServerId] = []
 
     # === 1. Always disabled (flaky / broken everywhere) ===
-    result.append(LanguageServerId.BSL)  # 1C:Enterprise; niche and the tests are slow and flaky
     result.append(LanguageServerId.FSHARP)  # F# language server is currently unreliable
 
     # === 2. Disabled off-CI if the precondition is missing; expected to be present on CI ===
+    if _sh.which("java") is None and not is_ci:
+        result.append(LanguageServerId.BSL)
     if _sh.which("terraform") is None and not is_ci:
         result.append(LanguageServerId.TERRAFORM)
     if _sh.which("regal") is None and not is_ci:

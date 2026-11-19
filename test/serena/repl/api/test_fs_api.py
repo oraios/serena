@@ -46,6 +46,21 @@ def test_read_file(api: FsApi) -> None:
     assert api.read_file("src/a.py", start_line=-2).lines == ["z = 3", ""]
 
 
+def test_read_file_of_undecodable_file_does_not_fail(api: FsApi, project: Project) -> None:
+    # a project file whose bytes are not valid in the project's encoding is still readable, as
+    # documented for Serena's file reading, instead of failing with a decoding error
+    (Path(project.project_root) / "src" / "cp1252.py").write_bytes(b"# \xe9\nx = 2\n")
+
+    lines = api.read_file("src/cp1252.py").lines
+    assert len(lines) == 3 and lines[1:] == ["x = 2", ""]
+
+
+def test_read_file_of_utf16_file_uses_detected_encoding(api: FsApi, project: Project) -> None:
+    (Path(project.project_root) / "src" / "utf16.py").write_bytes("# utf-16 file\nx = 3\n".encode("utf-16"))
+
+    assert api.read_file("src/utf16.py").text == "# utf-16 file\nx = 3\n"
+
+
 def test_create_text_file(api: FsApi, project: Project) -> None:
     result = api.create_text_file("sub/new.txt", "hello\n")
     assert "new.txt" in result
