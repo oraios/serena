@@ -359,6 +359,7 @@ class Dashboard {
         this.$themeText = $('#theme-text');
         this.$configDisplay = $('#config-display');
         this.$basicStatsDisplay = $('#basic-stats-display');
+        this.$replStatsDisplay = $('#repl-stats-display');
         this.$statsSection = $('#stats-section');
         this.$refreshStats = $('#refresh-stats');
         this.$clearStats = $('#clear-stats');
@@ -648,7 +649,12 @@ class Dashboard {
                     self.activeProjectName = response.active_project.name;
                     $('#dashboard-welcome').toggle(!self.dashboardWelcomeDismissed && response.web_dashboard_open_on_launch === null);
                     self.displayConfig(response);
-                    self.displayBasicStats(response.tool_stats_summary);
+                    self.displayBasicStats(response.tool_stats_summary, self.$basicStatsDisplay, 'No tool usage stats collected yet.');
+                    const isRepl = response.agent_interface === 'REPL';
+                    $('#repl-stats-section').toggle(isRepl);
+                    if (isRepl) {
+                        self.displayBasicStats(response.repl_stats_summary, self.$replStatsDisplay, 'No REPL function usage stats collected yet.');
+                    }
                     self.displayProjects(response.registered_projects);
                     self.displayAvailableTools(response.available_tools);
                     self.displayAvailableModes(response.available_modes);
@@ -954,9 +960,9 @@ class Dashboard {
         }
     }
 
-    displayBasicStats(stats) {
+    displayBasicStats(stats, $display, emptyMessage) {
         if (Object.keys(stats).length === 0) {
-            this.$basicStatsDisplay.html('<div class="no-stats-message">No tool usage stats collected yet.</div>');
+            $display.html('<div class="no-stats-message">' + emptyMessage + '</div>');
             return;
         }
 
@@ -981,7 +987,7 @@ class Dashboard {
             html += '</div>';
         });
 
-        this.$basicStatsDisplay.html(html);
+        $display.html(html);
     }
 
     displayProjects(projects) {

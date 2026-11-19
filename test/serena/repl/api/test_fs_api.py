@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from serena.analytics import ReplFacadeMethodUsageStats
 from serena.config.serena_config import SerenaConfig
 from serena.project import Project
 from serena.repl.api.fs_api import FsApi
@@ -31,7 +32,7 @@ def api(project: Project) -> FsApi:
 
 
 def test_facade_exposes_file_operations(api: FsApi) -> None:
-    facade = Facade.from_api(api, ApiScope())
+    facade = Facade.from_api(api, ApiScope(), stats=ReplFacadeMethodUsageStats())
     assert facade.name == "fs"
     assert set(facade.enabled_method_names) == {"read_file", "create_text_file", "list_dir", "find_file", "search_for_pattern"}
     assert {name for name in facade.enabled_method_names if facade.get_method(name).info.can_edit} == {"create_text_file"}

@@ -75,6 +75,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     of a fixed delay before the first cross-file request; add `jvm_options` setting (e.g. `-Xmx`).
 
 * Dashboard:
+  - Show REPL function usage below tool usage when using the REPL interface, including facade methods
+    and `info`, `vars`, `clear`, and `overview`, with separately normalized bar charts.
+  - Improve usage chart readability with wider name columns, smaller regular-weight monospace text,
+    and compact call-count columns.
   - Fix: on macOS, the tray icon stayed white on a light menu bar instead of adapting to the menu bar's
     appearance like other menu bar icons (#2263)
   - Fix: on macOS, the tray icon was blurry on Retina displays
