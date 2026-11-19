@@ -9,6 +9,7 @@ Status of the `main` branch. Changes prior to the next official version change w
     - Allow API exclusions to include `marker:editing` to exclude all editing functionality
   - Add new modes `ext-full` and `ext-readonly` to conveniently enable external project access when using
     the REPL interface.
+  - Remove unnecessary sections from Claude Code system prompt override, which will be phased out (#2259)
   - Fix: `planning` mode now correctly excludes all editing tools/functions (#2210)
   - Fix: `read_file`, `search_for_pattern` and `replace_in_files` failed with a `UnicodeDecodeError` on a
     project file whose encoding differs from the project's configured `encoding` (e.g. a UTF-16 file saved
