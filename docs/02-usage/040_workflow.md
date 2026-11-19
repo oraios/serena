@@ -202,7 +202,7 @@ For JetBrains mode, make sure that your IDE is configured to work with all the l
 If, while working on a project, you want Serena to be able to access another Serena project (e.g. a library or otherwise related project), 
 this can be enabled via Serena's dedicated **external project access methods**:
 
-  * When using the REPL interface (strongly recommended!), this is functionality is provided by the `ext` facade.
+  * When using the [REPL interface](agent-interfaces) (strongly recommended!), this is functionality is provided by the `ext` facade.
     You can enable it through [modes](modes):
       * Enable mode `ext-full` to give agents full access to external projects.
       * Enable mode `ext-readonly` to give agents read-only access to external projects.

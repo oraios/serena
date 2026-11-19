@@ -180,7 +180,8 @@ Examples of built-in modes include:
 * `no-onboarding`: Skips the initial onboarding process if it's not needed for a particular session but retains the memory tools (assuming initial memories were created externally).
 * `onboarding`: Focuses on the project onboarding process.
 * `no-memories`: Disables all memory tools (and tools building on memories such as onboarding tools)
-* `query-projects`: Enables tools for querying other Serena projects (without activating them); see section [Reading from External Projects](query-projects) 
+* `ext-full` and `ext-readonly`: Enables [REPL functions](agent-interfaces) for accessing other Serena projects (full access vs. read-only access); see section [Accessing External Projects](query-projects)
+* `query-projects`: Equivalent to `ext-readonly` for users of the [tools interface](agent-interfaces)
 
 Find the concrete definitions of these modes [here](https://github.com/oraios/serena/tree/main/src/serena/resources/config/modes).
 
