@@ -57,6 +57,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - C/C++ (clangd) logs errors only (`--log=error`) instead of a line for every request and parse, unless
     `ls_extra_args` sets `--log` or Serena logs at debug level
   - Fix: every line a language server wrote to stderr was followed by an empty line in Serena's log
+  - Fix: in-memory edits were sent to language servers as ranged changes even when the server negotiated full
+    document sync (`TextDocumentSyncKind.Full`); Regal (Rego) discarded them and emptied the open document
 
 * Dashboard:
   - Fix: on macOS, the tray icon stayed white on a light menu bar instead of adapting to the menu bar's

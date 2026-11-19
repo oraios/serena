@@ -52,6 +52,7 @@ from solidlsp.lsp_protocol_handler.lsp_types import (
     RenameParams,
     SymbolInformation,
     SymbolKind,
+    TextDocumentSyncKind,
 )
 from solidlsp.lsp_protocol_handler.server import (
     LSPError,
@@ -1481,6 +1482,31 @@ class SolidLanguageServer(ABC):
             with self.open_file(relative_file_path, open_in_ls=open_in_ls) as fb:
                 yield fb
 
+    def _notify_did_change(self, file_buffer: LSPFileBuffer, edit_range: ls_types.Range, text: str) -> None:
+        """
+        Notifies the language server of an edit that has already been applied to the given buffer.
+
+        The change is sent as the buffer's full text if the server negotiated full text document
+        synchronisation and as the ranged edit otherwise.
+
+        :param file_buffer: the buffer whose contents and version already reflect the edit
+        :param edit_range: the range of the buffer's previous contents that the edit replaced
+        :param text: the text that replaced the range
+        """
+        if self.server.send.text_document_sync_kind == TextDocumentSyncKind.Full:
+            content_change = {LSPConstants.TEXT: file_buffer.contents}
+        else:
+            content_change = {LSPConstants.RANGE: edit_range, LSPConstants.TEXT: text}
+        self.server.notify.did_change_text_document(
+            {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
+                LSPConstants.TEXT_DOCUMENT: {
+                    LSPConstants.VERSION: file_buffer.version,
+                    LSPConstants.URI: file_buffer.uri,
+                },
+                LSPConstants.CONTENT_CHANGES: [content_change],
+            }
+        )
+
     def insert_text_at_position(self, relative_file_path: str, line: int, column: int, text_to_be_inserted: str) -> ls_types.Position:
         """
         Insert text at the given line and column in the given file and return
@@ -1505,23 +1531,8 @@ class SolidLanguageServer(ABC):
 
         new_contents, new_l, new_c = TextUtils.insert_text_at_position(file_buffer.contents, line, column, text_to_be_inserted)
         file_buffer.contents = new_contents
-        self.server.notify.did_change_text_document(
-            {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
-                LSPConstants.TEXT_DOCUMENT: {
-                    LSPConstants.VERSION: file_buffer.version,
-                    LSPConstants.URI: file_buffer.uri,
-                },
-                LSPConstants.CONTENT_CHANGES: [
-                    {
-                        LSPConstants.RANGE: {
-                            "start": {"line": line, "character": column},
-                            "end": {"line": line, "character": column},
-                        },
-                        "text": text_to_be_inserted,
-                    }
-                ],
-            }
-        )
+        position = ls_types.Position(line=line, character=column)
+        self._notify_did_change(file_buffer, ls_types.Range(start=position, end=position), text_to_be_inserted)
         return ls_types.Position(line=new_l, character=new_c)
 
     def delete_text_between_positions(
@@ -1548,15 +1559,7 @@ class SolidLanguageServer(ABC):
             file_buffer.contents, start_line=start["line"], start_col=start["character"], end_line=end["line"], end_col=end["character"]
         )
         file_buffer.contents = new_contents
-        self.server.notify.did_change_text_document(
-            {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
-                LSPConstants.TEXT_DOCUMENT: {
-                    LSPConstants.VERSION: file_buffer.version,
-                    LSPConstants.URI: file_buffer.uri,
-                },
-                LSPConstants.CONTENT_CHANGES: [{LSPConstants.RANGE: {"start": start, "end": end}, "text": ""}],
-            }
-        )
+        self._notify_did_change(file_buffer, ls_types.Range(start=start, end=end), "")
         return deleted_text
 
     def _send_definition_request(self, definition_params: DefinitionParams) -> Definition | list[LocationLink] | None:
