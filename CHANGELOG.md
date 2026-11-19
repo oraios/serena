@@ -58,6 +58,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     incorrect double semicolon behind (`... n * 3;;`). Mirrors the range-start fix already applied
     to Go's `type`/`var`/`const` declarations, and the range-end fix already applied to Nix's
     attribute declarations (#1956)
+  - Fix: `rename_symbol` did not wait for the language server to be ready for cross-file requests, so with
+    the TypeScript language server a rename issued before any reference lookup could change only the open
+    files (often just the definition) while still reporting success. Renames now wait the same way
+    reference lookups do.
   - Fix: C# solution discovery aborted with ``ValueError: path is on mount '\\.\nul'`` when the repository
     contained a file with a reserved DOS device name (e.g. ``nul``, typically created accidentally by
     `... > nul` in Git Bash), failing the C# language server startup. Reserved-name entries are now skipped
