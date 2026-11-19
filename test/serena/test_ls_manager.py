@@ -1,3 +1,4 @@
+import logging
 import subprocess
 import sys
 import time
@@ -7,6 +8,7 @@ from unittest.mock import MagicMock
 import psutil
 import pytest
 
+from serena.config.serena_config import LanguageServerFileSystemSyncStrategy
 from serena.ls_manager import LanguageServerManager, LanguageServerManagerInitialisationError
 from solidlsp.ls_config import LanguageServerId
 
@@ -72,6 +74,16 @@ class _FakeLanguageServerFactory:
         ls = _FakeLanguageServer(ls_id, should_fail=ls_id in self.fail_ids)
         self.created[ls_id] = ls
         return ls
+
+
+class _CountingProject:
+    def __init__(self, strategy: LanguageServerFileSystemSyncStrategy):
+        self.ls_file_system_sync_strategy = strategy
+        self.gather_source_files_calls = 0
+
+    def gather_source_files(self) -> list:
+        self.gather_source_files_calls += 1
+        return []
 
 
 @pytest.fixture
@@ -237,3 +249,30 @@ def test_remove_releases_processes_of_exited_server(manager_with_exited_server):
     m.manager.remove_language_server(m.ls_id)
 
     assert m.exited_proc.poll() is not None, "the removed server's surviving process should be stopped"
+
+
+def test_full_sync_strategy_scans_source_files():
+    project = _CountingProject(LanguageServerFileSystemSyncStrategy.FULL)
+    manager = LanguageServerManager({}, _FakeLanguageServerFactory(set()), project)
+
+    assert project.gather_source_files_calls == 1
+    assert manager.sync_file_system_changes() == 0
+    assert project.gather_source_files_calls == 2
+
+
+def test_none_sync_strategy_does_not_scan_source_files():
+    project = _CountingProject(LanguageServerFileSystemSyncStrategy.NONE)
+    manager = LanguageServerManager({}, _FakeLanguageServerFactory(set()), project)
+
+    assert manager.sync_file_system_changes() == 0
+    assert project.gather_source_files_calls == 0
+
+
+def test_file_system_sync_logs_elapsed_time(caplog):
+    project = _CountingProject(LanguageServerFileSystemSyncStrategy.NONE)
+    manager = LanguageServerManager({}, _FakeLanguageServerFactory(set()), project)
+
+    with caplog.at_level(logging.INFO, logger="serena.ls_manager"):
+        manager.sync_file_system_changes()
+
+    assert any(message.startswith("File system synchronization completed in ") for message in caplog.messages)
