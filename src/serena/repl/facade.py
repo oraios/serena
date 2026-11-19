@@ -527,6 +527,9 @@ class ApiScope:
                 facade_scope.exclude_method(components[1]) if excluded else facade_scope.include_method(components[1])
 
         for api_exclusion in definition.excluded_apis:
+            if api_exclusion == ApiInclusionDefinition.MARKER_EDITING:
+                self.exclude_editing()
+                continue
             apply(api_exclusion, excluded=True)
         for api_inclusion in definition.included_apis:
             apply(api_inclusion, excluded=False)

@@ -1,0 +1,17 @@
+"""The root query type: entry point for all read operations."""
+type Query {
+  """Look up a single user by id."""
+  user(id: ID!): User @auth
+}
+
+"""
+A registered user of the application.
+
+`@auth` is used here but never declared in SDL (as when a server declares a directive only
+programmatically), so the schema this config points at cannot be fully resolved.
+"""
+type User {
+  id: ID!
+  name: String!
+  email: String! @auth
+}

@@ -181,9 +181,15 @@ We generally recommend to start an editing task from a state where all linting c
 
 There are several ways in which you might want to work with multiple projects simultaneously.
 
-### A Single Agent Editing Multiple Projects Simultaneously
+### A Single Agent Working on Multiple Projects Simultaneously
 
-If fulfilling a task requires a single agent to edit code in multiple projects, the recommended approach is to create a **monorepo folder**,
+To enable an agent to conveniently access multiple projects, there are two main approaches:
+* If the projects are strongly related, create a **monorepo folder** that contains all the projects as sub-folders, and open that monorepo folder as a project in Serena.
+* Enable Serena's **features for accessing external projects**, allowing Serena to access secondary projects while a primary project remains activated
+
+#### Monorepos
+
+If fulfilling a task requires a single agent to edit code in multiple projects, a convenient approach is to create a **monorepo folder**,
 i.e. a folder that contains all the projects as sub-folders, and open that monorepo folder as a project in Serena.
 You may also use symbolic links to create a monorepo folder if the projects are located in different places on your filesystem.
 
@@ -191,28 +197,32 @@ If several languages are used across the projects, specify all of them as needed
 For JetBrains mode, make sure that your IDE is configured to work with all the languages used across the projects (e.g. by installing the respective language plugins).
 
 (query-projects)=
-### Reading from External Projects
+#### Accessing External Projects
 
-If, while working on a project, you want Serena to be able to read code or other information from another project (e.g. a library or otherwise related project), 
-this can be enabled via the `query_project` tool.
-Provided that the project you want to query is known to Serena (i.e. you have created it as described above),
-the `query_project` tool allows the agent to query files and symbolic information from that project.
+If, while working on a project, you want Serena to be able to access another Serena project (e.g. a library or otherwise related project), 
+this can be enabled via Serena's dedicated **external project access methods**:
 
-To enable this tool, [activate the mode](modes) `query-projects`.
-This also enables a second tool for listing projects that can be queried.
+  * When using the [REPL interface](agent-interfaces) (strongly recommended!), this functionality is provided by the `ext` facade.
+    You can enable it through [modes](modes):
+      * Enable mode `ext-full` to give agents full access to external projects.
+      * Enable mode `ext-readonly` to give agents read-only access to external projects.
+  * When using the legacy tools interface, this functionality is provided by the `query_project` tool (alongside `list_queryable_projects`).
+    It provides read-only access and can be enabled through [mode](modes) `query_projects`.
 
-Depending on the language backend being used, the management of resources for the external projects varies:
+The project to be accessed must be known to Serena (i.e. a Serena project must have been created it as described above).
+
+Depending on the language backend being used, the management of resources for external projects varies:
 
 * When using the JetBrains backend, make sure that every project for which you want symbolic queries to work is open in an IDE instance. 
-* When using the LSP backend, executing symbolic tools via the query tool requires that Serena's **Project Server** be started,
-  which will automatically spawn the necessary language servers for the projects that are queried.
+* When using the LSP backend, executing symbolic tools requires that Serena's **Project Server** be started,
+  which will automatically spawn the necessary language servers for the projects that are accessed.
 
   To start the server, run
 
       serena start-project-server
 
 
-### Multiple Agents Accessing a Single Serena Instance
+### Multiple Agents Accessing a Single Project/Serena Instance
 
 If you want multiple agents to access the same project via a single Serena instance,
 i.e. you do not want several instances of Serena (including its language servers) to be running,

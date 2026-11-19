@@ -53,6 +53,9 @@ dependencies = [
   "regex==2026.2.28",
   "pythonnet==3.1.0 ; sys_platform == 'win32'",
   "oslex==2.0.0",
+  "pillow==13.0.0",
+  "anyio==4.14.2",
+  "certifi==2026.10.18",
 ]
 
 
@@ -387,6 +390,7 @@ markers = [
   "qml: language server running for QML (uses Qt's qmlls)",
   "gleam: language server running for Gleam (uses the Gleam compiler's bundled `gleam lsp`)",
   "wolfram: language server running for Wolfram Language (requires Mathematica 13.0+ or Wolfram Engine 12.1+)",
+  "graphql: language server running for GraphQL (uses graphql-language-service-cli / graphql-lsp)",
   "astro: language server running for Astro (uses @astrojs/language-server)",
 ]
 
