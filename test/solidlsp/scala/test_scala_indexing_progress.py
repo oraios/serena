@@ -11,12 +11,11 @@ from solidlsp.language_servers.scala_language_server import (
     DEFAULT_INDEXING_QUIET_PERIOD,
     DEFAULT_INDEXING_START_GRACE,
     DEFAULT_INDEXING_TIMEOUT,
-    IndexingOutcome,
-    MetalsProgressTracker,
     _get_scala_settings,
 )
 from solidlsp.ls_config import LanguageServerId
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.progress import IndexingOutcome, WorkDoneProgressTracker
 
 # `$/progress` as Metals sends it (scala/meta/internal/metals/WorkDoneProgress.scala), whose
 # titles are the ones that matter to a cross-file query: the build import, the index, and the
@@ -39,11 +38,11 @@ def end(token: str) -> dict:
 
 
 @pytest.fixture
-def tracker() -> MetalsProgressTracker:
-    return MetalsProgressTracker()
+def tracker() -> WorkDoneProgressTracker:
+    return WorkDoneProgressTracker("Metals")
 
 
-def test_no_work_reported(tracker: MetalsProgressTracker) -> None:
+def test_no_work_reported(tracker: WorkDoneProgressTracker) -> None:
     """A server that reports nothing must not hold a query for the whole timeout."""
     tracker.expect_work()
     started = time.monotonic()
@@ -51,7 +50,7 @@ def test_no_work_reported(tracker: MetalsProgressTracker) -> None:
     assert time.monotonic() - started < 5
 
 
-def test_waits_for_work_that_starts_within_the_grace(tracker: MetalsProgressTracker) -> None:
+def test_waits_for_work_that_starts_within_the_grace(tracker: WorkDoneProgressTracker) -> None:
     tracker.expect_work()
 
     def work() -> None:
@@ -64,7 +63,7 @@ def test_waits_for_work_that_starts_within_the_grace(tracker: MetalsProgressTrac
     assert tracker.wait_until_idle(timeout=10, start_grace=2, quiet_period=0.1) == IndexingOutcome.IDLE
 
 
-def test_waits_for_every_outstanding_token(tracker: MetalsProgressTracker) -> None:
+def test_waits_for_every_outstanding_token(tracker: WorkDoneProgressTracker) -> None:
     """Indexing ending is not readiness: the compilations that follow it must be waited for too."""
     tracker.on_progress(begin("index", INDEXING))
     tracker.on_progress(begin("compile", COMPILING))
@@ -78,7 +77,7 @@ def test_waits_for_every_outstanding_token(tracker: MetalsProgressTracker) -> No
     assert tracker.wait_until_idle(timeout=1, start_grace=0.2, quiet_period=0.1) == IndexingOutcome.IDLE
 
 
-def test_token_created_before_it_begins_is_awaited(tracker: MetalsProgressTracker) -> None:
+def test_token_created_before_it_begins_is_awaited(tracker: WorkDoneProgressTracker) -> None:
     """`window/workDoneProgress/create` arrives first, and work announced that way still counts."""
     assert tracker.on_create({"token": "t1"}) == {}
     assert tracker.wait_until_idle(timeout=0.2, start_grace=0.2, quiet_period=0.1) == IndexingOutcome.TIMEOUT
@@ -88,7 +87,7 @@ def test_token_created_before_it_begins_is_awaited(tracker: MetalsProgressTracke
     assert tracker.wait_until_idle(timeout=1, start_grace=0.2, quiet_period=0.1) == IndexingOutcome.IDLE
 
 
-def test_unknown_and_repeated_ends_do_not_unbalance_the_count(tracker: MetalsProgressTracker) -> None:
+def test_unknown_and_repeated_ends_do_not_unbalance_the_count(tracker: WorkDoneProgressTracker) -> None:
     tracker.on_progress(begin("t1", INDEXING))
     tracker.on_progress(end("unknown"))
     assert tracker.wait_until_idle(timeout=0.2, start_grace=0.2, quiet_period=0.1) == IndexingOutcome.TIMEOUT
@@ -98,7 +97,7 @@ def test_unknown_and_repeated_ends_do_not_unbalance_the_count(tracker: MetalsPro
     assert tracker.wait_until_idle(timeout=1, start_grace=0.2, quiet_period=0.1) == IndexingOutcome.IDLE
 
 
-def test_describe_reports_outstanding_titles(tracker: MetalsProgressTracker) -> None:
+def test_describe_reports_outstanding_titles(tracker: WorkDoneProgressTracker) -> None:
     assert "<none>" in tracker.describe()
     tracker.on_progress(begin("t1", COMPILING))
     described = tracker.describe()
@@ -124,7 +123,7 @@ def test_invalid_indexing_settings_fall_back_to_the_default(value: object) -> No
     assert settings["indexing_start_grace"] == DEFAULT_INDEXING_START_GRACE
 
 
-def test_a_gap_between_phases_does_not_end_the_wait(tracker: MetalsProgressTracker) -> None:
+def test_a_gap_between_phases_does_not_end_the_wait(tracker: WorkDoneProgressTracker) -> None:
     """Metals' token set empties between its phases; the wait must not return in that gap."""
     tracker.on_progress(begin("import", IMPORTING))
 

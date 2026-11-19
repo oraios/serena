@@ -57,6 +57,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - C/C++ (clangd) logs errors only (`--log=error`) instead of a line for every request and parse, unless
     `ls_extra_args` sets `--log` or Serena logs at debug level
   - Fix: every line a language server wrote to stderr was followed by an empty line in Serena's log
+  - Fix: the first C/C++ (clangd) reference search after a start could return no or incomplete results while
+    clangd was still building its background index; it now waits for the index (at most `indexing_timeout`,
+    default 60 s) instead of a fixed 2 s
 
 * Dashboard:
   - Fix: on macOS, the tray icon stayed white on a light menu bar instead of adapting to the menu bar's

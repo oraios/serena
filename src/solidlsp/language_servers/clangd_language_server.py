@@ -15,6 +15,7 @@ from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependen
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.ls_exceptions import SolidLSPException
 from solidlsp.settings import SolidLSPSettings
+from solidlsp.util.progress import IndexingOutcome, WorkDoneProgressTracker, parse_positive_float
 
 from .common import RuntimeDependency, RuntimeDependencyCollection, is_unreal_engine_project
 
@@ -34,7 +35,15 @@ class ClangdLanguageServer(SolidLanguageServer):
           ``compile_commands.json`` if needed.
         - clangd_version: Override the pinned Clangd version downloaded by Serena
           (default: the bundled Serena version).
+        - indexing_timeout: Maximum time in seconds to wait, before the first cross-file query, for clangd's
+          background index to finish (default: 60.0); after it, results may be incomplete.
+        - indexing_start_grace: Time in seconds to wait for clangd to report background indexing at all
+          before the first cross-file query (default: 2.0).
     """
+
+    _DEFAULT_INDEXING_TIMEOUT = 60.0
+    _DEFAULT_INDEXING_START_GRACE = 2.0
+    _INDEXING_QUIET_PERIOD = 1.0
 
     @staticmethod
     def _determine_log_level(line: str) -> int:
@@ -78,6 +87,44 @@ class ClangdLanguageServer(SolidLanguageServer):
         self.service_ready_event = threading.Event()
         self.initialize_searcher_command_available = threading.Event()
         self.resolve_main_method_available = threading.Event()
+        self._indexing_progress = WorkDoneProgressTracker("clangd")
+        cpp_settings = self._custom_settings or {}
+        self._indexing_timeout = parse_positive_float(
+            cpp_settings.get("indexing_timeout"), "indexing_timeout", self._DEFAULT_INDEXING_TIMEOUT
+        )
+        self._indexing_start_grace = parse_positive_float(
+            cpp_settings.get("indexing_start_grace"), "indexing_start_grace", self._DEFAULT_INDEXING_START_GRACE
+        )
+
+    def _on_work_done_progress_create(self, params: dict) -> None:
+        """
+        Handles clangd's `window/workDoneProgress/create` request, which announces its background indexing.
+        clangd only accepts `null` as the reply.
+
+        :param params: the request's `WorkDoneProgressCreateParams`
+        """
+        self._indexing_progress.on_create(params)
+
+    @override
+    def _wait_for_cross_file_references_if_needed(self) -> None:
+        if self._has_waited_for_cross_file_references:
+            return
+
+        # wait (once) for clangd's background index, which cross-file queries are answered from
+        outcome = self._indexing_progress.wait_until_idle(
+            timeout=self._indexing_timeout,
+            start_grace=self._indexing_start_grace,
+            quiet_period=self._INDEXING_QUIET_PERIOD,
+        )
+        if outcome == IndexingOutcome.TIMEOUT:
+            log.warning(
+                "clangd was still indexing after %.0f s; proceeding, so cross-file results may be incomplete (%s)",
+                self._indexing_timeout,
+                self._indexing_progress.describe(),
+            )
+        else:
+            log.info("clangd background index ready (%s)", outcome.value)
+        self._has_waited_for_cross_file_references = True
 
     @override
     def _raw_document_symbols_cache_fingerprint(self) -> Hashable:
@@ -354,6 +401,7 @@ class ClangdLanguageServer(SolidLanguageServer):
                     },
                 },
                 "workspace": {"workspaceFolders": True, "didChangeConfiguration": {"dynamicRegistration": True}},
+                "window": {"workDoneProgress": True},
             },
         }
 
@@ -406,7 +454,8 @@ class ClangdLanguageServer(SolidLanguageServer):
         self.server.on_notification("language/status", lang_status_handler)
         self.server.on_notification("window/logMessage", window_log_message)
         self.server.on_request("workspace/executeClientCommand", execute_client_command_handler)
-        self.server.on_notification("$/progress", do_nothing)
+        self.server.on_request("window/workDoneProgress/create", self._on_work_done_progress_create)
+        self.server.on_notification("$/progress", self._indexing_progress.on_progress)
         self.server.on_notification("textDocument/publishDiagnostics", do_nothing)
         self.server.on_notification("language/actionableNotification", do_nothing)
         self.server.on_notification("experimental/serverStatus", check_experimental_status)
