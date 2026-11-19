@@ -1147,23 +1147,6 @@ class ProjectCommands(AutoRegisteringGroup):
                 if not find_symbol_data:
                     raise ProjectCommands._HealthCheckFailure("FindSymbolTool returned no results")
 
-                # Test 3: find_referencing_symbols
-                log.info("Testing find_referencing_symbols for symbol: %s", symbol_name)
-                try:
-                    with LspApi.references_grouper_.disabled_context():
-                        find_refs_result = agent.execute_task(
-                            lambda: api.find_referencing_symbols(symbol_name, relative_path=target_rel_path).represent()
-                        )
-                        find_refs_data = json.loads(find_refs_result)
-                        log.info("find_referencing_symbols found %d references for symbol %s", len(find_refs_data), symbol_name)
-                except Exception as e:
-                    # A symbol with no references at all is a legitimate result, so the number of
-                    # references is not asserted - but a *failure* of the reference search means the
-                    # language server is not functional, which is the single thing this command is
-                    # asked to determine. Logging it as a warning let the command print
-                    # "All tools working correctly" and exit 0 after the search had already failed.
-                    raise ProjectCommands._HealthCheckFailure(f"find_referencing_symbols failed for symbol {symbol_name}: {e}") from e
-
                 log.info("Health check completed successfully")
 
             # expected failures and unexpected exceptions are reported alike: both mean the project's

@@ -74,6 +74,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - BSL: upgrade to bsl-language-server 1.0.7; wait for the server's initial indexing instead
     of a fixed delay before the first cross-file request; add `jvm_options` setting (e.g. `-Xmx`).
 
+* CLI:
+  - health-check: Remove the "find references" step, as it is not universally supported by language servers (#2253)
+
 * Dashboard:
   - Show REPL function usage below tool usage when using the REPL interface, including facade methods
     and `info`, `vars`, `clear`, and `overview`, with separately normalized bar charts.
