@@ -258,6 +258,10 @@ Follow the link for specific instructions on how to set up Serena for Claude Cod
 
 Please refer to the [user guide](https://oraios.github.io/serena/02-usage/000_intro.html) for detailed instructions on how to use Serena effectively.
 
+## Partner Offerings
+
+<a href="https://infistar.cc/register?aff=SERENA&ref_source=link"><img src="resources/infistar.png" alt="Infistar"></a>
+
 ## Acknowledgements
 
 A significant part of Serena, especially support for various languages, was contributed by the open source community.
