@@ -24,11 +24,11 @@ import webview
 from sensai.util import logging
 from sensai.util.helper import mark_used
 from sensai.util.logging import LogTime
-from sensai.util.string import dict_string
+from sensai.util.string import ToStringMixin, dict_string, list_string
 
 from interprompt.jinja_template import JinjaTemplate
 from serena import serena_version
-from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
+from serena.analytics import RegisteredTokenCountEstimator, ReplFacadeMethodUsageStats, ToolUsageStats
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import (
     AgentInterface,
@@ -42,7 +42,9 @@ from serena.config.serena_config import (
     SerenaPaths,
     ToolInclusionDefinition,
 )
-from serena.dashboard import SerenaDashboardAPI, SerenaDashboardTrayManager, SerenaDashboardViewer, open_url_in_browser
+from serena.dashboard.dashboard_api import SerenaDashboardAPI
+from serena.dashboard.dashboard_tray_manager import SerenaDashboardTrayManager
+from serena.dashboard.dashboard_viewer import SerenaDashboardViewer, open_url_in_browser
 from serena.language_backend import BuiltinLanguageBackend, LanguageBackend
 from serena.ls_manager import LanguageServerManager
 from serena.memories.memory_manager import MemoryManager
@@ -70,13 +72,14 @@ from serena.tools import (
     Tool,
     ToolMarker,
     ToolRegistry,
+    tools_base,
 )
 from serena.util.gui import system_has_usable_display
 from serena.util.inspection import iter_subclasses
 from serena.util.logging import MemoryLogHandler
 from solidlsp.ls_config import LanguageServerIdLike
 from solidlsp.util import subprocess_util
-from solidlsp.util.subprocess_util import terminate_process_tree_with_kill_fallback
+from solidlsp.util.subprocess_util import subprocess_run
 
 if TYPE_CHECKING:
     from serena.gui_log_viewer import GuiLogViewer
@@ -91,7 +94,7 @@ class ProjectNotFoundError(Exception):
     pass
 
 
-class AvailableTools:
+class AvailableTools(ToStringMixin):
     """
     Represents the set of available/exposed tools of a SerenaAgent.
     """
@@ -114,6 +117,9 @@ class AvailableTools:
 
     def __len__(self) -> int:
         return len(self.tools)
+
+    def _tostring_object_info(self) -> str:
+        return list_string(self.tool_names, brackets=None)
 
     def contains_tool_name(self, tool_name: str) -> bool:
         return tool_name in self._tool_name_set
@@ -165,6 +171,15 @@ class ToolSet:
                 return new_tool_name
             return tool_name
 
+        def is_marker(name: str) -> bool:
+            return name.startswith("ToolMarker")
+
+        def get_marker(name: str) -> type[ToolMarker] | None:
+            marker_cls = getattr(tools_base, name, None)
+            if marker_cls is not None and issubclass(marker_cls, ToolMarker):
+                return marker_cls
+            return None
+
         registry = ToolRegistry()
         tool_names = set(self._tool_names)
         for definition in tool_inclusion_definitions:
@@ -179,16 +194,40 @@ class ToolSet:
                 included_tools = []
                 excluded_tools = []
                 for included_tool in definition.included_optional_tools:
-                    included_tool = get_updated_tool_name(included_tool)
-                    if registry.check_valid_tool_name(included_tool, " (in included optional tools)") and included_tool not in tool_names:
-                        tool_names.add(included_tool)
-                        included_tools.append(included_tool)
+                    if is_marker(included_tool):
+                        marker_class = get_marker(included_tool)
+                        if marker_class is None:
+                            log.warning(f"Tool marker '{included_tool}' not found; skipping inclusion.")
+                            continue
+                        for reg_tool in registry.iter_registered_tools():
+                            if reg_tool.has_marker(marker_class) and reg_tool.tool_name not in tool_names:
+                                tool_names.add(reg_tool.tool_name)
+                                included_tools.append(reg_tool.tool_name)
+                    else:
+                        included_tool = get_updated_tool_name(included_tool)
+                        if (
+                            registry.check_valid_tool_name(included_tool, " (in included optional tools)")
+                            and included_tool not in tool_names
+                        ):
+                            tool_names.add(included_tool)
+                            included_tools.append(included_tool)
                 for excluded_tool in definition.excluded_tools:
-                    excluded_tool = get_updated_tool_name(excluded_tool)
-                    registry.check_valid_tool_name(excluded_tool, " (in excluded tools)")
-                    if excluded_tool in tool_names:
-                        tool_names.remove(excluded_tool)
-                        excluded_tools.append(excluded_tool)
+                    if is_marker(excluded_tool):
+                        marker_class = get_marker(excluded_tool)
+                        if marker_class is None:
+                            log.warning(f"Tool marker '{excluded_tool}' not found; skipping exclusion.")
+                            continue
+                        for tool_name in list(tool_names):
+                            reg_tool = registry.get_registered_tool_by_name(tool_name)
+                            if reg_tool.has_marker(marker_class):
+                                tool_names.remove(tool_name)
+                                excluded_tools.append(tool_name)
+                    else:
+                        excluded_tool = get_updated_tool_name(excluded_tool)
+                        registry.check_valid_tool_name(excluded_tool, " (in excluded tools)")
+                        if excluded_tool in tool_names:
+                            tool_names.remove(excluded_tool)
+                            excluded_tools.append(excluded_tool)
                 if included_tools:
                     log.info(f"{definition} included {len(included_tools)} tools: {', '.join(included_tools)}")
                 if excluded_tools:
@@ -399,7 +438,7 @@ class DashboardManager:
         def from_platform(cls) -> "DashboardManager.Mode":
             match platform.system():
                 case "Windows":
-                    return cls.WEBVIEW
+                    return cls.TRAY_MANAGER
                 case "Darwin":
                     return cls.TRAY_MANAGER
                 case _:
@@ -646,6 +685,7 @@ class SerenaAgent:
         token_count_estimator = RegisteredTokenCountEstimator[self.serena_config.token_count_estimator]
         log.info(f"Will record tool usage statistics with token count estimator: {token_count_estimator.name}.")
         self._tool_usage_stats = ToolUsageStats(token_count_estimator)
+        self._repl_facade_method_usage_stats = ReplFacadeMethodUsageStats()
 
         # log fundamental information
         log.info(
@@ -1326,13 +1366,14 @@ class SerenaAgent:
         """
         :return: the default list of facades provided by Serena itself, not including any language backend-specific facades
         """
+        stats = self._repl_facade_method_usage_stats
         return [
-            Facade.from_api(ConfigApi(self), api_scope),
-            Facade.from_api(FsApi(self), api_scope),
-            Facade.from_api(EditApi(self), api_scope),
-            Facade.from_api(MemoryApi(self), api_scope),
-            Facade.from_api(ShellApi(self), api_scope),
-            Facade.from_api(ExternalProjectsApi(self), api_scope, is_optional=True),
+            Facade.from_api(ConfigApi(self), api_scope, stats),
+            Facade.from_api(FsApi(self), api_scope, stats),
+            Facade.from_api(EditApi(self), api_scope, stats),
+            Facade.from_api(MemoryApi(self), api_scope, stats),
+            Facade.from_api(ShellApi(self), api_scope, stats),
+            Facade.from_api(ExternalProjectsApi(self), api_scope, stats, is_optional=True),
         ]
 
     def get_repl(self) -> SerenaRepl:
@@ -1354,8 +1395,14 @@ class SerenaAgent:
                 api_scope.process(NamedApiInclusionDefinition(name="Dashboard", excluded_apis=["cfg.open_dashboard"]))
 
             facades = self.create_default_facade_list(api_scope) + self._language_backend.create_facades(self, api_scope)
-            self._repl = SerenaRepl(facades, api_scope)
+            self._repl = SerenaRepl(facades, self._repl_facade_method_usage_stats)
         return self._repl
+
+    def get_repl_facade_method_usage_stats(self) -> ReplFacadeMethodUsageStats:
+        """
+        :return: the REPL facade method usage statistics for this agent
+        """
+        return self._repl_facade_method_usage_stats
 
     def issue_task(
         self, task: Callable[[], T], name: str | None = None, logged: bool = True, timeout: float | None = None
@@ -1498,24 +1545,22 @@ class SerenaAgent:
         log.info(f"Running activation_command for project '{project.project_name}': {cmd}")
         try:
             with LogTime("Project activation command", logger=log):
-                p = subprocess.Popen(
-                    cmd,
-                    shell=True,
-                    cwd=project.project_root,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    **subprocess_util.subprocess_kwargs(),
-                )
                 try:
-                    _, stderr = p.communicate(timeout=timeout)
+                    p = subprocess_run(
+                        cmd,
+                        shell=True,
+                        cwd=project.project_root,
+                        timeout=timeout,
+                    )
                     if p.returncode != 0:
-                        log.error(f"activation_command for project '{project.project_name}' failed (exit {p.returncode}): {stderr.strip()}")
+                        log.error(
+                            f"activation_command for project '{project.project_name}' failed (exit {p.returncode}): {p.stderr.strip()}"
+                        )
                 except subprocess.TimeoutExpired:
                     log.error(
                         f"Activation_command for project '{project.project_name}' timed out after "
-                        f"{timeout}s; terminating process and continuing with backend initialisation."
+                        f"{timeout}s; continuing with backend initialisation."
                     )
-                    terminate_process_tree_with_kill_fallback(p, terminate_timeout=5.0, process_name="activation_command")
         except Exception:
             log.exception(f"Unexpected error running activation_command for project '{project.project_name}'")
 

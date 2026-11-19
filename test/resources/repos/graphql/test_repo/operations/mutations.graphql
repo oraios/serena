@@ -1,0 +1,17 @@
+mutation CreateUser($input: CreateUserInput!) {
+  createUser(input: $input) {
+    id
+    name
+    role
+  }
+}
+
+mutation CreatePost($authorId: ID!, $title: String!) {
+  createPost(authorId: $authorId, title: $title) {
+    id
+    title
+    author {
+      name
+    }
+  }
+}

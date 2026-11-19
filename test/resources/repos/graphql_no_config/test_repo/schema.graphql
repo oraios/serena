@@ -1,0 +1,12 @@
+"""The root query type: entry point for all read operations."""
+type Query {
+  """Look up a single user by id."""
+  user(id: ID!): User
+}
+
+"""A registered user of the application."""
+type User {
+  id: ID!
+  name: String!
+  email: String!
+}

@@ -1,0 +1,6 @@
+description: Enables REPL functionality for reading external projects without activating them.
+prompt: |
+  Use the 'ext' facade to access other Serena projects without activating them.
+excluded_tools: []
+included_apis:
+  - "ext"

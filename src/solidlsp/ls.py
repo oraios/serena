@@ -19,6 +19,7 @@ from time import monotonic, perf_counter, sleep
 from typing import Any, Self, Union, cast
 
 import pathspec
+from ruamel.yaml.scalarstring import DoubleQuotedScalarString, SingleQuotedScalarString
 from sensai.util.helper import mark_used
 from sensai.util.pickle import getstate
 from sensai.util.string import ToStringMixin
@@ -394,7 +395,16 @@ class SolidLanguageServer(ABC):
         }
     )
 
-    _cache_loader = SafePickleLoader(allowed_classes=[DocumentSymbols, SymbolBody, SymbolKind])
+    _SYMBOL_CACHE_TYPES = [DocumentSymbols, SymbolBody, SymbolKind]
+    """
+    data types used in document symbol caches 
+    """
+    _LS_SPECIFIC_SETTINGS_TYPES = [SingleQuotedScalarString, DoubleQuotedScalarString]
+    """
+    types that may appear in LS-specific settings read from YAML files and which therefore
+    may appear in persisted cache keys.
+    """
+    _cache_loader = SafePickleLoader(allowed_classes=[*_SYMBOL_CACHE_TYPES, *_LS_SPECIFIC_SETTINGS_TYPES])
 
     # To be overridden and extended by subclasses
     def is_ignored_dirname(self, dirname: str) -> bool:
@@ -3259,7 +3269,11 @@ class SolidLanguageServer(ABC):
             newName=new_name,
         )
 
+        # a rename edits every reference, so it needs the same cross-file readiness as a references request;
+        # otherwise a server that is still loading the project may answer from the open files only
+        self._pre_open_for_cross_file_references()
         with self.open_file(relative_file_path):
+            self._wait_for_cross_file_references_if_needed()
             return self.server.send.rename(params)
 
     def apply_text_edits_to_file(self, relative_path: str, edits: list[ls_types.TextEdit]) -> None:

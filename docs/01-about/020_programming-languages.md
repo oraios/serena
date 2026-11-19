@@ -50,7 +50,7 @@ Some languages require additional installations or setup steps, as noted.
   (requires Node.js v18+ and npm; supports `.astro` files plus TypeScript/JavaScript files via `@astrojs/language-server`; a companion `typescript-language-server` + `@astrojs/ts-plugin` is spawned automatically for cross-file rename, go-to-definition, and references across `.ts`/`.js` and `.astro` files; use language `astro` for Astro projects instead of also enabling `typescript`)
 * **Bash**
 * **BSL** (1C:Enterprise / OneScript)  
-  (requires Java 21+ on PATH; uses [bsl-language-server](https://github.com/1c-syntax/bsl-language-server) by 1c-syntax; the JAR is auto-downloaded and SHA-256-verified for the bundled default version; supports `.bsl` and `.os` files; configure optional `ls_path` or `bsl_ls_version` under `ls_specific_settings.bsl`)
+  (requires Java 21+ on PATH; uses [bsl-language-server](https://github.com/1c-syntax/bsl-language-server) 1.0.7 by 1c-syntax; the JAR is auto-downloaded and SHA-256-verified for the bundled default version; supports `.bsl` and `.os` files; configure `ls_path`, `bsl_ls_version`, or `jvm_options` (a list of JVM arguments, default `[]`) under `ls_specific_settings.bsl`)
 * **C#**  
   (by default, uses the Roslyn language server (language `csharp`), requiring [.NET v10+](https://dotnet.microsoft.com/en-us/download/dotnet) and, on Windows, `pwsh` ([PowerShell 7+](https://learn.microsoft.com/en-us/powershell/scripting/install/install-powershell-on-windows?view=powershell-7.5));
   set language to `csharp_omnisharp` to use OmniSharp instead)
@@ -84,6 +84,14 @@ Some languages require additional installations or setup steps, as noted.
   (requires the [Gleam compiler](https://gleam.run) on PATH; the language server is bundled with the compiler and started via `gleam lsp`)
 * **Go**  
   (requires installation of `gopls`)
+* **GraphQL**  
+  (experimental; requires Node.js and npm; automatically installs `graphql-language-service-cli` (`graphql-lsp`) and its
+  `graphql` peer dependency; handles `.graphql` and `.gql` files; must be explicitly specified in the `languages` entry
+  in the `project.yml`. Cross-file navigation — go-to-definition from an operation field into the schema type that
+  declares it — requires a [graphql-config](https://the-guild.dev/graphql/config) file
+  (`.graphqlrc.yml` / `graphql.config.{yml,yaml,json}`) at the repository root pointing at the schema; without it only
+  single-file document symbols are available. Note: the upstream server does not implement `textDocument/references`,
+  so find-references is unsupported.)
 * **Groovy**  
   (requires a local groovy-language-server.jar, configured via `ls_jar_path` in `ls_specific_settings`;
   see the [Groovy Setup Guide](../03-special-guides/groovy_setup_guide_for_serena) for details)
@@ -152,10 +160,10 @@ Some languages require additional installations or setup steps, as noted.
   alternatives: [BasedPyright](https://github.com/DetachHead/basedpyright) (language `python_basedpyright`),
   [ty](https://github.com/astral-sh/ty) (language `python_ty`),
   [pyrefly](https://github.com/facebook/pyrefly) (language `python_pyrefly`),
-  [Jedi](https://github.com/palotas/jedi-language-server) (language `python_jedi`);
+  [Jedi](https://github.com/pappasam/jedi-language-server) (language `python_jedi`);
   Pyright, BasedPyright, ty, and pyrefly require `uv`/`uvx` in PATH)
 * **QML**
-  (requires Qt 6, provides `qmlls` or `qmlls6` on PATH; see the [Qt qmlls documentation](https://doc.qt.io/qt-6/qtqml-tool-qmlls.html))
+  (requires Qt 6, provides `qmlls` or `qmlls6` on PATH; see the [Qt qmlls documentation](https://doc.qt.io/qt-6/qtqml-tooling-qmlls.html))
 * **R**  
   (requires installation of the `languageserver` R package)
 * **Rego**  
