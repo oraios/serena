@@ -77,8 +77,8 @@ Status of the `main` branch. Changes prior to the next official version change w
 * Dashboard:
   - Show REPL function usage below tool usage when using the REPL interface, including facade methods
     and `info`, `vars`, `clear`, and `overview`, with separately normalized bar charts.
-  - Improve usage chart readability with wider name columns, smaller regular-weight monospace text,
-    and compact call-count columns.
+  - On Windows, change the default interface to `tray_manager` (better in case of many instances, which is
+    becoming increasingly common) (#2212)
   - Fix: on macOS, the tray icon stayed white on a light menu bar instead of adapting to the menu bar's
     appearance like other menu bar icons (#2263)
   - Fix: on macOS, the tray icon was blurry on Retina displays
