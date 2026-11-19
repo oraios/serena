@@ -7,6 +7,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - More flexible inclusion/exclusion definitions: 
     - Allow tool exclusions/inclusions to use tool marker names (e.g. `ToolMarkerCanEdit`)
     - Allow API exclusions to include `marker:editing` to exclude all editing functionality
+  - Add new modes `ext-full` and `ext-readonly` to conveniently enable external project access when using
+    the REPL interface.
   - Fix: `planning` mode now correctly excludes all editing tools/functions (#2210)
   - Fix: `read_file`, `search_for_pattern` and `replace_in_files` failed with a `UnicodeDecodeError` on a
     project file whose encoding differs from the project's configured `encoding` (e.g. a UTF-16 file saved
