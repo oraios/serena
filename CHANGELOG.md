@@ -32,6 +32,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     which takes noticeable time for large projects; they are now saved at most every 30 s, and always when
     language servers are stopped or restarted
 
+* Tools:
+  - Fix: full-text `search_for_pattern` honors `skip_ignored_files=False` when targeting a single ignored file.
+
 * JetBrains:
   - Fix: When applying a non-symbolic edit, do not raise a post-edit exception during IDE file refresh
     if the IDE's plugin server is not reachable.
