@@ -5,11 +5,14 @@ Provides PHP specific instantiation of the LanguageServer class using Intelephen
 
 import logging
 import os
+import re
 import shutil
+from pathlib import PurePath
 from time import sleep
 
 from overrides import override
 
+from serena.util.file_system import match_path
 from solidlsp.ls import LanguageServerDependencyProvider, LanguageServerDependencyProviderSinglePath, SolidLanguageServer
 from solidlsp.ls_config import LanguageServerConfig
 from solidlsp.lsp_protocol_handler.lsp_types import Definition, DefinitionParams, DidChangeConfigurationParams, LocationLink
@@ -41,6 +44,29 @@ class Intelephense(SolidLanguageServer):
           ".phtml") of Serena's PHP source-file matcher and are pushed to Intelephense via
           files.associations, such that the symbol tools and the language server treat the
           same files as PHP sources (see #1710).
+    """
+
+    _DEFAULT_FILES_EXCLUDE = (
+        "**/.git/**",
+        "**/.svn/**",
+        "**/.hg/**",
+        "**/CVS/**",
+        "**/.DS_Store/**",
+        "**/node_modules/**",
+        "**/bower_components/**",
+        "**/vendor/**/{Tests,tests}/**",
+        "**/.history/**",
+        "**/vendor/**/vendor/**",
+    )
+    """
+    Intelephense's default value of the ``files.exclude`` setting (as of version 1.14.4).
+    A configured value replaces the default rather than extending it.
+    """
+
+    _INDEXED_DIRNAMES = frozenset({"vendor"})
+    """
+    names of directories which Intelephense indexes even if they are ignored, because the Composer dependencies
+    they contain are needed to resolve the types used in the project's sources
     """
 
     @override
@@ -197,12 +223,52 @@ class Intelephense(SolidLanguageServer):
         max_file_size = self._custom_settings.get("maxFileSize")
         if max_file_size is not None:
             files_config["maxSize"] = int(max_file_size)
+
+        # exclude the ignored directories from Intelephense's index; its globs are relative to the repository root
+        excluded_dirs = self._find_excluded_dirs()
+        if excluded_dirs:
+            files_config["exclude"] = [*self._DEFAULT_FILES_EXCLUDE, *(self._escape_glob(d) + "/**" for d in excluded_dirs)]
+            log.info(f"Excluding {len(excluded_dirs)} ignored directories from Intelephense's index: {excluded_dirs}")
+
         intelephense_config: DidChangeConfigurationParams = {"settings": {"intelephense": {"files": files_config}}}
         log.info(f"Sending workspace/didChangeConfiguration with files configuration: {files_config}")
         self.server.notify.workspace_did_change_configuration(intelephense_config)
 
         # Intelephense server is typically ready immediately after initialization
         # TODO: This is probably incorrect; the server does send an initialized notification, which we could wait for!
+
+    def _find_excluded_dirs(self) -> list[str]:
+        """
+        Finds the directories to exclude from Intelephense's index.
+
+        Intelephense indexes all PHP files below the repository root and does not know the ignored paths, so
+        these directories are passed to it via ``files.exclude``. Directories named in ``_INDEXED_DIRNAMES`` are
+        neither excluded nor searched.
+
+        :return: the topmost directories matched by the ignored paths, as POSIX paths relative to the repository root
+        """
+        excluded_dirs: list[str] = []
+        for dir_path, dir_names, _ in os.walk(self.repository_root_path):
+            rel_dir_path = os.path.relpath(dir_path, self.repository_root_path)
+            searched_dir_names = []
+            for dir_name in dir_names:
+                if dir_name in self._INDEXED_DIRNAMES:
+                    continue
+                rel_path = PurePath(rel_dir_path, dir_name).as_posix()
+                if match_path(rel_path, self.get_ignore_spec(), root_path=self.repository_root_path, is_dir=True):
+                    excluded_dirs.append(rel_path)
+                else:
+                    searched_dir_names.append(dir_name)
+            dir_names[:] = searched_dir_names
+        return excluded_dirs
+
+    @staticmethod
+    def _escape_glob(path: str) -> str:
+        """
+        :param path: a POSIX path
+        :return: the glob pattern matching exactly the given path
+        """
+        return re.sub(r"([\\*?\[\]{}()!+@])", r"\\\1", path)
 
     @override
     # For some reason, the LS may need longer to process this, so we just retry
