@@ -304,6 +304,39 @@ class TextUtils:
         return text_stepper.line_start_idx + col
 
     @staticmethod
+    def utf16_offset_to_codepoint_offset(line_text: str, utf16_offset: int) -> int:
+        """
+        Converts a column expressed in UTF-16 code units, as used by the Language Server Protocol
+        (`character` in a `Position`, see
+        https://microsoft.github.io/language-server-protocol/specifications/lsp/3.18/specification/#textDocuments),
+        into the corresponding column expressed in Python code points, as used everywhere else in
+        this class. The two differ whenever `line_text` contains a character outside the Basic
+        Multilingual Plane (e.g. most emoji), which occupies 2 UTF-16 code units but only 1 Python
+        code point.
+
+        :param line_text: the text of the line the offset is relative to (without line terminator)
+        :param utf16_offset: the 0-based column in UTF-16 code units
+        :return: the corresponding 0-based column in Python code points
+        """
+        codepoint_offset = 0
+        utf16_units_consumed = 0
+        for ch in line_text:
+            if utf16_units_consumed >= utf16_offset:
+                break
+            utf16_units_consumed += 2 if ord(ch) > 0xFFFF else 1
+            codepoint_offset += 1
+        return codepoint_offset
+
+    @staticmethod
+    def codepoint_offset_to_utf16_offset(line_text: str, codepoint_offset: int) -> int:
+        """
+        The inverse of `utf16_offset_to_codepoint_offset`: converts a column expressed in Python
+        code points into the corresponding column expressed in UTF-16 code units, for handing a
+        position back to a language server.
+        """
+        return sum(2 if ord(ch) > 0xFFFF else 1 for ch in line_text[:codepoint_offset])
+
+    @staticmethod
     def delete_text_between_positions(text: str, start_line: int, start_col: int, end_line: int, end_col: int) -> tuple[str, str]:
         """
         Deletes the text between the given start and end positions.
