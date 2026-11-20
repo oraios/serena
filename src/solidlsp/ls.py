@@ -142,6 +142,7 @@ class LSPFileBuffer:
                     }
                 }
             )
+            self.language_server._handle_file_opened_in_ls(self)
         else:
             # file already open: check if contents have changed and notify if so
             current_contents = self.contents
@@ -1505,23 +1506,8 @@ class SolidLanguageServer(ABC):
 
         new_contents, new_l, new_c = TextUtils.insert_text_at_position(file_buffer.contents, line, column, text_to_be_inserted)
         file_buffer.contents = new_contents
-        self.server.notify.did_change_text_document(
-            {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
-                LSPConstants.TEXT_DOCUMENT: {
-                    LSPConstants.VERSION: file_buffer.version,
-                    LSPConstants.URI: file_buffer.uri,
-                },
-                LSPConstants.CONTENT_CHANGES: [
-                    {
-                        LSPConstants.RANGE: {
-                            "start": {"line": line, "character": column},
-                            "end": {"line": line, "character": column},
-                        },
-                        "text": text_to_be_inserted,
-                    }
-                ],
-            }
-        )
+        insertion_point = ls_types.Position(line=line, character=column)
+        self._notify_text_replaced(file_buffer, insertion_point, insertion_point, text_to_be_inserted)
         return ls_types.Position(line=new_l, character=new_c)
 
     def delete_text_between_positions(
@@ -1548,16 +1534,48 @@ class SolidLanguageServer(ABC):
             file_buffer.contents, start_line=start["line"], start_col=start["character"], end_line=end["line"], end_col=end["character"]
         )
         file_buffer.contents = new_contents
+        self._notify_text_replaced(file_buffer, start, end, "")
+        return deleted_text
+
+    def _notify_text_replaced(self, file_buffer: LSPFileBuffer, start: ls_types.Position, end: ls_types.Position, new_text: str) -> None:
+        """
+        Notifies the language server that the text between the given positions of the given open file was replaced.
+
+        :param file_buffer: the buffer of the edited file, whose contents and version must already reflect the edit.
+        :param start: the start of the replaced range, in the file's contents before the edit.
+        :param end: the end of the replaced range, in the file's contents before the edit.
+        :param new_text: the text that replaced the range.
+        """
+        if self._requires_full_text_document_sync():
+            content_change: dict = {LSPConstants.TEXT: file_buffer.contents}
+        else:
+            content_change = {LSPConstants.RANGE: {"start": start, "end": end}, LSPConstants.TEXT: new_text}
         self.server.notify.did_change_text_document(
             {  # ty: ignore[invalid-argument-type]  # dict built from LSPConstants keys; shape matches the TypedDict
                 LSPConstants.TEXT_DOCUMENT: {
                     LSPConstants.VERSION: file_buffer.version,
                     LSPConstants.URI: file_buffer.uri,
                 },
-                LSPConstants.CONTENT_CHANGES: [{LSPConstants.RANGE: {"start": start, "end": end}, "text": ""}],
+                LSPConstants.CONTENT_CHANGES: [content_change],
             }
         )
-        return deleted_text
+
+    def _requires_full_text_document_sync(self) -> bool:
+        """
+        :return: whether the language server must be sent the full contents of a file with every change
+            (``TextDocumentSyncKind.Full``) rather than only the changed range. Override this for a language server
+            which advertises full synchronization and treats a range-based change as the entire new contents of the file.
+        """
+        return False
+
+    def _handle_file_opened_in_ls(self, file_buffer: LSPFileBuffer) -> None:
+        """
+        Handles a file having just been opened in the language server via a ``textDocument/didOpen`` notification.
+        The default implementation does nothing. Override this for a language server that needs further
+        notifications in order to process an opened file correctly.
+
+        :param file_buffer: the buffer of the opened file.
+        """
 
     def _send_definition_request(self, definition_params: DefinitionParams) -> Definition | list[LocationLink] | None:
         return self.server.send.definition(definition_params)

@@ -28,3 +28,9 @@ def test_document_symbols_are_returned_despite_unresolved_schema() -> None:
         names = [s["name"] for s in all_symbols]
         for name in ("Query", "user", "User", "email"):
             assert name in names, f"Expected {name!r} among the document symbols, got: {names}"
+
+
+def test_hover_does_not_fail_despite_unresolved_schema() -> None:
+    """Hover information depends on the schema; without it, there is none, but requesting it must not fail."""
+    with start_ls_context(LanguageServerId.GRAPHQL, repo_path=str(_FIXTURE_REPO)) as ls:
+        ls.request_hover("schema.graphql", 3, 3)

@@ -46,8 +46,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     when overriding values like `ls_path`, `clangd_version` or `compile_commands_dir`
   - Add GraphQL language server support (experimental) via `graphql-language-service-cli` (`graphql-lsp`) for
     `.graphql`/`.gql` files. Document symbols, hover and cross-file go-to-definition require a graphql-config file
-    (`.graphqlrc.yml` / `graphql.config.*`) at the repository root; without one, Serena logs an actionable message
-    instead of waiting out the startup timeout. Find-references is unsupported (not implemented by the upstream server)
+    (`.graphqlrc.yml` / `graphql.config.*`) at the repository root (or a parent directory); without one, Serena logs
+    an actionable message instead of waiting out the startup timeout. Find-references and rename are unsupported
+    (not implemented by the upstream server)
   - Fix: tsserver reports the range of a single top-level `const`/`let`/`var` declaration starting
     at the identifier and ending before the statement's semicolon, excluding a leading `export`,
     the keyword, and the trailing `;` (unlike `function`/`class` declarations, whose range already
