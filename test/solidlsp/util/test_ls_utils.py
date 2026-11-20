@@ -124,6 +124,26 @@ def test_get_platform_id_freebsd(system: str, machine: str, expected: PlatformId
         assert PlatformUtils.get_platform_id() is expected
 
 
+@pytest.mark.parametrize(
+    ("machine", "libc", "expected"),
+    [
+        pytest.param("x86_64", ("glibc", "2.39"), PlatformId.LINUX_x64, id="glibc-x64"),
+        pytest.param("x86_64", ("musl", "1"), PlatformId.LINUX_MUSL_x64, id="musl-x64-py314"),
+        pytest.param("x86_64", ("libc", ""), PlatformId.LINUX_MUSL_x64, id="musl-x64-uv-python"),
+        pytest.param("aarch64", ("", ""), PlatformId.LINUX_MUSL_arm64, id="musl-arm64-alpine-python"),
+    ],
+)
+def test_get_platform_id_linux_libc(machine: str, libc: tuple[str, str], expected: PlatformId) -> None:
+    """On musl, Python before 3.14 reports the libc as "" or "libc" rather than "musl"."""
+    with (
+        patch("solidlsp.ls_utils.platform.system", return_value="Linux"),
+        patch("solidlsp.ls_utils.platform.machine", return_value=machine),
+        patch("solidlsp.ls_utils.platform.architecture", return_value=("64bit",)),
+        patch("solidlsp.ls_utils.platform.libc_ver", return_value=libc),
+    ):
+        assert PlatformUtils.get_platform_id() is expected
+
+
 def test_get_platform_id_freebsd_i386_raises() -> None:
     """32-bit FreeBSD was deprecated with the release of FreeBSD 15.0 and must fail with the standard error."""
     with (
