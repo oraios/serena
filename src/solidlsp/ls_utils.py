@@ -793,10 +793,9 @@ class PlatformUtils:
         if system in system_map and machine in machine_map:
             platform_id = system_map[system] + "-" + machine_map[machine]
             if system == "Linux" and bitness == "64bit":
-                libc = platform.libc_ver()[0]
-                if libc != "glibc":
-                    # Format: linux-musl-arch (e.g., linux-musl-arm64)
-                    platform_id = f"{system_map[system]}-{libc}-{machine_map[machine]}"
+                if platform.libc_ver()[0] != "glibc":
+                    # musl is the only other supported libc; before Python 3.14, libc_ver() reports it as "" or "libc"
+                    platform_id = f"{system_map[system]}-musl-{machine_map[machine]}"
             try:
                 return PlatformId(platform_id)
             except ValueError:
