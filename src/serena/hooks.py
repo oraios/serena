@@ -300,6 +300,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         """
 
         _CONTROL_OPERATORS = frozenset(("&&", "||", ";", ";;", "|", "|&", "&", "(", ")"))
+        _PIPE_OPERATORS = frozenset(("|", "|&"))
         _REDIRECTION_OPERATORS = frozenset((">", ">>", ">|", ">&", "&>", "&>>", "<", "<<", "<<<", "<&", "<>"))
         _PREFIX_COMMANDS = frozenset(("command", "env", "exec"))
         _ENV_ASSIGNMENT_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
@@ -309,6 +310,8 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             program: str
             """the name of the invoked program (base name, lowercase)"""
             arguments: tuple[str, ...]
+            is_piped: bool = False
+            """whether the invocation reads the output of a preceding invocation via a pipe (e.g. the ``grep`` in ``cmd | grep``)"""
 
             def get_operands(self) -> list[str]:
                 """:return: the arguments which are not options"""
@@ -316,8 +319,8 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
 
         def __init__(self, command_line: str):
             self.invocations: list[PreToolUseRemindAboutSymbolicToolsHook.ShellCommandLine.Invocation] = []
-            for segment in self._split_into_simple_commands(self._tokenize(command_line)):
-                invocation = self._create_invocation(segment)
+            for segment, is_piped in self._split_into_simple_commands(self._tokenize(command_line)):
+                invocation = self._create_invocation(segment, is_piped)
                 if invocation is not None:
                     self.invocations.append(invocation)
 
@@ -331,23 +334,26 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
                 return command_line.split()
 
         @classmethod
-        def _split_into_simple_commands(cls, tokens: list[str]) -> list[list[str]]:
-            segments: list[list[str]] = [[]]
+        def _split_into_simple_commands(cls, tokens: list[str]) -> list[tuple[list[str], bool]]:
+            """:return: the simple commands (as token lists), each along with whether it directly follows a pipe operator"""
+            segments: list[tuple[list[str], bool]] = [([], False)]
             skip_next = False
             for token in tokens:
                 if skip_next:
                     skip_next = False
                 elif token in cls._CONTROL_OPERATORS:
-                    segments.append([])
+                    segments.append(([], token in cls._PIPE_OPERATORS))
                 elif token in cls._REDIRECTION_OPERATORS:
                     # the redirection target is not an argument of the invoked program
                     skip_next = True
                 else:
-                    segments[-1].append(token)
-            return [segment for segment in segments if segment]
+                    segments[-1][0].append(token)
+            return [(segment, is_piped) for segment, is_piped in segments if segment]
 
         @classmethod
-        def _create_invocation(cls, segment: list[str]) -> "PreToolUseRemindAboutSymbolicToolsHook.ShellCommandLine.Invocation | None":
+        def _create_invocation(
+            cls, segment: list[str], is_piped: bool
+        ) -> "PreToolUseRemindAboutSymbolicToolsHook.ShellCommandLine.Invocation | None":
             # skip variable assignments and prefix commands (along with their options) preceding the actual program
             index = 0
             while index < len(segment):
@@ -364,7 +370,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
                 return None
 
             program = os.path.basename(segment[index]).lower()
-            return cls.Invocation(program=program, arguments=tuple(segment[index + 1 :]))
+            return cls.Invocation(program=program, arguments=tuple(segment[index + 1 :]), is_piped=is_piped)
 
     #: substrings that, combined with ``"file"`` in the tool name, identify a
     #: read-file tool for non-Claude-Code clients (whose tool names vary across
@@ -489,10 +495,17 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
         return self._client in self._COMMAND_PARAMETER_SHELL_CLIENTS
 
     def _is_shell_search_call(self) -> bool:
-        """:return: whether the call is a shell-command call which runs a content search"""
+        """
+        :return: whether the call is a shell-command call which runs a content search.
+            A search program which reads from a pipe (e.g. ``cmd | grep error``) merely filters the output of
+            another command rather than searching the code base, and thus does not count.
+        """
         if self._shell_command_line is None:
             return False
-        return any(invocation.program in self._GREP_SHELL_COMMANDS for invocation in self._shell_command_line.invocations)
+        return any(
+            invocation.program in self._GREP_SHELL_COMMANDS and not invocation.is_piped
+            for invocation in self._shell_command_line.invocations
+        )
 
     def _get_shell_read_invocations(self) -> "list[PreToolUseRemindAboutSymbolicToolsHook.ShellCommandLine.Invocation]":
         """:return: the invocations of the shell-command call (if any) which read files"""

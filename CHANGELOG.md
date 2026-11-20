@@ -77,6 +77,10 @@ Status of the `main` branch. Changes prior to the next official version change w
 * CLI:
   - health-check: Remove the "find references" step, as it is not universally supported by language servers (#2253)
 
+* Hooks:
+  - Fix: `remind` counted a search program which only filters the output of another command, such as
+    `grep` in `python script.py | grep error`, as a code search (#2269)
+
 * Dashboard:
   - Show REPL function usage below tool usage when using the REPL interface, including facade methods
     and `info`, `vars`, `clear`, and `overview`, with separately normalized bar charts.
