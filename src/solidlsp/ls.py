@@ -3128,7 +3128,7 @@ class SolidLanguageServer(ABC):
             self._raw_document_symbols_cache_is_modified = False
         except Exception as e:
             log.error(
-                "Failed to save raw document symbols cache to %s: %s. Note: this may have resulted in a corrupted cache file.",
+                "Failed to save raw document symbols cache to %s: %s; the previous cache file is unchanged.",
                 cache_file,
                 e,
             )
@@ -3211,7 +3211,7 @@ class SolidLanguageServer(ABC):
             self._document_symbols_cache_is_modified = False
         except Exception as e:
             log.error(
-                "Failed to save document symbols cache to %s: %s. Note: this may have resulted in a corrupted cache file.",
+                "Failed to save document symbols cache to %s: %s; the previous cache file is unchanged.",
                 cache_file,
                 e,
             )

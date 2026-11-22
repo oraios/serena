@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: MIT
 
+import contextlib
 import logging
+import os
+import tempfile
 from typing import Any, Optional
 
 from sensai.util.pickle import dump_pickle, load_pickle
@@ -27,4 +30,14 @@ def load_cache(path: str, version: Any, loader: SafePickleLoader | None = None) 
 
 def save_cache(path: str, version: Any, obj: Any) -> None:
     data = {"__cache_version": version, "obj": obj}
-    dump_pickle(data, path)
+    directory, file_name = os.path.split(os.path.abspath(path))
+    os.makedirs(directory, exist_ok=True)
+    file_descriptor, temp_path = tempfile.mkstemp(prefix=file_name + ".", suffix=".tmp", dir=directory)
+    os.close(file_descriptor)
+    try:
+        dump_pickle(data, temp_path)
+        os.replace(temp_path, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.remove(temp_path)
+        raise

@@ -41,6 +41,9 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: every line a language server wrote to stderr was followed by an empty line in Serena's log
   - Fix: a symbol cache file that could not be loaded was overwritten by the next save, losing the whole
     index; it is now kept next to the cache as `*.bak`
+  - Fix: a symbol cache file was left truncated when Serena stopped while saving it, or when another Serena
+    instance read it during the save, so the whole cache was lost on the next start; a cache is now written to a
+    temporary file that replaces the cache file once complete
 
 # v2.1.0 (2026-10-19)
 
