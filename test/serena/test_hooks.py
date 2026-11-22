@@ -109,9 +109,15 @@ def _execute_remind_hook(client: HookClient, payload: dict, tmp_path: Path) -> N
         PreToolUseRemindAboutSymbolicToolsHook(client).execute()
 
 
-def _assert_grok_native_deny(output: str, reason_fragment: str) -> dict:
+def _make_remind_hook(client: HookClient = HookClient.CLAUDE_CODE) -> PreToolUseRemindAboutSymbolicToolsHook:
+    """Build a remind hook instance so its output-data builders can be exercised directly."""
+    with patch("sys.stdin", _make_stdin(_base_input())):
+        return PreToolUseRemindAboutSymbolicToolsHook(client)
+
+
+def _assert_grok_native_allow(output: str, reason_fragment: str) -> dict:
     result = json.loads(output)
-    assert result["decision"] == "deny"
+    assert result["decision"] == "allow"
     assert reason_fragment in result["reason"].lower()
     assert "hookSpecificOutput" not in result
     return result
@@ -488,14 +494,14 @@ class TestPreToolUseRemindAboutSerenaHook:
         assert hook.is_grep_call() is True
 
     def test_deny_output_after_threshold_bash_searches_claude_code(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        """Searches via Claude Code's native ``Bash`` tool trigger the same reminder as ``Grep`` calls."""
+        """Searches via Claude Code's native ``Bash`` tool trigger the same non-blocking reminder as ``Grep`` calls."""
         payload = _base_input("Bash", tool_input={"command": "cd project && rg -n foo src/main.py"})
         for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
             _execute_remind_hook(HookClient.CLAUDE_CODE, payload, tmp_path)
 
         result = json.loads(capsys.readouterr().out.strip())
         hook_output = result["hookSpecificOutput"]
-        assert hook_output["permissionDecision"] == "deny"
+        assert hook_output["permissionDecision"] == "allow"
         assert "grep" in hook_output["additionalContext"].lower()
 
     def test_serena_tool_detection(self, tmp_path: Path):
@@ -518,7 +524,7 @@ class TestPreToolUseRemindAboutSerenaHook:
         assert capsys.readouterr().out == ""
 
     def test_deny_output_after_threshold_greps_claude_code(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        """After reaching the grep threshold, the hook should output a deny."""
+        """After reaching the grep threshold, the hook should output a non-blocking reminder."""
         for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
             with patch("sys.stdin", _make_stdin(_base_input("grep"))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
                 PreToolUseRemindAboutSymbolicToolsHook(HookClient.CLAUDE_CODE).execute()
@@ -526,11 +532,11 @@ class TestPreToolUseRemindAboutSerenaHook:
         output = capsys.readouterr().out.strip()
         result = json.loads(output)
         hook_output = result["hookSpecificOutput"]
-        assert hook_output["permissionDecision"] == "deny"
+        assert hook_output["permissionDecision"] == "allow"
         assert "grep" in hook_output["additionalContext"].lower()
 
     def test_deny_output_after_threshold_greps_vscode(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        """After reaching the grep threshold, the hook should output a deny for VS Code."""
+        """After reaching the grep threshold, the hook should output a non-blocking reminder for VS Code."""
         for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
             with patch("sys.stdin", _make_stdin(_base_input("grep_search"))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
                 PreToolUseRemindAboutSymbolicToolsHook(HookClient.VSCODE).execute()
@@ -538,11 +544,11 @@ class TestPreToolUseRemindAboutSerenaHook:
         output = capsys.readouterr().out.strip()
         result = json.loads(output)
         hook_output = result["hookSpecificOutput"]
-        assert hook_output["permissionDecision"] == "deny"
+        assert hook_output["permissionDecision"] == "allow"
         assert "grep" in hook_output["additionalContext"].lower()
 
     def test_deny_output_after_threshold_greps_codex_shell_command(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        """After reaching the grep threshold, Codex ``functions.shell_command`` emits a deny."""
+        """After reaching the grep threshold, Codex ``functions.shell_command`` emits a non-blocking reminder."""
         payload = _base_input("functions.shell_command", tool_input={"command": "rg -n foo README.md"})
         for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
             with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
@@ -551,12 +557,12 @@ class TestPreToolUseRemindAboutSerenaHook:
         output = capsys.readouterr().out.strip()
         result = json.loads(output)
         hook_output = result["hookSpecificOutput"]
-        assert hook_output["permissionDecision"] == "deny"
+        assert hook_output["permissionDecision"] == "allow"
         assert "additionalContext" not in hook_output
         assert "grep" in hook_output["permissionDecisionReason"].lower()
 
     def test_deny_output_after_threshold_greps_grok(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        """Grok expects native ``decision`` / ``reason`` JSON, not Claude-style hookSpecificOutput."""
+        """Grok expects native non-blocking ``decision`` / ``reason`` JSON, not Claude-style hookSpecificOutput."""
         payload = _grok_input("grep", {"pattern": "foo", "path": "."})
         for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
             with patch("sys.stdin", _make_stdin(payload)), patch("serena.hooks.serena_home_dir", str(tmp_path)):
@@ -564,7 +570,7 @@ class TestPreToolUseRemindAboutSerenaHook:
 
         output = capsys.readouterr().out.strip()
         result = json.loads(output)
-        assert result["decision"] == "deny"
+        assert result["decision"] == "allow"
         assert "grep" in result["reason"].lower()
         assert "hookSpecificOutput" not in result
 
@@ -583,12 +589,12 @@ class TestPreToolUseRemindAboutSerenaHook:
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
     ):
-        """Grok code-read reminders are emitted in native ``decision`` / ``reason`` JSON."""
+        """Grok code-read reminders are emitted as native non-blocking ``decision`` / ``reason`` JSON."""
         payload = _grok_input(tool_name, tool_input, session_id=f"grok-read-{tool_name}")
         for _ in range(ToolUseCounter._READ_FILE_USES_THRESHOLD):
             _execute_remind_hook(HookClient.GROK, payload, tmp_path)
 
-        _assert_grok_native_deny(capsys.readouterr().out.strip(), "read")
+        _assert_grok_native_allow(capsys.readouterr().out.strip(), "read")
 
         _execute_remind_hook(HookClient.GROK, payload, tmp_path)
         assert capsys.readouterr().out == ""
@@ -606,7 +612,7 @@ class TestPreToolUseRemindAboutSerenaHook:
         for payload in payloads:
             _execute_remind_hook(HookClient.GROK, payload, tmp_path)
 
-        _assert_grok_native_deny(capsys.readouterr().out.strip(), "non-symbolic")
+        _assert_grok_native_allow(capsys.readouterr().out.strip(), "non-symbolic")
 
         _execute_remind_hook(HookClient.GROK, payloads[-1], tmp_path)
         assert capsys.readouterr().out == ""
@@ -642,7 +648,7 @@ class TestPreToolUseRemindAboutSerenaHook:
         assert capsys.readouterr().out == ""
 
     def test_deny_output_after_threshold_reads(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        """After reaching the read file threshold, the hook should output a deny.
+        """After reaching the read file threshold, the hook should output a non-blocking reminder.
 
         ``_read_input`` supplies the direct ``file_path`` field emitted by file-read tools.
         """
@@ -653,7 +659,7 @@ class TestPreToolUseRemindAboutSerenaHook:
         output = capsys.readouterr().out.strip()
         result = json.loads(output)
         hook_output = result["hookSpecificOutput"]
-        assert hook_output["permissionDecision"] == "deny"
+        assert hook_output["permissionDecision"] == "allow"
         assert "read" in hook_output["additionalContext"].lower()
         assert "files" in hook_output["additionalContext"].lower()
 
@@ -675,7 +681,7 @@ class TestPreToolUseRemindAboutSerenaHook:
 
         result = json.loads(capsys.readouterr().out.strip())
         hook_output = result["hookSpecificOutput"]
-        assert hook_output["permissionDecision"] == "deny"
+        assert hook_output["permissionDecision"] == "allow"
         assert "additionalContext" not in hook_output
         assert "read" in hook_output["permissionDecisionReason"].lower()
 
@@ -733,7 +739,7 @@ class TestPreToolUseRemindAboutSerenaHook:
         assert counter_after == counter_before, "gated hook must not mutate the persisted counter"
 
     def test_rate_limit_allows_deny_after_interval(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-        """Once the minimum deny interval has elapsed, a fresh burst emits a deny again."""
+        """Once the minimum reminder interval has elapsed, a fresh burst emits a reminder again."""
         # first burst: emits a deny
         for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
             with patch("sys.stdin", _make_stdin(_base_input("grep"))), patch("serena.hooks.serena_home_dir", str(tmp_path)):
@@ -754,9 +760,9 @@ class TestPreToolUseRemindAboutSerenaHook:
                 PreToolUseRemindAboutSymbolicToolsHook(HookClient.CLAUDE_CODE).execute()
 
         second_output = capsys.readouterr().out.strip()
-        assert second_output, "after the rate-limit window elapsed, a new burst should emit a deny"
+        assert second_output, "after the rate-limit window elapsed, a new burst should emit a reminder"
         result = json.loads(second_output)
-        assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert result["hookSpecificOutput"]["permissionDecision"] == "allow"
 
     def test_non_symbolic_deny_emitted_when_combined_threshold_tripped(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
         """Pre-populated state trips only the combined non-symbolic counter (not per-tool ones)
@@ -783,11 +789,73 @@ class TestPreToolUseRemindAboutSerenaHook:
             PreToolUseRemindAboutSymbolicToolsHook(HookClient.CLAUDE_CODE).execute()
 
         output = capsys.readouterr().out.strip()
-        assert output, "expected a non-symbolic deny to be emitted"
+        assert output, "expected a non-symbolic reminder to be emitted"
         result = json.loads(output)
         hook_output = result["hookSpecificOutput"]
-        assert hook_output["permissionDecision"] == "deny"
+        assert hook_output["permissionDecision"] == "allow"
         assert "symbolic" in hook_output["additionalContext"].lower()
+
+
+class TestReminderOutputIsNonBlocking:
+    """Reminder hooks must inform the agent without blocking its tool call (issue #2251)."""
+
+    @pytest.mark.parametrize(
+        ("builder_name", "context_fragment"),
+        [
+            ("_build_grep_deny", "grep"),
+            ("_build_code_read_deny", "read"),
+            ("_build_non_symbolic_deny", "symbolic"),
+        ],
+    )
+    def test_reminder_builders_are_allow_for_claude_code(self, builder_name: str, context_fragment: str) -> None:
+        output_data = getattr(_make_remind_hook(), builder_name)()
+        hook_output = json.loads(output_data.to_json_string(HookClient.CLAUDE_CODE))["hookSpecificOutput"]
+
+        assert hook_output["permissionDecision"] == "allow"
+        assert context_fragment in hook_output["additionalContext"].lower()
+        assert "continue" in hook_output["additionalContext"].lower()
+
+    @pytest.mark.parametrize(
+        "client",
+        [HookClient.CLAUDE_CODE, HookClient.CODEBUDDY, HookClient.VSCODE, HookClient.DSH, HookClient.ZCODE],
+    )
+    def test_reminders_are_non_blocking_for_hook_specific_clients(self, client: HookClient) -> None:
+        hook_output = json.loads(_make_remind_hook()._build_grep_deny().to_json_string(client))["hookSpecificOutput"]
+        assert hook_output["permissionDecision"] == "allow"
+        assert "grep" in hook_output["additionalContext"].lower()
+
+    def test_reminder_is_non_blocking_for_codex_without_additional_context(self) -> None:
+        hook_output = json.loads(_make_remind_hook()._build_grep_deny().to_json_string(HookClient.CODEX))["hookSpecificOutput"]
+        assert hook_output["permissionDecision"] == "allow"
+        assert "additionalContext" not in hook_output
+        assert "grep" in hook_output["permissionDecisionReason"].lower()
+
+    def test_reminder_is_non_blocking_for_grok_with_reason_preserved(self) -> None:
+        result = json.loads(_make_remind_hook()._build_grep_deny().to_json_string(HookClient.GROK))
+        assert result["decision"] == "allow"
+        assert "grep" in result["reason"].lower()
+        assert "hookSpecificOutput" not in result
+
+    def test_remind_only_without_explicit_context_still_delivers_reason(self) -> None:
+        output_data = PreToolUseHook.OutputData(permission_decision="deny", permission_decision_reason="reminder text", remind_only=True)
+        hook_output = json.loads(output_data.to_json_string(HookClient.CLAUDE_CODE))["hookSpecificOutput"]
+        assert hook_output["permissionDecision"] == "allow"
+        assert hook_output["additionalContext"] == "reminder text"
+
+    def test_direct_deny_still_serializes_as_deny(self) -> None:
+        output_data = PreToolUseHook.OutputData(permission_decision="deny", permission_decision_reason="blocked")
+        hook_output = json.loads(output_data.to_json_string(HookClient.CLAUDE_CODE))["hookSpecificOutput"]
+        assert hook_output["permissionDecision"] == "deny"
+
+    def test_plan_mode_guard_still_denies(self) -> None:
+        result = CliRunner().invoke(
+            hook_commands,
+            ["plan-guard", "--client", "codex"],
+            input=json.dumps(_codex_tool_input("mcp__serena__replace_symbol_body", "plan")),
+        )
+        assert result.exit_code == 0
+        hook_output = json.loads(result.output)["hookSpecificOutput"]
+        assert hook_output["permissionDecision"] == "deny"
 
 
 class TestToolUseCounter:
@@ -1207,7 +1275,7 @@ class TestPostToolUseResetSymbolicToolCounterHook:
             PreToolUseRemindAboutSymbolicToolsHook(HookClient.CODEX).execute()
 
         output = json.loads(capsys.readouterr().out.strip())
-        assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
 
 
 class TestCodexPlanHooks:
@@ -1391,7 +1459,7 @@ class TestHookCli:
         assert not session_dir.exists()
 
     def test_remind_command(self, tmp_path: Path):
-        """Invoke the remind command enough times to trigger a deny."""
+        """Invoke the remind command enough times to trigger a non-blocking reminder."""
         runner = CliRunner()
         for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
             stdin_json = json.dumps({"session_id": "cli-remind", "tool_name": "grep", "tool_input": {}})
@@ -1400,7 +1468,7 @@ class TestHookCli:
             assert result.exit_code == 0
 
         output = json.loads(result.output)
-        assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
 
     def test_remind_command_accepts_raw_control_characters_in_tool_input(self, tmp_path: Path):
         """CodeBuddy freeform tool input may contain unescaped control characters."""
@@ -1417,7 +1485,7 @@ class TestHookCli:
         assert result.output == ""
 
     def test_remind_command_grok_emits_native_deny(self, tmp_path: Path):
-        """The documented Grok remind CLI emits Grok-native deny JSON."""
+        """The documented Grok remind CLI emits non-blocking Grok-native JSON."""
         runner = CliRunner()
         payload = _grok_input("grep", {"pattern": "foo", "path": "."}, session_id="cli-grok-remind")
         for _ in range(ToolUseCounter._GREP_USES_THRESHOLD):
@@ -1426,7 +1494,7 @@ class TestHookCli:
             assert result.exit_code == 0
 
         output = json.loads(result.output)
-        assert output["decision"] == "deny"
+        assert output["decision"] == "allow"
         assert "grep" in output["reason"].lower()
         assert "hookSpecificOutput" not in output
 
@@ -1660,7 +1728,7 @@ class TestDSHHookClient:
         result = json.loads(capsys.readouterr().out.strip())
         output = result["hookSpecificOutput"]
         assert output["hookEventName"] == "PreToolUse"
-        assert output["permissionDecision"] == "deny"
+        assert output["permissionDecision"] == "allow"
         assert "additionalContext" in output
         assert "grep" in output["additionalContext"].lower()
 
