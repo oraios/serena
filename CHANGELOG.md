@@ -73,6 +73,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Fix: every line a language server wrote to stderr was followed by an empty line in Serena's log
   - BSL: upgrade to bsl-language-server 1.0.7; wait for the server's initial indexing instead
     of a fixed delay before the first cross-file request; add `jvm_options` setting (e.g. `-Xmx`).
+  - Fix: with `typescript_tsgo`, reference searches missed imports, re-exports and implementing members,
+    so `safe_delete_symbol` could delete a symbol that was still re-exported (#2286)
 
 * CLI:
   - health-check: Remove the "find references" step, as it is not universally supported by language servers (#2253)
