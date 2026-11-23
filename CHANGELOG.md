@@ -7,11 +7,24 @@ Status of the `main` branch. Changes prior to the next official version change w
   - More flexible inclusion/exclusion definitions: 
     - Allow tool exclusions/inclusions to use tool marker names (e.g. `ToolMarkerCanEdit`)
     - Allow API exclusions to include `marker:editing` to exclude all editing functionality
+  - Add new modes `ext-full` and `ext-readonly` to conveniently enable external project access when using
+    the REPL interface.
+  - Remove unnecessary sections from Claude Code system prompt override, which will be phased out (#2259)
   - Fix: `planning` mode now correctly excludes all editing tools/functions (#2210)
+  - Fix: `read_file`, `search_for_pattern` and `replace_in_files` failed with a `UnicodeDecodeError` on a
+    project file whose encoding differs from the project's configured `encoding` (e.g. a UTF-16 file saved
+    by Notepad or PowerShell, or a latin-1 export), although Serena documents a fallback to detected
+    encoding for such files. These tools now use the documented read path, so the file is read instead of
+    rejected (#2274)
   - Fix: project-level `ls_specific_settings` replaced the global settings for the same language server
     silently. Since the replacement is per language rather than per key, a project block that only set
     `ls_path`, for example, dropped every global key such as `ls_extra_args`, leaving no trace. The
     replacement behaviour is unchanged, but the global keys hidden by a project block are now logged (#2188).
+  - Fix: under the `sse` and `streamable-http` transports, stopping the MCP server with SIGINT/SIGTERM
+    did not shut the agent down, so language servers were left to be killed and the symbol caches they
+    had built were never saved (the server lifespan runs per connection under these transports, and
+    uvicorn re-raises the signal right after its loop ends). The CLI now shuts the agent down on the
+    signal and when the server loop ends for any other reason, as the `stdio` transport already did (#2221).
   - Fix: on macOS, cleaning up a language server that had already exited logged a spurious
     "Permission denied signaling process group" warning; an exited process group is now treated
     as already clean (#2237)
@@ -24,7 +37,11 @@ Status of the `main` branch. Changes prior to the next official version change w
     if the IDE's plugin server is not reachable.
 
 * Language Servers:
+  - Fix: `find_implementations` can now find TypeScript interface implementations in Vue projects (#2218)
   - Fix: detect Elixir installed via a Windows batch launcher
+  - Fix: a language server process that exited while its child processes kept running (e.g. after being
+    killed) was still considered running, so it was not restarted and the next request hung until the
+    tool timeout
   - Extend allowed types in persisted symbol caches, fixing cache loading issues with `clangd`
     when overriding values like `ls_path`, `clangd_version` or `compile_commands_dir`
   - Add GraphQL language server support (experimental) via `graphql-language-service-cli` (`graphql-lsp`) for
@@ -41,13 +58,30 @@ Status of the `main` branch. Changes prior to the next official version change w
     incorrect double semicolon behind (`... n * 3;;`). Mirrors the range-start fix already applied
     to Go's `type`/`var`/`const` declarations, and the range-end fix already applied to Nix's
     attribute declarations (#1956)
+  - Fix: `rename_symbol` did not wait for the language server to be ready for cross-file requests, so with
+    the TypeScript language server a rename issued before any reference lookup could change only the open
+    files (often just the definition) while still reporting success. Renames now wait the same way
+    reference lookups do.
+  - Fix: C# solution discovery aborted with ``ValueError: path is on mount '\\.\nul'`` when the repository
+    contained a file with a reserved DOS device name (e.g. ``nul``, typically created accidentally by
+    `... > nul` in Git Bash), failing the C# language server startup. Reserved-name entries are now skipped
+    per entry instead of aborting the whole directory scan
   - Fix: C/C++ (clangd) reference searches returned at most 1000 references; clangd is now started with
     `--limit-references=0` unless `ls_extra_args` already sets a limit
   - C/C++ (clangd) logs errors only (`--log=error`) instead of a line for every request and parse, unless
     `ls_extra_args` sets `--log` or Serena logs at debug level
   - Fix: every line a language server wrote to stderr was followed by an empty line in Serena's log
+  - BSL: upgrade to bsl-language-server 1.0.7; wait for the server's initial indexing instead
+    of a fixed delay before the first cross-file request; add `jvm_options` setting (e.g. `-Xmx`).
+
+* CLI:
+  - health-check: Remove the "find references" step, as it is not universally supported by language servers (#2253)
 
 * Dashboard:
+  - Show REPL function usage below tool usage when using the REPL interface, including facade methods
+    and `info`, `vars`, `clear`, and `overview`, with separately normalized bar charts.
+  - On Windows, change the default interface to `tray_manager` (better in case of many instances, which is
+    becoming increasingly common) (#2212)
   - Fix: on macOS, the tray icon stayed white on a light menu bar instead of adapting to the menu bar's
     appearance like other menu bar icons (#2263)
   - Fix: on macOS, the tray icon was blurry on Retina displays

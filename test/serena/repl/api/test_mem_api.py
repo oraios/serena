@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from serena.analytics import ReplFacadeMethodUsageStats
 from serena.config.serena_config import SerenaConfig
 from serena.project import Project
 from serena.repl.api.mem_api import MemoryApi
@@ -23,7 +24,7 @@ def api(tmp_path: Path) -> MemoryApi:
 
 
 def test_facade_exposes_memory_operations(api: MemoryApi) -> None:
-    facade = Facade.from_api(api, ApiScope())
+    facade = Facade.from_api(api, ApiScope(), stats=ReplFacadeMethodUsageStats())
     assert facade.name == "mem"
     assert set(facade.enabled_method_names) == {
         "list_memories",

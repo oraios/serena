@@ -197,7 +197,7 @@ code, pre, kbd, samp,
 .memory-editor,
 .project-path,
 .tool-item,
-.stat-tool-name,
+.stat-bar-container,
 .execution-name,
 .execution-meta,
 .last-execution-name,
@@ -420,6 +420,21 @@ code, pre, kbd, samp,
 .gold-banner-slide .banner-image {
     max-width: 100%;
     object-fit: contain;
+}
+
+.gold-banner-slide .banner-html {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 400px;
+    border-radius: var(--border-radius);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.gold-banner-slide:has(.banner-html) > a {
+    display: block;
+    color: inherit;
+    text-decoration: none;
 }
 
 /* Banner Arrow Navigation */
@@ -754,6 +769,10 @@ code, pre, kbd, samp,
     transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
+.basic-stats-section h2.repl-stats-heading {
+    margin-top: var(--space-5);
+}
+
 /* Executions Styles */
 .executions-section {
     background-color: var(--bg-secondary);
@@ -947,13 +966,15 @@ code, pre, kbd, samp,
     align-items: center;
     margin: 8px 0;
     gap: 12px;
+    font-size: 13px;
+    font-weight: normal;
 }
 
 .stat-tool-name {
-    min-width: 200px;
-    max-width: 200px;
-    font-weight: bold;
-    color: var(--text-secondary);
+    min-width: 260px;
+    max-width: 260px;
+    text-align: left;
+    color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -977,9 +998,9 @@ code, pre, kbd, samp,
 }
 
 .stat-count {
-    min-width: 60px;
+    flex: 0 0 4ch;
+    font-variant-numeric: tabular-nums;
     text-align: right;
-    font-weight: bold;
     color: var(--text-primary);
 }
 

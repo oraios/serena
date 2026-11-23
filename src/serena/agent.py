@@ -28,7 +28,7 @@ from sensai.util.string import ToStringMixin, dict_string, list_string
 
 from interprompt.jinja_template import JinjaTemplate
 from serena import serena_version
-from serena.analytics import RegisteredTokenCountEstimator, ToolUsageStats
+from serena.analytics import RegisteredTokenCountEstimator, ReplFacadeMethodUsageStats, ToolUsageStats
 from serena.config.context_mode import SerenaAgentContext, SerenaAgentMode
 from serena.config.serena_config import (
     AgentInterface,
@@ -438,7 +438,7 @@ class DashboardManager:
         def from_platform(cls) -> "DashboardManager.Mode":
             match platform.system():
                 case "Windows":
-                    return cls.WEBVIEW
+                    return cls.TRAY_MANAGER
                 case "Darwin":
                     return cls.TRAY_MANAGER
                 case _:
@@ -685,6 +685,7 @@ class SerenaAgent:
         token_count_estimator = RegisteredTokenCountEstimator[self.serena_config.token_count_estimator]
         log.info(f"Will record tool usage statistics with token count estimator: {token_count_estimator.name}.")
         self._tool_usage_stats = ToolUsageStats(token_count_estimator)
+        self._repl_facade_method_usage_stats = ReplFacadeMethodUsageStats()
 
         # log fundamental information
         log.info(
@@ -1365,13 +1366,14 @@ class SerenaAgent:
         """
         :return: the default list of facades provided by Serena itself, not including any language backend-specific facades
         """
+        stats = self._repl_facade_method_usage_stats
         return [
-            Facade.from_api(ConfigApi(self), api_scope),
-            Facade.from_api(FsApi(self), api_scope),
-            Facade.from_api(EditApi(self), api_scope),
-            Facade.from_api(MemoryApi(self), api_scope),
-            Facade.from_api(ShellApi(self), api_scope),
-            Facade.from_api(ExternalProjectsApi(self), api_scope, is_optional=True),
+            Facade.from_api(ConfigApi(self), api_scope, stats),
+            Facade.from_api(FsApi(self), api_scope, stats),
+            Facade.from_api(EditApi(self), api_scope, stats),
+            Facade.from_api(MemoryApi(self), api_scope, stats),
+            Facade.from_api(ShellApi(self), api_scope, stats),
+            Facade.from_api(ExternalProjectsApi(self), api_scope, stats, is_optional=True),
         ]
 
     def get_repl(self) -> SerenaRepl:
@@ -1393,8 +1395,14 @@ class SerenaAgent:
                 api_scope.process(NamedApiInclusionDefinition(name="Dashboard", excluded_apis=["cfg.open_dashboard"]))
 
             facades = self.create_default_facade_list(api_scope) + self._language_backend.create_facades(self, api_scope)
-            self._repl = SerenaRepl(facades, api_scope)
+            self._repl = SerenaRepl(facades, self._repl_facade_method_usage_stats)
         return self._repl
+
+    def get_repl_facade_method_usage_stats(self) -> ReplFacadeMethodUsageStats:
+        """
+        :return: the REPL facade method usage statistics for this agent
+        """
+        return self._repl_facade_method_usage_stats
 
     def issue_task(
         self, task: Callable[[], T], name: str | None = None, logged: bool = True, timeout: float | None = None

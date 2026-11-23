@@ -46,8 +46,9 @@ In this case, a workaround is to provide the full path to the `serena` executabl
 
 **Serena's tools not being used**.
 With some clients, you may experience that Serena's tools are not being used.
-This is mainly due to problems in the client itself (like a poorly implemented tool discovery). To counteract this,
-Serena comes with a set of commands that can be used in _hooks_. See the sections on hooks for Claude Code and VSCode below.
+First, ask the agent to activate your project and read Serena's initial instructions. If you want to enforce
+Serena usage more rigorously, optional hooks can provide reminders and other controls. Hooks are not generally
+recommended as part of the standard setup; see the client-specific subsections below for configuration examples.
 
 **Environment Variables**.
 Some language servers may require additional environment variables to be set (e.g. F# on macOS with Homebrew),
@@ -106,7 +107,7 @@ To set up the Serena MCP server for Claude Code, you can simply run this command
 
     serena setup claude-code
 
-Find manual setup instructions as well as workarounds for Claude Code's recent regressions pertaining to (external) tool use below.
+### Manual Setup
 
 **Global Configuration**. To add the Serena MCP server for all your projects, use the user-level configuration of claude code and the `--project-from-cwd` flag:
 
@@ -126,22 +127,17 @@ Confirm that Claude Code is connected to Serena by running the `/mcp` command an
 If Serena fails to start fast enough, you should set `MCP_TIMEOUT` to a sufficiently high value
 (e.g. by adding `export MCP_TIMEOUT=60000` to your shell profile)
 
-**Hooks.**
-Due to recent changes (especially dynamic tool loading) in Claude Code, the agent will often fail to make proper use
-of Serena's tools, either by failing to load them in the beginning or by forgetting the instructions in a long session
-(a behavior known as agent drift). To counteract this, we provide reminder hooks. We **strongly recommend** setting
-up the hooks as below (or a variation thereof) for optimal performance of Serena in Claude Code.
+### Optional Hooks
+
+Hooks let you enforce Serena usage more rigorously, for example by reminding the agent to use Serena's
+symbolic tools during long sessions. They are optional and are not generally recommended for standard use.
 
 :::{note}
-While recommended, hooks are an **alpha feature**. Provide feedback via the [GitHub issue tracker](https://github.com/oraios/serena/issues) if you encounter any issues.
+Hooks are an **alpha feature**. Provide feedback via the [GitHub issue tracker](https://github.com/oraios/serena/issues) if you encounter any issues.
 :::
 
-To set up hooks, add the following to your Claude Code settings file
+Include only the hooks you want. Add the following to your Claude Code settings file
 (`.claude/settings.json` in your project directory, or `~/.claude/settings.json` globally):
-
-All hooks below are opt-in — include only the ones you want. Add the following to your
-Claude Code settings file (`.claude/settings.json` in your project directory, or
-`~/.claude/settings.json` globally):
 
 ```json
 {
@@ -206,28 +202,14 @@ The hooks will:
 For more details on Claude Code's hook system, see the
 [Claude Code hooks documentation](https://code.claude.com/docs/en/hooks).
 
-**Modifying Claude Code's Prompts.**
-Recent updates to Claude Code (CC) and to the Opus line of models resulted in drastically reduced
-adherence to instructions pertaining to Serena's tools.
-
-Analysis showed that part of the reason are very long and detailed
-tool descriptions for built-in tools and parts of the default system prompt.
-The descriptions of CC's system tools take almost 16k tokens, cannot be adjusted by the user,
-and introduce a very strong bias towards internal tools, making it almost impossible to convince Opus 4.7 to use Serena.
-
-To counteracts this bias, you can consider overriding the system prompt with a version
-that emphasizes usage of Serena's tools.
-
-```shell
-claude --system-prompt="$(serena prompts print-cc-system-prompt-override)"
-```
-
-You can also consider adding the content of `serena prompts print-cc-system-prompt-override` to your `CLAUDE.md` files,
-but the effect may be insufficient for counteracting Claude Code's bias towards internal tools.
-
 ## DeepSeek Harness (DSH)
 
-DSH can run Serena through its Claude Code-compatible hooks bridge. Install and enable
+Connect Serena as an MCP server using the [general instructions](#clients-general-instructions).
+
+### Optional Hooks
+
+To enforce Serena usage more rigorously, DSH can run Serena's hooks through its Claude Code-compatible
+hooks bridge. Install and enable
 `@deepseek-ai/dsh-hooks-claude-code`, then configure the bridge with the path to the hooks file. For example,
 add the following plugin entry to the DSH Cordis configuration (the exact file location depends on your DSH setup):
 
@@ -287,12 +269,11 @@ In both cases, proceed to enter Serena as the name, then select either global or
 **Verification.**
 You should be able to see Serena in the tools overview in the AI Chat window.
 
-**Hooks.**
-Due to recent changes (especially dynamic tool loading) in VSCode, the agent will often fail to make proper use
-of Serena's tools, either by failing to load them in the beginning or by forgetting the instructions in a long session
-(a behaviour known as agent drift). To counteract this, we provide reminder hooks. We **strongly recommend** setting
-up the hooks as below (or a variation thereof) for optimal performance of Serena in VSCode.
+(vscode-hooks)=
+### Optional Hooks
 
+If you want to enforce Serena usage more rigorously, you can configure hooks to remind the agent to use
+Serena's symbolic tools and prompt project activation. These hooks are optional.
 
 The hooks will:
 
@@ -337,10 +318,13 @@ Use the interactive `/mcp add` slash command, choose Serena as the name, STDIO a
 `serena start-mcp-server --context=copilot-cli --project-from-cwd` as command. Copilot CLI will immediately notify you
 that Serena is running if everything is set up correctly or display an error otherwise.
 
-You should add the same **hooks** as in VSCode (see above) if Copilot CLI didn't pick them up automatically.
+### Optional Hooks
+
+For stricter Serena usage, you can use the same [optional hooks as in VSCode](#vscode-hooks)
+if Copilot CLI did not pick them up automatically.
 
 
-## Codex (CLI and App)
+## Codex (CLI and via ChatGPT App)
 
 You can simply run `serena setup codex`.
 
@@ -359,10 +343,41 @@ The Codex app does not start a session in the project's directory, so when using
 asking Codex to "Activate the current dir as project using serena" at the start of each session (though Codex might
 do this automatically).
 
-**Hooks.**
-Current Codex versions enable lifecycle hooks by default, so no feature flag is required. See the
-[Codex hooks documentation](https://developers.openai.com/codex/hooks) for details. Create
-`~/.codex/hooks.json` with the following content:
+### SessionStart Hook
+
+For Codex users who consistently work with Serena, we recommend the `SessionStart` hook to bootstrap Serena: it prompts the agent to activate
+its project and read Serena's instructions when a session starts or resumes. This handles the manual
+activation step described above.
+
+See the [Codex hooks documentation](https://developers.openai.com/codex/hooks) for details. Create
+`~/.codex/hooks.json` with the following content, or merge this entry into your existing hooks configuration:
+
+```json
+{
+    "hooks": {
+        "SessionStart": [
+            {
+                "matcher": "startup|resume",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "serena-hooks activate --client=codex",
+                        "statusMessage": "Activating Serena project",
+                        "timeout": 5
+                    }
+                ]
+            }
+        ]
+    }
+}
+```
+
+### Optional Full Hook Configuration
+
+If you want to enforce Serena usage more rigorously, the configuration below adds tool-use reminders,
+reminder counter resets, plan-mode controls, and cleanup. These additional hooks are optional and are
+not generally recommended for standard use. Use this configuration in place of the minimal configuration
+above; it already includes the `SessionStart` hook.
 
 ```json
 {
@@ -491,7 +506,7 @@ grep and code-file reads, so running it for every tool call is unnecessary. That
 the way it does for clients whose `PreToolUse` hook observes every tool call. The separate `reset`
 hook above, matched to `PostToolUse` on Serena's own tools, covers that case for Codex instead.
 
-### Diagnosing opaque Codex hook failures
+#### Diagnosing opaque Codex hook failures
 
 Codex may report that a hook failed without identifying the configured command or showing enough
 of its output to diagnose the cause. [Codex issue #27052](https://github.com/openai/codex/issues/27052)
@@ -540,9 +555,10 @@ modal to inspect, refresh, enable, or disable configured MCP servers.
 Grok can also load existing Claude Code MCP configuration. If you previously ran `serena setup claude-code`,
 Serena may already appear in Grok, but it will use the `claude-code` context instead of the dedicated `grok` context.
 
-### Hooks
+### Optional Hooks
 
-Grok supports lifecycle hooks; see Grok's bundled hooks documentation for details. To enable Serena's hooks
+For stricter Serena usage, you can optionally configure Grok's lifecycle hooks; see Grok's bundled
+hooks documentation for details. To enable Serena's hooks
 for Grok globally, create `~/.grok/hooks/serena-hooks.json` with the following content. For a single project,
 create `.grok/hooks/serena-hooks.json` in that project instead; note that Grok loads project-scoped hooks
 only after you have trusted the project for hook execution (via Grok's `/hooks-trust` command).
@@ -754,9 +770,9 @@ codebuddy mcp add serena -- serena start-mcp-server --context codebuddy --projec
 
 Confirm that CodeBuddy is connected to Serena by running the `/mcp` command and reconnecting if necessary.
 
-### Hooks
+### Optional Hooks
 
-CodeBuddy supports the same hook system as Claude Code. To set up hooks, add the following to your CodeBuddy settings file (`.codebuddy/settings.json` in your project directory, or `~/.codebuddy/settings.json` globally):
+CodeBuddy supports the same hook system as Claude Code. If you want to enforce Serena usage more rigorously, add the following to your CodeBuddy settings file (`.codebuddy/settings.json` in your project directory, or `~/.codebuddy/settings.json` globally):
 
 ```json
 {
@@ -809,7 +825,7 @@ CodeBuddy supports the same hook system as Claude Code. To set up hooks, add the
 }
 ```
 
-### Hook Descriptions
+#### Hook Descriptions
 
 - **`remind`**: Remind the agent to use Serena's tools instead of built-in `grep` and `read` tools.
 - **`activate`**: Prompt the agent to activate the project at session start and read Serena's instructions.
@@ -845,10 +861,10 @@ This assumes Serena is already running in [HTTP/SSE mode](streamable-http) on th
 `--context=zcode --project-from-cwd` for a single-project setup, or `--context=zcode` if you intend to
 activate a project from within the chat.
 
-### Hooks
+### Optional Hooks
 
 ZCode supports lifecycle hooks with the same event names as Claude Code (`SessionStart`, `PreToolUse`,
-`Stop`, ...). To set up hooks, add the following to your ZCode hooks configuration
+`Stop`, ...). If you want to enforce Serena usage more rigorously, add the following to your ZCode hooks configuration
 (`~/.zcode/cli/config.json` globally, or `.zcode/config.json` for a single project), under
 `hooks.events`, with `hooks.enabled` set to `true`:
 
@@ -871,7 +887,7 @@ ZCode supports lifecycle hooks with the same event names as Claude Code (`Sessio
 }
 ```
 
-### Hook Descriptions
+#### Hook Descriptions
 
 - **`activate`**: Prompt the agent to activate the project at session start and read Serena's instructions.
 - **`remind`**: Remind the agent to use Serena's tools instead of built-in read and search tools.
@@ -920,7 +936,7 @@ Some of the leading open source GUI applications are
 
   * [Jan](https://jan.ai/docs/mcp), 
   * [OpenHands](https://github.com/All-Hands-AI/OpenHands/),
-  * [OpenWebUI](https://docs.openwebui.com/openapi-servers/mcp) and 
+  * [OpenWebUI](https://docs.openwebui.com/features/extensibility/plugin/tools/openapi-servers/mcp) and 
   * [Agno](https://docs.agno.com/introduction/playground).
 
 These applications allow combining Serena with almost any LLM (including locally running ones) 

@@ -230,15 +230,12 @@ class LanguageServerInterface(ABC):
 
     def stop(self, timeout: float = 5.0) -> None:
         """
-        Terminates communication with the language server, freeing resources
+        Terminates communication with the language server, freeing resources.
+        Resources are freed even if the server has already exited, since processes it started may outlive it.
 
         :param timeout: the maximum time, in seconds, to wait for the language server to terminate before forcefully killing it
             (if applicable)
         """
-        if not self.is_running():
-            log.debug("Server process not running, skipping shutdown.")
-            return
-
         self._is_stopping = True
 
         log.info(f"Initiating shutdown with a {timeout}s timeout...")
@@ -522,7 +519,7 @@ class StdioLanguageServer(LanguageServerInterface):
         self._stdin_lock = threading.Lock()
 
     def is_running(self) -> bool:
-        return self._process is not None and self._process.returncode is None
+        return self._process is not None and self._process.poll() is None
 
     def _start(self) -> None:
         log.info("Starting language server process via command: %s", self._process_launch_info.cmd)
@@ -560,7 +557,8 @@ class StdioLanguageServer(LanguageServerInterface):
         try:
             # send LSP shutdown and close stdin to signal no more input
             try:
-                self._send_shutdown_in_thread()
+                if self.is_running():
+                    self._send_shutdown_in_thread()
                 self._safely_close_pipe(self._process.stdin)
             except Exception as e:
                 log.debug(f"Exception during graceful shutdown: {e}")

@@ -179,3 +179,17 @@ class ToolUsageStats:
     def clear(self) -> None:
         with self._tool_stats_lock:
             self._tool_stats.clear()
+
+
+class ReplFacadeMethodUsageStats:
+    def __init__(self):
+        self._method_stats = defaultdict(lambda: 0)
+
+    def record_method_call(self, qualified_method_name: str) -> None:
+        self._method_stats[qualified_method_name] += 1
+
+    def get_counts(self) -> dict[str, int]:
+        """
+        :return: a dictionary mapping qualified facade method names to the number of times they have been called.
+        """
+        return dict(self._method_stats)
