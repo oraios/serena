@@ -3,7 +3,7 @@
 # is encouraged (via the tool description) to call at the beginning of the conversation.
 prompts:
   connection_prompt: |
-    CRITICAL: Before starting to work on a coding task, call the `initial_instructions` tool to read the 'Serena Instructions Manual'.
+    CRITICAL: Before starting to work on a coding task, call the `initial_instructions` tool to read the 'Serena Instructions Manual', unless it is already available in your conversation context.
   system_prompt: |
     You have semantic coding functions/tools that you rely on heavily. Work resource-efficiently: don't read or
     generate content the task doesn't need.
