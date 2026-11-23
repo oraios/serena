@@ -154,7 +154,9 @@ Status of the `main` branch. Changes prior to the next official version change w
     `ls_specific_settings: {python_pyrefly: {indexing_mode: lazy-blocking}}`: in its default lazy-non-blocking
     mode pyrefly may answer before its reverse-dependency graph is built and miss importers (measured: 1 of 5
     dependents seen right after start-up, all 5 a few seconds later); in blocking mode the answer is complete,
-    the index completing cancels the first request and Serena's existing retry re-asks.
+    the index completing cancels the first request and Serena's existing retry re-asks. Like `rename_symbol`, the
+    request waits until the server is ready for cross-file requests, so a rename issued while tsserver is still
+    loading the project does not miss importers.
 
 * General:
   - **Introducing the Serena REPL**:   

@@ -3301,8 +3301,11 @@ class SolidLanguageServer(ABC):
         params = self._create_rename_files_params(old_relative_path, new_relative_path)
         if os.path.isfile(os.path.join(self.repository_root_path, old_relative_path)):
             # opening the file is what makes some servers (tsserver) load the project it belongs to, which
-            # they need in order to compute the edits for its rename
+            # they need in order to compute the edits for its rename; the edits are to the files that import
+            # it, so the request needs the same cross-file readiness as a references request
+            self._pre_open_for_cross_file_references()
             with self.open_file(old_relative_path):
+                self._wait_for_cross_file_references_if_needed()
                 return self.server.send.will_rename_files(params)
         return self.server.send.will_rename_files(params)
 
