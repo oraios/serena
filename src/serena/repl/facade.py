@@ -19,6 +19,7 @@ import typing_extensions
 from serena.config.serena_config import ApiInclusionDefinition
 from serena.project import Project
 
+from ..analytics import ReplFacadeMethodUsageStats
 from .representable import RepresentableViaRenderer
 
 if TYPE_CHECKING:
@@ -373,15 +374,19 @@ class FacadeMethod:
     enabled or disabled; only enabled methods are accessible from REPL code.
     """
 
-    def __init__(self, parent: "Facade", implementation: Callable[..., Any], info: FacadeMethodInfo, enabled: bool) -> None:
+    def __init__(
+        self, parent: "Facade", implementation: Callable[..., Any], info: FacadeMethodInfo, enabled: bool, stats: ReplFacadeMethodUsageStats
+    ) -> None:
         """
         :param parent: the facade the method belongs to
         :param implementation: the implementation to delegate to
         :param info: the method's metadata (including the method's name)
         :param enabled: whether the method is initially enabled
+        :param stats: the object with which to record usage statistics
         """
         self.parent = parent
         self._implementation = implementation
+        self._stats = stats
         self.info = info
         self.enabled = enabled
 
@@ -401,6 +406,7 @@ class FacadeMethod:
         return f"{self.facade_name}.{self.name}"
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        self._stats.record_method_call(self.qualified_name)
         external_project_execution = self.parent.get_external_project_()
         if external_project_execution is not None:
             external_project_execution.check_call_permission(self)
@@ -590,12 +596,13 @@ class Facade:
         self._methods[method.name] = method
 
     @staticmethod
-    def from_api(api: FacadeApi, api_scope: ApiScope, *, is_optional: bool = False) -> "Facade":
+    def from_api(api: FacadeApi, api_scope: ApiScope, stats: ReplFacadeMethodUsageStats, *, is_optional: bool = False) -> "Facade":
         """
         Creates a facade wrapping the given implementation.
 
         :param api: the implementation; each of its methods decorated with `facade_method` becomes a facade method
         :param api_scope: API scope definition determining which methods are enabled
+        :param stats: the usage statistics of the facade's methods, for recording usage
         :param is_optional: whether the facade is optional (disabled by default and must be enabled explicitly)
         :return: the facade
         """
@@ -605,7 +612,7 @@ class Facade:
             if method_info is None:
                 continue
             is_enabled = api_scope.is_method_enabled(facade.name, method_info, is_facade_optional=is_optional)
-            facade._add_method(FacadeMethod(facade, member, method_info, enabled=is_enabled))
+            facade._add_method(FacadeMethod(facade, member, method_info, enabled=is_enabled, stats=stats))
         facade._discover_referenced_types()
         return facade
 

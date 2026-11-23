@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from serena.analytics import ReplFacadeMethodUsageStats
 from serena.config.serena_config import SerenaConfig
 from serena.project import Project
 from serena.repl.api.shell_api import ShellApi
@@ -25,7 +26,7 @@ def api(tmp_path: Path) -> ShellApi:
 
 
 def test_facade_exposes_shell_command_as_editing_operation(api: ShellApi) -> None:
-    facade = Facade.from_api(api, ApiScope())
+    facade = Facade.from_api(api, ApiScope(), stats=ReplFacadeMethodUsageStats())
     assert facade.name == "shell"
     assert facade.enabled_method_names == ["execute_shell_command"]
     assert facade.get_method("execute_shell_command").info.can_edit

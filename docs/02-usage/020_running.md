@@ -204,7 +204,13 @@ If, however, the synchronisation is fast enough for you, this is still a good op
    cd serena
    ```
 
-2. Run Serena via
+2. Create the virtual environment and install dependencies using Python 3.13.
+
+   ```shell
+   uv sync -p 3.13
+   ```
+
+3. Run Serena via
 
    ```shell
    uv run serena 

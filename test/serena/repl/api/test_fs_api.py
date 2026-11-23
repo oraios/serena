@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from serena.analytics import ReplFacadeMethodUsageStats
 from serena.config.serena_config import SerenaConfig
 from serena.project import Project
 from serena.repl.api.fs_api import FsApi
@@ -31,7 +32,7 @@ def api(project: Project) -> FsApi:
 
 
 def test_facade_exposes_file_operations(api: FsApi) -> None:
-    facade = Facade.from_api(api, ApiScope())
+    facade = Facade.from_api(api, ApiScope(), stats=ReplFacadeMethodUsageStats())
     assert facade.name == "fs"
     assert set(facade.enabled_method_names) == {"read_file", "create_text_file", "list_dir", "find_file", "search_for_pattern"}
     assert {name for name in facade.enabled_method_names if facade.get_method(name).info.can_edit} == {"create_text_file"}
@@ -44,6 +45,21 @@ def test_read_file(api: FsApi) -> None:
 
     assert api.read_file("src/a.py", start_line=1, end_line=1).text == "y = foo(2)"
     assert api.read_file("src/a.py", start_line=-2).lines == ["z = 3", ""]
+
+
+def test_read_file_of_undecodable_file_does_not_fail(api: FsApi, project: Project) -> None:
+    # a project file whose bytes are not valid in the project's encoding is still readable, as
+    # documented for Serena's file reading, instead of failing with a decoding error
+    (Path(project.project_root) / "src" / "cp1252.py").write_bytes(b"# \xe9\nx = 2\n")
+
+    lines = api.read_file("src/cp1252.py").lines
+    assert len(lines) == 3 and lines[1:] == ["x = 2", ""]
+
+
+def test_read_file_of_utf16_file_uses_detected_encoding(api: FsApi, project: Project) -> None:
+    (Path(project.project_root) / "src" / "utf16.py").write_bytes("# utf-16 file\nx = 3\n".encode("utf-16"))
+
+    assert api.read_file("src/utf16.py").text == "# utf-16 file\nx = 3\n"
 
 
 def test_create_text_file(api: FsApi, project: Project) -> None:

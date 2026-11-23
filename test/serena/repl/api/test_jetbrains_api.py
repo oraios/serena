@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from serena.analytics import ReplFacadeMethodUsageStats
 from serena.repl.api.jb_api import JetBrainsApi
 from serena.repl.facade import ApiScope, Facade
 
@@ -26,7 +27,7 @@ def client() -> MagicMock:
 
 
 def test_facade_exposes_all_jetbrains_operations(agent: MagicMock) -> None:
-    facade = Facade.from_api(JetBrainsApi(agent), ApiScope())
+    facade = Facade.from_api(JetBrainsApi(agent), ApiScope(), stats=ReplFacadeMethodUsageStats())
     assert facade.name == "jb"
     assert set(facade.enabled_method_names) == {
         "find_symbol",

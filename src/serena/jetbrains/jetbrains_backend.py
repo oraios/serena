@@ -43,7 +43,7 @@ class JetBrainsLanguageBackend(LanguageBackend):
         from ..repl.api.jb_api import JetBrainsApi
         from ..repl.facade import Facade
 
-        return Facade.from_api(JetBrainsApi(agent), api_scope)
+        return Facade.from_api(JetBrainsApi(agent), api_scope, agent.get_repl_facade_method_usage_stats())
 
     @override
     def create_facades(self, agent: "SerenaAgent", api_scope: "ApiScope") -> list["Facade"]:

@@ -69,6 +69,7 @@ class BannerRotation {
         this.goldTimer = null;
         this.platinumInterval = 15000;
         this.goldInterval = 15000;
+        this.isTestEnv = false;
 
         this.init();
     }
@@ -92,37 +93,58 @@ class BannerRotation {
     }
 
     loadBanners(onSuccess) {
+        const baseUrl = this.isTestEnv ? 'http://localhost:8090/oraios-software/serena-banners' : 'https://oraios-software.de/serena-banners';
         $.ajax({
-            url: 'https://oraios-software.de/serena-banners/manifest.php',
+            url: baseUrl + '/manifest.php',
             type: 'GET',
-            success: function (response) {
+            success: async function (response) {
                 console.log('Banners loaded:', response);
 
-                function fillBanners($container, banners, className) {
-                    $.each(banners, function (index, banner) {
-                        let $img = $('<img src="' + banner.image + '" alt="' + banner.alt + '" class="banner-image">');
-                        if (banner.image_dark) {
-                            $img.addClass('theme-aware-img');
-                            $img.attr('data-src-dark', banner.image_dark);
-                            $img.attr('data-src-light', banner.image);
-                            updateThemeAwareImage($img);
+                async function fillBanners($container, banners, className) {
+                    // load fragments before inserting slides in manifest order
+                    const slides = await Promise.all(banners.map(async function (banner, index) {
+                        let $content;
+                        if (banner.html) {
+                            if (className !== 'gold-banner') {
+                                console.error('HTML banners are only supported for gold banners:', banner.html);
+                                return null;
+                            }
+                            try {
+                                const html = await $.ajax({url: banner.html, dataType: 'html'});
+                                $content = $('<div class="banner-html"></div>').html(html);
+                            } catch (error) {
+                                console.error('Error loading HTML banner:', banner.html, error);
+                                return null;
+                            }
+                        } else {
+                            $content = $('<img class="banner-image">').attr({src: banner.image, alt: banner.alt});
+                            if (banner.image_dark) {
+                                $content.addClass('theme-aware-img');
+                                $content.attr('data-src-dark', banner.image_dark);
+                                $content.attr('data-src-light', banner.image);
+                                updateThemeAwareImage($content);
+                            }
                         }
-                        let $anchor = $('<a href="' + banner.link + '" target="_blank"></a>');
-                        $anchor.append($img);
-                        let $banner = $('<div class="' + className + '-slide" data-banner="' + (index + 1) + '"></div>');
+
+                        // wrap either content type in the manifest's destination link
+                        const $anchor = $('<a target="_blank" rel="noopener noreferrer"></a>').attr('href', banner.link);
+                        $anchor.append($content);
+                        const $banner = $('<div></div>').addClass(className + '-slide').attr('data-banner', index + 1);
                         $banner.append($anchor);
-                        if (index === 0) {
-                            $banner.addClass('active');
-                        }
                         if (banner.border) {
-                            $img.addClass('banner-border');
+                            $content.addClass('banner-border');
                         }
-                        $container.append($banner);
+                        return $banner;
+                    }));
+                    slides.forEach(function ($banner) {
+                        if ($banner) $container.append($banner);
                     });
                 }
 
-                fillBanners($('#gold-banners'), response.gold, 'gold-banner');
-                fillBanners($('#platinum-banners'), response.platinum, 'platinum-banner');
+                await Promise.all([
+                    fillBanners($('#gold-banners'), response.gold, 'gold-banner'),
+                    fillBanners($('#platinum-banners'), response.platinum, 'platinum-banner')
+                ]);
                 onSuccess();
             },
             error: function (xhr, status, error) {
@@ -337,6 +359,7 @@ class Dashboard {
         this.$themeText = $('#theme-text');
         this.$configDisplay = $('#config-display');
         this.$basicStatsDisplay = $('#basic-stats-display');
+        this.$replStatsDisplay = $('#repl-stats-display');
         this.$statsSection = $('#stats-section');
         this.$refreshStats = $('#refresh-stats');
         this.$clearStats = $('#clear-stats');
@@ -626,7 +649,12 @@ class Dashboard {
                     self.activeProjectName = response.active_project.name;
                     $('#dashboard-welcome').toggle(!self.dashboardWelcomeDismissed && response.web_dashboard_open_on_launch === null);
                     self.displayConfig(response);
-                    self.displayBasicStats(response.tool_stats_summary);
+                    self.displayBasicStats(response.tool_stats_summary, self.$basicStatsDisplay, 'No tool usage stats collected yet.');
+                    const isRepl = response.agent_interface === 'REPL';
+                    $('#repl-stats-section').toggle(isRepl);
+                    if (isRepl) {
+                        self.displayBasicStats(response.repl_stats_summary, self.$replStatsDisplay, 'No REPL function usage stats collected yet.');
+                    }
                     self.displayProjects(response.registered_projects);
                     self.displayAvailableTools(response.available_tools);
                     self.displayAvailableModes(response.available_modes);
@@ -932,9 +960,9 @@ class Dashboard {
         }
     }
 
-    displayBasicStats(stats) {
+    displayBasicStats(stats, $display, emptyMessage) {
         if (Object.keys(stats).length === 0) {
-            this.$basicStatsDisplay.html('<div class="no-stats-message">No tool usage stats collected yet.</div>');
+            $display.html('<div class="no-stats-message">' + emptyMessage + '</div>');
             return;
         }
 
@@ -959,7 +987,7 @@ class Dashboard {
             html += '</div>';
         });
 
-        this.$basicStatsDisplay.html(html);
+        $display.html(html);
     }
 
     displayProjects(projects) {
