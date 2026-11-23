@@ -11,9 +11,10 @@ import traceback
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from ..analytics import ReplFacadeMethodUsageStats
 from ..session import SerenaSession
 from .external_project import ExternalProjectExecution
-from .facade import ApiScope, Facade, FacadeMethod, ReferencedType
+from .facade import Facade, FacadeMethod, ReferencedType
 from .representable import Representable
 
 if TYPE_CHECKING:
@@ -52,11 +53,12 @@ class SerenaReplEntrypoint:
     and offers progressive disclosure of their interfaces via `info`.
     """
 
-    def __init__(self, facades: list[Facade], api_scope: ApiScope) -> None:
+    def __init__(self, facades: list[Facade], stats: ReplFacadeMethodUsageStats) -> None:
         """
         :param facades: the candidate facades
-        :param api_scope: the API scope, which determines which of the facades are made available
+        :param stats: the object with which to record usage statistics
         """
+        self._stats = stats
         self._facades: dict[str, Facade] = {}
         self._current_session: SerenaSession | None = None
         self._current_namespace: dict[str, Any] | None = None
@@ -130,6 +132,10 @@ class SerenaReplEntrypoint:
 
         :return: the listing (name, type and a short representation per item)
         """
+        # record the namespace listing request
+        self._stats.record_method_call("vars")
+
+        # list the persisted items
         items = self._get_persisted_items()
         if not items:
             return "No persisted variables."
@@ -147,6 +153,10 @@ class SerenaReplEntrypoint:
 
         :return: a message indicating the number of removed items
         """
+        # record the namespace clearing request
+        self._stats.record_method_call("clear")
+
+        # remove the persisted items
         items = self._get_persisted_items()
         assert self._current_namespace is not None
         for name in items:
@@ -170,6 +180,11 @@ class SerenaReplEntrypoint:
         :return: the list of available facades, each with a one-line description and the names of its methods
             (with the result type of methods returning objects that can be processed in code)
         """
+        self._stats.record_method_call("overview")
+        return self._render_overview()
+
+    def _render_overview(self) -> str:
+        """The overview of available facades and their methods."""
 
         def method_entry(method: FacadeMethod) -> str:
             return_types = method.get_referenced_return_types()
@@ -191,8 +206,12 @@ class SerenaReplEntrypoint:
             Unknown items are reported without affecting the documentation of the other items.
         :return: the requested documentation
         """
+        # record the documentation request
+        self._stats.record_method_call("info")
+
+        # render the requested documentation
         if not items:
-            return self.overview()
+            return self._render_overview()
         described_in_call: set[str] = set()
         return "\n\n".join(self._describe_item(item, described_in_call) for item in items)
 
@@ -285,12 +304,12 @@ class SerenaRepl:
         """
         return cls._PERSISTED_NAME_PATTERN.match(name) is not None
 
-    def __init__(self, facades: list[Facade], api_scope: ApiScope) -> None:
+    def __init__(self, facades: list[Facade], stats: ReplFacadeMethodUsageStats) -> None:
         """
         :param facades: the candidate facades
-        :param api_scope: the API scope, which determines which of the facades are made available
+        :param stats: the object with which to record usage statistics
         """
-        self._entrypoint = SerenaReplEntrypoint(facades, api_scope)
+        self._entrypoint = SerenaReplEntrypoint(facades, stats)
 
     @property
     def entrypoint(self) -> SerenaReplEntrypoint:

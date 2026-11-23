@@ -4,12 +4,13 @@ Tests for the configuration facade API.
 
 from unittest.mock import MagicMock
 
+from serena.analytics import ReplFacadeMethodUsageStats
 from serena.repl.api.cfg_api import ConfigApi
 from serena.repl.facade import ApiScope, Facade
 
 
 def test_facade_exposes_config_operations() -> None:
-    facade = Facade.from_api(ConfigApi(MagicMock()), ApiScope())
+    facade = Facade.from_api(ConfigApi(MagicMock()), ApiScope(), stats=ReplFacadeMethodUsageStats())
     assert facade.name == "cfg"
     assert set(facade.enabled_method_names) == {"get_current_config", "open_dashboard"}
     assert not any(facade.get_method(name).info.can_edit for name in facade.enabled_method_names)

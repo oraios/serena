@@ -3271,7 +3271,11 @@ class SolidLanguageServer(ABC):
             newName=new_name,
         )
 
+        # a rename edits every reference, so it needs the same cross-file readiness as a references request;
+        # otherwise a server that is still loading the project may answer from the open files only
+        self._pre_open_for_cross_file_references()
         with self.open_file(relative_file_path):
+            self._wait_for_cross_file_references_if_needed()
             return self.server.send.rename(params)
 
     def request_type_hierarchy_subtypes(

@@ -31,7 +31,7 @@ class LSPLanguageBackend(LanguageBackend):
         from ..repl.api.lsp_api import LspApi
         from ..repl.facade import Facade
 
-        return [Facade.from_api(LspApi(agent), api_scope)]
+        return [Facade.from_api(LspApi(agent), api_scope, agent.get_repl_facade_method_usage_stats())]
 
     @override
     def init_active_project(self, agent: "SerenaAgent") -> None:

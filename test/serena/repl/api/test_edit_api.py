@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from serena.analytics import ReplFacadeMethodUsageStats
 from serena.code_editor import CodeEditor
 from serena.config.serena_config import SerenaConfig
 from serena.project import Project
@@ -45,7 +46,7 @@ def test_facade_exposes_editing_operations(api: EditApi) -> None:
     }
     optional_methods = {"delete_lines", "replace_lines", "insert_at_line"}  # the line-level operations are optional (as are the tools)
 
-    facade = Facade.from_api(api, ApiScope())
+    facade = Facade.from_api(api, ApiScope(), stats=ReplFacadeMethodUsageStats())
     assert facade.name == "edit"
     assert set(facade.enabled_method_names) == default_methods
     for name in optional_methods:

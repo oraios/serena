@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from serena.analytics import ReplFacadeMethodUsageStats
 from serena.config.context_mode import SerenaAgentContext
 from serena.config.serena_config import AgentInterface
 from serena.dashboard.dashboard_api import SerenaDashboardAPI
@@ -73,6 +74,11 @@ def test_config_overview_reports_project_trust(monkeypatch: pytest.MonkeyPatch, 
     agent.serena_config.projects = []
     agent.serena_config.web_dashboard_open_on_launch = open_on_launch
     agent._all_tools = {}
+    usage_stats = ReplFacadeMethodUsageStats()
+    usage_stats.record_method_call("fs.read_file")
+    usage_stats.record_method_call("fs.read_file")
+    usage_stats.record_method_call("edit.replace_content")
+    agent.get_repl_facade_method_usage_stats.return_value = usage_stats
     agent.is_tool_function_available.return_value = False
     agent.get_agent_interface.return_value = AgentInterface.TOOLS
     agent.get_language_backend.return_value = BuiltinLanguageBackend.LSP.get_instance()
@@ -89,6 +95,7 @@ def test_config_overview_reports_project_trust(monkeypatch: pytest.MonkeyPatch, 
 
     # expose a boolean for active projects and no trust status without a project
     response = dashboard._compute_config_overview().model_dump()
+    assert response["repl_stats_summary"] == {"fs.read_file": {"num_calls": 2}, "edit.replace_content": {"num_calls": 1}}
     assert response["web_dashboard_open_on_launch"] is open_on_launch
     assert response["active_project"]["is_trusted"] is trusted
     assert response["active_project"]["name"] == ("example" if project is not None else None)
