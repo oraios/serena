@@ -45,9 +45,11 @@ class LocalProjectFileProxy(FileProxy):
         self._project = project
 
     def get_contents(self) -> str:
+        # local import, because solidlsp imports this module via serena.util.text_utils
+        from solidlsp.ls_utils import FileUtils
+
         abs_path = os.path.join(self._project.project_root, self._relative_path)
-        with open(abs_path, encoding=self._project.project_config.encoding) as f:
-            return f.read()
+        return FileUtils.read_file(abs_path, encoding=self._project.project_config.encoding)
 
     def get_relative_path(self) -> str:
         return self._relative_path

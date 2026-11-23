@@ -10,14 +10,24 @@ what the stdout-reader death path and ``TCPLanguageServer`` already emit.
 
 Two kinds of failed write matter. A pipe that broke raises from the ``OSError``
 family; a stdin that ``_stop`` already closed raises ``ValueError``.
+
+A write can also succeed although the server is gone, when processes it started outlive it and
+keep the inherited pipes open; ``is_running()`` must then report the exit, so that the server
+is restarted before a request is sent.
 """
 
 import logging
+import platform
 import subprocess
 import sys
-from collections.abc import Iterator
+import textwrap
+import time
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
+from pathlib import Path
 from unittest.mock import MagicMock
 
+import psutil
 import pytest
 
 from solidlsp.ls_config import LanguageServerId
@@ -26,6 +36,7 @@ from solidlsp.ls_process import (
     Request,
     StdioLanguageServer,
 )
+from solidlsp.lsp_protocol_handler.server import ProcessLaunchInfo
 from solidlsp.util.subprocess_util import ManagedSubprocess
 
 
@@ -133,3 +144,85 @@ def test_healthy_write_leaves_request_pending() -> None:
         pass
     else:
         raise AssertionError("healthy write should leave the request pending")
+
+
+def _wait_until(condition: Callable[[], bool], timeout: float = 5.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while not condition() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    return condition()
+
+
+@dataclass
+class _ExitedLauncher:
+    """A started server whose launcher process has exited, leaving a child that holds its pipes open.
+
+    Launchers such as ``uvx``, or ``typescript-language-server`` with its ``tsserver`` children,
+    behave like this when only the launcher dies.
+    """
+
+    server: StdioLanguageServer
+    child_pid: int
+
+
+@pytest.fixture()
+def exited_launcher(tmp_path: Path) -> Iterator[_ExitedLauncher]:
+    child_pid_file = tmp_path / "child.pid"
+    launcher = tmp_path / "launcher.py"
+    launcher.write_text(
+        textwrap.dedent(
+            """
+            import subprocess, sys
+            child = subprocess.Popen(
+                [sys.executable, "-c", "import time; time.sleep(60)"], stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr
+            )
+            open(sys.argv[1], "w").write(str(child.pid))
+            """
+        )
+    )
+    server = StdioLanguageServer(
+        ProcessLaunchInfo(cmd=[sys.executable, str(launcher), str(child_pid_file)]),
+        ls_id=LanguageServerId.PYTHON,
+        determine_log_level=lambda _line: logging.INFO,
+    )
+    server.start()
+    if not _wait_until(lambda: child_pid_file.exists() and child_pid_file.read_text() != ""):
+        server.stop(timeout=1.0)
+        pytest.fail("the launcher did not report its child's pid")
+    child_pid = int(child_pid_file.read_text())
+
+    yield _ExitedLauncher(server, child_pid)
+
+    server.stop(timeout=1.0)
+    try:
+        psutil.Process(child_pid).kill()
+    except psutil.NoSuchProcess:
+        pass
+
+
+def test_is_running_is_false_once_process_exits_while_child_holds_pipes(exited_launcher: _ExitedLauncher) -> None:
+    assert _wait_until(lambda: not exited_launcher.server.is_running())
+
+
+@pytest.mark.xfail(
+    platform.system() == "Windows",
+    reason="without POSIX process groups, cleanup finds children only through the exited launcher, so they leak",
+    raises=AssertionError,
+    strict=True,
+)
+def test_stop_terminates_surviving_children_of_exited_process(exited_launcher: _ExitedLauncher) -> None:
+    assert _wait_until(lambda: not exited_launcher.server.is_running())
+
+    exited_launcher.server.stop(timeout=1.0)
+
+    assert _wait_until(lambda: not psutil.pid_exists(exited_launcher.child_pid))
+
+
+def test_stop_is_safe_on_never_started_server() -> None:
+    _server().stop(timeout=1.0)
+
+
+def test_stop_is_idempotent(exited_launcher: _ExitedLauncher) -> None:
+    exited_launcher.server.stop(timeout=1.0)
+
+    exited_launcher.server.stop(timeout=1.0)

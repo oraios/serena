@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from serena.analytics import ReplFacadeMethodUsageStats
 from serena.config.serena_config import ApiInclusionDefinition
 from serena.language_backend import BuiltinLanguageBackend
 from serena.repl.api.edit_api import EditApi
@@ -25,7 +26,29 @@ class TestReplExecution:
 
     @pytest.fixture
     def repl(self) -> SerenaRepl:
-        return SerenaRepl([Facade.from_api(LspApi(MagicMock()), ApiScope())], ApiScope())
+        return SerenaRepl(
+            [Facade.from_api(LspApi(MagicMock()), ApiScope(), stats=ReplFacadeMethodUsageStats())], ReplFacadeMethodUsageStats()
+        )
+
+    def test_info_calls_are_counted(self) -> None:
+        # share the usage collector across REPL instances
+        stats = ReplFacadeMethodUsageStats()
+        repl = SerenaRepl([], stats)
+
+        # count each request once, regardless of the number of items
+        repl.execute("s.info()")
+        repl.execute('s.info("unknown", "another")')
+        SerenaRepl([], stats).execute("s.info()")
+        assert stats.get_counts() == {"info": 3}
+
+    def test_public_entrypoint_calls_are_counted(self) -> None:
+        # record calls against a shared collector
+        stats = ReplFacadeMethodUsageStats()
+        repl = SerenaRepl([], stats)
+
+        # include calls with populated and empty namespaces
+        repl.execute("x = 42\ns.vars()\ns.overview()\ns.clear()\ns.vars()\ns.clear()")
+        assert stats.get_counts() == {"vars": 2, "overview": 1, "clear": 2}
 
     def test_last_expression_defines_result(self, repl: SerenaRepl) -> None:
         assert repl.execute("x = 20\ny = 22\nx + y") == "42"
@@ -79,8 +102,12 @@ class TestReplExecution:
     def test_persisted_functions_use_the_current_entrypoint(self) -> None:
         # a function defined against one REPL instance uses the entrypoint of the REPL that later calls it
         session = SerenaSession("a")
-        SerenaRepl([Facade.from_api(LspApi(MagicMock()), ApiScope())], ApiScope()).execute("def facades():\n    return s.info()", session)
-        rebuilt_repl = SerenaRepl([Facade.from_api(EditApi(MagicMock()), ApiScope())], ApiScope())
+        SerenaRepl(
+            [Facade.from_api(LspApi(MagicMock()), ApiScope(), stats=ReplFacadeMethodUsageStats())], ReplFacadeMethodUsageStats()
+        ).execute("def facades():\n    return s.info()", session)
+        rebuilt_repl = SerenaRepl(
+            [Facade.from_api(EditApi(MagicMock()), ApiScope(), stats=ReplFacadeMethodUsageStats())], ReplFacadeMethodUsageStats()
+        )
         overview = rebuilt_repl.execute("facades()", session)
         assert "s.edit" in overview and "s.lsp" not in overview
 
@@ -106,8 +133,11 @@ class TestReplExecution:
                 return f"local result: {content}"
 
         # expose a server-backed read and a backend-dependent write
-        facades = [Facade.from_api(LspApi(agent), ApiScope()), Facade.from_api(LocalApi(agent, "local", "local operations"), ApiScope())]
-        repl = SerenaRepl(facades, ApiScope())
+        facades = [
+            Facade.from_api(LspApi(agent), ApiScope(), stats=ReplFacadeMethodUsageStats()),
+            Facade.from_api(LocalApi(agent, "local", "local operations"), ApiScope(), stats=ReplFacadeMethodUsageStats()),
+        ]
+        repl = SerenaRepl(facades, ReplFacadeMethodUsageStats())
         external_project = FakeExternalProject()
         repl.entrypoint.set_external_project_(external_project)
 
@@ -243,32 +273,42 @@ class TestFacade:
 
     def test_optional_facade_is_opt_in(self) -> None:
         # an optional facade is disabled unless it is included explicitly
-        facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope(), is_optional=True)
+        facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope(), is_optional=True, stats=ReplFacadeMethodUsageStats())
         assert not facade.is_enabled()
         assert facade.enabled_method_names == []
 
         # including the facade enables its non-optional methods
-        facade = Facade.from_api(self.DummyApi(MagicMock()), self._scope(included_apis=["dummy"]), is_optional=True)
+        facade = Facade.from_api(
+            self.DummyApi(MagicMock()), self._scope(included_apis=["dummy"]), is_optional=True, stats=ReplFacadeMethodUsageStats()
+        )
         assert facade.is_enabled()
         assert set(facade.enabled_method_names) == {"add", "secret", "rarely"}
 
         # including a single method enables the facade with just that method
-        facade = Facade.from_api(self.DummyApi(MagicMock()), self._scope(included_apis=["dummy.add"]), is_optional=True)
+        facade = Facade.from_api(
+            self.DummyApi(MagicMock()), self._scope(included_apis=["dummy.add"]), is_optional=True, stats=ReplFacadeMethodUsageStats()
+        )
         assert facade.is_enabled()
         assert facade.enabled_method_names == ["add"]
 
     def test_api_scope_facade_exclusion_and_method_inclusion(self) -> None:
         # excluding the facade disables everything
-        facade = Facade.from_api(self.DummyApi(MagicMock()), self._scope(excluded_apis=["dummy"]))
+        facade = Facade.from_api(self.DummyApi(MagicMock()), self._scope(excluded_apis=["dummy"]), stats=ReplFacadeMethodUsageStats())
         assert facade.enabled_method_names == []
 
         # an excluded facade is opt-in: a method inclusion enables exactly that method
-        facade = Facade.from_api(self.DummyApi(MagicMock()), self._scope(excluded_apis=["dummy"], included_apis=["dummy.add"]))
+        facade = Facade.from_api(
+            self.DummyApi(MagicMock()),
+            self._scope(excluded_apis=["dummy"], included_apis=["dummy.add"]),
+            stats=ReplFacadeMethodUsageStats(),
+        )
         assert facade.enabled_method_names == ["add"]
 
     def test_entrypoint_omits_excluded_facades(self) -> None:
         def create_repl(scope: ApiScope) -> SerenaRepl:
-            return SerenaRepl([Facade.from_api(self.DummyApi(MagicMock()), scope)], scope)
+            return SerenaRepl(
+                [Facade.from_api(self.DummyApi(MagicMock()), scope, stats=ReplFacadeMethodUsageStats())], ReplFacadeMethodUsageStats()
+            )
 
         assert "s.dummy" in create_repl(ApiScope()).execute("s.info()")
         assert "s.dummy" not in create_repl(self._scope(excluded_apis=["dummy"])).execute("s.info()")
@@ -282,23 +322,25 @@ class TestFacade:
             ApiInclusionDefinition(excluded_apis=["dummy.extra", "dummy.add"]),
             ApiInclusionDefinition(included_apis=["dummy.add"]),
         )
-        facade = Facade.from_api(self.DummyApi(MagicMock()), scope)
+        facade = Facade.from_api(self.DummyApi(MagicMock()), scope, stats=ReplFacadeMethodUsageStats())
         assert set(facade.enabled_method_names) == {"add", "secret", "rarely"}
 
     def test_api_scope_read_only_excludes_editing_methods(self) -> None:
         scope = self._scope(included_apis=["dummy.secret"])
         scope.exclude_editing()
-        facade = Facade.from_api(self.DummyApi(MagicMock()), scope)
+        facade = Facade.from_api(self.DummyApi(MagicMock()), scope, stats=ReplFacadeMethodUsageStats())
         assert set(facade.enabled_method_names) == {"add", "rarely"}
 
     def test_enabled_methods_delegate_to_implementation(self) -> None:
-        facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope())
+        facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope(), stats=ReplFacadeMethodUsageStats())
         assert facade.add(1, 2) == 3
         assert "dummy.add(a: int, b: int) -> int" in facade.describe()
         assert "Adds two numbers." in facade.describe_member("add")
 
     def test_disabled_methods_are_inaccessible_and_undocumented(self) -> None:
-        facade = Facade.from_api(self.DummyApi(MagicMock()), self._scope(excluded_apis=["dummy.secret"]))
+        facade = Facade.from_api(
+            self.DummyApi(MagicMock()), self._scope(excluded_apis=["dummy.secret"]), stats=ReplFacadeMethodUsageStats()
+        )
         assert facade.add(1, 2) == 3
         with pytest.raises(AttributeError):
             facade.secret()
@@ -308,7 +350,7 @@ class TestFacade:
         assert "_internal" not in facade.describe()
 
     def test_undecorated_methods_are_not_exposed(self) -> None:
-        facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope())
+        facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope(), stats=ReplFacadeMethodUsageStats())
         assert self.DummyApi(MagicMock()).undecorated() == "internal"  # usable from within Serena
         with pytest.raises(AttributeError):
             facade.undecorated()
@@ -318,14 +360,14 @@ class TestFacade:
         assert "undecorated" not in facade.enabled_method_names
 
     def test_niche_methods_are_summarised_in_facade_description(self) -> None:
-        facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope())
+        facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope(), stats=ReplFacadeMethodUsageStats())
         description = facade.describe()
         assert "dummy.rarely: Rarely needed operation." in description
         assert ":param x:" not in description  # only the summary, no signature or full documentation
         assert ":param x:" in facade.describe_member("rarely")  # full documentation on request
 
     def test_optional_methods_are_disabled_by_default(self) -> None:
-        facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope())
+        facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope(), stats=ReplFacadeMethodUsageStats())
         assert "extra" not in facade.enabled_method_names
         with pytest.raises(AttributeError):
             facade.extra()
@@ -333,26 +375,26 @@ class TestFacade:
         assert facade.extra() == "extra"
 
         # an explicit inclusion enables it
-        facade = Facade.from_api(self.DummyApi(MagicMock()), self._scope(included_apis=["dummy.extra"]))
+        facade = Facade.from_api(self.DummyApi(MagicMock()), self._scope(included_apis=["dummy.extra"]), stats=ReplFacadeMethodUsageStats())
         assert "extra" in facade.enabled_method_names
 
     def test_corresponding_tool(self) -> None:
-        facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope())
+        facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope(), stats=ReplFacadeMethodUsageStats())
         assert facade.get_method("add").info.get_corresponding_tool_name() is None
 
-        lsp_facade = Facade.from_api(LspApi(MagicMock()), ApiScope())
+        lsp_facade = Facade.from_api(LspApi(MagicMock()), ApiScope(), stats=ReplFacadeMethodUsageStats())
         info = lsp_facade.get_method("find_symbol").info
         assert info.corresponding_tool is FindSymbolTool
         assert info.get_corresponding_tool_name() == "find_symbol"
 
     def test_method_info_mirrors_decorator(self) -> None:
-        facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope())
+        facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope(), stats=ReplFacadeMethodUsageStats())
         assert facade.get_method("add").info == FacadeMethodInfo(name="add")
         assert facade.get_method("secret").info.can_edit
         assert facade.get_method("extra").info == FacadeMethodInfo(name="extra", optional=True, beta=True)
 
     def test_enablement_can_be_changed(self) -> None:
-        facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope())
+        facade = Facade.from_api(self.DummyApi(MagicMock()), ApiScope(), stats=ReplFacadeMethodUsageStats())
         facade.get_method("secret").enabled = False
         with pytest.raises(AttributeError):
             facade.secret()
