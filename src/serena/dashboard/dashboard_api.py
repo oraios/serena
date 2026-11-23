@@ -73,6 +73,7 @@ class ResponseConfigOverview(BaseModel):
     language_backend: str
     facades: list[ResponseFacade] | None
     tool_stats_summary: dict[str, dict[str, int]]
+    repl_stats_summary: dict[str, dict[str, int]]
     registered_projects: list[dict[str, str | bool]]
     available_tools: list[dict[str, str | bool]]
     available_modes: list[dict[str, str | bool]]
@@ -673,6 +674,9 @@ class SerenaDashboardAPI:
             language_backend=self._agent.get_language_backend().get_key(),
             facades=facades,
             tool_stats_summary=tool_stats_summary,
+            repl_stats_summary={
+                name: {"num_calls": count} for name, count in self._agent.get_repl_facade_method_usage_stats().get_counts().items()
+            },
             registered_projects=registered_projects,
             available_tools=available_tools,
             available_modes=available_modes,

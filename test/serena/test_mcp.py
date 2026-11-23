@@ -5,9 +5,9 @@ from mcp.server.mcpserver import Context
 from mcp.server.mcpserver.tools.base import Tool as MCPTool
 
 from serena.agent import Tool, ToolRegistry
+from serena.analytics import ReplFacadeMethodUsageStats
 from serena.config.context_mode import SerenaAgentContext
 from serena.mcp import SerenaMCPFactory
-from serena.repl.facade import ApiScope
 from serena.repl.repl import SerenaRepl
 
 make_tool = SerenaMCPFactory.make_mcp_tool
@@ -25,7 +25,7 @@ class MockAgent:
 
     @staticmethod
     def get_repl() -> SerenaRepl:
-        return SerenaRepl([], ApiScope())
+        return SerenaRepl([], ReplFacadeMethodUsageStats())
 
     @staticmethod
     def is_single_project() -> bool:
