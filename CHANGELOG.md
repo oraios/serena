@@ -31,6 +31,8 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Performance: the symbol caches were rewritten in full after every tool call that fetched new symbols,
     which takes noticeable time for large projects; they are now saved at most every 30 s, and always when
     language servers are stopped or restarted
+  - Fix: the default connection prompt made some agents call `initial_instructions` again for every new task in a
+    conversation, although the Serena Instructions Manual was still in context (#2293)
 
 * JetBrains:
   - Fix: When applying a non-symbolic edit, do not raise a post-edit exception during IDE file refresh
