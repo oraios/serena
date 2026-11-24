@@ -1006,6 +1006,26 @@ src/*.o
         # foo.txt in other/ should NOT be ignored (outside foo/ subtree)
         assert not parser.should_ignore("other/foo.txt"), "other/foo.txt should NOT be ignored by foo/.gitignore"
 
+    def test_pattern_with_middle_slash_in_subdirectory(self):
+        """Test that a pattern with a slash in the middle is relative to the subdirectory, as in git."""
+        test_dir = self.repo_path / "test_middle_slash_subdir"
+        for directory in ["web/docs/build", "web/examples/docs/build", "web/src/a/b", "web/src/x/a/b"]:
+            (test_dir / directory).mkdir(parents=True)
+            (test_dir / directory / "file.txt").touch()
+
+        gitignore = test_dir / "web" / ".gitignore"
+        gitignore.write_text("docs/build\nsrc/**/b\n")
+
+        parser = GitignoreParser(str(test_dir))
+
+        assert parser.get_ignore_specs()[0].patterns == ["web/docs/build", "web/src/**/b"]
+
+        assert parser.should_ignore("web/docs/build/file.txt")
+        assert not parser.should_ignore("web/examples/docs/build/file.txt"), "docs/build in web/.gitignore should only match web/docs/build"
+
+        assert parser.should_ignore("web/src/a/b/file.txt")
+        assert parser.should_ignore("web/src/x/a/b/file.txt")
+
     @pytest.mark.skipif(sys.platform == "win32", reason="'*' is illegal in Windows filenames; this directory name cannot exist there")
     def test_gitignore_dir_name_with_glob_metachars_is_not_a_wildcard(self):
         """A directory named with glob metacharacters (e.g. a stray '***' venv) must be

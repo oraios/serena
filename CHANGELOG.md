@@ -4,6 +4,9 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * General:
   - Fix: project activation commands could hang on Windows when Serena uses the stdio transport (#2270)
+  - Fix: a pattern with a slash in the middle (e.g. `docs/build`) in a nested `.gitignore` also ignored
+    matching paths deeper below that directory (e.g. `web/examples/docs/build` for `web/.gitignore`),
+    which git does not ignore. As in git, such patterns are now relative to the `.gitignore`'s directory
   - More flexible inclusion/exclusion definitions: 
     - Allow tool exclusions/inclusions to use tool marker names (e.g. `ToolMarkerCanEdit`)
     - Allow API exclusions to include `marker:editing` to exclude all editing functionality
