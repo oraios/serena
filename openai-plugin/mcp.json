@@ -1,0 +1,18 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "serena": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "-p",
+        "3.13",
+        "serena-agent@latest",
+        "start-mcp-server",
+        "--context",
+        "codex",
+        "--project-from-cwd"
+      ]
+    }
+  }
+}
