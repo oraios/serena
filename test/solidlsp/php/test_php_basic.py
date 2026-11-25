@@ -1,24 +1,15 @@
-import subprocess
 from pathlib import Path
 
 import pytest
 
 from solidlsp import SolidLanguageServer
 from solidlsp.ls_config import LanguageServerId
-from test.conftest import is_ci, is_windows, language_server_tests_enabled
+from test.conftest import language_server_tests_enabled
 from test.solidlsp.conftest import format_symbol_for_assert, has_malformed_name, request_all_symbols
-
-
-def _php_supports_phpactor() -> bool:
-    completed_process = subprocess.run(["php", "-m"], capture_output=True, text=True, check=False)
-    installed_extensions = {line.strip().lower() for line in completed_process.stdout.splitlines()}
-    return "openssl" in installed_extensions
-
 
 _php_servers: list[LanguageServerId] = [LanguageServerId.PHP]
 if language_server_tests_enabled(LanguageServerId.PHP_PHPACTOR):
-    if not (is_windows and is_ci) and _php_supports_phpactor():
-        _php_servers.append(LanguageServerId.PHP_PHPACTOR)
+    _php_servers.append(LanguageServerId.PHP_PHPACTOR)
 if language_server_tests_enabled(LanguageServerId.PHP_PHPANTOM):
     _php_servers.append(LanguageServerId.PHP_PHPANTOM)
 
