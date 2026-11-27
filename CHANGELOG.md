@@ -39,6 +39,10 @@ Status of the `main` branch. Changes prior to the next official version change w
     language servers are stopped or restarted
   - Fix: the default connection prompt made some agents call `initial_instructions` again for every new task in a
     conversation, although the Serena Instructions Manual was still in context (#2293)
+  - Fix: a language server request that timed out stayed registered in the pending-request table,
+    since entries were only removed when a response arrived; a server that is running but not
+    answering therefore leaked one entry per timed-out request for the lifetime of the server, and
+    a later cancellation counted those abandoned requests as live (#2003)
 
 * JetBrains:
   - Fix: When applying a non-symbolic edit, do not raise a post-edit exception during IDE file refresh
