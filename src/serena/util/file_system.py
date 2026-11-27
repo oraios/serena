@@ -432,18 +432,14 @@ class GitignoreParser:
             # Windows os.sep is backslash, indistinguishable from the escape backslashes
             # rel_dir_pattern may already contain.
             if rel_dir:
-                if is_anchored:
-                    # Anchored patterns are relative to the gitignore directory
+                # As in git, a slash at the start or in the middle of a pattern (not just a
+                # trailing one) makes it relative to the gitignore directory. This also keeps
+                # patterns starting with **/ scoped to the subdirectory.
+                if is_anchored or "/" in line.rstrip("/"):
                     adjusted_pattern = f"{rel_dir_pattern}/{line}"
                 else:
-                    # Non-anchored patterns can match anywhere below the gitignore directory
-                    # We need to preserve this behavior
-                    if line.startswith("**/"):
-                        # Even if pattern starts with **, it should still be scoped to the subdirectory
-                        adjusted_pattern = f"{rel_dir_pattern}/{line}"
-                    else:
-                        # Add the directory prefix but also allow matching in subdirectories
-                        adjusted_pattern = f"{rel_dir_pattern}/**/{line}"
+                    # Patterns without such a slash can match at any level below the gitignore directory
+                    adjusted_pattern = f"{rel_dir_pattern}/**/{line}"
             else:
                 if is_anchored:
                     # Anchored patterns in root should only match at root level
