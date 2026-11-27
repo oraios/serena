@@ -46,6 +46,8 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Language Servers:
   - Fix: `find_implementations` can now find TypeScript interface implementations in Vue projects (#2218)
+  - Fix: on musl-based Linux (e.g. Alpine), language servers failed to start with "Unknown platform",
+    because Python before 3.14 reports the libc as `""` or `"libc"` rather than `"musl"` (#2280)
   - Fix: detect Elixir installed via a Windows batch launcher
   - Fix: a language server process that exited while its child processes kept running (e.g. after being
     killed) was still considered running, so it was not restarted and the next request hung until the
