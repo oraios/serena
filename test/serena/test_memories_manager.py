@@ -272,6 +272,33 @@ def _write(manager: MemoryManager, name: str, content: str) -> None:
     manager.save_memory(name, content, is_tool_context=False)
 
 
+class TestListMemoriesWithMalformedFilename:
+    """Regression for issue #2276: a file literally named ``..md`` used to crash the whole
+    listing because ``Path.with_suffix("")`` rejects its computed ``"."``/``".."`` stem.
+    """
+
+    @staticmethod
+    def _create_files(tmp_path) -> None:
+        memories_dir = tmp_path / "memories"
+        memories_dir.mkdir(parents=True, exist_ok=True)
+        (memories_dir / "..md").write_text("pathological", encoding="utf-8")
+        (memories_dir / "normal.md").write_text("control", encoding="utf-8")
+
+    def test_list_project_memories_does_not_crash_on_dotdot_md(self, fs_manager: MemoryManager, tmp_path) -> None:
+        self._create_files(tmp_path)
+
+        names = fs_manager.list_project_memories().get_full_list()
+
+        assert "normal" in names
+
+    def test_list_memories_does_not_crash_on_dotdot_md(self, fs_manager: MemoryManager, tmp_path) -> None:
+        self._create_files(tmp_path)
+
+        names = fs_manager.list_memories().get_full_list()
+
+        assert "normal" in names
+
+
 class TestSaveAndEditMemoryAreAtomic:
     """Regression for issue #1958: ``save_memory``/``edit_memory`` used a plain
     ``open(path, "w")``, which truncates the file before the new content is written. An

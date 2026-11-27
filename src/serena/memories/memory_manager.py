@@ -271,7 +271,12 @@ class MemoryManager:
         if not search_dir.exists():
             return result
         for md_file in self._iter_memory_files(search_dir):
-            rel = str(md_file.relative_to(base_dir).with_suffix("")).replace(os.sep, "/")
+            # Strip ".md" textually instead of via Path.with_suffix(""): the latter raises
+            # ValueError("Invalid name '..'") for a file literally named "..md" (its computed
+            # stem is "." or ".." on newer Pythons), which would crash the whole listing.
+            rel = str(md_file.relative_to(base_dir)).removesuffix(".md").replace(os.sep, "/")
+            if not rel:
+                continue  # nameless entry, e.g. a file literally named ".md"
             memory_name = prefix + rel
             if self._is_ignored_memory(memory_name):
                 continue

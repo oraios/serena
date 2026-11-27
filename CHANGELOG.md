@@ -3,6 +3,7 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - Fix: `list_project_memories()` no longer raises `ValueError` when a memory file is named `..md`, which made the entire memory listing fail (#2276)
   - Fix: project activation commands could hang on Windows when Serena uses the stdio transport (#2270)
   - More flexible inclusion/exclusion definitions: 
     - Allow tool exclusions/inclusions to use tool marker names (e.g. `ToolMarkerCanEdit`)
