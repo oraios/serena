@@ -106,23 +106,32 @@ class PreToolUseHook(Hook, ABC):
         permission_decision: Literal["deny", "allow"]
         permission_decision_reason: str
         additional_context: str = ""
+        # A reminder informs the agent without blocking its tool call. When set, the decision
+        # is downgraded to "allow" on the wire while the reminder text is still delivered via
+        # the reason field and, where the client supports it, ``additionalContext``.
+        remind_only: bool = False
 
         def to_json_string(self, client: HookClient) -> str:
+            decision = "allow" if self.remind_only else self.permission_decision
             if client == HookClient.GROK:
-                grok_output: dict[str, str] = {"decision": self.permission_decision}
-                if self.permission_decision == "deny":
+                grok_output: dict[str, str] = {"decision": decision}
+                # Grok has no additionalContext field, so keep the reason as the reminder channel.
+                if decision == "deny" or self.remind_only:
                     grok_output["reason"] = self.permission_decision_reason
                 return json.dumps(grok_output)
 
             hook_output = {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
-                    "permissionDecision": self.permission_decision,
+                    "permissionDecision": decision,
                     "permissionDecisionReason": self.permission_decision_reason,
                 }
             }
             if client != HookClient.CODEX:
-                hook_output["hookSpecificOutput"]["additionalContext"] = self.additional_context
+                additional_context = self.additional_context
+                if self.remind_only and not additional_context:
+                    additional_context = self.permission_decision_reason
+                hook_output["hookSpecificOutput"]["additionalContext"] = additional_context
             return json.dumps(hook_output)
 
     def is_serena_symbolic_tool(self) -> bool:
@@ -611,6 +620,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             permission_decision="deny",
             permission_decision_reason="Too many consecutive grep calls without using symbolic tools. "
             "You can continue using grep now if needed, the counter was reset.",
+            remind_only=True,
             additional_context=(
                 "You were using many grep calls recently. Consider using Serena's symbolic "
                 "mcp tools instead for more code-centric search. You can continue using grep now if needed, the counter was reset."
@@ -622,6 +632,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             permission_decision="deny",
             permission_decision_reason="Too many consecutive read calls of files without using symbolic tools. "
             "You can continue using read now if needed, the counter was reset.",
+            remind_only=True,
             additional_context=(
                 "You were using many read calls on files recently. Consider using Serena's symbolic "
                 "mcp tools instead for more targeted reads. You can continue using read now if needed, the counter was reset."
@@ -633,6 +644,7 @@ class PreToolUseRemindAboutSymbolicToolsHook(PreToolUseHook):
             permission_decision="deny",
             permission_decision_reason="Too many consecutive non-symbolic tool calls (mixed grep and read). "
             "You can continue using these tools now if needed, the counter was reset.",
+            remind_only=True,
             additional_context=(
                 "You were alternating between grep and read file calls recently without using "
                 "Serena's symbolic mcp tools. Consider using symbolic search and targeted symbol "

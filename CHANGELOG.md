@@ -3,6 +3,7 @@
 Status of the `main` branch. Changes prior to the next official version change will appear here.
 
 * General:
+  - Fix: the symbolic-tool reminder hooks no longer block Claude Code tool calls with `permissionDecision: deny`; they remain non-blocking reminders while genuine denies (e.g. plan mode) are unchanged (#2251)
   - Fix: project activation commands could hang on Windows when Serena uses the stdio transport (#2270)
   - More flexible inclusion/exclusion definitions: 
     - Allow tool exclusions/inclusions to use tool marker names (e.g. `ToolMarkerCanEdit`)
