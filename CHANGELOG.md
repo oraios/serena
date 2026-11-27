@@ -10,6 +10,12 @@ Status of the `main` branch. Changes prior to the next official version change w
   - Add new modes `ext-full` and `ext-readonly` to conveniently enable external project access when using
     the REPL interface.
   - Remove unnecessary sections from Claude Code system prompt override, which will be phased out (#2259)
+  - Improve initial instructions for REPL mode in order to make clear that functionality is centrally 
+    provided through the `serena_repl` tool, which should be loaded immediately.
+    This applies, in particular, to Claude Code with single-project activation at startup in combination
+    with tool search, as the REPL's scope is provided in the REPL tool's description rather than
+    the project activation message/initial instructions in this case, with the tool's description 
+    being loaded lazily.
   - Fix: `planning` mode now correctly excludes all editing tools/functions (#2210)
   - Fix: `read_file`, `search_for_pattern` and `replace_in_files` failed with a `UnicodeDecodeError` on a
     project file whose encoding differs from the project's configured `encoding` (e.g. a UTF-16 file saved

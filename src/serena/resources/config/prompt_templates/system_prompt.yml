@@ -5,8 +5,12 @@ prompts:
   connection_prompt: |
     CRITICAL: Before starting to work on a coding task, call the `initial_instructions` tool to read the 'Serena Instructions Manual', unless it is already available in your conversation context.
   system_prompt: |
-    You have semantic coding functions/tools that you rely on heavily. Work resource-efficiently: don't read or
-    generate content the task doesn't need.
+    You have access to Serena's semantic coding functions/tools, which you rely on heavily for coding tasks.
+    {% if 'serena_repl' in available_tools -%}
+    The functionality is provided through the central `{{ tool_names['serena_repl'] }}` tool; load this tool immediately if you haven't already.
+    {%- endif %}
+    
+    Work resource-efficiently: don't read or generate content the task doesn't need.
 
     Some tasks require understanding a large part of the codebase; others need only a few symbols or a
     single file. Avoid reading whole files unless necessary — acquire information step by step, using
