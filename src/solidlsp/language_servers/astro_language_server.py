@@ -321,6 +321,8 @@ class AstroLanguageServer(SolidLanguageServer):
         repo = pathlib.Path(self.repo_path)
         for astro_file in repo.rglob("*.astro"):
             try:
+                if not astro_file.is_file():
+                    continue
                 relative = str(astro_file.relative_to(repo))
                 if "node_modules" not in relative and not relative.startswith("."):
                     astro_files.append(relative)
