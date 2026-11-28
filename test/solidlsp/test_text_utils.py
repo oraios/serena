@@ -42,6 +42,14 @@ class TestTextUtils:
         assert stepper.col == 1
         assert stepper.idx == 3 + 1 + 3 + 2 + 1
 
+    def test_last_line_without_a_line_break(self):
+        """Stepping over a final line with no line break makes it the last line, not the line before it."""
+        stepper = TextStepper("first\nlast")
+        stepper.step_line()
+        stepper.step_line()
+        assert stepper.get_last_line(with_end=False) == "last"
+        assert stepper.get_last_line(with_end=True) == "last"
+
     def test_insert_text_at_index(self):
         insertion = "XXX"
         new_text, l, c = TextUtils.insert_text_at_position(self.TEXT, 0, 1, insertion)

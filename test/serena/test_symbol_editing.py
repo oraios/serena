@@ -439,6 +439,30 @@ def test_replace_body(test_case: ReplaceBodyTest, snapshot: SnapshotAssertion):
 NIX_ATTR_REPLACEMENT = """c = 3;"""
 
 
+class DeleteSymbolExactlyTest(EditingTest):
+    def __init__(self, ls_id: LanguageServerId, rel_path: str, name_path: str, expected: str):
+        super().__init__(ls_id, rel_path)
+        self.name_path = name_path
+        self.expected = expected
+
+    def _apply_edit(self, code_editor: CodeEditor) -> None:
+        code_editor.delete_symbol(self.name_path, self.rel_path)
+
+    @overrides
+    def _test_diff(self, code_diff: CodeDiff, snapshot: SnapshotAssertion | None) -> None:
+        assert code_diff.modified_content == self.expected
+
+
+@pytest.mark.nix
+@pytest.mark.skipif(not language_server_tests_enabled(LanguageServerId.NIX), reason="Nix tests are disabled (nixd not available)")
+def test_delete_symbol_on_a_last_line_without_a_line_break():
+    """
+    The removal of the empty lines a deletion leaves read the line before a final line with no line break, empty
+    here, and so deleted the rest of the file: `{ first = 1; keep = 2; }` became empty.
+    """
+    DeleteSymbolExactlyTest(LanguageServerId.NIX, "no_final_newline.nix", "first", "{  keep = 2; }").run_test(None)
+
+
 class NixAttrReplacementTest(EditingTest):
     """Test for replacing individual attributes in Nix that should NOT result in double semicolons."""
 
