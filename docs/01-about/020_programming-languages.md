@@ -87,11 +87,11 @@ Some languages require additional installations or setup steps, as noted.
 * **GraphQL**  
   (experimental; requires Node.js and npm; automatically installs `graphql-language-service-cli` (`graphql-lsp`) and its
   `graphql` peer dependency; handles `.graphql` and `.gql` files; must be explicitly specified in the `languages` entry
-  in the `project.yml`. Cross-file navigation — go-to-definition from an operation field into the schema type that
-  declares it — requires a [graphql-config](https://the-guild.dev/graphql/config) file
-  (`.graphqlrc.yml` / `graphql.config.{yml,yaml,json}`) at the repository root pointing at the schema; without it only
-  single-file document symbols are available. Note: the upstream server does not implement `textDocument/references`,
-  so find-references is unsupported.)
+  in the `project.yml`. Requires a [graphql-config](https://the-guild.dev/graphql/config) file
+  (`.graphqlrc.yml` / `graphql.config.{yml,yaml,json}`) at the repository root (or a parent directory) pointing at the
+  schema; without it, the language server provides no information at all, not even the symbols of a single file.
+  Note: the upstream server does not implement `textDocument/references` and `textDocument/rename`, so
+  find-references and renaming are unsupported.)
 * **Groovy**  
   (requires a local groovy-language-server.jar, configured via `ls_jar_path` in `ls_specific_settings`;
   see the [Groovy Setup Guide](../03-special-guides/groovy_setup_guide_for_serena) for details)
