@@ -266,6 +266,15 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         return None
 
     @property
+    def is_external(self) -> bool:
+        """
+        :return: whether the symbol is defined outside the project (the standard library, an installed package) —
+            `relative_path` is then the absolute path of its file, and the symbol is read-only
+        """
+        location = self.symbol_root.get("location")
+        return bool(location and location.get("external"))
+
+    @property
     def location(self) -> LanguageServerSymbolLocation:
         """
         :return: the start location of the actual symbol identifier
@@ -424,6 +433,11 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
         name: NotRequired[str]
         location: NotRequired[dict[str, Any]]
         relative_path: NotRequired[str | None]
+        external: NotRequired[bool]
+        """
+        True when the symbol is defined outside the project (the standard library, an installed package); `relative_path`
+        is then the absolute path of its file, and the symbol is read-only
+        """
         body_location: NotRequired[dict[str, Any]]
         body: NotRequired[str | None]
         kind: NotRequired[str]
@@ -507,6 +521,8 @@ class LanguageServerSymbol(Symbol, ToStringMixin):
             result["location"] = self.location.to_dict(include_relative_path=relative_path)
         elif relative_path:
             result["relative_path"] = self.relative_path
+            if self.is_external:
+                result["external"] = True
 
         if body_location:
             body_start_line, body_end_line = self.get_body_line_numbers()
