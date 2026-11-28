@@ -46,6 +46,10 @@ Status of the `main` branch. Changes prior to the next official version change w
 
 * Language Servers:
   - Fix: `find_implementations` can now find TypeScript interface implementations in Vue projects (#2218)
+  - Fix: Nix `replace_symbol_body` deleted a binding's trailing semicolon. The symbol range was extended to
+    include the `;`, but the body (what `find_symbol` shows) was not, so writing back a body in the shape
+    shown removed it, and the tool still returned `OK`. Expressions that merely end before a binding's `;`
+    (e.g. the lambda in `f = x: x;`) no longer take the semicolon either.
   - Fix: detect Elixir installed via a Windows batch launcher
   - Fix: a language server process that exited while its child processes kept running (e.g. after being
     killed) was still considered running, so it was not restarted and the next request hung until the
