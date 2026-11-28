@@ -32,6 +32,8 @@ class RustAnalyzer(SolidLanguageServer):
     Provides Rust specific instantiation of the LanguageServer class. Contains various configurations and settings specific to Rust.
     """
 
+    _CARGO_MANIFEST_FILENAME = "Cargo.toml"
+
     @classmethod
     def supports_implementation_request(cls) -> bool:
         return True
@@ -216,10 +218,48 @@ class RustAnalyzer(SolidLanguageServer):
     def is_ignored_dirname(self, dirname: str) -> bool:
         return super().is_ignored_dirname(dirname) or dirname in ["target"]
 
+    def _discover_cargo_manifests(self) -> list[str]:
+        """
+        Determines the Cargo manifests to link as projects, which rust-analyzer would otherwise only
+        discover at the workspace folders and one level below them.
+
+        Manifests below another manifest are not returned, since the enclosing manifest's project is
+        assumed to comprise them (as workspace members).
+
+        :return: the absolute paths of the Cargo manifests to link, sorted by path
+        """
+        manifest_paths: list[str] = []
+        for workspace_folder in self.config.get_absolute_workspace_folders(self.repository_root_path):
+            # collect manifests below the workspace folder, pruning ignored directories
+            for dirpath, dirnames, filenames in os.walk(workspace_folder):
+                dirnames[:] = [dirname for dirname in dirnames if not self.is_ignored_dirname(dirname)]
+                if RustAnalyzer._CARGO_MANIFEST_FILENAME not in filenames:
+                    continue
+
+                manifest_path = os.path.join(dirpath, RustAnalyzer._CARGO_MANIFEST_FILENAME)
+                relative_path = os.path.relpath(manifest_path, self.repository_root_path)
+                if not self.is_ignored_path(relative_path, ignore_unsupported_files=False):
+                    manifest_paths.append(manifest_path)
+
+        # retain only manifests without a manifest in an enclosing directory
+        manifest_directories = {os.path.dirname(manifest_path) for manifest_path in manifest_paths}
+        outermost_manifest_paths = [
+            manifest_path
+            for manifest_path in manifest_paths
+            if not any(
+                os.path.dirname(manifest_path).startswith(enclosing_directory + os.sep) for enclosing_directory in manifest_directories
+            )
+        ]
+
+        return sorted(outermost_manifest_paths)
+
     def _create_base_initialize_params(self) -> dict:
         """
         Returns the initialize params for the Rust Analyzer Language Server.
         """
+        # linking the manifests explicitly, since rust-analyzer does not discover nested crates
+        linked_projects = self._discover_cargo_manifests()
+
         initialize_params = {
             "locale": "en",
             "capabilities": {
@@ -662,7 +702,7 @@ class RustAnalyzer(SolidLanguageServer):
                     },
                     "run": {"enable": True},
                 },
-                "linkedProjects": [],
+                "linkedProjects": linked_projects,
                 "lru": {"capacity": None, "query": {"capacities": {}}},
                 "notifications": {"cargoTomlNotFound": True},
                 "numThreads": None,

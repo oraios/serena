@@ -79,6 +79,10 @@ Status of the `main` branch. Changes prior to the next official version change w
   - C/C++ (clangd) logs errors only (`--log=error`) instead of a line for every request and parse, unless
     `ls_extra_args` sets `--log` or Serena logs at debug level
   - Fix: every line a language server wrote to stderr was followed by an empty line in Serena's log
+  - Fix: rust-analyzer is now passed every Cargo manifest found in the project, not just the ones at the
+    workspace folders and directly below them. Projects whose crates are nested more deeply and which have
+    no root `Cargo.toml` previously started without loading any crate, so reference searches silently
+    returned no results (#2205)
   - BSL: upgrade to bsl-language-server 1.0.7; wait for the server's initial indexing instead
     of a fixed delay before the first cross-file request; add `jvm_options` setting (e.g. `-Xmx`).
   - Fix: with `typescript_tsgo`, reference searches missed imports, re-exports and implementing members,
