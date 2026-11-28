@@ -76,12 +76,12 @@ dev = [
   # In version 1.0.4 we get a NoneType error related to some config conversion (yml_analytics is None and should be a list)
   "ty==0.0.24",
   "poethepoet==0.36.0",
-  "pytest==8.4.1",
+  "pytest==9.2.0",
   "pytest-xdist==3.8.0",
   "ruff==0.12.5",
   "toml-sort==0.24.2",
   "types-pyyaml==6.0.12.20250516",
-  "syrupy==4.9.1",
+  "syrupy==7.0.2",
   "types-requests==2.32.4.20250809",
   # docs
   "sphinx==7.4.7",
