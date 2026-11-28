@@ -45,6 +45,8 @@ Status of the `main` branch. Changes prior to the next official version change w
     if the IDE's plugin server is not reachable.
 
 * Language Servers:
+  - Fix: C# files created during slow project startup could produce incorrect diagnostics because
+    synchronization mistook the initial project load for completion of the new-file reload.
   - Fix: `find_implementations` can now find TypeScript interface implementations in Vue projects (#2218)
   - Fix: detect Elixir installed via a Windows batch launcher
   - Fix: a language server process that exited while its child processes kept running (e.g. after being

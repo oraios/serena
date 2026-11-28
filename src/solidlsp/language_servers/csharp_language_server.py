@@ -809,6 +809,12 @@ class CSharpLanguageServer(SolidLanguageServer):
         the already-loaded compilation. Resend the same notifications and wait for the
         server to confirm the reload before the file is opened.
         """
+        # finish any outstanding load before requesting a fresh evaluation of the project
+        if not self._project_reload_complete.wait(30):
+            log.warning("Timeout waiting for the preceding C# project load before adding new files")
+            return
+
+        # wait for the reload that includes the newly created files
         self._project_reload_complete.clear()
         self._open_solution_and_projects()
         if not self._project_reload_complete.wait(30):
