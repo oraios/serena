@@ -525,7 +525,9 @@ class Project(ToStringMixin):
         follow_links = self.is_trusted()
 
         if os.path.isfile(start_path):
-            if not self.is_ignored_path(start_path, ignore_non_source_files=code_files_only, is_file=True):
+            if not (skip_ignored_files or code_files_only) or not self.is_ignored_path(
+                start_path, ignore_non_source_files=code_files_only, is_file=True
+            ):
                 return [self.ProjectFile.from_abs_path(start_path, self)]
             else:
                 return []
