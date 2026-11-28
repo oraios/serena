@@ -106,6 +106,15 @@ ls_workspace_folders: ["."]
 #     - ../shared-lib
 ls_additional_workspace_folders: []
 
+# strategy for synchronizing file-system changes made outside Serena with language servers.
+# Possible values:
+#  * unset: use the global setting or, if that is also unset, the recommended strategy (currently "full").
+#  * full: walk all project source files before symbolic operations and notify language servers of changes.
+#  * none: do not scan for file changes made outside Serena. Only use this for a checkout whose files
+#      are never changed or changed only through Serena; otherwise language-server results may become stale
+#      after editor, agent, git, shell or build operations.
+ls_file_system_sync_strategy:
+
 # list of additional paths to ignore in this project.
 # Same syntax as gitignore, so you can use * and **.
 # Important: quote patterns that start with `*`, otherwise YAML treats them as aliases.
